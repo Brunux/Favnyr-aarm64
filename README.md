@@ -7,22 +7,24 @@
 
 https://github.com/user-attachments/assets/78f459cc-ada4-4f07-9ed5-2132f3062fa6
 
-A portable file browser for Windows and Linux. Single executable, no installer, no administrator rights, no telemetry.
+*(Worth watching to the end. It goes well past the basics and shows most of the
+gestures and shortcuts collected under [Pro tips](#pro-tips).)*
+
+**Favnyr** : A portable file browser for Windows and Linux. Single executable, no installer, no administrator rights, no telemetry.
 
 Favnyr came out of a simple frustration: wanting several folders open side by side, being able to come back to the same arrangement tomorrow, and not wondering what the program does when nobody is looking. It is written in Rust with [Slint](https://slint.dev), which is why it starts fast and stays small.
 I am Favnyr's first user, and I use it daily literally every day.
 
 Copy the executable where you want and run it. That is the whole installation.
 
-**Special case** : on NixOS there is no `/usr/lib`, so the binary finds neither fontconfig nor the OpenGL driver on its own. Run it through an FHS environment instead:
-`steam-run ./favnyr`
+**Special case** : on NixOS there is a footnote.
 
 
 ## Private by construction
 
 Favnyr makes no network request. There is no account, no telemetry, no update check, no crash reporting.
 
-Its settings, favorites and workspaces are plain TOML files in the usual per-user folders. You do not have to guess where: **Settings → Storage locations** lists the exact paths and opens them.
+Its settings, favorites and workspaces are plain TOML files in the usual per-user folders. You do not have to guess where: **Settings → Storage** lists the exact paths and opens them.
 
 Thumbnails live in a bounded memory cache for the length of the session. Nothing is written to a thumbnail database on disk.
 
@@ -30,9 +32,9 @@ Favnyr runs with ordinary user permissions. It installs no service and no backgr
 
 ## What it does
 
-**Panels.** Split the window horizontally or vertically, up to 16 panels. Each keeps its own tabs, history, sorting and columns.
+**Views.** Split the window horizontally or vertically, up to 32 views. Each keeps its own tabs, history, sorting and columns.
 
-**Workspaces.** A workspace is a saved set of panels and tabs. Keep one per project and restore the whole arrangement in one click.
+**Workspaces.** A workspace is a saved set of views and tabs. Keep one per project and restore the whole arrangement in one click, or give it a number and reach it with Ctrl+1 to Ctrl+9. Switching that way saves what you were doing first, without asking.
 
 **Favorites.** Shared across every workspace, so your usual places do not depend on which layout is open.
 
@@ -44,21 +46,23 @@ So if 7-Zip is installed (7zz, 7z or 7za), Favnyr compresses and extracts withou
 - `Extract here` and `Extract to folder` work on the archive types 7-Zip reads, RAR included.
 
 
-**Keyboard.** 39 actions follow the usual conventions and can all be rebound from Settings.
+**Keyboard.** Actions follow the usual conventions and can be rebound from Settings.
 
-**Columns.** Show, hide, resize and reorder them per panel.
+**Columns.** Show, hide, resize and reorder them per view.
+
+**List and grid.** The display menu selects the arrangement and whether to show icons or thumbnails. Each tab remembers its layout and grid size; Ctrl+wheel adjusts the size. The grid keeps selection, file drops, folder annotations and manual ordering. In manual order, drop before or after a tile to reposition the selection, including across rows. Drop in the centre of a folder to target that folder. Settings provide defaults for new tabs, text size and spacing on both grid axes.
 
 **Filtering.** Start typing to narrow a folder by name, or open the extension filter for something stricter.
 
-**Recursive folder size and date.** Off by default. Turn either on and choose a depth from 1 to 8: Favnyr then shows the real size and latest modification date of a folder's contents, computed in the background. Both metrics share a single directory walk, so enabling the two costs one pass, not two.
+**Recursive folder size and date.** Off by default. Turn either on and choose a depth from 1 to 16: Favnyr then shows the real size and latest modification date of a folder's contents, computed in the background. Both metrics share a single directory walk, so enabling the two costs one pass, not two.
 
-**Files and folders.** Copy, move, link, rename, create, trash and delete, with progress reported. Several operations can run at once. Multi-selection, drag and drop between panels and to other applications, and reopening closed tabs. Folders can be given a color, any item (file/folder) a short note, and both follow it when it is renamed or moved within Favnyr.
+**Files and folders.** Copy, move, link, rename, create, trash and delete, with progress reported. Several operations can run at once. Multi-selection, drag and drop between views and to other applications, and reopening closed tabs. Folders can be given a color, any item (file/folder) a short note, and both follow it when it is renamed or moved within Favnyr.
 
-**Interface.** English, French, Spanish, German and Italian. Light and dark themes. Adjustable scaling.
+**Interface.** English, French, Spanish, German, Italian, Russian, Simplified Chinese and Japanese. Light and dark themes. Adjustable scaling.
 
-## Previews
+## Thumbnails
 
-Images are decoded in pure Rust, no C library and no network:
+Images are decoded in pure Rust :
 
 `.jpg` `.jpeg` · `.png` · `.gif` · `.webp` · `.bmp` · `.tif` `.tiff` · `.tga` · `.hdr` · `.ico`
 
@@ -72,21 +76,57 @@ and `.af`) receive the same lightweight treatment.
 
 MP3 and FLAC files (`.mp3`, `.flac`) display their embedded cover art. A track without embedded artwork simply keeps the normal audio icon.
 
-Videos (`.mp4` `.mkv` `.mov` `.avi` `.webm` `.wmv` `.flv` `.m4v` `.mpg` `.mpeg` `.ts` `.3gp`) and PDFs get a preview too, through a different route on each system:
+Videos (`.mp4` `.mkv` `.mov` `.avi` `.webm` `.wmv` `.flv` `.m4v` `.mpg` `.mpeg` `.ts` `.3gp`) and PDFs get a thumbnail too, through a different route on each system:
 
 - **Windows** -> the shell's thumbnail providers, so nothing extra to install.
 - **Linux** -> `ffmpeg` for video, Poppler (`pdftoppm` or `pdftocairo`) for PDF. Both optional; without them Favnyr simply shows the file-type icon.
 
 
+## Pro tips
+
+A few things that are easy to miss.
+
+- **Type to filter.** Any printable character typed in a view filters its
+  entries by name as you go.
+- **Ctrl+wheel resizes the entries**, and past a size threshold they switch to
+  thumbnails.
+- **The wheel over a tab bar switches tabs**, forwards and back, wrapping around
+  at the ends. It works the same on a vertical tab bar, and a horizontal
+  trackpad swipe counts too.
+- **The wheel still scrolls during a drag.** It scrolls whichever view sits
+  under the cursor, so a folder further down the list can be reached without
+  releasing the drag.
+- **Hold Space while dragging one folder** and the drag opens it instead of
+  moving it: drop on the edge of a view to split there, or in its middle to add
+  a tab.
+- **Drag modifiers.** Ctrl copies straight away, Shift moves straight away, and
+  no modifier shows the Move/Copy menu.
+- **Drop files on an executable** to open them with that program.
+- **Double-click the gutter**, the narrow empty strip to the left of the
+  entries, to select everything (similar to CTRL+A).
+- **Double-click a separator** to even out the views it divides, and double-click
+  it again to put the previous sizes back.
+- **Middle-click** is three gestures: held down in a view it scrolls from where
+  it was pressed, on a sidebar entry or a favorite it opens in a new tab, and on
+  a tab it closes it.
+- **Workspace shortcuts.** In the workspaces panel (Ctrl+Q) every saved
+  workspace carries a badge where a slot from 1 to 9 can be assigned, after
+  which Ctrl+1 to Ctrl+9 load it directly. 
+  Switching this way never asks a question:
+  the current workspace is saved first, so changing your mind cannot cost
+  unsaved work.
+  On an AZERTY keyboard the digit row
+  needs Shift, so those defaults don't match. You can rebind them manually if needed in the
+  settings to Ctrl+&, Ctrl+é and so on.
+
 ## About AI-assisted development
 
-Favnyr is built with AI assistance. Saying so plainly seems better than leaving it to be discovered.
-
+Because of the project’s complexity, AI has been used as a development assistant
 Nothing was accepted because it compiled. Every change was carefully tried by hand on both Windows and Linux, lived with, and reworked until it held up in the awkward cases as well as the obvious ones. That patient testing and finishing took far longer than the writing. 
 
 ## Building
 
-Needs Rust 1.88 or newer and a C compiler. The first release build takes several minutes: it is optimised with link-time optimisation.
+Needs Rust 1.92 or newer and a C compiler. The first release build takes several minutes: it is optimised with link-time optimisation.
 
 ### Windows
 
@@ -96,7 +136,7 @@ Install Rust from <https://rust-lang.org/tools/install/> (the x64 `rustup-init.e
 winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 ```
 
-Nothing else is needed : previews go through the system.
+Nothing else is needed : thumbnails go through the system.
 
 ### Linux
 
@@ -110,8 +150,8 @@ Then the build dependencies:
 - Fedora -> `sudo dnf install gcc pkgconf-pkg-config fontconfig-devel`
 - Arch -> `sudo pacman -S --needed base-devel fontconfig`
 
-Optionally install `ffmpeg` for video previews, `poppler-utils` for PDF
-previews, and 7-Zip (`7zz`, `7z`, or `7za`) for the advanced compression and
+Optionally install `ffmpeg` for video thumbnails, `poppler-utils` for PDF
+thumbnails, and 7-Zip (`7zz`, `7z`, or `7za`) for the advanced compression and
 extraction recipes (ready-made commands).
 
 ### Build and run
@@ -122,21 +162,21 @@ cargo run --release --bin favnyr
 
 The executable lands in `target/release/` (`favnyr` on Linux, `favnyr.exe` on Windows). Copy it anywhere. `cargo clean` reclaims the build directory, which is large.
 
-## NixOS
+### NixOS
 
-### Run directly
-
-```bash
-nix run github:GlitchAwakened/Favnyr?dir=packaging/nix
-```
-
-### Install via Profile
+#### Run directly
 
 ```bash
-nix profile install github:GlitchAwakened/Favnyr?dir=packaging/nix
+nix run 'github:GlitchAwakened/Favnyr?dir=packaging/nix'
 ```
 
-### Install via Flake
+#### Install via Profile
+
+```bash
+nix profile install 'github:GlitchAwakened/Favnyr?dir=packaging/nix'
+```
+
+#### Install via Flake
 
 ```nix
 {
@@ -159,9 +199,6 @@ nix profile install github:GlitchAwakened/Favnyr?dir=packaging/nix
   };
 }
 ```
-
-
-
 
 ## License
 

@@ -21,6 +21,10 @@ stdenv.mkDerivation rec {
   pname = "favnyr";
   version = "0.3.4";
 
+  # One release, one architecture. A second architecture cannot be another entry
+  # in the flake's system list: each one has its own archive and its own hash, so
+  # the url and the hash would both have to be selected from a per-system table
+  # here, and `meta.platforms` widened to match.
   src = fetchurl {
     url = "https://github.com/GlitchAwakened/Favnyr/releases/download/v${version}/favnyr-linux-x86_64.tar.gz";
     hash = "sha256-ft0MkM4Dz1Mq+brX2SCHagsAiISuYIuF0v2u7lAhfkk=";
@@ -93,6 +97,8 @@ stdenv.mkDerivation rec {
     description = "A modern and lightweight file manager";
     homepage = "https://github.com/GlitchAwakened/Favnyr";
     license = licenses.gpl3Plus;
+    # The recipe unpacks a published binary, it does not build from source.
+    sourceProvenance = with sourceTypes; [ binaryNativeCode ];
     mainProgram = "favnyr";
     platforms = [ "x86_64-linux" ];
   };

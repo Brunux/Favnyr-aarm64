@@ -433,6 +433,54 @@ fn execute(
     Ok(ProcessOutcome::Failed)
 }
 
+/// Extensions 7-Zip opens as a single-stream compressor, which is its own
+/// format rather than a container. Such an archive holds exactly one stream,
+/// so a lone `.tar` found inside it IS the container the user meant to open —
+/// unlike a `.zip` or a `.7z`, which may legitimately hold a `.tar` as one
+/// file among others.
+fn is_stream_compressed(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| {
+            matches!(
+                ext.to_ascii_lowercase().as_str(),
+                "gz" | "tgz"
+                    | "bz2"
+                    | "tbz"
+                    | "tbz2"
+                    | "xz"
+                    | "txz"
+                    | "zst"
+                    | "tzst"
+                    | "lzma"
+                    | "lz"
+                    | "z"
+            )
+        })
+}
+
+/// The single `.tar` a stream compressor expanded to, when that is exactly
+/// what `dir` holds. Several entries, a directory, or any other name mean the
+/// content is the user's payload and is left alone.
+fn lone_tar(dir: &Path) -> std::io::Result<Option<PathBuf>> {
+    let mut found = None;
+    for entry in std::fs::read_dir(dir)? {
+        let entry = entry?;
+        if found.is_some() || !entry.file_type()?.is_file() {
+            return Ok(None);
+        }
+        let path = entry.path();
+        if !path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
+        {
+            return Ok(None);
+        }
+        found = Some(path);
+    }
+    Ok(found)
+}
+
 /// Rejects links that could escape the private tree during publication.
 /// Directory traversal never follows symlinks, including directory links.
 fn validate_tree(root: &Path, cancel: &AtomicBool) -> std::io::Result<()> {
@@ -504,6 +552,13 @@ pub fn run(
         let mut args = base_args();
         let mut intermediate_tar = None;
         let mut split_progress = false;
+        // Set when a second extraction pass has to unwrap the TAR container a
+        // stream compressor yields: the directory the first pass wrote into,
+        // and the folder name to reproduce for "extract to folder".
+        let mut tar_unwrap: Option<(PathBuf, Option<OsString>)> = None;
+        // The directory whose content is published. It stops being `payload`
+        // only when that second pass succeeds.
+        let mut publish_root = payload.clone();
         let sources = match &job.kind {
             Kind::Compress {
                 name,
@@ -590,41 +645,75 @@ pub fn run(
                 vec![archive]
             }
             Kind::Extract { folder } => {
-                let output = if *folder {
-                    let name = first
+                // 7-Zip exposes a stream compressor and the TAR container it
+                // carries as two separate formats, so `x` on an archive like
+                // `my_archive.tar.gz` yields `my_archive.tar` and stops. What
+                // "extract" means is the files, so a second pass follows.
+                let wrapped = is_stream_compressed(first);
+                let inner = if *folder {
+                    let stem = first
                         .file_stem()
                         .ok_or_else(|| std::io::Error::other("missing archive name"))?;
-                    let folder = payload.join(name);
-                    std::fs::create_dir(&folder)?;
-                    folder
+                    // The folder is named after the archive without any of the
+                    // extensions it carries: `my_archive`, not
+                    // `my_archive.tar`.
+                    let stem_path = Path::new(stem);
+                    let name = if wrapped
+                        && stem_path
+                            .extension()
+                            .is_some_and(|ext| ext.eq_ignore_ascii_case("tar"))
+                    {
+                        stem_path.file_stem().unwrap_or(stem).to_os_string()
+                    } else {
+                        stem.to_os_string()
+                    };
+                    Some(name)
                 } else {
-                    payload.clone()
+                    None
+                };
+                let output = match &inner {
+                    Some(name) => {
+                        let folder = payload.join(name);
+                        std::fs::create_dir(&folder)?;
+                        folder
+                    }
+                    None => payload.clone(),
                 };
                 args.insert(0, "x".into());
                 args.push("-aou".into());
                 let mut output_arg = OsString::from("-o");
                 output_arg.push(&output);
                 args.extend([output_arg, "--".into(), first.clone().into_os_string()]);
+                if wrapped {
+                    tar_unwrap = Some((output, inner));
+                }
                 Vec::new()
             }
         };
-        let mut final_progress = |value: Option<u8>| {
-            progress(value.map(|percent| {
-                if split_progress {
-                    50 + percent / 2
-                } else {
-                    percent
-                }
-            }));
+        let unwrap_follows = tar_unwrap.is_some();
+        // Both directions of a compressed TAR need two passes, and each pass
+        // owns half of the reported progress. Compression ran the container
+        // pass first, so this one is the second half; extraction runs it next,
+        // so this one is the first half. The closure is scoped: it borrows
+        // `progress`, which the second pass needs back.
+        let outcome = {
+            let mut final_progress = |value: Option<u8>| {
+                progress(value.map(|percent| match (split_progress, unwrap_follows) {
+                    (true, _) => 50 + percent / 2,
+                    (_, true) => percent / 2,
+                    _ => percent,
+                }));
+            };
+            execute(
+                job,
+                &args,
+                &destination,
+                password,
+                cancel,
+                &mut final_progress,
+            )?
         };
-        match execute(
-            job,
-            &args,
-            &destination,
-            password,
-            cancel,
-            &mut final_progress,
-        )? {
+        match outcome {
             ProcessOutcome::Success => {}
             ProcessOutcome::PasswordRequired => return Ok(Outcome::PasswordRequired),
             ProcessOutcome::Cancelled => return Ok(Outcome::Cancelled),
@@ -633,12 +722,50 @@ pub fn run(
         if let Some(path) = intermediate_tar {
             std::fs::remove_file(path)?;
         }
-        validate_tree(&payload, cancel)?;
+        // The unwrapping pass writes into a directory of its own, so a failure
+        // here leaves the first pass's output exactly as it was and still
+        // publishable: the archive was opened once, which is the behaviour
+        // this used to stop at.
+        if let Some((stage, inner)) = tar_unwrap
+            && let Some(tar) = lone_tar(&stage)?
+        {
+            let unwrapped = staging.0.join("unwrapped");
+            std::fs::create_dir(&unwrapped)?;
+            let target = match &inner {
+                Some(name) => {
+                    let folder = unwrapped.join(name);
+                    std::fs::create_dir(&folder)?;
+                    folder
+                }
+                None => unwrapped.clone(),
+            };
+            let mut second = base_args();
+            second.insert(0, "x".into());
+            second.push("-aou".into());
+            let mut output_arg = OsString::from("-o");
+            output_arg.push(&target);
+            second.extend([output_arg, "--".into(), tar.clone().into_os_string()]);
+            let mut second_half = |value: Option<u8>| {
+                progress(value.map(|percent| 50 + percent / 2));
+            };
+            // A TAR container carries no password of its own.
+            match execute(job, &second, &destination, "", cancel, &mut second_half)? {
+                ProcessOutcome::Success => {
+                    publish_root = unwrapped;
+                    // Frees the temporary copy before the final publication
+                    // copies the real content out.
+                    let _ = std::fs::remove_file(&tar);
+                }
+                ProcessOutcome::Cancelled => return Ok(Outcome::Cancelled),
+                ProcessOutcome::PasswordRequired | ProcessOutcome::Failed => {}
+            }
+        }
+        validate_tree(&publish_root, cancel)?;
         if cancel.load(Ordering::Relaxed) {
             return Ok(Outcome::Cancelled);
         }
         let sources = if sources.is_empty() {
-            std::fs::read_dir(&payload)?
+            std::fs::read_dir(&publish_root)?
                 .map(|entry| entry.map(|entry| entry.path()))
                 .collect::<std::io::Result<Vec<_>>>()?
         } else {
@@ -823,6 +950,179 @@ mod tests {
         assert!(validate_tree(&payload, &cancel).is_ok());
         symlink("../outside.txt", payload.join("link02")).unwrap();
         assert!(validate_tree(&payload, &cancel).is_err());
+    }
+
+    /// What decides the second extraction pass, without needing 7-Zip: the
+    /// archive must be a single-stream compressor AND must have expanded to
+    /// nothing but one `.tar`. Either half alone would be wrong.
+    #[test]
+    fn only_a_stream_compressor_holding_one_tar_is_unwrapped() {
+        for name in [
+            "my_archive.tar.gz",
+            "my_archive.tgz",
+            "my_archive.tar.xz",
+            "my_archive.TAR.GZ",
+            "my_archive.tar.bz2",
+            "my_archive.tar.zst",
+        ] {
+            assert!(
+                is_stream_compressed(Path::new(name)),
+                "{name} should be treated as a compressed stream"
+            );
+        }
+        // Containers may legitimately hold a `.tar` as one file among others,
+        // so they must never be unwrapped on the user's behalf.
+        for name in ["my_archive.tar", "my_archive.zip", "my_archive.7z", "plain"] {
+            assert!(
+                !is_stream_compressed(Path::new(name)),
+                "{name} is a container, not a compressed stream"
+            );
+        }
+
+        let stage = Staging::create().unwrap();
+        let dir = stage.0.join("expanded");
+        std::fs::create_dir(&dir).unwrap();
+        assert!(lone_tar(&dir).unwrap().is_none(), "nothing expanded");
+
+        let tar = dir.join("my_archive.tar");
+        std::fs::write(&tar, b"x").unwrap();
+        assert_eq!(lone_tar(&dir).unwrap().as_deref(), Some(tar.as_path()));
+
+        // A second entry means the content is the payload, not a container.
+        std::fs::write(dir.join("notes.txt"), b"x").unwrap();
+        assert!(lone_tar(&dir).unwrap().is_none(), "two entries");
+
+        let other = stage.0.join("single");
+        std::fs::create_dir(&other).unwrap();
+        std::fs::write(other.join("my_file.pdf"), b"x").unwrap();
+        assert!(lone_tar(&other).unwrap().is_none(), "lone file, not a tar");
+
+        let nested = stage.0.join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        std::fs::create_dir(nested.join("folder01")).unwrap();
+        assert!(lone_tar(&nested).unwrap().is_none(), "lone directory");
+    }
+
+    /// A compressed TAR extracts in one pass, and a container holding a lone
+    /// `.tar` still does not.
+    #[test]
+    #[ignore = "requires FAVNYR_TEST_7ZIP"]
+    fn real_compressed_tar_extracts_in_a_single_pass() {
+        let fixture = Staging::create().unwrap();
+        std::fs::write(fixture.0.join("my_file.txt"), b"data").unwrap();
+        let folder = fixture.0.join("folder01");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("nested.txt"), b"nested data").unwrap();
+        let inputs = vec![fixture.0.join("my_file.txt"), folder];
+        let cancel = AtomicBool::new(false);
+
+        let compress = Job {
+            program: program(),
+            inputs: inputs.clone(),
+            kind: Kind::Compress {
+                name: "my_archive.tar.gz".into(),
+                format: Format::Tar,
+                tar_compression: TarCompression::Gzip,
+                level: 5,
+            },
+        };
+        let Outcome::Ready(created) = run(&compress, "", &cancel, |_| {}) else {
+            panic!("compression failed")
+        };
+        let archive = created.sources[0].clone();
+
+        // Extract here: the files themselves, and no leftover container.
+        let Outcome::Ready(here) = run(
+            &Job {
+                program: program(),
+                inputs: vec![archive.clone()],
+                kind: Kind::Extract { folder: false },
+            },
+            "",
+            &cancel,
+            |_| {},
+        ) else {
+            panic!("extraction failed")
+        };
+        let names: Vec<String> = here
+            .sources
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            !names.iter().any(|n| n.ends_with(".tar")),
+            "the container must not be published: {names:?}"
+        );
+        let root = here.sources[0].parent().unwrap();
+        assert_eq!(std::fs::read(root.join("my_file.txt")).unwrap(), b"data");
+        assert_eq!(
+            std::fs::read(root.join("folder01/nested.txt")).unwrap(),
+            b"nested data"
+        );
+
+        // Extract to folder: named after the archive without any of the
+        // extensions it carried.
+        let Outcome::Ready(into) = run(
+            &Job {
+                program: program(),
+                inputs: vec![archive.clone()],
+                kind: Kind::Extract { folder: true },
+            },
+            "",
+            &cancel,
+            |_| {},
+        ) else {
+            panic!("extraction failed")
+        };
+        assert_eq!(into.sources.len(), 1);
+        assert_eq!(
+            into.sources[0].file_name().unwrap().to_string_lossy(),
+            "my_archive"
+        );
+        assert_eq!(
+            std::fs::read(into.sources[0].join("folder01/nested.txt")).unwrap(),
+            b"nested data"
+        );
+
+        // The control: a container holding one `.tar` keeps it. Unwrapping it
+        // would destroy a file the user asked for.
+        let wrapper = Job {
+            program: program(),
+            inputs: vec![archive.clone()],
+            kind: Kind::Compress {
+                name: "wrapper.7z".into(),
+                format: Format::SevenZip,
+                tar_compression: TarCompression::None,
+                level: 1,
+            },
+        };
+        let tar_only = archive.parent().unwrap().join("my_archive.tar");
+        std::fs::write(&tar_only, std::fs::read(&archive).unwrap()).unwrap();
+        let wrapper = Job {
+            inputs: vec![tar_only],
+            ..wrapper
+        };
+        let Outcome::Ready(packed) = run(&wrapper, "", &cancel, |_| {}) else {
+            panic!("compression failed")
+        };
+        let Outcome::Ready(unpacked) = run(
+            &Job {
+                program: program(),
+                inputs: packed.sources.clone(),
+                kind: Kind::Extract { folder: false },
+            },
+            "",
+            &cancel,
+            |_| {},
+        ) else {
+            panic!("extraction failed")
+        };
+        assert_eq!(unpacked.sources.len(), 1);
+        assert_eq!(
+            unpacked.sources[0].file_name().unwrap().to_string_lossy(),
+            "my_archive.tar",
+            "a container's lone .tar is a payload and must survive"
+        );
     }
 
     #[test]

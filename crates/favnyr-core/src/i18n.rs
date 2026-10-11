@@ -17,6 +17,9 @@ pub enum Lang {
     Es,
     De,
     It,
+    Ru,
+    Zh,
+    Ja,
 }
 
 impl Lang {
@@ -28,6 +31,9 @@ impl Lang {
             Lang::Es => "es",
             Lang::De => "de",
             Lang::It => "it",
+            Lang::Ru => "ru",
+            Lang::Zh => "zh",
+            Lang::Ja => "ja",
         }
     }
 
@@ -39,12 +45,24 @@ impl Lang {
             Lang::Es => "Español",
             Lang::De => "Deutsch",
             Lang::It => "Italiano",
+            Lang::Ru => "Русский",
+            Lang::Zh => "简体中文",
+            Lang::Ja => "日本語",
         }
     }
 
     /// All supported languages, in display order.
     pub fn all() -> &'static [Lang] {
-        &[Lang::En, Lang::Fr, Lang::Es, Lang::De, Lang::It]
+        &[
+            Lang::En,
+            Lang::Fr,
+            Lang::Es,
+            Lang::De,
+            Lang::It,
+            Lang::Ru,
+            Lang::Zh,
+            Lang::Ja,
+        ]
     }
 
     /// Parses an ISO code; falls back to `En` if unrecognized.
@@ -54,6 +72,9 @@ impl Lang {
             "es" => Lang::Es,
             "de" => Lang::De,
             "it" => Lang::It,
+            "ru" => Lang::Ru,
+            "zh" => Lang::Zh,
+            "ja" => Lang::Ja,
             _ => Lang::En,
         }
     }
@@ -109,8 +130,14 @@ mod tests {
 
     #[test]
     fn lang_unknown_falls_back_to_english() {
-        assert_eq!(Lang::from_code("zh"), Lang::En);
-        assert_eq!(Lang::from_code(""), Lang::En);
+        // The codes are checked against `all()` rather than assumed unknown:
+        // this test used "zh" as its example and broke the day Chinese was
+        // added. A sample that names a real language proves nothing.
+        let known: Vec<&str> = Lang::all().iter().map(|lang| lang.code()).collect();
+        for code in ["", "xx", "qqq", "EN", "fr-CA", "zz"] {
+            assert!(!known.contains(&code), "{code} is a supported language");
+            assert_eq!(Lang::from_code(code), Lang::En, "{code}");
+        }
     }
 
     #[test]

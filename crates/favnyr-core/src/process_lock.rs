@@ -30,6 +30,13 @@ pub fn diagnose(path: &Path) -> Option<PathLock> {
     imp::diagnose(path)
 }
 
+/// Confirms a delete-rights denial after a Shell failure with no error code.
+/// Opening a handle for DELETE access does not delete or modify the item.
+#[cfg(windows)]
+pub fn delete_access_denied(path: &Path) -> bool {
+    imp::delete_access_denied(path)
+}
+
 #[cfg(windows)]
 pub(crate) use imp::process_executable_name;
 
@@ -216,7 +223,7 @@ mod imp {
     /// Attempts to open the object with DELETE rights while allowing all
     /// sharing modes. `ERROR_SHARING_VIOLATION` therefore means an existing
     /// handle didn't grant `FILE_SHARE_DELETE` and can genuinely block the action.
-    unsafe fn has_delete_share_conflict(path: &Path) -> bool {
+    unsafe fn delete_access_error(path: &Path) -> Option<u32> {
         unsafe {
             let path = wide(path);
             let handle = CreateFileW(
@@ -231,10 +238,19 @@ mod imp {
             );
             if handle != INVALID_HANDLE_VALUE {
                 CloseHandle(handle);
-                return false;
+                return None;
             }
-            GetLastError() == ERROR_SHARING_VIOLATION
+            Some(GetLastError())
         }
+    }
+
+    unsafe fn has_delete_share_conflict(path: &Path) -> bool {
+        unsafe { delete_access_error(path) == Some(ERROR_SHARING_VIOLATION) }
+    }
+
+    pub(super) fn delete_access_denied(path: &Path) -> bool {
+        const ERROR_ACCESS_DENIED: u32 = 5;
+        unsafe { delete_access_error(path) == Some(ERROR_ACCESS_DENIED) }
     }
 
     struct LockProbe {

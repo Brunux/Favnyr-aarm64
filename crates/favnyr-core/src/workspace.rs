@@ -25,6 +25,37 @@ use crate::layout::LayoutNode;
 /// recent. The last element is the one "Reopen" will restore.
 pub const MAX_CLOSED_TABS: usize = 20;
 
+/// Item placement inside a tab, independent of thumbnail representation.
+/// Unknown string values fall back locally without discarding the workspace.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ItemArrangement {
+    Grid,
+    #[default]
+    #[serde(other)]
+    List,
+}
+
+impl ItemArrangement {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::List => "list",
+            Self::Grid => "grid",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Self {
+        match code {
+            "grid" => Self::Grid,
+            _ => Self::List,
+        }
+    }
+
+    fn is_list(&self) -> bool {
+        *self == Self::List
+    }
+}
+
 /// Serializable state of a tab: current path + sort + display mode.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TabState {
@@ -33,8 +64,7 @@ pub struct TabState {
     pub sort_column: SortColumn,
     #[serde(default = "default_sort_order")]
     pub sort_order: SortOrder,
-    /// Preview mode (thumbnails) active for this tab. When the field is
-    /// absent, `#[serde(default)]` selects list mode.
+    /// Whether content thumbnails are enabled. An absent field keeps icons.
     #[serde(default)]
     pub preview: bool,
     /// Display of hidden files for this tab. When the field is
@@ -54,6 +84,12 @@ pub struct TabState {
     /// interface, which clamps on restore — the core only carries the value.
     #[serde(default)]
     pub zoom: Option<i32>,
+    /// Missing from older workspaces, whose items always used the list.
+    #[serde(default, skip_serializing_if = "ItemArrangement::is_list")]
+    pub item_arrangement: ItemArrangement,
+    /// Independent grid size. The interface supplies and clamps its default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid_zoom: Option<i32>,
 }
 
 fn default_group_mode() -> GroupMode {
@@ -69,7 +105,7 @@ fn default_sort_order() -> SortOrder {
 
 /// Serializable state of a panel: width ratio, active tab, tabs.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct PanelState {
+pub struct ViewState {
     /// Width ratio relative to the other panels (see `panel_stretches`).
     #[serde(default = "default_stretch")]
     pub stretch: f32,
@@ -93,6 +129,24 @@ pub struct PanelState {
 
 fn default_stretch() -> f32 {
     1.0
+}
+
+impl ViewState {
+    /// Normalizes presentation and active-tab bounds without removing tabs.
+    /// Workspace loading and detached-window startup share these rules.
+    pub fn sanitize(&mut self) {
+        self.active_tab = self.active_tab.min(self.tabs.len().saturating_sub(1));
+        if !(self.stretch.is_finite() && self.stretch > 0.0) {
+            self.stretch = 1.0;
+        }
+        if self.tab_bar_mode > 2 {
+            self.tab_bar_mode = 0;
+        }
+        if !self.vbar_width.is_finite() || self.vbar_width < 0.0 {
+            self.vbar_width = 0.0;
+        }
+        self.columns = crate::columns::sanitize(std::mem::take(&mut self.columns));
+    }
 }
 
 /// State of the four collapsible sections of the left sidebar. All
@@ -127,7 +181,7 @@ impl SidebarSectionsState {
 pub struct WorkspaceState {
     #[serde(default)]
     pub active_panel: usize,
-    pub panels: Vec<PanelState>,
+    pub panels: Vec<ViewState>,
     /// Layout tree. `None` triggers its reconstruction on load.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub layout: Option<LayoutNode>,
@@ -208,7 +262,7 @@ impl WorkspaceState {
         if self.panels.is_empty() {
             // Rebuild a minimal panel — the caller will replace the empty
             // path with $HOME via `effective_*`.
-            self.panels.push(PanelState {
+            self.panels.push(ViewState {
                 stretch: 1.0,
                 active_tab: 0,
                 tabs: vec![TabState {
@@ -219,30 +273,16 @@ impl WorkspaceState {
                     show_hidden: false,
                     group_mode: GroupMode::FoldersFirst,
                     zoom: None,
+                    item_arrangement: ItemArrangement::List,
+                    grid_zoom: None,
                 }],
                 columns: crate::columns::default_columns(),
                 tab_bar_mode: 0,
                 vbar_width: 0.0,
             });
         }
-        // Unknown tab bar mode / invalid width (hand-edited file) → defaults.
         for p in &mut self.panels {
-            if p.tab_bar_mode > 2 {
-                p.tab_bar_mode = 0;
-            }
-            if !p.vbar_width.is_finite() || p.vbar_width < 0.0 {
-                p.vbar_width = 0.0;
-            }
-        }
-        for p in &mut self.panels {
-            if p.active_tab >= p.tabs.len() {
-                p.active_tab = p.tabs.len() - 1;
-            }
-            if !(p.stretch.is_finite() && p.stretch > 0.0) {
-                p.stretch = 1.0;
-            }
-            // Normalize the columns (anchor `name`, widths, completion).
-            p.columns = crate::columns::sanitize(std::mem::take(&mut p.columns));
+            p.sanitize();
         }
         if self.active_panel >= self.panels.len() {
             self.active_panel = self.panels.len() - 1;
@@ -277,7 +317,21 @@ struct NamedWorkspaceFile {
     name: String,
     #[serde(default)]
     saved_at: u64,
+    /// Keyboard slot, 1 to 9, that loads this workspace directly. Absent for
+    /// the many workspaces that carry none, and omitted from the file then, so
+    /// an existing collection reads back unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    slot: Option<u8>,
     state: WorkspaceState,
+}
+
+/// Highest keyboard slot a workspace can hold. The slots mirror the digit row,
+/// so there is no tenth.
+pub const MAX_WORKSPACE_SLOT: u8 = 9;
+
+/// Is `slot` one a workspace may actually hold?
+fn slot_is_valid(slot: u8) -> bool {
+    (1..=MAX_WORKSPACE_SLOT).contains(&slot)
 }
 
 /// Lightweight metadata of a named workspace (for list display).
@@ -287,12 +341,14 @@ pub struct NamedWorkspaceMeta {
     pub id: String,
     /// Displayed name, editable by the user.
     pub name: String,
-    /// Number of panels (for the metadata shown in the list).
-    pub panels: usize,
-    /// Total number of tabs (sum over all panels).
+    /// Number of views (for the metadata shown in the list).
+    pub views: usize,
+    /// Total number of tabs (sum over all views).
     pub tabs: usize,
     /// Date of the last save (epoch nanos) — sort key for recency.
     pub saved_at: u64,
+    /// Keyboard slot that loads it, when it holds one.
+    pub slot: Option<u8>,
 }
 
 /// Validates that an `id` is safe as a file name (anti path-traversal).
@@ -353,9 +409,13 @@ pub fn list_named_workspaces(dir: &Path) -> Vec<NamedWorkspaceMeta> {
             out.push(NamedWorkspaceMeta {
                 id: id.to_string(),
                 name: file.name,
-                panels,
+                views: panels,
                 tabs,
                 saved_at,
+                // A value written by hand outside the range is read as no slot
+                // rather than as an error: the collection stays loadable, and
+                // the workspace simply answers to no shortcut.
+                slot: file.slot.filter(|s| slot_is_valid(*s)),
             });
         }
     }
@@ -366,20 +426,6 @@ pub fn list_named_workspaces(dir: &Path) -> Vec<NamedWorkspaceMeta> {
             .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
     out
-}
-
-/// Finds a named workspace by its user-facing label. The comparison is
-/// the same as in the UI: surrounding whitespace ignored and comparison
-/// in Unicode lowercase. The session file `workspace.toml`, located
-/// elsewhere, never enters this search.
-pub fn find_named_workspace(dir: &Path, name: &str) -> Option<NamedWorkspaceMeta> {
-    let wanted = name.trim().to_lowercase();
-    if wanted.is_empty() {
-        return None;
-    }
-    list_named_workspaces(dir)
-        .into_iter()
-        .find(|meta| meta.name.trim().to_lowercase() == wanted)
 }
 
 /// Nanoseconds (u64) since the UNIX epoch. Precision sufficient to
@@ -403,6 +449,7 @@ pub fn save_named_workspace(dir: &Path, name: &str, state: &WorkspaceState) -> R
     let file = NamedWorkspaceFile {
         name: name.trim().to_string(),
         saved_at: now_nanos(),
+        slot: None,
         state: state.clone(),
     };
     write_named(dir, &id, &file)?;
@@ -421,6 +468,55 @@ pub fn overwrite_named_workspace(dir: &Path, id: &str, state: &WorkspaceState) -
 pub fn load_named_workspace(dir: &Path, id: &str) -> Result<(String, WorkspaceState)> {
     let file = read_named(dir, id)?;
     Ok((file.name, file.state.sanitized()))
+}
+
+/// Gives `id` the keyboard slot `slot`, or takes its slot away with `None`.
+/// Returns the workspace that had to give the slot up, when there was one.
+///
+/// A slot addresses exactly one workspace, so handing it over takes it from
+/// whoever held it: a shortcut with two answers would have to pick one of them
+/// silently, and the list would show the same digit twice.
+///
+/// The previous holder is cleared BEFORE the new one is written. Should the
+/// second write fail, the slot ends up held by nobody, which is visible in the
+/// list and one click away from being fixed. The reverse order would leave two
+/// holders, an inconsistency the rest of the code would then have to arbitrate.
+///
+/// Neither save date moves: assigning a shortcut is not a save, and the list is
+/// ordered by recency.
+pub fn set_workspace_slot(dir: &Path, id: &str, slot: Option<u8>) -> Result<Option<String>> {
+    if let Some(value) = slot
+        && !slot_is_valid(value)
+    {
+        return Err(crate::error::Error::Workspace(format!(
+            "workspace slot out of range: {value}"
+        )));
+    }
+    // Read first, so an unknown id fails before any other file is touched.
+    let mut file = read_named(dir, id)?;
+    let mut previous = None;
+    if let Some(value) = slot {
+        for meta in list_named_workspaces(dir) {
+            if meta.slot != Some(value) || meta.id == id {
+                continue;
+            }
+            let mut other = read_named(dir, &meta.id)?;
+            other.slot = None;
+            write_named(dir, &meta.id, &other)?;
+            previous = Some(meta.id);
+        }
+    }
+    file.slot = slot;
+    write_named(dir, id, &file)?;
+    Ok(previous)
+}
+
+/// Identifier of the workspace holding `slot`, if any.
+pub fn workspace_with_slot(dir: &Path, slot: u8) -> Option<String> {
+    list_named_workspaces(dir)
+        .into_iter()
+        .find(|meta| meta.slot == Some(slot))
+        .map(|meta| meta.id)
 }
 
 /// Renames a workspace (only changes the `name` field, keeps the `id`/file).
@@ -467,7 +563,7 @@ mod tests {
         WorkspaceState {
             active_panel: 1,
             panels: vec![
-                PanelState {
+                ViewState {
                     stretch: 1.5,
                     active_tab: 0,
                     tabs: vec![TabState {
@@ -478,12 +574,14 @@ mod tests {
                         show_hidden: false,
                         group_mode: GroupMode::FoldersFirst,
                         zoom: None,
+                        item_arrangement: ItemArrangement::List,
+                        grid_zoom: None,
                     }],
                     columns: crate::columns::default_columns(),
                     tab_bar_mode: 0,
                     vbar_width: 0.0,
                 },
-                PanelState {
+                ViewState {
                     stretch: 1.0,
                     active_tab: 1,
                     tabs: vec![
@@ -495,6 +593,8 @@ mod tests {
                             show_hidden: false,
                             group_mode: GroupMode::FoldersFirst,
                             zoom: None,
+                            item_arrangement: ItemArrangement::List,
+                            grid_zoom: None,
                         },
                         TabState {
                             path: "/etc".into(),
@@ -504,6 +604,8 @@ mod tests {
                             show_hidden: false,
                             group_mode: GroupMode::FoldersFirst,
                             zoom: None,
+                            item_arrangement: ItemArrangement::List,
+                            grid_zoom: None,
                         },
                     ],
                     columns: crate::columns::default_columns(),
@@ -524,6 +626,98 @@ mod tests {
         let s = toml::to_string_pretty(&ws).unwrap();
         let back: WorkspaceState = toml::from_str(&s).unwrap();
         assert_eq!(back, ws);
+    }
+
+    #[test]
+    fn grid_state_is_optional_and_keeps_all_legacy_tab_keys() {
+        let old = r#"path = "folder01"
+preview = true
+zoom = 5
+"#;
+        let saved: TabState = toml::from_str(old).unwrap();
+        assert_eq!(saved.item_arrangement, ItemArrangement::List);
+        assert_eq!(saved.grid_zoom, None);
+        let old_written = toml::to_string(&saved).unwrap();
+        assert!(!old_written.contains("item_arrangement"));
+        assert!(!old_written.contains("grid_zoom"));
+
+        let mut current = saved.clone();
+        current.item_arrangement = ItemArrangement::Grid;
+        current.grid_zoom = Some(3);
+        let value = toml::Value::try_from(&current).unwrap();
+        let table = value.as_table().unwrap();
+        let expected: std::collections::BTreeSet<_> = [
+            "path",
+            "sort_column",
+            "sort_order",
+            "preview",
+            "show_hidden",
+            "group_mode",
+            "zoom",
+            "item_arrangement",
+            "grid_zoom",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(
+            table
+                .keys()
+                .map(String::as_str)
+                .collect::<std::collections::BTreeSet<_>>(),
+            expected
+        );
+        assert_eq!(table["path"].as_str(), Some("folder01"));
+        assert_eq!(table["preview"].as_bool(), Some(true));
+        assert_eq!(table["zoom"].as_integer(), Some(5));
+        assert_eq!(table["item_arrangement"].as_str(), Some("grid"));
+        assert_eq!(table["grid_zoom"].as_integer(), Some(3));
+    }
+
+    #[test]
+    fn grid_state_round_trips_open_closed_and_named_workspaces() {
+        for item_arrangement in [ItemArrangement::List, ItemArrangement::Grid] {
+            for preview in [false, true] {
+                let mut state = sample();
+                let tab = &mut state.panels[0].tabs[0];
+                tab.item_arrangement = item_arrangement;
+                tab.preview = preview;
+                tab.zoom = Some(5);
+                tab.grid_zoom = Some(2);
+                state.closed_tabs.push(tab.clone());
+                let named = NamedWorkspaceFile {
+                    name: "workspace01".into(),
+                    saved_at: 1,
+                    slot: None,
+                    state,
+                };
+                let encoded = toml::to_string(&named).unwrap();
+                let restored: NamedWorkspaceFile = toml::from_str(&encoded).unwrap();
+                assert_eq!(restored, named);
+            }
+        }
+    }
+
+    #[test]
+    fn grid_state_unknown_arrangement_only_falls_back_for_that_field() {
+        let saved: TabState = toml::from_str(
+            r#"
+path = "folder01"
+preview = true
+zoom = 6
+grid_zoom = 4
+item_arrangement = "future"
+"#,
+        )
+        .unwrap();
+        assert_eq!(saved.item_arrangement, ItemArrangement::List);
+        assert_eq!(saved.zoom, Some(6));
+        assert_eq!(saved.grid_zoom, Some(4));
+        assert!(saved.preview);
+        assert!(toml::from_str::<TabState>("path = 'folder01'\nitem_arrangement = 42").is_err());
+        assert_eq!(ItemArrangement::from_code("future"), ItemArrangement::List);
+        for value in [ItemArrangement::List, ItemArrangement::Grid] {
+            assert_eq!(ItemArrangement::from_code(value.code()), value);
+        }
     }
 
     #[test]
@@ -555,6 +749,34 @@ mod tests {
         let text = toml::to_string_pretty(&current).unwrap();
         let back: WorkspaceState = toml::from_str(&text).unwrap();
         assert_eq!(back.panels[0].tabs[0].zoom, Some(5));
+    }
+
+    /// The names a workspace file carries are a compatibility contract, not a
+    /// matter of taste: a reader that cannot find `panels` fails outright,
+    /// since the field has no default, and the user loses the arrangement and
+    /// every named workspace.
+    ///
+    /// The vocabulary moved to "view" everywhere a user can see it, and some
+    /// Rust names followed. These did not, and this test is what keeps them
+    /// from following later by accident.
+    #[test]
+    fn the_persisted_names_are_pinned_whatever_the_rust_names_become() {
+        let mut ws = sample();
+        ws.layout = Some(LayoutNode::row_chain(&[1.0, 1.0]));
+        let text = toml::to_string_pretty(&ws).unwrap();
+
+        for name in ["active_panel", "[[panels]]", "[[panels.tabs]]", "panel = 0"] {
+            assert!(
+                text.contains(name),
+                "the file no longer writes {name}; existing workspaces and \
+                 older builds expect it:\n{text}"
+            );
+        }
+        // And what it writes, it reads back unchanged.
+        let back: WorkspaceState = toml::from_str(&text).unwrap();
+        assert_eq!(back.active_panel, ws.active_panel);
+        assert_eq!(back.panels.len(), ws.panels.len());
+        assert_eq!(back.layout, ws.layout);
     }
 
     #[test]
@@ -589,6 +811,8 @@ mod tests {
                 show_hidden: false,
                 group_mode: GroupMode::FoldersFirst,
                 zoom: None,
+                item_arrangement: ItemArrangement::List,
+                grid_zoom: None,
             })
             .collect();
 
@@ -668,29 +892,10 @@ mod tests {
     }
 
     #[test]
-    fn finds_named_workspace_by_trimmed_case_insensitive_label() {
-        let dir = std::env::temp_dir().join(format!(
-            "favnyr-ws-find-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
-        ));
-        let id = save_named_workspace(&dir, "Café Project", &sample()).unwrap();
-
-        let found = find_named_workspace(&dir, "  CAFÉ PROJECT  ").unwrap();
-        assert_eq!(found.id, id);
-        assert_eq!(found.name, "Café Project");
-        assert!(find_named_workspace(&dir, "workspace.toml").is_none());
-
-        std::fs::remove_dir_all(dir).ok();
-    }
-
-    #[test]
     fn sanitized_clamps_out_of_bounds() {
         let ws = WorkspaceState {
             active_panel: 99,
-            panels: vec![PanelState {
+            panels: vec![ViewState {
                 stretch: -3.0,  // invalid
                 active_tab: 42, // out of bounds
                 tabs: vec![TabState {
@@ -701,6 +906,8 @@ mod tests {
                     show_hidden: false,
                     group_mode: GroupMode::FoldersFirst,
                     zoom: None,
+                    item_arrangement: ItemArrangement::List,
+                    grid_zoom: None,
                 }],
                 columns: crate::columns::default_columns(),
                 tab_bar_mode: 0,
@@ -722,7 +929,7 @@ mod tests {
         let ws = WorkspaceState {
             active_panel: 0,
             panels: vec![
-                PanelState {
+                ViewState {
                     stretch: 1.0,
                     active_tab: 0,
                     tabs: vec![],
@@ -730,7 +937,7 @@ mod tests {
                     tab_bar_mode: 0,
                     vbar_width: 0.0,
                 },
-                PanelState {
+                ViewState {
                     stretch: 1.0,
                     active_tab: 0,
                     tabs: vec![TabState {
@@ -741,6 +948,8 @@ mod tests {
                         show_hidden: false,
                         group_mode: GroupMode::FoldersFirst,
                         zoom: None,
+                        item_arrangement: ItemArrangement::List,
+                        grid_zoom: None,
                     }],
                     columns: crate::columns::default_columns(),
                     tab_bar_mode: 0,
@@ -770,6 +979,78 @@ mod tests {
     }
 
     #[test]
+    fn a_keyboard_slot_belongs_to_one_workspace_and_survives_a_save() {
+        let dir = temp_dir("slot");
+        let first = save_named_workspace(&dir, "First", &sample()).unwrap();
+        let second = save_named_workspace(&dir, "Second", &sample()).unwrap();
+
+        // A fresh workspace answers to no shortcut.
+        let slot_of = |dir: &std::path::Path, id: &str| {
+            list_named_workspaces(dir)
+                .into_iter()
+                .find(|meta| meta.id == id)
+                .and_then(|meta| meta.slot)
+        };
+        assert_eq!(slot_of(&dir, &first), None);
+
+        assert_eq!(set_workspace_slot(&dir, &first, Some(3)).unwrap(), None);
+        assert_eq!(slot_of(&dir, &first), Some(3));
+        assert_eq!(
+            workspace_with_slot(&dir, 3).as_deref(),
+            Some(first.as_str())
+        );
+
+        // Saving the workspace again must not cost it its shortcut: the two are
+        // independent, which is the whole point of storing the slot per file.
+        overwrite_named_workspace(&dir, &first, &sample()).unwrap();
+        assert_eq!(slot_of(&dir, &first), Some(3));
+        rename_named_workspace(&dir, &first, "Renamed").unwrap();
+        assert_eq!(slot_of(&dir, &first), Some(3));
+
+        // Handing the slot over takes it from its holder, and says so.
+        assert_eq!(
+            set_workspace_slot(&dir, &second, Some(3))
+                .unwrap()
+                .as_deref(),
+            Some(first.as_str())
+        );
+        assert_eq!(slot_of(&dir, &first), None);
+        assert_eq!(slot_of(&dir, &second), Some(3));
+        assert_eq!(
+            workspace_with_slot(&dir, 3).as_deref(),
+            Some(second.as_str())
+        );
+
+        // Clearing leaves the shortcut answering nobody.
+        assert_eq!(set_workspace_slot(&dir, &second, None).unwrap(), None);
+        assert_eq!(slot_of(&dir, &second), None);
+        assert_eq!(workspace_with_slot(&dir, 3), None);
+
+        // Out of range is refused rather than stored.
+        assert!(set_workspace_slot(&dir, &first, Some(0)).is_err());
+        assert!(set_workspace_slot(&dir, &first, Some(10)).is_err());
+        assert_eq!(slot_of(&dir, &first), None);
+
+        // A file written without the field, and one written with a value out
+        // of range, both read back as no shortcut instead of failing.
+        let path = dir.join(format!("{first}.toml"));
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("slot"));
+        std::fs::write(
+            &path,
+            text.replace(
+                "name =",
+                "slot = 42
+name =",
+            ),
+        )
+        .unwrap();
+        assert_eq!(slot_of(&dir, &first), None);
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
     fn named_workspace_crud() {
         let dir = temp_dir("crud");
 
@@ -783,7 +1064,7 @@ mod tests {
         assert_eq!(list[0].name, "My workspace"); // trim applied
         assert_eq!(list[0].id, id);
         // Counters: sample() = 2 panels, 1+2 = 3 tabs.
-        assert_eq!(list[0].panels, 2);
+        assert_eq!(list[0].views, 2);
         assert_eq!(list[0].tabs, 3);
 
         // Load → name + state returned (sanitized: migrated layout materialized).
@@ -800,7 +1081,7 @@ mod tests {
         // Overwrite → state replaced, name kept.
         let other = WorkspaceState {
             active_panel: 0,
-            panels: vec![PanelState {
+            panels: vec![ViewState {
                 stretch: 1.0,
                 active_tab: 0,
                 tabs: vec![TabState {
@@ -811,6 +1092,8 @@ mod tests {
                     show_hidden: false,
                     group_mode: GroupMode::FoldersFirst,
                     zoom: None,
+                    item_arrangement: ItemArrangement::List,
+                    grid_zoom: None,
                 }],
                 columns: crate::columns::default_columns(),
                 tab_bar_mode: 0,

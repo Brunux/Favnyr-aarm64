@@ -63,6 +63,16 @@ pub const ACTIONS: &[ActionDef] = &[
         default: "Home",
     },
     ActionDef {
+        id: "cursor-left",
+        group: ActionGroup::Navigation,
+        default: "ArrowLeft",
+    },
+    ActionDef {
+        id: "cursor-right",
+        group: ActionGroup::Navigation,
+        default: "ArrowRight",
+    },
+    ActionDef {
         id: "cursor-last",
         group: ActionGroup::Navigation,
         default: "End",
@@ -114,6 +124,16 @@ pub const ACTIONS: &[ActionDef] = &[
         default: "Shift+ArrowDown",
     },
     // ----- Tabs & views -----
+    ActionDef {
+        id: "extend-left",
+        group: ActionGroup::Selection,
+        default: "Shift+ArrowLeft",
+    },
+    ActionDef {
+        id: "extend-right",
+        group: ActionGroup::Selection,
+        default: "Shift+ArrowRight",
+    },
     ActionDef {
         id: "tab-new",
         group: ActionGroup::TabsViews,
@@ -218,7 +238,17 @@ pub const ACTIONS: &[ActionDef] = &[
     ActionDef {
         id: "terminal",
         group: ActionGroup::FileOps,
-        default: "Ctrl+Alt+T",
+        // Ctrl+Alt+T is the desktop's own "open a terminal" binding on GNOME
+        // and on most KDE setups. The compositor takes the combination before
+        // any window is offered it, so the application is never asked and the
+        // terminal that appears is the desktop's, started in the home folder.
+        // Shift+F4 is free, and is what a file manager usually carries.
+        // Windows has no such grab and keeps the familiar combination.
+        default: if cfg!(windows) {
+            "Ctrl+Alt+T"
+        } else {
+            "Shift+F4"
+        },
     },
     ActionDef {
         id: "properties",
@@ -256,6 +286,54 @@ pub const ACTIONS: &[ActionDef] = &[
         id: "open-workspaces",
         group: ActionGroup::App,
         default: "Ctrl+Q",
+    },
+    // One action per keyboard slot. The slot belongs to the workspace, not to
+    // the shortcut, so these nine stay fixed while what they load changes with
+    // the slots the user hands out.
+    ActionDef {
+        id: "load-workspace-1",
+        group: ActionGroup::App,
+        default: "Ctrl+1",
+    },
+    ActionDef {
+        id: "load-workspace-2",
+        group: ActionGroup::App,
+        default: "Ctrl+2",
+    },
+    ActionDef {
+        id: "load-workspace-3",
+        group: ActionGroup::App,
+        default: "Ctrl+3",
+    },
+    ActionDef {
+        id: "load-workspace-4",
+        group: ActionGroup::App,
+        default: "Ctrl+4",
+    },
+    ActionDef {
+        id: "load-workspace-5",
+        group: ActionGroup::App,
+        default: "Ctrl+5",
+    },
+    ActionDef {
+        id: "load-workspace-6",
+        group: ActionGroup::App,
+        default: "Ctrl+6",
+    },
+    ActionDef {
+        id: "load-workspace-7",
+        group: ActionGroup::App,
+        default: "Ctrl+7",
+    },
+    ActionDef {
+        id: "load-workspace-8",
+        group: ActionGroup::App,
+        default: "Ctrl+8",
+    },
+    ActionDef {
+        id: "load-workspace-9",
+        group: ActionGroup::App,
+        default: "Ctrl+9",
     },
 ];
 
@@ -428,6 +506,38 @@ mod tests {
     use super::*;
 
     #[test]
+    fn no_two_actions_share_a_default_combination() {
+        // A duplicate default would hand one combination to two actions, and
+        // only one of them would ever answer. The catalogue is the place where
+        // that is decided, so it is the place where it is checked.
+        let mut seen: std::collections::HashMap<&str, &str> = std::collections::HashMap::new();
+        for action in ACTIONS {
+            if action.default.is_empty() {
+                continue;
+            }
+            if let Some(other) = seen.insert(action.default, action.id) {
+                panic!(
+                    "{} and {} both default to {}",
+                    other, action.id, action.default
+                );
+            }
+        }
+        // The nine workspace slots are there, each on its own digit.
+        for slot in 1..=MAX_WORKSPACE_SLOT_ACTIONS {
+            let id = format!("load-workspace-{slot}");
+            let def = ACTIONS
+                .iter()
+                .find(|a| a.id == id)
+                .unwrap_or_else(|| panic!("missing action {id}"));
+            assert_eq!(def.default, format!("Ctrl+{slot}"));
+        }
+    }
+
+    /// Mirrors the core's slot ceiling without depending on the workspace
+    /// module, which the catalogue knows nothing about.
+    const MAX_WORKSPACE_SLOT_ACTIONS: u8 = 9;
+
+    #[test]
     fn parse_serialize_round_trip() {
         for s in [
             "Ctrl+C",
@@ -472,6 +582,16 @@ mod tests {
             km.action_for(&Chord::parse("ArrowDown").unwrap()),
             Some("cursor-down")
         );
+        for (chord, action) in [
+            ("ArrowLeft", "cursor-left"),
+            ("ArrowRight", "cursor-right"),
+            ("Shift+ArrowLeft", "extend-left"),
+            ("Shift+ArrowRight", "extend-right"),
+            ("Alt+ArrowLeft", "nav-back"),
+            ("Alt+ArrowRight", "nav-forward"),
+        ] {
+            assert_eq!(km.action_for(&Chord::parse(chord).unwrap()), Some(action));
+        }
         assert_eq!(
             km.action_for(&Chord::parse("Ctrl+Z").unwrap()),
             Some("restore-trash")
@@ -542,6 +662,26 @@ mod tests {
         assert_eq!(
             km.action_for(&Chord::parse("Shift+Delete").unwrap()),
             Some("delete-permanent")
+        );
+    }
+
+    #[test]
+    fn the_terminal_default_avoids_the_desktop_grab_away_from_windows() {
+        // GNOME and most KDE setups bind Ctrl+Alt+T themselves, at the
+        // compositor, so an application given that default is never offered
+        // the key and the action silently does nothing. Measured on KDE: the
+        // desktop opens its own terminal and the log records no launch.
+        let km = Keymap::build(&BTreeMap::new());
+        let chord = km.chord_of("terminal");
+        if cfg!(windows) {
+            assert_eq!(chord, "Ctrl+Alt+T");
+        } else {
+            assert_ne!(chord, "Ctrl+Alt+T");
+            assert_eq!(chord, "Shift+F4");
+        }
+        assert_eq!(
+            km.action_for(&Chord::parse(chord).unwrap()),
+            Some("terminal")
         );
     }
 

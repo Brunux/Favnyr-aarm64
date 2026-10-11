@@ -23,17 +23,21 @@ use anyhow::{Context, Result};
 use slint::ComponentHandle;
 use tracing::{info, warn};
 
-use favnyr_core::{Config, WorkspaceState, logging, paths, workspace};
+use favnyr_core::{Config, WorkspaceState, logging, paths};
 
 mod actions;
 mod archives;
 mod bridge;
 mod clipboard;
+mod detached_view;
+mod file_drag;
+mod file_uri;
 mod i18n;
 #[cfg(target_os = "linux")]
 mod linportable;
 mod openwith;
 mod shellmenu;
+mod transfer;
 #[cfg(windows)]
 mod winddrag;
 mod winmsg;
@@ -54,7 +58,7 @@ slint::include_modules!();
 const MIN_WINDOW_WIDTH: u32 = 720;
 const MIN_WINDOW_HEIGHT: u32 = 420;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 enum StartupRequest {
     Normal,
     /// Internal protocol used only for tab tear-off.
@@ -70,8 +74,10 @@ enum StartupRequest {
         position: Option<(i32, i32)>,
         tab_bar_mode: u8,
     },
-    /// Public argument: visible name of a saved workspace.
-    Workspace(String),
+    DetachedState(detached_view::DetachedView),
+    /// Desktop launch: one folder per argument, opened as tabs in a new window.
+    Folders(Vec<PathBuf>),
+    InvalidLocation(OsString),
 }
 
 fn parse_startup_request(args: impl IntoIterator<Item = OsString>) -> StartupRequest {
@@ -79,6 +85,12 @@ fn parse_startup_request(args: impl IntoIterator<Item = OsString>) -> StartupReq
     let Some(first) = args.next() else {
         return StartupRequest::Normal;
     };
+
+    if first == detached_view::MARKER {
+        return detached_view::parse(args)
+            .map(StartupRequest::DetachedState)
+            .unwrap_or(StartupRequest::Normal);
+    }
 
     if first == "--detached-tab" {
         let Some(dir) = args
@@ -144,16 +156,33 @@ fn parse_startup_request(args: impl IntoIterator<Item = OsString>) -> StartupReq
         };
     }
 
-    // Also accepts an unquoted name made of several words. Workspace names
-    // come from Unicode UI fields; a rare non-UTF-8 argument remains
-    // displayable anyway thanks to the tolerant conversion.
-    let mut words = vec![first.to_string_lossy().into_owned()];
-    words.extend(args.map(|arg| arg.to_string_lossy().into_owned()));
-    let name = words.join(" ").trim().to_string();
-    if name.is_empty() {
+    // `--` allows a folder name starting with an option marker. Unrecognized
+    // options are rejected rather than opened as unrelated relative paths.
+    let positional_only = first == "--";
+    let mut dirs = Vec::new();
+    for argument in std::iter::once(first)
+        .chain(args)
+        .skip(usize::from(positional_only))
+    {
+        if argument.is_empty()
+            || (!positional_only && argument.as_encoded_bytes().starts_with(b"--"))
+        {
+            return StartupRequest::InvalidLocation(argument);
+        }
+        let dir = if file_uri::has_file_scheme(&argument) {
+            let Some(dir) = file_uri::to_path(&argument) else {
+                return StartupRequest::InvalidLocation(argument);
+            };
+            dir
+        } else {
+            PathBuf::from(argument)
+        };
+        dirs.push(dir);
+    }
+    if dirs.is_empty() {
         StartupRequest::Normal
     } else {
-        StartupRequest::Workspace(name)
+        StartupRequest::Folders(dirs)
     }
 }
 
@@ -366,13 +395,20 @@ fn main() -> Result<()> {
         Config::default()
     });
 
-    // The internal tear-off protocol now has an explicit marker,
-    // which frees up the first public positional argument for a workspace name.
-    // The parser performs no disk access.
+    // Public arguments are folder paths or local file URIs, one per tab.
+    // Parsing performs no filesystem probes.
     let startup = parse_startup_request(std::env::args_os().skip(1));
-    let (detached_dirs, detached_pos, detached_tab_bar, requested_workspace) = match startup {
+    let mut invalid_location = None;
+    let (startup_dirs, detached_pos, startup_tab_bar, detached_settings) = match startup {
         StartupRequest::Normal => (None, None, 0, None),
-        StartupRequest::Workspace(name) => (None, None, 0, Some(name)),
+        StartupRequest::Folders(dirs) => {
+            (Some(dirs), None, config.default_tab_bar_mode.min(2), None)
+        }
+        StartupRequest::InvalidLocation(location) => {
+            warn!(location = %location.to_string_lossy(), "invalid startup location");
+            invalid_location = Some(location);
+            (None, None, 0, None)
+        }
         // A torn-off tab is a torn-off view holding one tab: the two protocols
         // meet here and everything downstream sees the same shape.
         StartupRequest::DetachedTab {
@@ -385,7 +421,25 @@ fn main() -> Result<()> {
             position,
             tab_bar_mode,
         } => (Some(dirs), position, tab_bar_mode, None),
+        StartupRequest::DetachedState(packet) => (
+            Some(packet.dirs),
+            packet.position,
+            packet.view.tab_bar_mode,
+            Some(packet.view),
+        ),
     };
+    // Desktop launchers can pass "." with the target folder as their working
+    // directory. Absolutize without canonicalizing or blocking on network I/O.
+    let startup_dirs = startup_dirs.map(|dirs| {
+        dirs.into_iter()
+            .map(|dir| {
+                std::path::absolute(&dir).unwrap_or_else(|err| {
+                    warn!(error = %err, path = %dir.display(), "resolving startup folder failed");
+                    dir
+                })
+            })
+            .collect::<Vec<_>>()
+    });
 
     let window = MainWindow::new().context("Slint MainWindow::new failed")?;
 
@@ -461,7 +515,7 @@ fn main() -> Result<()> {
         // A normal instance sanitizes any size incompatible with the
         // current monitor. A detached instance stays ephemeral and never modifies this
         // global preference.
-        if detached_dirs.is_none()
+        if startup_dirs.is_none()
             && (config.window_width != restored.0 || config.window_height != restored.1)
         {
             info!(
@@ -479,50 +533,26 @@ fn main() -> Result<()> {
         }
     }
 
-    // Detached instance (tear-off): blank state on the requested folder.
+    // Folder launches and detached instances start on the requested folders.
     // Otherwise: restores the workspace (panels + tabs) if present, or falls
     // back to the default state (one panel, one tab on $HOME).
-    let mut workspace_warning = None;
-    let state = if let Some(dirs) = detached_dirs.as_ref().filter(|dirs| !dirs.is_empty()) {
-        info!(tabs = dirs.len(), dir = %dirs[0].display(), "starting detached instance");
-        let s = bridge::AppState::new_at(config, dirs[0].clone(), detached_tab_bar);
-        // The rest of the view's tabs, in order, then back to the first.
-        s.adopt_tabs(&dirs[1..]);
-        // A detached instance is ephemeral: its view changes must
-        // never replace the main instance's shared workspace.
+    let state = if let Some(dirs) = startup_dirs.as_ref().filter(|dirs| !dirs.is_empty()) {
+        info!(tabs = dirs.len(), dir = %dirs[0].display(), "starting folder instance");
+        let s = bridge::AppState::new_at(config, dirs[0].clone(), startup_tab_bar);
+        if let Some(view) = detached_settings {
+            s.adopt_detached_view(&view, dirs);
+        } else {
+            s.adopt_tabs(&dirs[1..]);
+        }
+        // A folder window must never replace another instance's shared workspace.
         s.set_ephemeral();
         s
-    } else if let Some(name) = requested_workspace {
-        let dir = paths::workspaces_dir();
-        if let Some(meta) = workspace::find_named_workspace(&dir, &name) {
-            match workspace::load_named_workspace(&dir, &meta.id) {
-                Ok((canonical_name, mut ws)) => {
-                    info!(
-                        name = canonical_name,
-                        "starting named workspace from command line"
-                    );
-                    // `from_workspace` uses this field for the title and reloads
-                    // the saved snapshot used for the "modified" state.
-                    ws.workspace_name = Some(canonical_name);
-                    bridge::AppState::from_workspace(config, ws)
-                }
-                Err(err) => {
-                    warn!(error = %err, name, "command-line workspace could not be loaded");
-                    workspace_warning = Some(name);
-                    restore_session(config)
-                }
-            }
-        } else {
-            warn!(name, "command-line workspace not found");
-            workspace_warning = Some(name);
-            restore_session(config)
-        }
     } else {
         restore_session(config)
     };
     bridge::install(&window, state.clone());
-    if let Some(name) = workspace_warning {
-        bridge::show_workspace_not_found_notice(&window, &state, &name);
+    if let Some(location) = invalid_location {
+        bridge::show_invalid_startup_location_notice(&window, &state, &location.to_string_lossy());
     }
 
     // Ctrl+C / Ctrl+Break from the terminal → clean exit (dev). Installed
@@ -537,14 +567,14 @@ fn main() -> Result<()> {
     window.run().context("Slint event loop failed")?;
 
     // Persistence on close: window size (config) + panel/tab layout
-    // (workspace). SKIPPED for a detached instance (tear-off): it's
+    // (workspace). SKIPPED for a folder launch or detached instance: it is
     // ephemeral and would otherwise overwrite the main instance's config/workspace
     // (both files are shared).
     // ALSO skipped if the instance was emptied by transferring all its tabs to
     // another instance: otherwise we'd overwrite the shared workspace (empty
     // state), and the tab — already on the other instance — would be "recreated" on
     // the next launch.
-    if detached_dirs.is_none() && !bridge::suppress_workspace_persist() {
+    if startup_dirs.is_none() && !bridge::suppress_workspace_persist() {
         bridge::persist_window_size(&window, &state);
         state.persist_workspace();
     }
@@ -616,15 +646,136 @@ mod tests {
     }
 
     #[test]
-    fn positional_arguments_form_a_workspace_name() {
+    fn startup_bare_arguments_are_independent_folder_paths() {
+        let arguments = ["folder01", "my folder", "folder02"];
         assert_eq!(
-            parse_startup_request([OsString::from("My"), OsString::from("Workspace")]),
-            StartupRequest::Workspace("My Workspace".into())
+            parse_startup_request(arguments.map(OsString::from)),
+            StartupRequest::Folders(arguments.map(PathBuf::from).to_vec())
         );
     }
 
     #[test]
-    fn detached_tab_protocol_cannot_be_confused_with_a_workspace() {
+    fn startup_folder_arguments_keep_spaces_and_argument_boundaries() {
+        let arguments = ["/folder01/my folder", "/folder02/other folder"];
+        assert_eq!(
+            parse_startup_request(arguments.map(OsString::from)),
+            StartupRequest::Folders(arguments.map(PathBuf::from).to_vec())
+        );
+    }
+
+    #[test]
+    fn startup_relative_paths_include_the_desktop_working_directory_marker() {
+        for path in [
+            ".",
+            "..",
+            "folder01",
+            "./folder01",
+            "folder01/",
+            "folder01/folder02",
+        ] {
+            assert_eq!(
+                parse_startup_request([OsString::from(path)]),
+                StartupRequest::Folders(vec![PathBuf::from(path)])
+            );
+        }
+    }
+
+    #[test]
+    fn startup_unknown_options_need_the_positional_separator() {
+        let argument = OsString::from("--folder01");
+        assert_eq!(
+            parse_startup_request([argument.clone()]),
+            StartupRequest::InvalidLocation(argument.clone())
+        );
+        assert_eq!(
+            parse_startup_request([OsString::from("--"), argument.clone()]),
+            StartupRequest::Folders(vec![PathBuf::from(argument)])
+        );
+        assert_eq!(
+            parse_startup_request([OsString::from("--"), OsString::from("--detached-tab")]),
+            StartupRequest::Folders(vec![PathBuf::from("--detached-tab")])
+        );
+    }
+
+    #[test]
+    fn startup_empty_arguments_are_not_folder_paths() {
+        assert_eq!(parse_startup_request([]), StartupRequest::Normal);
+        assert_eq!(
+            parse_startup_request([OsString::from("--")]),
+            StartupRequest::Normal
+        );
+        assert_eq!(
+            parse_startup_request([OsString::new()]),
+            StartupRequest::InvalidLocation(OsString::new())
+        );
+    }
+
+    #[test]
+    fn startup_malformed_file_uri_reports_invalid_location() {
+        for argument in [
+            "file://remote-host/folder01",
+            "file:folder01",
+            "file:///folder01/%GG",
+            "file:///folder01/%00",
+        ] {
+            assert_eq!(
+                parse_startup_request([OsString::from(argument)]),
+                StartupRequest::InvalidLocation(argument.into())
+            );
+        }
+        assert_eq!(
+            parse_startup_request([
+                OsString::from("/folder01"),
+                OsString::from("file:///folder02/%"),
+            ]),
+            StartupRequest::InvalidLocation("file:///folder02/%".into())
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn startup_windows_native_paths_and_drive_uris_open_folders() {
+        for path in [r"C:\folder01\my folder", r"\\device01\folder01\my folder"] {
+            assert_eq!(
+                parse_startup_request([OsString::from(path)]),
+                StartupRequest::Folders(vec![PathBuf::from(path)])
+            );
+        }
+        assert_eq!(
+            parse_startup_request([
+                OsString::from("file:///C:/folder01/my%20folder"),
+                OsString::from("FILE://LOCALHOST/D:/folder02/my%23folder"),
+            ]),
+            StartupRequest::Folders(vec![
+                PathBuf::from(r"C:\folder01\my folder"),
+                PathBuf::from(r"D:\folder02\my#folder"),
+            ])
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn startup_unix_paths_and_uris_preserve_non_utf8_filename_bytes() {
+        use std::os::unix::ffi::OsStringExt;
+        let path = OsString::from_vec(b"/folder01/my file\xFF".to_vec());
+        assert_eq!(
+            parse_startup_request([path.clone()]),
+            StartupRequest::Folders(vec![PathBuf::from(path.clone())])
+        );
+        assert_eq!(
+            parse_startup_request([
+                OsString::from("FILE://LOCALHOST/folder01/my%20file%FF"),
+                OsString::from("file:///folder02/my%2520file+%C3%A9"),
+            ]),
+            StartupRequest::Folders(vec![
+                PathBuf::from(path),
+                PathBuf::from("/folder02/my%20file+é"),
+            ])
+        );
+    }
+
+    #[test]
+    fn detached_tab_protocol_carries_its_folder_position_and_bar_mode() {
         assert_eq!(
             parse_startup_request([
                 OsString::from("--detached-tab"),
@@ -638,6 +789,30 @@ mod tests {
                 position: Some((120, 240)),
                 tab_bar_mode: 2,
             }
+        );
+    }
+
+    #[test]
+    fn detached_state_protocol_dispatches_settings_and_native_paths() {
+        let view = toml::from_str(
+            "tabs = [{ path = 'folder01', item_arrangement = 'grid', preview = false, zoom = 5, grid_zoom = 2 }]"
+        ).unwrap();
+        let dirs = vec![PathBuf::from("folder01")];
+        let args = detached_view::arguments(&view, &dirs, Some((-100, 200))).unwrap();
+        let StartupRequest::DetachedState(packet) = parse_startup_request(args) else {
+            panic!("detached settings must use the internal startup path");
+        };
+        assert_eq!(packet.dirs, dirs);
+        assert_eq!(packet.position, Some((-100, 200)));
+        assert_eq!(
+            packet.view.tabs[0].item_arrangement,
+            favnyr_core::workspace::ItemArrangement::Grid
+        );
+        assert_eq!(packet.view.tabs[0].grid_zoom, Some(2));
+        assert!(!packet.view.tabs[0].preview);
+        assert_eq!(
+            parse_startup_request([OsString::from(detached_view::MARKER), OsString::from("bad")]),
+            StartupRequest::Normal
         );
     }
 

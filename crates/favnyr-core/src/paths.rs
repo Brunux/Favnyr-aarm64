@@ -64,6 +64,28 @@ pub fn annotations_path() -> PathBuf {
     data_dir().join("annotations.toml")
 }
 
+/// SINGLE file for presentation state that belongs to a directory rather than
+/// to a tab or workspace.
+pub fn folder_state_path() -> PathBuf {
+    data_dir().join("folder_state.toml")
+}
+
+/// Path folding shared by stores whose keys follow platform path semantics.
+#[cfg(windows)]
+pub(crate) fn fold_for_storage(path: &Path) -> PathBuf {
+    PathBuf::from(path.to_string_lossy().to_lowercase())
+}
+
+#[cfg(not(windows))]
+pub(crate) fn fold_for_storage(path: &Path) -> PathBuf {
+    path.to_path_buf()
+}
+
+/// Stable textual key for path-owned data.
+pub(crate) fn storage_key(path: &Path) -> String {
+    fold_for_storage(path).to_string_lossy().into_owned()
+}
+
 /// File for "openers" (Open with: programs + custom commands). Data,
 /// not config: a growing collection (cf. favorites.toml).
 pub fn openers_path() -> PathBuf {

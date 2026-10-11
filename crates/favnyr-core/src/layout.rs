@@ -84,11 +84,12 @@ pub struct Rect {
     pub h: f32,
 }
 
-/// Geometry of a leaf panel after flattening.
+/// Geometry of a leaf view after flattening.
 #[derive(Debug, Clone, PartialEq)]
-pub struct PanelGeom {
-    /// Index of the panel in `panels`.
-    pub panel: usize,
+pub struct ViewGeom {
+    /// Index of the view. The list it indexes keeps the name it carries on
+    /// disk — see [`crate::workspace::WorkspaceState::panels`].
+    pub view: usize,
     pub rect: Rect,
 }
 
@@ -107,7 +108,7 @@ pub struct SplitterGeom {
 /// Result of flattening a [`LayoutNode`] over a given area.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Layout {
-    pub panels: Vec<PanelGeom>,
+    pub views: Vec<ViewGeom>,
     pub splitters: Vec<SplitterGeom>,
 }
 
@@ -171,7 +172,7 @@ impl LayoutNode {
     /// Refused, with nothing written, when the two are the same or when either
     /// has no leaf: a half-applied swap would leave the tree holding one index
     /// twice, which `is_valid_for` would then reject.
-    pub fn swap_panels(&mut self, a: usize, b: usize) -> bool {
+    pub fn swap_views(&mut self, a: usize, b: usize) -> bool {
         if a == b {
             return false;
         }
@@ -189,6 +190,36 @@ impl LayoutNode {
         true
     }
 
+    /// Moves an existing view beside a target, keeping all panel indices stable.
+    /// The source's sibling fills its old place; the target is split equally.
+    /// Only the tree changes, so tabs and other panel-owned state stay intact.
+    pub fn move_view_beside(
+        &mut self,
+        source: usize,
+        target: usize,
+        dir: SplitDir,
+        source_first: bool,
+    ) -> bool {
+        if source == target {
+            return false;
+        }
+        let leaves = self.leaf_indices();
+        if !leaves.contains(&source) || !leaves.contains(&target) {
+            return false;
+        }
+        // Prepare the complete edit before committing. Unlike remove_view,
+        // collapsing a leaf here must not renumber the surviving views.
+        let mut moved = self.clone();
+        if !Self::collapse_leaf(&mut moved, source)
+            || !moved.split_leaf(target, dir, source, 0.5, source_first)
+            || moved == *self
+        {
+            return false;
+        }
+        *self = moved;
+        true
+    }
+
     fn each_leaf_mut(&mut self, visit: &mut impl FnMut(&mut usize)) {
         match self {
             LayoutNode::Leaf { panel } => visit(panel),
@@ -199,16 +230,16 @@ impl LayoutNode {
         }
     }
 
-    /// True if the tree covers **exactly** the panels `0..panel_count`, each
+    /// True if the tree covers **exactly** the panels `0..view_count`, each
     /// exactly once (no missing, duplicated, or out-of-bounds index). Used
     /// as a safeguard before using a tree loaded from disk.
-    pub fn is_valid_for(&self, panel_count: usize) -> bool {
-        if panel_count == 0 {
+    pub fn is_valid_for(&self, view_count: usize) -> bool {
+        if view_count == 0 {
             return false;
         }
-        let mut seen = vec![false; panel_count];
+        let mut seen = vec![false; view_count];
         for i in self.leaf_indices() {
-            if i >= panel_count || seen[i] {
+            if i >= view_count || seen[i] {
                 return false;
             }
             seen[i] = true;
@@ -421,23 +452,27 @@ impl LayoutNode {
         true
     }
 
-    /// Splits the leaf of panel `panel`: it becomes a `Split`.
-    /// `new_first = false` → the existing panel stays first (left/top) and
-    /// `new_panel` comes second (right/bottom); `new_first = true` → the
+    /// Splits the leaf of view `view`: it becomes a `Split`.
+    /// `new_first = false` → the existing view stays first (left/top) and
+    /// `new_view` comes second (right/bottom); `new_first = true` → the
     /// reverse (for a drop on the west/north edge). Returns `false` if no
-    /// leaf `panel` exists. First match only (indices are unique).
+    /// leaf `view` exists. First match only (indices are unique).
+    ///
+    /// The `Leaf` field is still spelled `panel`: that is the name it carries
+    /// in a saved workspace, and renaming it would make every existing file
+    /// unreadable.
     pub fn split_leaf(
         &mut self,
-        panel: usize,
+        view: usize,
         dir: SplitDir,
-        new_panel: usize,
+        new_view: usize,
         ratio: f32,
         new_first: bool,
     ) -> bool {
         match self {
-            LayoutNode::Leaf { panel: p } if *p == panel => {
+            LayoutNode::Leaf { panel: p } if *p == view => {
                 let kept = LayoutNode::Leaf { panel: *p };
-                let fresh = LayoutNode::Leaf { panel: new_panel };
+                let fresh = LayoutNode::Leaf { panel: new_view };
                 let (first, second, r) = if new_first {
                     // The new panel takes the `ratio` share (first child).
                     (fresh, kept, ratio)
@@ -454,8 +489,8 @@ impl LayoutNode {
             }
             LayoutNode::Leaf { .. } => false,
             LayoutNode::Split { first, second, .. } => {
-                first.split_leaf(panel, dir, new_panel, ratio, new_first)
-                    || second.split_leaf(panel, dir, new_panel, ratio, new_first)
+                first.split_leaf(view, dir, new_view, ratio, new_first)
+                    || second.split_leaf(view, dir, new_view, ratio, new_first)
             }
         }
     }
@@ -465,7 +500,7 @@ impl LayoutNode {
     /// **decremented** to stay consistent with the caller removing
     /// `panels[idx]`. Returns `false` if the tree is reduced to a single
     /// leaf (the last panel is never removed).
-    pub fn remove_panel(&mut self, idx: usize) -> bool {
+    pub fn remove_view(&mut self, idx: usize) -> bool {
         if matches!(self, LayoutNode::Leaf { .. }) {
             return false;
         }
@@ -536,8 +571,8 @@ impl LayoutNode {
 
     fn compute_into(&self, area: Rect, gap: f32, path: &mut NodePath, out: &mut Layout) {
         match self {
-            LayoutNode::Leaf { panel } => out.panels.push(PanelGeom {
-                panel: *panel,
+            LayoutNode::Leaf { panel } => out.views.push(ViewGeom {
+                view: *panel,
                 rect: area,
             }),
             LayoutNode::Split {
@@ -630,8 +665,8 @@ mod tests {
         }
     }
 
-    fn leaf(panel: usize) -> LayoutNode {
-        LayoutNode::Leaf { panel }
+    fn leaf(view: usize) -> LayoutNode {
+        LayoutNode::Leaf { panel: view }
     }
 
     fn split(dir: SplitDir, ratio: f32, first: LayoutNode, second: LayoutNode) -> LayoutNode {
@@ -646,9 +681,9 @@ mod tests {
     /// Panel sizes over the reference area, indexed by panel number.
     fn sizes(tree: &LayoutNode, gap: f32) -> Vec<(f32, f32)> {
         let l = tree.compute(area(), gap);
-        let mut out = vec![(0.0, 0.0); l.panels.len()];
-        for p in &l.panels {
-            out[p.panel] = (p.rect.w, p.rect.h);
+        let mut out = vec![(0.0, 0.0); l.views.len()];
+        for p in &l.views {
+            out[p.view] = (p.rect.w, p.rect.h);
         }
         out
     }
@@ -667,9 +702,9 @@ mod tests {
     fn single_leaf_fills_area() {
         let tree = LayoutNode::Leaf { panel: 0 };
         let l = tree.compute(area(), 8.0);
-        assert_eq!(l.panels.len(), 1);
+        assert_eq!(l.views.len(), 1);
         assert!(l.splitters.is_empty());
-        assert_eq!(l.panels[0].rect, area());
+        assert_eq!(l.views[0].rect, area());
     }
 
     #[test]
@@ -681,16 +716,16 @@ mod tests {
             second: Box::new(LayoutNode::Leaf { panel: 1 }),
         };
         let l = tree.compute(area(), 8.0);
-        assert_eq!(l.panels.len(), 2);
+        assert_eq!(l.views.len(), 2);
         assert_eq!(l.splitters.len(), 1);
         // avail = 992, half = 496
-        approx(l.panels[0].rect.w, 496.0);
-        approx(l.panels[1].rect.w, 496.0);
-        approx(l.panels[0].rect.h, 600.0);
+        approx(l.views[0].rect.w, 496.0);
+        approx(l.views[1].rect.w, 496.0);
+        approx(l.views[0].rect.h, 600.0);
         // no overlap, separator between the two
         approx(l.splitters[0].rect.x, 496.0);
         approx(l.splitters[0].rect.w, 8.0);
-        approx(l.panels[1].rect.x, 504.0);
+        approx(l.views[1].rect.x, 504.0);
         assert_eq!(l.splitters[0].dir, SplitDir::Row);
     }
 
@@ -704,9 +739,9 @@ mod tests {
         };
         let l = tree.compute(area(), 8.0);
         // avail = 592, first = 148
-        approx(l.panels[0].rect.h, 148.0);
-        approx(l.panels[1].rect.h, 444.0);
-        approx(l.panels[0].rect.w, 1000.0);
+        approx(l.views[0].rect.h, 148.0);
+        approx(l.views[1].rect.h, 444.0);
+        approx(l.views[0].rect.w, 1000.0);
         approx(l.splitters[0].rect.y, 148.0);
         approx(l.splitters[0].rect.h, 8.0);
         assert_eq!(l.splitters[0].dir, SplitDir::Column);
@@ -727,15 +762,15 @@ mod tests {
             }),
         };
         let l = tree.compute(area(), 8.0);
-        assert_eq!(l.panels.len(), 3);
+        assert_eq!(l.views.len(), 3);
         assert_eq!(l.splitters.len(), 2);
         // panel 0 = left half, full height
-        let p0 = l.panels.iter().find(|p| p.panel == 0).unwrap();
+        let p0 = l.views.iter().find(|p| p.view == 0).unwrap();
         approx(p0.rect.w, 496.0);
         approx(p0.rect.h, 600.0);
         // panels 1 and 2 = right half, stacked (≈ (600-8)/2)
-        let p1 = l.panels.iter().find(|p| p.panel == 1).unwrap();
-        let p2 = l.panels.iter().find(|p| p.panel == 2).unwrap();
+        let p1 = l.views.iter().find(|p| p.view == 1).unwrap();
+        let p2 = l.views.iter().find(|p| p.view == 2).unwrap();
         approx(p1.rect.w, 496.0);
         approx(p1.rect.h, 296.0);
         approx(p2.rect.h, 296.0);
@@ -758,7 +793,7 @@ mod tests {
         );
         // total stretch = 4; gaps = 2*8 = 16; remainder 392.
         // p0 = 2/4 ≈ 196 (at the first level ratio=0.5 over 400 available)
-        let p0 = l.panels.iter().find(|p| p.panel == 0).unwrap();
+        let p0 = l.views.iter().find(|p| p.view == 0).unwrap();
         approx(p0.rect.w, 200.0);
     }
 
@@ -864,17 +899,17 @@ mod tests {
         // Chain of 3 panels: leaves [0,1,2].
         let mut tree = LayoutNode::row_chain(&[1.0, 1.0, 1.0]);
         // Remove panel 1 → [0, 2] remain, reindexed as [0, 1].
-        assert!(tree.remove_panel(1));
+        assert!(tree.remove_view(1));
         assert!(tree.is_valid_for(2));
         assert_eq!(tree.leaf_indices(), vec![0, 1]);
 
         // Remove again → 1 leaf.
-        assert!(tree.remove_panel(0));
+        assert!(tree.remove_view(0));
         assert!(tree.is_valid_for(1));
         assert_eq!(tree.leaf_indices(), vec![0]);
 
         // Last panel: refused.
-        assert!(!tree.remove_panel(0));
+        assert!(!tree.remove_view(0));
     }
 
     #[test]
@@ -892,7 +927,7 @@ mod tests {
                 second: Box::new(LayoutNode::Leaf { panel: 2 }),
             }),
         };
-        assert!(tree.remove_panel(0));
+        assert!(tree.remove_view(0));
         assert!(tree.is_valid_for(2));
         assert_eq!(tree.leaf_indices(), vec![0, 1]);
         assert!(matches!(
@@ -1052,7 +1087,7 @@ mod tests {
             split(SplitDir::Row, 0.2, leaf(1), leaf(2)),
         );
         let (before, _) = tree.equalize(&[], area(), 8.0, 0.08).expect("layout moved");
-        assert!(tree.remove_panel(2));
+        assert!(tree.remove_view(2));
         assert!(!tree.restore_ratios(&[], &before));
     }
 
@@ -1067,15 +1102,10 @@ mod tests {
             split(SplitDir::Row, 0.5, leaf(2), leaf(3)),
         );
         let before = tree.compute(area(), 8.0);
-        assert!(tree.swap_panels(0, 1));
+        assert!(tree.swap_views(0, 1));
         let after = tree.compute(area(), 8.0);
-        let place = |l: &Layout, panel: usize| {
-            l.panels
-                .iter()
-                .find(|p| p.panel == panel)
-                .expect("panel")
-                .rect
-        };
+        let place =
+            |l: &Layout, view: usize| l.views.iter().find(|p| p.view == view).expect("view").rect;
         assert_eq!(place(&after, 0), place(&before, 1));
         assert_eq!(place(&after, 1), place(&before, 0));
         // The two left untouched really are untouched.
@@ -1090,7 +1120,7 @@ mod tests {
         let mut tree = split(SplitDir::Row, 0.8, leaf(0), leaf(1));
         let wide = sizes(&tree, 8.0)[0].0;
         let narrow = sizes(&tree, 8.0)[1].0;
-        assert!(tree.swap_panels(0, 1));
+        assert!(tree.swap_views(0, 1));
         approx(sizes(&tree, 8.0)[0].0, narrow);
         approx(sizes(&tree, 8.0)[1].0, wide);
     }
@@ -1105,7 +1135,7 @@ mod tests {
             split(SplitDir::Column, 0.3, leaf(1), leaf(2)),
         );
         let ratios = tree.ratios(&[]);
-        assert!(tree.swap_panels(0, 2));
+        assert!(tree.swap_views(0, 2));
         assert_eq!(tree.ratios(&[]), ratios);
         assert!(tree.is_valid_for(3));
     }
@@ -1120,8 +1150,8 @@ mod tests {
             split(SplitDir::Column, 0.3, leaf(1), leaf(2)),
         );
         let before = tree.clone();
-        assert!(tree.swap_panels(0, 2));
-        assert!(tree.swap_panels(0, 2));
+        assert!(tree.swap_views(0, 2));
+        assert!(tree.swap_views(0, 2));
         assert_eq!(tree, before);
     }
 
@@ -1131,10 +1161,100 @@ mod tests {
     fn swap_panels_refuses_what_it_cannot_do_whole() {
         let mut tree = split(SplitDir::Row, 0.5, leaf(0), leaf(1));
         let before = tree.clone();
-        assert!(!tree.swap_panels(1, 1));
+        assert!(!tree.swap_views(1, 1));
         assert_eq!(tree, before);
-        assert!(!tree.swap_panels(0, 9));
+        assert!(!tree.swap_views(0, 9));
         assert_eq!(tree, before);
         assert!(tree.is_valid_for(2));
+    }
+
+    #[test]
+    fn move_view_all_edges_preserve_indices_and_unrelated_subtrees() {
+        let untouched = split(SplitDir::Column, 0.3, leaf(2), leaf(3));
+        let initial = split(
+            SplitDir::Row,
+            0.7,
+            split(SplitDir::Column, 0.6, leaf(0), leaf(1)),
+            untouched.clone(),
+        );
+        for dir in [SplitDir::Row, SplitDir::Column] {
+            for source_first in [false, true] {
+                let mut tree = initial.clone();
+                assert!(tree.move_view_beside(0, 1, dir, source_first));
+                let (first, second) = if source_first {
+                    (leaf(0), leaf(1))
+                } else {
+                    (leaf(1), leaf(0))
+                };
+                assert_eq!(
+                    tree,
+                    split(
+                        SplitDir::Row,
+                        0.7,
+                        split(dir, 0.5, first, second),
+                        untouched.clone()
+                    )
+                );
+                assert!(tree.is_valid_for(4));
+                let geom = tree.compute(area(), 8.0);
+                assert_eq!(geom.splitters.len(), 3);
+                let restored: LayoutNode =
+                    toml::from_str(&toml::to_string(&tree).unwrap()).unwrap();
+                assert_eq!(restored, tree);
+            }
+        }
+    }
+
+    #[test]
+    fn move_view_across_branches_collapses_source_without_renumbering() {
+        let mut tree = split(
+            SplitDir::Row,
+            0.4,
+            split(SplitDir::Column, 0.2, leaf(0), leaf(1)),
+            split(SplitDir::Column, 0.8, leaf(2), leaf(3)),
+        );
+        assert!(tree.move_view_beside(1, 3, SplitDir::Row, true));
+        assert_eq!(
+            tree,
+            split(
+                SplitDir::Row,
+                0.4,
+                leaf(0),
+                split(
+                    SplitDir::Column,
+                    0.8,
+                    leaf(2),
+                    split(SplitDir::Row, 0.5, leaf(1), leaf(3))
+                )
+            )
+        );
+        assert!(tree.is_valid_for(4));
+    }
+
+    #[test]
+    fn move_view_preserves_source_sibling_subtree_and_works_at_capacity() {
+        let mut tree = LayoutNode::row_chain(&[1.0; 16]);
+        assert!(tree.move_view_beside(0, 15, SplitDir::Column, false));
+        assert!(tree.is_valid_for(16));
+        assert_eq!(tree.compute(area(), 0.0).splitters.len(), 15);
+        let leaves = tree.leaf_indices();
+        assert_eq!(&leaves[..15], &(1..16).collect::<Vec<_>>());
+        assert_eq!(leaves[15], 0);
+    }
+
+    #[test]
+    fn move_view_noops_and_invalid_targets_leave_layout_untouched() {
+        let initial = split(SplitDir::Row, 0.5, leaf(0), leaf(1));
+        let mut tree = initial.clone();
+        for (source, target) in [(0, 0), (0, 9), (9, 1), (0, 1)] {
+            assert!(!tree.move_view_beside(source, target, SplitDir::Row, true));
+            assert_eq!(tree, initial);
+        }
+        let mut single = leaf(0);
+        assert!(!single.move_view_beside(0, 1, SplitDir::Column, false));
+        assert_eq!(single, leaf(0));
+        // Two views may change axis without adding a third panel.
+        assert!(tree.move_view_beside(1, 0, SplitDir::Column, true));
+        assert_eq!(tree, split(SplitDir::Column, 0.5, leaf(1), leaf(0)));
     }
 }

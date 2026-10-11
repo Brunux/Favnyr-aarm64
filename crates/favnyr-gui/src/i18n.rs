@@ -26,6 +26,9 @@ const EMBED_FR: &str = include_str!("../i18n/fr.toml");
 const EMBED_ES: &str = include_str!("../i18n/es.toml");
 const EMBED_DE: &str = include_str!("../i18n/de.toml");
 const EMBED_IT: &str = include_str!("../i18n/it.toml");
+const EMBED_RU: &str = include_str!("../i18n/ru.toml");
+const EMBED_ZH: &str = include_str!("../i18n/zh.toml");
+const EMBED_JA: &str = include_str!("../i18n/ja.toml");
 
 fn embedded(lang: Lang) -> &'static str {
     match lang {
@@ -34,6 +37,9 @@ fn embedded(lang: Lang) -> &'static str {
         Lang::Es => EMBED_ES,
         Lang::De => EMBED_DE,
         Lang::It => EMBED_IT,
+        Lang::Ru => EMBED_RU,
+        Lang::Zh => EMBED_ZH,
+        Lang::Ja => EMBED_JA,
     }
 }
 
@@ -94,12 +100,18 @@ fn catalog(lang: Lang) -> &'static HashMap<String, String> {
     static ES: OnceLock<HashMap<String, String>> = OnceLock::new();
     static DE: OnceLock<HashMap<String, String>> = OnceLock::new();
     static IT: OnceLock<HashMap<String, String>> = OnceLock::new();
+    static RU: OnceLock<HashMap<String, String>> = OnceLock::new();
+    static ZH: OnceLock<HashMap<String, String>> = OnceLock::new();
+    static JA: OnceLock<HashMap<String, String>> = OnceLock::new();
     match lang {
         Lang::En => get(lang, &EN),
         Lang::Fr => get(lang, &FR),
         Lang::Es => get(lang, &ES),
         Lang::De => get(lang, &DE),
         Lang::It => get(lang, &IT),
+        Lang::Ru => get(lang, &RU),
+        Lang::Zh => get(lang, &ZH),
+        Lang::Ja => get(lang, &JA),
     }
 }
 
@@ -168,6 +180,7 @@ pub fn strings_for(lang: Lang) -> Strings {
         fav_empty: g("fav_empty"),
         fav_container_empty: g("fav_container_empty"),
         fav_open: g("fav_open"),
+        fav_execute: g("fav_execute"),
         fav_open_all: g("fav_open_all"),
         fav_new_subcontainer: g("fav_new_subcontainer"),
         fav_rename: g("fav_rename"),
@@ -197,7 +210,13 @@ pub fn strings_for(lang: Lang) -> Strings {
         nav_parent: g("nav_parent"),
         nav_refresh: g("nav_refresh"),
         view_mode_tooltip: g("view_mode_tooltip"),
+        view_layout_list: g("view_layout_list"),
+        view_layout_grid: g("view_layout_grid"),
+        view_sort_tooltip: g("view_sort_tooltip"),
         show_hidden_tooltip: g("show_hidden_tooltip"),
+        manual_order_label: g("manual_order_label"),
+        manual_order_hint: g("manual_order_hint"),
+        manual_order_drag: g("manual_order_drag"),
         group_section: g("group_section"),
         group_folders_first: g("group_folders_first"),
         group_colored_folders_first: g("group_colored_folders_first"),
@@ -212,6 +231,8 @@ pub fn strings_for(lang: Lang) -> Strings {
         tabbar_right: g("tabbar_right"),
         settings_tabbar_default: g("settings_tabbar_default"),
         settings_default_view_mode_label: g("settings_default_view_mode_label"),
+        settings_default_item_arrangement_label: g("settings_default_item_arrangement_label"),
+        settings_default_hidden_label: g("settings_default_hidden_label"),
         settings_default_view_mode_hint: g("settings_default_view_mode_hint"),
         settings_view_mode_list: g("settings_view_mode_list"),
         settings_view_mode_previews: g("settings_view_mode_previews"),
@@ -247,6 +268,7 @@ pub fn strings_for(lang: Lang) -> Strings {
         equalize_restore: g("equalize_restore"),
         ctx_open: g("ctx_open"),
         ctx_open_new_tab: g("ctx_open_new_tab"),
+        ctx_open_new_pane: g("ctx_open_new_pane"),
         ctx_open_with: g("ctx_open_with"),
         ctx_open_parent: g("ctx_open_parent"),
         ctx_open_admin: g("ctx_open_admin"),
@@ -280,14 +302,26 @@ pub fn strings_for(lang: Lang) -> Strings {
         settings_tooltip: g("settings_tooltip"),
         settings_title: g("settings_title"),
         settings_tab_general: g("settings_tab_general"),
+        settings_tab_defaults_title: g("settings_tab_defaults_title"),
+        settings_tab_defaults_hint: g("settings_tab_defaults_hint"),
+        settings_new_workspace_title: g("settings_new_workspace_title"),
+        settings_new_workspace_hint: g("settings_new_workspace_hint"),
+        settings_group_dates: g("settings_group_dates"),
+        settings_group_tabs: g("settings_group_tabs"),
+        settings_folder_depth_hint: g("settings_folder_depth_hint"),
+        settings_tab_storage: g("settings_tab_storage"),
         settings_columns_section: g("settings_columns_section"),
         settings_col_resolution: g("settings_col_resolution"),
         settings_col_depth: g("settings_col_depth"),
-        settings_rmtime_section: g("settings_rmtime_section"),
         settings_rmtime_label: g("settings_rmtime_label"),
         settings_rmtime_hint: g("settings_rmtime_hint"),
         settings_fsize_label: g("settings_fsize_label"),
         settings_fsize_hint: g("settings_fsize_hint"),
+        settings_view_text_size_title: g("settings_view_text_size_title"),
+        settings_view_text_size_hint: g("settings_view_text_size_hint"),
+        settings_view_text_size_toggle: g("settings_view_text_size_toggle"),
+        settings_view_item_spacing_title: g("settings_view_item_spacing_title"),
+        settings_view_item_spacing_hint: g("settings_view_item_spacing_hint"),
         settings_paths_section: g("settings_paths_section"),
         settings_config_path: g("settings_config_path"),
         settings_data_path: g("settings_data_path"),
@@ -359,6 +393,9 @@ pub fn strings_for(lang: Lang) -> Strings {
         ws_dirty_discard: g("ws_dirty_discard"),
         ws_dirty_save_load: g("ws_dirty_save_load"),
         ws_dirty_tooltip: g("ws_dirty_tooltip"),
+        ws_slot_assign: g("ws_slot_assign"),
+        ws_slot_none: g("ws_slot_none"),
+        ws_toast_slot_moved: g("ws_toast_slot_moved"),
         ws_dirty_save_action: g("ws_dirty_save_action"),
         sidebar_tooltip: g("sidebar_tooltip"),
         sidebar_shortcuts: g("sidebar_shortcuts"),
@@ -384,6 +421,7 @@ pub fn strings_for(lang: Lang) -> Strings {
         open_many_confirm: g("open_many_confirm"),
         drop_move: g("drop_move"),
         drop_copy: g("drop_copy"),
+        drop_split: g("drop_split"),
         drop_link: g("drop_link"),
         drop_favorite: g("drop_favorite"),
         drop_swap: g("drop_swap"),
@@ -528,7 +566,14 @@ pub fn shortcut_group_name(lang: Lang, code: &str) -> String {
 }
 
 /// Localized label of a shortcut action (`id` = `ActionDef::id`).
+///
+/// The workspace slots share one template instead of nine near-identical
+/// entries per language: a digit is all that separates them, and a catalogue
+/// repeating the same sentence nine times invites the nine to drift apart.
 pub fn shortcut_action_name(lang: Lang, id: &str) -> String {
+    if let Some(slot) = id.strip_prefix("load-workspace-") {
+        return tr(lang, "shortcut_action_workspace_slot").replace("{n}", slot);
+    }
     tr(lang, &format!("shortcut_action.{id}"))
 }
 
@@ -548,32 +593,92 @@ pub fn shortcut_conflict_message(lang: Lang, other: &str) -> String {
 pub fn size_units(lang: Lang) -> favnyr_core::fs::SizeUnits<'static> {
     type Units = favnyr_core::fs::SizeUnits<'static>;
     fn build(lang: Lang) -> Units {
-        let c = catalog(lang);
-        let g = |k: &'static str| -> &'static str { c.get(k).map(|s| s.as_str()).unwrap_or(k) };
-        favnyr_core::fs::SizeUnits {
-            steps: [
-                g("unit_byte"),
-                g("unit_kb"),
-                g("unit_mb"),
-                g("unit_gb"),
-                g("unit_tb"),
-            ],
-            decimal: g("decimal_separator").chars().next().unwrap_or('.'),
-        }
+        size_units_from_catalog(catalog(lang))
     }
     static EN: OnceLock<Units> = OnceLock::new();
     static FR: OnceLock<Units> = OnceLock::new();
     static ES: OnceLock<Units> = OnceLock::new();
     static DE: OnceLock<Units> = OnceLock::new();
     static IT: OnceLock<Units> = OnceLock::new();
+    static RU: OnceLock<Units> = OnceLock::new();
+    static ZH: OnceLock<Units> = OnceLock::new();
+    static JA: OnceLock<Units> = OnceLock::new();
     let cell = match lang {
         Lang::En => &EN,
         Lang::Fr => &FR,
         Lang::Es => &ES,
         Lang::De => &DE,
         Lang::It => &IT,
+        Lang::Ru => &RU,
+        Lang::Zh => &ZH,
+        Lang::Ja => &JA,
     };
     *cell.get_or_init(|| build(lang))
+}
+
+fn size_units_from_catalog(c: &HashMap<String, String>) -> favnyr_core::fs::SizeUnits<'_> {
+    let g = |k: &'static str| c.get(k).map(|s| s.as_str()).unwrap_or(k);
+    favnyr_core::fs::SizeUnits {
+        steps: [
+            g("unit_byte"),
+            g("unit_kb"),
+            g("unit_mb"),
+            g("unit_gb"),
+            g("unit_tb"),
+        ],
+        decimal: g("decimal_separator").chars().next().unwrap_or('.'),
+    }
+}
+
+/// Compact copy throughput and optional remaining-time estimate.
+pub fn transfer_status(
+    lang: Lang,
+    bytes_per_second: u64,
+    remaining_seconds: Option<u64>,
+) -> String {
+    format_transfer_status(
+        bytes_per_second,
+        remaining_seconds,
+        size_units(lang),
+        |key| tr(lang, key),
+    )
+}
+
+fn format_transfer_status(
+    bytes_per_second: u64,
+    remaining_seconds: Option<u64>,
+    units: favnyr_core::fs::SizeUnits<'_>,
+    translate: impl Fn(&str) -> String,
+) -> String {
+    let size = favnyr_core::fs::format_size(bytes_per_second, units);
+    let speed = translate("op_transfer_speed").replace("{size}", &size);
+    match remaining_seconds {
+        Some(seconds) => {
+            let time = transfer_time(seconds, &translate);
+            let remaining = translate("op_transfer_remaining").replace("{time}", &time);
+            format!("{speed}{}{remaining}", translate("separator_dot"))
+        }
+        None => speed,
+    }
+}
+
+/// Round minutes upwards so an estimate never claims completion too early.
+fn transfer_time(seconds: u64, translate: impl Fn(&str) -> String) -> String {
+    if seconds < 60 {
+        return format!("{seconds} {}", translate("op_time_second"));
+    }
+    let minutes = seconds.div_ceil(60);
+    if minutes < 60 {
+        return format!("{minutes} {}", translate("age_minute"));
+    }
+    let hours = minutes / 60;
+    let rest = minutes % 60;
+    let hour = translate("op_time_hour");
+    if rest == 0 {
+        format!("{hours} {hour}")
+    } else {
+        format!("{hours} {hour} {rest} {}", translate("age_minute"))
+    }
 }
 
 /// Age-column wording for `lang`, ready for [`favnyr_core::fs::format_age`].
@@ -596,18 +701,56 @@ pub fn age_units(lang: Lang) -> favnyr_core::fs::AgeUnits<'static> {
     static ES: OnceLock<Units> = OnceLock::new();
     static DE: OnceLock<Units> = OnceLock::new();
     static IT: OnceLock<Units> = OnceLock::new();
+    static RU: OnceLock<Units> = OnceLock::new();
+    static ZH: OnceLock<Units> = OnceLock::new();
+    static JA: OnceLock<Units> = OnceLock::new();
     let cell = match lang {
         Lang::En => &EN,
         Lang::Fr => &FR,
         Lang::Es => &ES,
         Lang::De => &DE,
         Lang::It => &IT,
+        Lang::Ru => &RU,
+        Lang::Zh => &ZH,
+        Lang::Ja => &JA,
     };
     *cell.get_or_init(|| build(lang))
 }
 
 pub fn access_denied(lang: Lang) -> String {
     tr(lang, "access_denied")
+}
+
+/// Translates failure categories instead of exposing an untranslated OS message.
+pub fn file_error_reason(lang: Lang, kind: Option<std::io::ErrorKind>) -> String {
+    tr(lang, file_error_reason_key(kind))
+}
+
+fn file_error_reason_key(kind: Option<std::io::ErrorKind>) -> &'static str {
+    use std::io::ErrorKind;
+    match kind {
+        Some(ErrorKind::PermissionDenied) => "op_reason_permission_denied",
+        Some(ErrorKind::ReadOnlyFilesystem) => "op_reason_read_only",
+        Some(ErrorKind::NotFound) => "op_reason_not_found",
+        Some(ErrorKind::AlreadyExists) => "op_reason_already_exists",
+        Some(ErrorKind::StorageFull) => "op_reason_storage_full",
+        _ => "op_reason_system",
+    }
+}
+
+/// Shared item-and-reason interpolation for filesystem operation failures.
+pub fn file_operation_failed(lang: Lang, key: &str, item: &str, reason: &str) -> String {
+    format_file_failure(&tr(lang, key), item, reason)
+}
+
+fn format_file_failure(template: &str, item: &str, reason: &str) -> String {
+    // Substitute template tokens before inserting names, which can themselves
+    // contain braces and must never be interpreted as translation placeholders.
+    template
+        .split("{item}")
+        .map(|part| part.replace("{reason}", reason))
+        .collect::<Vec<_>>()
+        .join(item)
 }
 
 /// Renders a diagnosed process list as one readable fragment. The ellipsis
@@ -645,32 +788,24 @@ pub fn item_in_use(lang: Lang, item: &str, processes: &[String], truncated: bool
 }
 
 /// Message for an entry an operation could not process and stepped over. Used
-/// when no holding program could be named: `reason` then carries the system
-/// error, which stays the only thing known about the refusal.
+/// when no holding program could be named, with a translated failure reason.
 pub fn item_skipped(lang: Lang, item: &str, reason: &str) -> String {
-    tr(lang, "op_item_skipped")
-        .replace("{item}", item)
-        .replace("{reason}", reason)
+    file_operation_failed(lang, "op_item_skipped", item, reason)
 }
 
 /// Message for a move whose copy succeeded but whose original could not be
 /// removed. The item then exists in both places, which the user has to be told
 /// explicitly: the action was requested as a move and behaved as a copy.
 /// `reason` names the holding process when one could be attributed, and
-/// carries the system error otherwise.
+/// carries the translated failure category otherwise.
 pub fn move_source_kept(lang: Lang, item: &str, reason: &str) -> String {
-    tr(lang, "move_source_kept")
-        .replace("{item}", item)
-        .replace("{reason}", reason)
+    file_operation_failed(lang, "move_source_kept", item, reason)
 }
 
 /// Translated fallback when a rename fails without an attributable Windows
-/// lock. `reason` keeps the detail provided by the OS (permissions, invalid
-/// name, network…).
+/// lock, with a translated failure reason.
 pub fn rename_failed(lang: Lang, item: &str, reason: &str) -> String {
-    tr(lang, "rename_failed")
-        .replace("{item}", item)
-        .replace("{reason}", reason)
+    file_operation_failed(lang, "rename_failed", item, reason)
 }
 
 /// Translated reason for a device removal / network disconnection failure.
@@ -736,8 +871,9 @@ pub fn trash_error_message(lang: Lang, err: &favnyr_core::fs::ops::TrashError) -
             tr(lang, "trash_reason_list_failed").replace("{detail}", detail)
         }
         TrashError::ItemNotFound => tr(lang, "trash_reason_item_not_found"),
-        TrashError::RestoreFailed(detail) => {
-            tr(lang, "trash_reason_restore_failed").replace("{detail}", detail)
+        TrashError::RestoreFailed(error) => {
+            let reason = file_error_reason(lang, error.io_kind());
+            tr(lang, "trash_reason_restore_failed").replace("{detail}", &reason)
         }
         TrashError::PlatformUnsupported => tr(lang, "trash_reason_platform_unsupported"),
     }
@@ -746,6 +882,90 @@ pub fn trash_error_message(lang: Lang, err: &favnyr_core::fs::ops::TrashError) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn grid_catalogs_include_display_settings_and_keyboard_actions_without_fallback() {
+        // Derived, not listed: a hardcoded set is how a newly added language
+        // slips past this check.
+        for &lang in Lang::all() {
+            let table: toml::Table = toml::from_str(embedded(lang)).unwrap();
+            let mut catalog = HashMap::new();
+            flatten_into("", &table, &mut catalog);
+            for key in [
+                "view_mode_tooltip",
+                "view_layout_list",
+                "view_layout_grid",
+                "view_sort_tooltip",
+                "settings_default_item_arrangement_label",
+                "settings_default_hidden_label",
+                "settings_tab_defaults_title",
+                "settings_tab_defaults_hint",
+                "settings_view_mode_list",
+                "settings_view_mode_previews",
+                "settings_view_item_spacing_hint",
+                "settings_compact_preview_hint",
+                "shortcut_action.cursor-left",
+                "shortcut_action.cursor-right",
+                "shortcut_action.extend-left",
+                "shortcut_action.extend-right",
+            ] {
+                assert!(
+                    catalog.get(key).is_some_and(|text| !text.trim().is_empty()),
+                    "{lang:?}: {key}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn file_failure_messages_and_reasons_are_translated_in_every_bundled_language() {
+        use std::io::ErrorKind;
+        for &lang in Lang::all() {
+            let mut map = HashMap::new();
+            overlay(embedded(lang), &mut map);
+            for kind in [
+                Some(ErrorKind::PermissionDenied),
+                Some(ErrorKind::ReadOnlyFilesystem),
+                Some(ErrorKind::NotFound),
+                Some(ErrorKind::AlreadyExists),
+                Some(ErrorKind::StorageFull),
+                None,
+            ] {
+                let reason = &map[file_error_reason_key(kind)];
+                assert!(!reason.is_empty(), "{lang:?}");
+                for key in [
+                    "create_failed",
+                    "delete_failed",
+                    "link_failed",
+                    "rename_failed",
+                    "op_item_skipped",
+                    "move_source_kept",
+                ] {
+                    let text = format_file_failure(&map[key], "my_file.txt", reason);
+                    assert!(
+                        text.contains("my_file.txt") && text.contains(reason),
+                        "{lang:?} {key}"
+                    );
+                    assert!(
+                        !text.contains("{item}") && !text.contains("{reason}"),
+                        "{lang:?} {key}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn file_failure_interpolation_preserves_braces_in_names_and_reasons() {
+        assert_eq!(
+            format_file_failure("{item}: {reason}", "{reason}.txt", "{item}"),
+            "{reason}.txt: {item}"
+        );
+        assert_eq!(
+            file_error_reason_key(Some(std::io::ErrorKind::Other)),
+            "op_reason_system"
+        );
+    }
 
     #[test]
     fn every_language_loads_and_has_app_title() {
@@ -759,6 +979,102 @@ mod tests {
     fn french_overrides_english() {
         assert_eq!(tr(Lang::Fr, "settings_language"), "Langue");
         assert_eq!(tr(Lang::En, "settings_language"), "Language");
+    }
+
+    #[test]
+    fn transfer_status_localizes_units_and_interpolates_each_language() {
+        let mut speeds = HashMap::new();
+        for &lang in Lang::all() {
+            // Use the bundled catalog so personal overrides cannot affect the test.
+            let mut map = HashMap::new();
+            overlay(embedded(lang), &mut map);
+            let translate = |key: &str| map.get(key).expect("missing transfer translation").clone();
+            let units = size_units_from_catalog(&map);
+            let speed = format_transfer_status(1536, None, units, translate);
+            let remaining = format_transfer_status(1536, Some(61), units, translate);
+            assert!(!speed.contains('{') && !remaining.contains('{'), "{lang:?}");
+            assert!(remaining.starts_with(&speed), "{lang:?}");
+            assert!(
+                remaining.contains(&transfer_time(61, translate)),
+                "{lang:?}"
+            );
+            speeds.insert(lang.code(), speed);
+        }
+        assert_eq!(speeds["en"], "1.5 KB/s");
+        assert_eq!(speeds["fr"], "1,5 Ko/s");
+    }
+
+    #[test]
+    fn transfer_time_rounds_up_and_keeps_long_estimates_compact() {
+        let mut map = HashMap::new();
+        overlay(EMBED_EN, &mut map);
+        for (seconds, expected) in [
+            (0, "0 s"),
+            (59, "59 s"),
+            (60, "1 min"),
+            (61, "2 min"),
+            (3599, "1 h"),
+            (3600, "1 h"),
+            (3601, "1 h 1 min"),
+            (7200, "2 h"),
+        ] {
+            assert_eq!(transfer_time(seconds, |key| map[key].clone()), expected);
+        }
+    }
+
+    #[test]
+    fn russian_overrides_english() {
+        assert_eq!(tr(Lang::Ru, "settings_language"), "Язык");
+        assert_eq!(tr(Lang::Ru, "col_name"), "Имя");
+    }
+
+    #[test]
+    fn japanese_overrides_english() {
+        assert_eq!(tr(Lang::Ja, "settings_language"), "言語");
+        assert_eq!(tr(Lang::Ja, "settings_view_mode_previews"), "サムネイル");
+    }
+
+    #[test]
+    fn chinese_overrides_english() {
+        assert_eq!(tr(Lang::Zh, "settings_language"), "语言");
+        assert_eq!(tr(Lang::Zh, "settings_view_mode_previews"), "缩略图");
+    }
+
+    /// A bundled language must carry every key in its own file rather than
+    /// lean on the English fallback. That fallback exists so a missing key
+    /// never surfaces as raw text; it is not a licence to ship a language
+    /// half in English.
+    ///
+    /// [`catalog`] cannot see this — it overlays English first, so a fallback
+    /// and a real translation are indistinguishable there. The embedded source
+    /// is what has to be read.
+    #[test]
+    fn every_bundled_language_carries_every_key_itself() {
+        fn keys(src: &str) -> std::collections::BTreeSet<String> {
+            let mut map = HashMap::new();
+            overlay(src, &mut map);
+            map.into_keys().collect()
+        }
+        let english = keys(embedded(Lang::En));
+        assert!(english.len() > 400, "the English base looks truncated");
+        for &lang in Lang::all() {
+            if lang == Lang::En {
+                continue;
+            }
+            let own = keys(embedded(lang));
+            let missing: Vec<_> = english.difference(&own).collect();
+            assert!(
+                missing.is_empty(),
+                "{lang:?} would fall back to English for {} key(s): {missing:?}",
+                missing.len()
+            );
+            let extra: Vec<_> = own.difference(&english).collect();
+            assert!(
+                extra.is_empty(),
+                "{lang:?} declares {} key(s) English does not: {extra:?}",
+                extra.len()
+            );
+        }
     }
 
     #[test]
@@ -790,6 +1106,27 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_nine_workspace_slots_share_one_translated_label() {
+        // One template carries the nine labels, so what must be checked is that
+        // the digit reaches it and that no language lost the template.
+        for lang in Lang::all() {
+            let third = shortcut_action_name(*lang, "load-workspace-3");
+            assert!(third.contains('3'), "{lang:?} dropped the digit: {third}");
+            assert!(
+                !third.contains("{n}"),
+                "{lang:?} left the placeholder in: {third}"
+            );
+            assert_ne!(
+                third,
+                shortcut_action_name(*lang, "load-workspace-7"),
+                "{lang:?} renders every slot the same"
+            );
+        }
+        // An ordinary action keeps the per-id lookup.
+        assert_eq!(shortcut_action_name(Lang::Fr, "copy"), "Copier");
     }
 
     #[test]

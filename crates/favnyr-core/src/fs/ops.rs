@@ -938,17 +938,17 @@ fn windows_link(src: &Path, link: &Path) -> Result<()> {
     let fallback = if is_dir {
         windows_junction(src, link)
     } else {
-        std::fs::hard_link(src, link)
-            .map_err(|e| Error::Workspace(format!("hard link {}: {e}", link.display())))
+        std::fs::hard_link(src, link).map_err(Error::Io)
     };
     if let Err(fb_err) = fallback {
-        return Err(Error::Workspace(format!(
-            "cannot link {} → {}: {fb_err}; a symbolic link (needed across \
-             volumes and network shares) also failed: {sym_err} — enable \
-             Developer Mode or run as administrator",
-            link.display(),
-            src.display()
-        )));
+        return Err(Error::Operation {
+            message: format!(
+                "cannot link {} to {}; symbolic link also failed: {sym_err}",
+                link.display(),
+                src.display()
+            ),
+            source: Box::new(fb_err),
+        });
     }
     Ok(())
 }
@@ -1094,7 +1094,10 @@ pub fn trash_with_disposition(path: &Path) -> Result<TrashDisposition> {
     }
     trash::delete(path)
         .map(|()| TrashDisposition::Trashed)
-        .map_err(|e| Error::Workspace(format!("trash {}: {e}", path.display())))
+        .map_err(|source| Error::Trash {
+            path: path.to_path_buf(),
+            source,
+        })
 }
 
 /// Legacy variant preserving the old unit signature.
@@ -1102,19 +1105,17 @@ pub fn trash(path: &Path) -> Result<()> {
     trash_with_disposition(path).map(|_| ())
 }
 
-/// Data-only failure reason for [`restore_from_trash`]. Carries no
-/// natural-language text on purpose: the GUI translates each variant via its
-/// i18n layer before showing it to the user. `detail`, when present, is the
-/// underlying `trash` crate's own (English) message — arbitrary text outside
-/// Favnyr's control, passed through as-is.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Failures while restoring an item from the trash. The GUI translates their
+/// categories; native details remain available for logging. Restore failures
+/// retain the typed source so filesystem refusal categories are preserved.
+#[derive(Debug)]
 pub enum TrashError {
     /// Could not enumerate the OS trash.
     ListFailed(String),
     /// No trashed item matches the requested original path.
     ItemNotFound,
     /// The OS refused to restore the matched item.
-    RestoreFailed(String),
+    RestoreFailed(Error),
     /// No implementation for this OS.
     PlatformUnsupported,
 }
@@ -1144,8 +1145,12 @@ pub fn restore_from_trash(original_path: &Path) -> std::result::Result<(), Trash
         })
         .max_by_key(|item| item.time_deleted)
         .ok_or(TrashError::ItemNotFound)?;
-    trash::os_limited::restore_all(std::iter::once(item))
-        .map_err(|e| TrashError::RestoreFailed(e.to_string()))
+    trash::os_limited::restore_all(std::iter::once(item)).map_err(|source| {
+        TrashError::RestoreFailed(Error::Trash {
+            path: original_path.to_path_buf(),
+            source,
+        })
+    })
 }
 
 /// Resolves the symbolic links of `p`'s **parent** (which still exists even

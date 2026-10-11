@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::Result;
 use crate::i18n::{Lang, Theme};
+use crate::workspace::ItemArrangement;
 
 /// Default logical width of the main window (px).
 pub const DEFAULT_WINDOW_WIDTH: u32 = 1100;
@@ -151,6 +152,18 @@ pub struct Config {
     /// background, sharing ONE directory walk with the recursive mtime above.
     #[serde(default)]
     pub recursive_size_depth: i32,
+    /// Enables the dedicated font size used for every value displayed in file
+    /// views. Other interface text continues to follow the regular UI scale.
+    #[serde(default)]
+    pub view_text_font_size_override: bool,
+    /// Logical font size for view values when the override is enabled. Kept
+    /// while disabled so re-enabling restores the user's choice.
+    #[serde(default = "default_view_text_font_size")]
+    pub view_text_font_size: i32,
+    /// Extra vertical space between entries in file views. This expands only
+    /// the row band used by scrolling and hit-testing, not its visual content.
+    #[serde(default)]
+    pub view_item_spacing: i32,
     /// DEFAULT tab bar position for views created "from
     /// scratch" (new workspace, reset): 0 = top · 1 = left · 2 =
     /// right. Existing views keep their PER-VIEW setting (workspace);
@@ -162,6 +175,15 @@ pub struct Config {
     /// Restored, duplicated, and transferred tabs keep their own per-tab mode.
     #[serde(default)]
     pub default_preview_mode: bool,
+    /// Arrangement for new tabs. Missing preferences preserve the list layout.
+    #[serde(default)]
+    pub default_item_arrangement: ItemArrangement,
+    /// Whether newly created tabs and views start with hidden entries shown.
+    /// Off when the field is absent, so an existing configuration keeps the
+    /// historical behaviour. Restored, duplicated and transferred tabs keep
+    /// their own per-tab setting.
+    #[serde(default)]
+    pub default_show_hidden: bool,
     /// Shows the full path as a tooltip when hovering a tab. `true` by default
     /// (`default = true` → earlier configs without the field keep it on too);
     /// the user can uncheck it.
@@ -212,6 +234,20 @@ fn default_ui_scale() -> f32 {
     1.0
 }
 
+pub const DEFAULT_VIEW_TEXT_FONT_SIZE: i32 = 13;
+pub const MIN_VIEW_TEXT_FONT_SIZE: i32 = 9;
+pub const MAX_VIEW_TEXT_FONT_SIZE: i32 = 20;
+pub const MIN_VIEW_ITEM_SPACING: i32 = 0;
+pub const MAX_VIEW_ITEM_SPACING: i32 = 16;
+/// Deepest walk the two folder-statistics settings accept. The spin
+/// boxes in the settings panel carry the same bound; raising one alone
+/// leaves the other to snap the value back.
+pub const MAX_FOLDER_STAT_DEPTH: i32 = 16;
+
+fn default_view_text_font_size() -> i32 {
+    DEFAULT_VIEW_TEXT_FONT_SIZE
+}
+
 fn default_true() -> bool {
     true
 }
@@ -240,8 +276,13 @@ impl Default for Config {
             shortcut_overrides: std::collections::BTreeMap::new(),
             recursive_mtime_depth: 0,
             recursive_size_depth: 0,
+            view_text_font_size_override: false,
+            view_text_font_size: DEFAULT_VIEW_TEXT_FONT_SIZE,
+            view_item_spacing: MIN_VIEW_ITEM_SPACING,
             default_tab_bar_mode: 0,
             default_preview_mode: true,
+            default_item_arrangement: ItemArrangement::List,
+            default_show_hidden: false,
             tab_path_tooltip: true,
             warn_unsaved_workspace: true,
             compact_icon_rows_in_preview: true,
@@ -294,6 +335,12 @@ impl Config {
     /// the invariants of. The default order is stable and allocation-free.
     pub fn sanitized(mut self) -> Self {
         self.sidebar_section_order = SidebarSection::sanitized_order(self.sidebar_section_order);
+        self.view_text_font_size = self
+            .view_text_font_size
+            .clamp(MIN_VIEW_TEXT_FONT_SIZE, MAX_VIEW_TEXT_FONT_SIZE);
+        self.view_item_spacing = self
+            .view_item_spacing
+            .clamp(MIN_VIEW_ITEM_SPACING, MAX_VIEW_ITEM_SPACING);
         self
     }
 }
@@ -302,6 +349,36 @@ impl Config {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn hidden_default_is_off_when_absent_and_survives_a_round_trip() {
+        // An existing configuration has no such field, and must keep the
+        // historical behaviour rather than start showing hidden entries.
+        let old: Config = toml::from_str("default_preview_mode = true").unwrap();
+        assert!(!old.default_show_hidden);
+        let on: Config = toml::from_str("default_show_hidden = true").unwrap();
+        assert!(on.default_show_hidden);
+        let restored: Config = toml::from_str(&toml::to_string(&on).unwrap()).unwrap();
+        assert!(restored.default_show_hidden);
+        assert!(!Config::default().default_show_hidden);
+    }
+
+    #[test]
+    fn grid_default_is_optional_and_independent_of_previews() {
+        let old: Config = toml::from_str("default_preview_mode = true").unwrap();
+        assert_eq!(old.default_item_arrangement, ItemArrangement::List);
+        assert!(old.default_preview_mode);
+        let grid: Config =
+            toml::from_str("default_item_arrangement = 'grid'\ndefault_preview_mode = false")
+                .unwrap();
+        assert_eq!(grid.default_item_arrangement, ItemArrangement::Grid);
+        assert!(!grid.default_preview_mode);
+        let restored: Config = toml::from_str(&toml::to_string(&grid).unwrap()).unwrap();
+        assert_eq!(restored.default_item_arrangement, ItemArrangement::Grid);
+        assert!(!restored.default_preview_mode);
+        let unknown: Config = toml::from_str("default_item_arrangement = 'unknown'").unwrap();
+        assert_eq!(unknown.default_item_arrangement, ItemArrangement::List);
+    }
 
     #[test]
     fn default_round_trip() {
@@ -321,6 +398,12 @@ mod tests {
             original.compact_icon_rows_in_preview
         );
         assert_eq!(back.default_preview_mode, original.default_preview_mode);
+        assert_eq!(
+            back.view_text_font_size_override,
+            original.view_text_font_size_override
+        );
+        assert_eq!(back.view_text_font_size, original.view_text_font_size);
+        assert_eq!(back.view_item_spacing, original.view_item_spacing);
         assert_eq!(back.sidebar_section_order, SidebarSection::DEFAULT_ORDER);
         assert!(back.sidebar_shortcut_redirects.is_empty());
     }
@@ -362,6 +445,9 @@ mod tests {
         assert!(cfg.compact_icon_rows_in_preview);
         // Earlier configurations keep the historical List default.
         assert!(!cfg.default_preview_mode);
+        assert!(!cfg.view_text_font_size_override);
+        assert_eq!(cfg.view_text_font_size, DEFAULT_VIEW_TEXT_FONT_SIZE);
+        assert_eq!(cfg.view_item_spacing, MIN_VIEW_ITEM_SPACING);
         // The global order absent from an old config falls back to the historical order.
         assert_eq!(cfg.sidebar_section_order, SidebarSection::DEFAULT_ORDER);
     }
@@ -444,6 +530,36 @@ mod tests {
                 SidebarSection::Favorites,
             ]
         );
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn view_text_font_size_is_clamped_when_loading_manual_config() {
+        let dir = tempdir();
+        let path = dir.join("config.toml");
+        let cfg = Config {
+            view_text_font_size_override: true,
+            view_text_font_size: MAX_VIEW_TEXT_FONT_SIZE + 50,
+            ..Config::default()
+        };
+        cfg.save(&path).unwrap();
+        let repaired = Config::load_or_default(&path).unwrap();
+        assert!(repaired.view_text_font_size_override);
+        assert_eq!(repaired.view_text_font_size, MAX_VIEW_TEXT_FONT_SIZE);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn view_item_spacing_is_clamped_when_loading_manual_config() {
+        let dir = tempdir();
+        let path = dir.join("config.toml");
+        let cfg = Config {
+            view_item_spacing: MAX_VIEW_ITEM_SPACING + 50,
+            ..Config::default()
+        };
+        cfg.save(&path).unwrap();
+        let repaired = Config::load_or_default(&path).unwrap();
+        assert_eq!(repaired.view_item_spacing, MAX_VIEW_ITEM_SPACING);
         std::fs::remove_dir_all(dir).ok();
     }
 

@@ -7,7 +7,7 @@
 # requires at least that version at run time, so building on a current runner
 # would produce something that refuses to start on Debian 12, Mint 21 and most
 # conservative distributions. Building against 2.35 keeps it running everywhere
-# from those up to the newest systems — a newer machine simply supplies its own,
+# from those up to the newest systems, a newer machine simply supplies its own,
 # patched glibc at run time.
 name: Release
 
@@ -58,7 +58,7 @@ jobs:
             | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1)
           echo "Highest required: $highest"
           if [ "$(printf '%s\nGLIBC_2.35\n' "$highest" | sort -V | tail -1)" != "GLIBC_2.35" ]; then
-            echo "::error::$highest exceeds GLIBC_2.35 — the binary will not run on older distributions"
+            echo "::error::$highest exceeds GLIBC_2.35, the binary will not run on older distributions"
             exit 1
           fi
 
@@ -66,15 +66,23 @@ jobs:
       # metadata: uploading the binary directly would silently drop its
       # executable bit, unlike this workflow's own inter-job artifacts. tar
       # preserves Unix permissions, so extracting the archive already leaves
-      # `favnyr` executable — no `chmod` step for whoever downloads it. The
-      # icon rides along in the same download for a desktop entry / launcher.
+      # `favnyr` executable, no `chmod` step for whoever downloads it.
+      #
+      # The icon and the desktop entry ride along in the same download. They are
+      # what a packager needs to integrate the binary with a desktop, and the
+      # Nix recipe installs both straight out of this archive rather than
+      # generating a launcher of its own. `Exec=favnyr` resolves through the
+      # PATH, which is correct once the binary is installed; extracting the
+      # archive into a home folder is not that case, and needs either the binary
+      # on the PATH or the entry edited by hand.
       - name: Package
         run: |
           mkdir -p dist
           chmod +x target/release/favnyr
           cp crates/favnyr-gui/assets/favnyr.svg target/release/favnyr.svg
+          cp packaging/favnyr.desktop target/release/favnyr.desktop
           tar -czf dist/favnyr-linux-x86_64.tar.gz \
-            -C target/release favnyr favnyr.svg
+            -C target/release favnyr favnyr.svg favnyr.desktop
 
       - uses: actions/upload-artifact@v4
         with:
@@ -103,9 +111,14 @@ jobs:
     name: Publish release
     needs: [linux, windows]
     runs-on: ubuntu-latest
-    # Only what the release needs: creating it, nothing else.
+    # Only what the release needs. `id-token` lets GitHub mint the short-lived
+    # identity the attestation is signed with, and `attestations` lets it be
+    # recorded. Declaring any permission sets the others to none, so the three
+    # listed here are the whole set this job gets.
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -121,6 +134,23 @@ jobs:
           cp artifacts/favnyr-linux-x86_64/favnyr-linux-x86_64.tar.gz dist/
           cp artifacts/favnyr-windows-x86_64/favnyr.exe dist/favnyr-windows-x86_64.exe
           ls -l dist
+
+      # Signs a statement binding each file's digest to this repository, this
+      # workflow and this commit. The digest GitHub already shows on a release
+      # asset proves the download matches what GitHub stores; it cannot prove
+      # what GitHub stores came from here. This can, and anyone may check it:
+      #
+      #     gh attestation verify --repo <owner>/<repo> <file>
+      #
+      # Placed before publication so a failure here leaves no release at all
+      # rather than binaries nobody can verify. Replacing an asset by hand
+      # afterwards would make that check fail on it, which is the point.
+      - name: Attest the release binaries
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/favnyr-linux-x86_64.tar.gz
+            dist/favnyr-windows-x86_64.exe
 
       - name: Create the release
         env:

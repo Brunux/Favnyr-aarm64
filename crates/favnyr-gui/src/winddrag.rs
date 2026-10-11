@@ -16,11 +16,17 @@ use std::ffi::c_void;
 use std::io::Write;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::fs::MetadataExt;
+use std::os::windows::fs::OpenOptionsExt;
+use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 
 use tracing::{debug, warn};
-use windows::Win32::Foundation::{HGLOBAL, HWND, POINTL};
-use windows::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+use windows::Win32::Foundation::{HANDLE, HGLOBAL, HWND, POINTL};
+use windows::Win32::Storage::FileSystem::{
+    BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS,
+    FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    GetFileInformationByHandle,
+};
 use windows::Win32::System::Com::StructuredStorage::{IStorage, StgCreateDocfile};
 use windows::Win32::System::Com::{
     CoTaskMemFree, DVASPECT_CONTENT, FORMATETC, IDataObject, IStream, STGC_DEFAULT, STGM_CREATE,
@@ -29,17 +35,21 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::DataExchange::RegisterClipboardFormatW;
 use windows::Win32::System::Memory::{GlobalLock, GlobalSize, GlobalUnlock};
 use windows::Win32::System::Ole::{
-    CF_HDROP, DROPEFFECT_COPY, DROPEFFECT_MOVE, DROPEFFECT_NONE, IDropTarget, IDropTarget_Impl,
-    OleInitialize, RegisterDragDrop, ReleaseStgMedium, RevokeDragDrop,
+    CF_HDROP, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_LINK, DROPEFFECT_MOVE, DROPEFFECT_NONE,
+    IDropTarget, IDropTarget_Impl, OleInitialize, RegisterDragDrop, ReleaseStgMedium,
+    RevokeDragDrop,
 };
 use windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS;
 use windows::Win32::UI::Shell::Common::ITEMIDLIST;
 use windows::Win32::UI::Shell::{
-    CFSTR_FILECONTENTS, CFSTR_FILEDESCRIPTORW, CFSTR_SHELLIDLIST, DragQueryFileW, FILEDESCRIPTORW,
-    FILEGROUPDESCRIPTORW, HDROP, IShellFolder, SHDoDragDrop, SHGetDesktopFolder,
-    SHParseDisplayName,
+    CFSTR_FILECONTENTS, CFSTR_FILEDESCRIPTORW, CFSTR_LOGICALPERFORMEDDROPEFFECT,
+    CFSTR_PERFORMEDDROPEFFECT, CFSTR_SHELLIDLIST, DragQueryFileW, FILEDESCRIPTORW,
+    FILEGROUPDESCRIPTORW, HDROP, IDataObjectAsyncCapability, IShellFolder, SHDoDragDrop,
+    SHGetDesktopFolder, SHParseDisplayName,
 };
-use windows::core::{PCWSTR, Ref, implement};
+use windows::core::{Interface, PCWSTR, Ref, implement};
+
+use crate::file_drag::DropAction;
 
 /// Event from an incoming OLE drag. Favnyr replaces winit's minimal drop
 /// target so it can also receive `DragOver` coordinates, essential for
@@ -48,14 +58,14 @@ pub enum IncomingFileDrag {
     Hover {
         screen_x: i32,
         screen_y: i32,
-        copy: bool,
+        action: DropAction,
     },
     Leave,
     Drop {
         paths: Vec<PathBuf>,
         screen_x: i32,
         screen_y: i32,
-        copy: bool,
+        action: DropAction,
         /// Present when Favnyr had to take ownership of source data before
         /// returning from OLE `Drop` (for example an email attachment or a
         /// temporary path exposed by an archive manager).
@@ -107,10 +117,10 @@ impl IncomingDataKind {
 }
 
 impl FavnyrDropTarget {
-    fn ctrl_down(keys: MODIFIERKEYS_FLAGS) -> bool {
-        // MK_CONTROL, defined in winuser.h. The generated type doesn't provide
-        // a dedicated constant across every windows-rs feature combination.
-        keys.0 & 0x0008 != 0
+    fn requested_action(keys: MODIFIERKEYS_FLAGS) -> DropAction {
+        // MK_CONTROL and MK_SHIFT, defined in winuser.h. Dedicated constants
+        // are not available across every windows-rs feature combination.
+        DropAction::from_modifiers(keys.0 & 0x0008 != 0, keys.0 & 0x0004 != 0)
     }
 
     fn choose_copy_effect(
@@ -131,7 +141,7 @@ impl FavnyrDropTarget {
     fn choose_hover_effect(
         allowed: windows::Win32::System::Ole::DROPEFFECT,
         kind: IncomingDataKind,
-        copy_requested: bool,
+        action: DropAction,
     ) -> windows::Win32::System::Ole::DROPEFFECT {
         // The deferred Favnyr menu takes ownership of path strings only after
         // OLE returns, so the final handoff must remain COPY. Reject a source
@@ -140,8 +150,11 @@ impl FavnyrDropTarget {
         if !kind.accepted() || allowed.0 & DROPEFFECT_COPY.0 == 0 {
             return DROPEFFECT_NONE;
         }
-        if kind.copy_only() || copy_requested {
+        if kind.copy_only() || action == DropAction::Copy {
             return Self::choose_copy_effect(allowed, true);
+        }
+        if action == DropAction::Move && allowed.0 & DROPEFFECT_MOVE.0 == 0 {
+            return DROPEFFECT_NONE;
         }
         if allowed.0 & DROPEFFECT_MOVE.0 != 0 {
             DROPEFFECT_MOVE
@@ -150,23 +163,27 @@ impl FavnyrDropTarget {
         }
     }
 
-    /// Updates OLE's live feedback and returns whether Favnyr should render
-    /// the copy variant of its own drag indicator. `None` rejects the drop.
+    /// The selected transfer intent drives both the native cursor and the
+    /// deferred action. Copy-only providers cannot request a source deletion.
     fn set_hover_effect(
         effect: *mut windows::Win32::System::Ole::DROPEFFECT,
         allowed: windows::Win32::System::Ole::DROPEFFECT,
         kind: IncomingDataKind,
-        copy_requested: bool,
-    ) -> Option<bool> {
+        action: DropAction,
+    ) -> Option<DropAction> {
         if effect.is_null() {
             return None;
         }
         unsafe {
-            *effect = Self::choose_hover_effect(allowed, kind, copy_requested);
+            *effect = Self::choose_hover_effect(allowed, kind, action);
             if *effect == DROPEFFECT_NONE {
                 None
             } else {
-                Some(*effect == DROPEFFECT_COPY)
+                Some(if *effect == DROPEFFECT_COPY {
+                    DropAction::Copy
+                } else {
+                    action
+                })
             }
         }
     }
@@ -212,7 +229,7 @@ impl IDropTarget_Impl for FavnyrDropTarget_Impl {
         self.incoming_kind.set(kind);
         let allowed = FavnyrDropTarget::effect_value(effect);
         self.allowed_effects.set(allowed);
-        let copy_requested = FavnyrDropTarget::ctrl_down(keys);
+        let action = FavnyrDropTarget::requested_action(keys);
         // One line per drag, not per move: `DragOver` is the chatty one. It
         // records that Favnyr's own target WAS consulted and what it made of
         // the source — the two questions a refused drag raises, and which
@@ -221,19 +238,19 @@ impl IDropTarget_Impl for FavnyrDropTarget_Impl {
         debug!(
             ?kind,
             allowed = format!("0x{allowed:X}"),
-            copy_requested,
+            ?action,
             "OLE drag entered Favnyr"
         );
-        if let Some(copy) = FavnyrDropTarget::set_hover_effect(
+        if let Some(action) = FavnyrDropTarget::set_hover_effect(
             effect,
             windows::Win32::System::Ole::DROPEFFECT(allowed),
             kind,
-            copy_requested,
+            action,
         ) {
             (self.handler)(IncomingFileDrag::Hover {
                 screen_x: point.x,
                 screen_y: point.y,
-                copy,
+                action,
             });
         }
         Ok(())
@@ -247,14 +264,12 @@ impl IDropTarget_Impl for FavnyrDropTarget_Impl {
     ) -> windows::core::Result<()> {
         let kind = self.incoming_kind.get();
         let allowed = windows::Win32::System::Ole::DROPEFFECT(self.allowed_effects.get());
-        let copy_requested = FavnyrDropTarget::ctrl_down(keys);
-        if let Some(copy) =
-            FavnyrDropTarget::set_hover_effect(effect, allowed, kind, copy_requested)
-        {
+        let action = FavnyrDropTarget::requested_action(keys);
+        if let Some(action) = FavnyrDropTarget::set_hover_effect(effect, allowed, kind, action) {
             (self.handler)(IncomingFileDrag::Hover {
                 screen_x: point.x,
                 screen_y: point.y,
-                copy,
+                action,
             });
         }
         Ok(())
@@ -278,7 +293,10 @@ impl IDropTarget_Impl for FavnyrDropTarget_Impl {
         let kind = self.incoming_kind.replace(IncomingDataKind::None);
         let mut paths = Vec::new();
         let mut staging = None;
-        let copy_allowed = allowed_effect & DROPEFFECT_COPY.0 != 0;
+        let requested = FavnyrDropTarget::requested_action(keys);
+        let copy_allowed =
+            FavnyrDropTarget::choose_hover_effect(DROPEFFECT(allowed_effect), kind, requested)
+                != DROPEFFECT_NONE;
         if copy_allowed && let Some(data) = data.as_ref() {
             match kind {
                 IncomingDataKind::ShellPaths => {
@@ -326,14 +344,18 @@ impl IDropTarget_Impl for FavnyrDropTarget_Impl {
             !paths.is_empty(),
         );
         if accepted {
-            let copy = kind.copy_only()
-                || FavnyrDropTarget::ctrl_down(keys)
-                || allowed_effect & DROPEFFECT_MOVE.0 == 0;
+            let action =
+                if kind.copy_only() || staging.is_some() || allowed_effect & DROPEFFECT_MOVE.0 == 0
+                {
+                    DropAction::Copy
+                } else {
+                    requested
+                };
             (self.handler)(IncomingFileDrag::Drop {
                 paths,
                 screen_x: point.x,
                 screen_y: point.y,
-                copy,
+                action,
                 staging,
             });
         } else if copy_allowed && kind.copy_only() {
@@ -970,29 +992,129 @@ fn wide_str(s: &std::ffi::OsStr) -> Vec<u16> {
     s.encode_wide().chain(std::iter::once(0)).collect()
 }
 
-/// Starts a native OLE drag of `paths` (all assumed to be in the SAME folder —
+// Keep links available for Shell targets such as taskbar pins.
+const OUTGOING_EFFECTS: DROPEFFECT =
+    DROPEFFECT(DROPEFFECT_COPY.0 | DROPEFFECT_MOVE.0 | DROPEFFECT_LINK.0);
+
+#[derive(Default)]
+pub struct NativeDragOutcome {
+    pub dropped: bool,
+    pub moved: bool,
+    pub cleanup: Vec<NativeMoveSource>,
+}
+
+/// File identity captured before OLE hands control to another application.
+/// Cleanup must never delete a replacement that later occupied the same path.
+#[derive(Clone)]
+pub struct NativeMoveSource {
+    pub path: PathBuf,
+    identity: [u32; 9],
+}
+
+impl NativeMoveSource {
+    fn capture(path: &Path) -> std::io::Result<Self> {
+        let file = std::fs::OpenOptions::new()
+            .access_mode(0)
+            .share_mode((FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE).0)
+            .custom_flags((FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT).0)
+            .open(path)?;
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
+        unsafe { GetFileInformationByHandle(HANDLE(file.as_raw_handle()), &mut info) }
+            .map_err(|err| std::io::Error::from_raw_os_error(err.code().0 & 0xFFFF))?;
+        Ok(Self {
+            path: path.to_path_buf(),
+            identity: [
+                info.dwVolumeSerialNumber,
+                info.nFileIndexHigh,
+                info.nFileIndexLow,
+                info.ftCreationTime.dwHighDateTime,
+                info.ftCreationTime.dwLowDateTime,
+                info.ftLastWriteTime.dwHighDateTime,
+                info.ftLastWriteTime.dwLowDateTime,
+                info.nFileSizeHigh,
+                info.nFileSizeLow,
+            ],
+        })
+    }
+
+    pub fn finish_move(&self) -> favnyr_core::Result<()> {
+        let current = match Self::capture(&self.path) {
+            Ok(current) => current,
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(err) => return Err(err.into()),
+        };
+        if current.identity != self.identity {
+            return Err(
+                std::io::Error::other("native move source changed during the transfer").into(),
+            );
+        }
+        favnyr_core::fs::ops::permanent_delete(&self.path)
+    }
+}
+
+/// An optimized Shell move has already removed the originals. Only the two
+/// explicit MOVE results together authorize source-side cleanup.
+fn source_cleanup_required(returned: DROPEFFECT, performed: Option<DROPEFFECT>) -> bool {
+    returned == DROPEFFECT_MOVE && performed == Some(DROPEFFECT_MOVE)
+}
+
+fn data_drop_effect(data: &IDataObject, name: PCWSTR) -> Option<DROPEFFECT> {
+    let id = unsafe { RegisterClipboardFormatW(name) };
+    if id == 0 {
+        return None;
+    }
+    let format = FORMATETC {
+        cfFormat: id as u16,
+        ptd: std::ptr::null_mut(),
+        dwAspect: DVASPECT_CONTENT.0,
+        lindex: -1,
+        tymed: TYMED_HGLOBAL.0 as u32,
+    };
+    let mut medium = unsafe { data.GetData(&format) }.ok()?;
+    let value = unsafe {
+        if medium.tymed == TYMED_HGLOBAL.0 as u32
+            && GlobalSize(medium.u.hGlobal) >= std::mem::size_of::<u32>()
+        {
+            let ptr = GlobalLock(medium.u.hGlobal).cast::<u32>();
+            if ptr.is_null() {
+                None
+            } else {
+                let value = ptr.read_unaligned();
+                let _ = GlobalUnlock(medium.u.hGlobal);
+                Some(DROPEFFECT(value))
+            }
+        } else {
+            None
+        }
+    };
+    unsafe { ReleaseStgMedium(&mut medium) };
+    value
+}
+
+/// Starts a native OLE drag of `paths` (all assumed to be in the same folder,
 /// which is the case for a selection coming from a view). External apps
-/// receive the files as `CF_HDROP` (COPY effect). Blocking (modal loop of
-/// `SHDoDragDrop`) until dropped/cancelled. `true` if a drop occurred.
-/// Fire-and-forget: any error is logged, never propagated (no panic).
-pub fn drag_files(paths: &[PathBuf]) -> bool {
+/// receive the Shell data object with COPY, MOVE or LINK effects. Blocks in
+/// `SHDoDragDrop` until dropped or cancelled. The result reports the drop and
+/// carries confirmed source cleanup for the shared background operation
+/// pipeline. Errors before the drop are logged.
+pub fn drag_files(paths: &[PathBuf]) -> NativeDragOutcome {
     match unsafe { drag_files_inner(paths) } {
         Ok(dropped) => dropped,
         Err(err) => {
             warn!(error = %err, "native OLE drag failed");
-            false
+            NativeDragOutcome::default()
         }
     }
 }
 
-unsafe fn drag_files_inner(paths: &[PathBuf]) -> windows::core::Result<bool> {
+unsafe fn drag_files_inner(paths: &[PathBuf]) -> windows::core::Result<NativeDragOutcome> {
     unsafe {
         if paths.is_empty() {
-            return Ok(false);
+            return Ok(NativeDragOutcome::default());
         }
         // Common parent folder (the selection comes from a single view).
         let Some(parent_dir) = paths[0].parent() else {
-            return Ok(false);
+            return Ok(NativeDragOutcome::default());
         };
 
         // `SHDoDragDrop`/OLE require OLE init on the UI thread. Idempotent
@@ -1018,6 +1140,7 @@ unsafe fn drag_files_inner(paths: &[PathBuf]) -> windows::core::Result<bool> {
 
         // Child (simple) PIDL of each file, relative to the parent.
         let mut child_pidls: Vec<*mut ITEMIDLIST> = Vec::with_capacity(paths.len());
+        let mut sources = Vec::with_capacity(paths.len());
         for p in paths {
             let Some(name) = p.file_name() else { continue };
             let name_w = wide_str(name);
@@ -1036,14 +1159,17 @@ unsafe fn drag_files_inner(paths: &[PathBuf]) -> windows::core::Result<bool> {
                 && !cpidl.is_null()
             {
                 child_pidls.push(cpidl);
+                if let Ok(source) = NativeMoveSource::capture(p) {
+                    sources.push(source);
+                }
             }
         }
 
         // Capture the outcome instead of `?`-returning: the shell-allocated
         // PIDLs below must be freed even when GetUIObjectOf / SHDoDragDrop fail
         // (both previously leaked parent_pidl AND every child PIDL).
-        let dropped: windows::core::Result<bool> = if child_pidls.is_empty() {
-            Ok(false)
+        let dropped: windows::core::Result<NativeDragOutcome> = if child_pidls.is_empty() {
+            Ok(NativeDragOutcome::default())
         } else {
             let ptrs: Vec<*const ITEMIDLIST> = child_pidls.iter().map(|p| *p as *const _).collect();
             // IDataObject built by the shell (CF_HDROP + shell formats) — no
@@ -1052,10 +1178,41 @@ unsafe fn drag_files_inner(paths: &[PathBuf]) -> windows::core::Result<bool> {
             match parent.GetUIObjectOf(HWND::default(), &ptrs, None) {
                 Ok(data) => {
                     let data: IDataObject = data;
-                    match SHDoDragDrop(None, &data, None, DROPEFFECT_COPY) {
+                    // Source cleanup is synchronous with the completed drop.
+                    // Opting out of asynchronous extraction prevents deleting
+                    // originals while the target is still reading their data.
+                    let synchronous = data
+                        .cast::<IDataObjectAsyncCapability>()
+                        .map_or(true, |async_data| async_data.SetAsyncMode(false).is_ok());
+                    let allowed = if synchronous && sources.len() == child_pidls.len() {
+                        OUTGOING_EFFECTS
+                    } else {
+                        DROPEFFECT(OUTGOING_EFFECTS.0 & !DROPEFFECT_MOVE.0)
+                    };
+                    match SHDoDragDrop(None, &data, None, allowed) {
                         Ok(effect) => {
-                            debug!(effect = effect.0, "SHDoDragDrop returned");
-                            Ok(effect.0 != 0)
+                            let performed = data_drop_effect(&data, CFSTR_PERFORMEDDROPEFFECT);
+                            let logical = data_drop_effect(&data, CFSTR_LOGICALPERFORMEDDROPEFFECT);
+                            let cleanup = if allowed.0 & DROPEFFECT_MOVE.0 != 0
+                                && source_cleanup_required(effect, performed)
+                            {
+                                sources
+                            } else {
+                                Vec::new()
+                            };
+                            debug!(
+                                effect = effect.0,
+                                ?performed,
+                                ?logical,
+                                "SHDoDragDrop returned"
+                            );
+                            Ok(NativeDragOutcome {
+                                dropped: effect != DROPEFFECT_NONE
+                                    || logical.is_some_and(|value| value != DROPEFFECT_NONE),
+                                moved: effect == DROPEFFECT_MOVE
+                                    || logical == Some(DROPEFFECT_MOVE),
+                                cleanup,
+                            })
                         }
                         Err(e) => Err(e),
                     }
@@ -1112,8 +1269,6 @@ mod tests {
 
     #[test]
     fn copy_effect_never_exceeds_the_source_mask() {
-        use windows::Win32::System::Ole::DROPEFFECT_LINK;
-
         assert_eq!(
             FavnyrDropTarget::choose_copy_effect(DROPEFFECT_COPY | DROPEFFECT_MOVE, true),
             DROPEFFECT_COPY
@@ -1129,21 +1284,50 @@ mod tests {
     }
 
     #[test]
+    fn outgoing_effects_preserve_links_and_copy_only_providers() {
+        assert_ne!(OUTGOING_EFFECTS.0 & DROPEFFECT_LINK.0, 0);
+        assert_ne!(OUTGOING_EFFECTS.0 & DROPEFFECT_MOVE.0, 0);
+        assert_eq!(
+            FavnyrDropTarget::choose_copy_effect(OUTGOING_EFFECTS, true),
+            DROPEFFECT_COPY
+        );
+        for kind in [
+            IncomingDataKind::ApplicationPaths,
+            IncomingDataKind::VirtualFiles,
+        ] {
+            for action in [DropAction::Choose, DropAction::Copy, DropAction::Move] {
+                assert_eq!(
+                    FavnyrDropTarget::choose_hover_effect(OUTGOING_EFFECTS, kind, action),
+                    DROPEFFECT_COPY
+                );
+            }
+        }
+    }
+
+    #[test]
     fn shell_hover_prefers_move_while_copy_only_sources_stay_copy() {
         let both = DROPEFFECT_COPY | DROPEFFECT_MOVE;
         assert_eq!(
-            FavnyrDropTarget::choose_hover_effect(both, IncomingDataKind::ShellPaths, false),
+            FavnyrDropTarget::choose_hover_effect(
+                both,
+                IncomingDataKind::ShellPaths,
+                DropAction::Choose
+            ),
             DROPEFFECT_MOVE
         );
         assert_eq!(
-            FavnyrDropTarget::choose_hover_effect(both, IncomingDataKind::ShellPaths, true),
+            FavnyrDropTarget::choose_hover_effect(
+                both,
+                IncomingDataKind::ShellPaths,
+                DropAction::Copy
+            ),
             DROPEFFECT_COPY
         );
         assert_eq!(
             FavnyrDropTarget::choose_hover_effect(
                 DROPEFFECT_COPY,
                 IncomingDataKind::ShellPaths,
-                false,
+                DropAction::Choose,
             ),
             DROPEFFECT_COPY
         );
@@ -1151,26 +1335,93 @@ mod tests {
             FavnyrDropTarget::choose_hover_effect(
                 DROPEFFECT_MOVE,
                 IncomingDataKind::ShellPaths,
-                false,
+                DropAction::Choose,
             ),
             DROPEFFECT_NONE
         );
         assert_eq!(
-            FavnyrDropTarget::choose_hover_effect(both, IncomingDataKind::ApplicationPaths, false),
+            FavnyrDropTarget::choose_hover_effect(
+                both,
+                IncomingDataKind::ApplicationPaths,
+                DropAction::Choose
+            ),
             DROPEFFECT_COPY
         );
         assert_eq!(
             FavnyrDropTarget::choose_hover_effect(
                 DROPEFFECT_MOVE,
                 IncomingDataKind::ApplicationPaths,
-                false,
+                DropAction::Choose,
             ),
             DROPEFFECT_NONE
         );
         assert_eq!(
-            FavnyrDropTarget::choose_hover_effect(both, IncomingDataKind::None, false),
+            FavnyrDropTarget::choose_hover_effect(both, IncomingDataKind::None, DropAction::Choose),
             DROPEFFECT_NONE
         );
+        assert_eq!(
+            FavnyrDropTarget::choose_hover_effect(
+                both,
+                IncomingDataKind::ShellPaths,
+                DropAction::Move
+            ),
+            DROPEFFECT_MOVE
+        );
+        assert_eq!(
+            FavnyrDropTarget::choose_hover_effect(
+                DROPEFFECT_COPY,
+                IncomingDataKind::ShellPaths,
+                DropAction::Move
+            ),
+            DROPEFFECT_NONE
+        );
+    }
+
+    #[test]
+    fn optimized_and_unconfirmed_moves_never_authorize_source_deletion() {
+        assert!(source_cleanup_required(
+            DROPEFFECT_MOVE,
+            Some(DROPEFFECT_MOVE)
+        ));
+        for returned in [
+            DROPEFFECT_COPY,
+            DROPEFFECT_LINK,
+            DROPEFFECT_NONE,
+            DROPEFFECT_MOVE,
+        ] {
+            for performed in [
+                None,
+                Some(DROPEFFECT_NONE),
+                Some(DROPEFFECT_COPY),
+                Some(DROPEFFECT_LINK),
+            ] {
+                assert!(!source_cleanup_required(returned, performed));
+            }
+        }
+        assert!(!source_cleanup_required(
+            DROPEFFECT_NONE,
+            Some(DROPEFFECT_MOVE)
+        ));
+        assert!(!source_cleanup_required(
+            DROPEFFECT_COPY,
+            Some(DROPEFFECT_MOVE)
+        ));
+    }
+
+    #[test]
+    fn native_move_cleanup_preserves_changed_sources() {
+        let root = create_drop_dir("favnyr-native-move").unwrap();
+        let path = root.join("my_file.bin");
+        std::fs::write(&path, b"data").unwrap();
+        let original = NativeMoveSource::capture(&path).unwrap();
+        std::fs::write(&path, b"changed data").unwrap();
+        assert!(original.finish_move().is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), b"changed data");
+        let unchanged = NativeMoveSource::capture(&path).unwrap();
+        unchanged.finish_move().unwrap();
+        assert!(!path.exists());
+        unchanged.finish_move().unwrap();
+        std::fs::remove_dir(root).unwrap();
     }
 
     #[test]

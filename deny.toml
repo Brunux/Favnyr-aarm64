@@ -37,18 +37,12 @@ db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
 ignore = [
-    # `paste` unmaintained (RUSTSEC-2024-0436). Pulled in ONLY by Slint's BUILD
-    # chain (image → ravif → rav1e → paste, via i-slint-compiler), not by our
-    # application code. "Unmaintained" advisory (not a vulnerability); nothing
-    # to fix until Slint migrates away from it → explicitly ignored.
-    "RUSTSEC-2024-0436",
-    # `ttf-parser` unmaintained (RUSTSEC-2026-0192). TRANSITIVE dependency of
-    # Slint's text rendering (resvg/fontdb), not our own code. "Unmaintained"
-    # advisory (not a vulnerability), no safe upgrade available → ignored.
+    # `ttf-parser` unmaintained (RUSTSEC-2026-0192). Transitive, and not our
+    # own code: it arrives through winit's client-side window decorations
+    # (ttf-parser → owned_ttf_parser → ab_glyph → sctk-adwaita → winit), so it
+    # only measures text for a title bar. "Unmaintained" advisory, not a
+    # vulnerability, and no safe upgrade available → ignored.
     "RUSTSEC-2026-0192",
-    # `rustybuzz` unmaintained (RUSTSEC-2026-0206). Same situation as
-    # `ttf-parser`: Slint's text shaping, transitive, no upgrade available.
-    "RUSTSEC-2026-0206",
     # `quick-xml` 0.39 (RUSTSEC-2026-0194 / -0195): two DoS issues parsing
     # untrusted XML. NOT APPLICABLE here — quick-xml is only reached via
     # `wayland-scanner`, a proc-macro that reads the Wayland protocol files
@@ -76,6 +70,9 @@ allow = [
     "Unicode-3.0",
     "MPL-2.0",
     "CC0-1.0",
+    # Slint's Linux system-tray integration (`ksni`). The Unlicense is an
+    # OSI-approved public-domain dedication with a permissive fallback grant.
+    "Unlicense",
     # Boost. Windows only: the clipboard stack (`clipboard-win`, `error-code`),
     # reached through both `arboard` and Slint's winit backend.
     "BSL-1.0",

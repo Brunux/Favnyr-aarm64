@@ -30,7 +30,12 @@ use slint::{
 use tracing::{debug, error, info, warn};
 
 use favnyr_core::SidebarSection;
+use favnyr_core::config::{
+    DEFAULT_VIEW_TEXT_FONT_SIZE, MAX_VIEW_ITEM_SPACING, MAX_VIEW_TEXT_FONT_SIZE,
+    MIN_VIEW_ITEM_SPACING, MIN_VIEW_TEXT_FONT_SIZE,
+};
 use favnyr_core::favorites::{self, FlatFav};
+use favnyr_core::folder_state::FolderStateStore;
 use favnyr_core::fs as rfs;
 use favnyr_core::fs::ops::{self};
 use favnyr_core::fs::{Entry, FileKind, GroupMode, SortColumn, SortOrder};
@@ -38,13 +43,16 @@ use favnyr_core::layout::{Layout, LayoutNode, NodePath, Rect, SplitDir};
 use favnyr_core::openers;
 use favnyr_core::shortcuts::{self, Chord};
 use favnyr_core::thumbnail::{self, Thumbnail};
-use favnyr_core::workspace::{self, PanelState, SidebarSectionsState, TabState, WorkspaceState};
+use favnyr_core::workspace::{
+    self, ItemArrangement, SidebarSectionsState, TabState, ViewState, WorkspaceState,
+};
 use favnyr_core::{Config, Lang, Theme, paths};
 
 use crate::actions;
 use crate::clipboard;
 use crate::i18n;
 use crate::openwith;
+use crate::transfer::TransferMeter;
 use favnyr_core::columns::{self, ColumnSpec};
 
 use crate::{
@@ -57,6 +65,9 @@ use crate::{
 const MIN_SPLIT_RATIO: f32 = 0.08;
 
 mod archive;
+mod item_geometry;
+
+use item_geometry::{GridLayout, ItemAnchor, ItemBand, ItemBands};
 
 /// Context remembered for the "Open with" picker between enumeration
 /// (opening) and the user's choice.
@@ -135,6 +146,9 @@ struct ClipboardState {
 struct PasteJob {
     op: ClipOp,
     dst_dir: PathBuf,
+    /// Original selection order, kept independently because conflict items are
+    /// resolved later than immediately available destinations.
+    source_order: Vec<PathBuf>,
     /// Sources still waiting to be arbitrated (name conflict).
     pending: std::collections::VecDeque<PathBuf>,
     /// Triples (source, final target, overwrite) ready to execute. `overwrite =
@@ -147,6 +161,9 @@ struct PasteJob {
     /// Keeps external staging data alive until this paste is resolved and its
     /// background copy/move has completed.
     transient_cleanup: Option<TransientDropGuard>,
+    /// Requested position when an internal drag targets a manual-order view.
+    /// Clipboard and external OLE pastes leave it empty.
+    manual_insertion: Option<ManualOrderInsertion>,
 }
 
 impl PasteJob {
@@ -172,6 +189,18 @@ impl PasteJob {
 struct PendingFileDrop {
     sources: Vec<PathBuf>,
     destination: PathBuf,
+}
+
+/// Stable context for placing the successful results of an inter-view drop.
+/// Neighbor names survive a refresh better than a raw visual row index; the
+/// directory keeps the request valid even if the originating view navigates
+/// or closes before the filesystem operation completes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ManualOrderInsertion {
+    directory: PathBuf,
+    before: Option<String>,
+    after: Option<String>,
+    fallback_gap: usize,
 }
 
 // ---------- Navigation history ----------
@@ -262,16 +291,18 @@ struct Tab {
     sort: SortState,
     /// Selection anchor for Shift+click. `-1` if none.
     selection_anchor: i32,
-    /// Display mode: `false` = list (icons), `true` = previews
-    /// (thumbnails). DERIVED from `zoom` (`preview = zoom >= THUMB_ZOOM`) and
-    /// persisted per tab in the workspace TOML alongside it — a workspace
-    /// written before the level existed carries only this flag.
+    /// Content thumbnails, derived from list zoom only while using the list.
+    /// Grid thumbnails are independent of either size setting.
     preview: bool,
     /// Zoom level of entries (Ctrl+wheel). Mapped to a row height by
     /// `zoom_to_height`, and persisted per tab in the workspace TOML: a view
     /// left at a chosen thumbnail size reopens at that size, not at the
     /// default for its mode.
     zoom: i32,
+    item_arrangement: ItemArrangement,
+    /// None preserves the absence of a grid preference in older workspaces.
+    /// The grid renderer supplies its default when the user first opens it.
+    grid_zoom: Option<i32>,
     /// Whether hidden files are shown (dotfiles + Windows HIDDEN attribute).
     /// `false` by default. Persisted per tab in the workspace TOML.
     show_hidden: bool,
@@ -291,8 +322,38 @@ struct Tab {
     ext_filter: String,
 }
 
+#[derive(Clone, Copy)]
+struct TabDisplayDefaults {
+    preview: bool,
+    arrangement: ItemArrangement,
+    show_hidden: bool,
+}
+
+impl From<&Config> for TabDisplayDefaults {
+    fn from(config: &Config) -> Self {
+        Self {
+            preview: config.default_preview_mode,
+            arrangement: config.default_item_arrangement,
+            show_hidden: config.default_show_hidden,
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<bool> for TabDisplayDefaults {
+    fn from(preview: bool) -> Self {
+        Self {
+            preview,
+            arrangement: ItemArrangement::List,
+            show_hidden: false,
+        }
+    }
+}
+
 impl Tab {
-    fn new(initial: PathBuf, preview: bool) -> Self {
+    fn new(initial: PathBuf, display: impl Into<TabDisplayDefaults>) -> Self {
+        let display = display.into();
+        let preview = display.preview;
         let mut h = NavHistory::default();
         h.push(initial.clone());
         let zoom = if preview {
@@ -307,7 +368,9 @@ impl Tab {
             selection_anchor: -1,
             preview,
             zoom,
-            show_hidden: false,
+            item_arrangement: display.arrangement,
+            grid_zoom: None,
+            show_hidden: display.show_hidden,
             group_mode: GroupMode::FoldersFirst,
             cursor: -1,
             scroll_gen: 0,
@@ -319,36 +382,38 @@ impl Tab {
     /// Builds a tab restored from a workspace: path + sort + display
     /// mode. History restarts with a single entry (back/forward not
     /// persisted).
-    fn restored(
-        path: PathBuf,
-        sort: SortState,
-        preview: bool,
-        zoom: Option<i32>,
-        show_hidden: bool,
-        group_mode: GroupMode,
-    ) -> Self {
+    fn restored(path: PathBuf, saved: &TabState) -> Self {
         let mut h = NavHistory::default();
         h.push(path.clone());
         // A workspace saved before the level was persisted carries none: the
         // tab reopens at the default for the mode it was in, exactly as it
         // used to. A hand-edited file is clamped rather than trusted.
-        let zoom = match zoom {
+        let zoom = match saved.zoom {
             Some(z) => z.clamp(MIN_ZOOM, MAX_ZOOM),
-            None if preview => THUMB_DEFAULT_ZOOM,
+            None if saved.preview => THUMB_DEFAULT_ZOOM,
             None => LIST_DEFAULT_ZOOM,
         };
         Self {
             current_path: path,
             history: h,
-            sort,
+            sort: SortState {
+                column: saved.sort_column,
+                order: saved.sort_order,
+            },
             selection_anchor: -1,
-            // Derived from the level, never read back from the file: the two
-            // are stored side by side and an edited workspace could hold
-            // `preview = true` with a list-mode zoom. The finer value wins.
-            preview: zoom >= THUMB_ZOOM,
+            // Keep the historical list precedence, including hand-edited
+            // workspaces. Grid representation has its own explicit choice.
+            preview: match saved.item_arrangement {
+                ItemArrangement::List => zoom >= THUMB_ZOOM,
+                ItemArrangement::Grid => saved.preview,
+            },
             zoom,
-            show_hidden,
-            group_mode,
+            item_arrangement: saved.item_arrangement,
+            grid_zoom: saved
+                .grid_zoom
+                .map(|zoom| zoom.clamp(MIN_GRID_ZOOM, MAX_GRID_ZOOM)),
+            show_hidden: saved.show_hidden,
+            group_mode: saved.group_mode,
             cursor: -1,
             scroll_gen: 0,
             ext_filter_on: false,
@@ -366,21 +431,13 @@ fn tab_to_state(tab: &Tab) -> TabState {
         show_hidden: tab.show_hidden,
         group_mode: tab.group_mode,
         zoom: Some(tab.zoom),
+        item_arrangement: tab.item_arrangement,
+        grid_zoom: tab.grid_zoom,
     }
 }
 
 fn tab_from_state(tab: TabState) -> Tab {
-    Tab::restored(
-        resolve_restored_path(&tab.path),
-        SortState {
-            column: tab.sort_column,
-            order: tab.sort_order,
-        },
-        tab.preview,
-        tab.zoom,
-        tab.show_hidden,
-        tab.group_mode,
-    )
+    Tab::restored(resolve_restored_path(&tab.path), &tab)
 }
 
 #[derive(Debug)]
@@ -399,8 +456,8 @@ impl TabBook {
         at
     }
 
-    fn open(&mut self, path: PathBuf, preview: bool) -> usize {
-        self.insert_tab_at(self.tabs.len(), Tab::new(path, preview))
+    fn open(&mut self, path: PathBuf, display: impl Into<TabDisplayDefaults>) -> usize {
+        self.insert_tab_at(self.tabs.len(), Tab::new(path, display))
     }
 
     /// Inserts `tab` right after tab `idx` and activates the new entry.
@@ -414,11 +471,15 @@ impl TabBook {
 
     /// Opens a target right after the active tab. A `TabBook` always has
     /// at least one tab; the fallback at the end nonetheless protects this invariant.
-    fn open_after_active(&mut self, path: PathBuf, preview: bool) -> usize {
+    fn open_after_active(
+        &mut self,
+        path: PathBuf,
+        display: impl Into<TabDisplayDefaults>,
+    ) -> usize {
         if self.active >= self.tabs.len() {
-            return self.open(path, preview);
+            return self.open(path, display);
         }
-        self.insert_after(self.active, Tab::new(path, preview))
+        self.insert_after(self.active, Tab::new(path, display))
             .expect("active tab was validated")
     }
 
@@ -428,14 +489,7 @@ impl TabBook {
         let Some(src) = self.tabs.get(idx) else {
             return false;
         };
-        let dup = Tab::restored(
-            src.current_path.clone(),
-            src.sort,
-            src.preview,
-            Some(src.zoom),
-            src.show_hidden,
-            src.group_mode,
-        );
+        let dup = Tab::restored(src.current_path.clone(), &tab_to_state(src));
         self.insert_after(idx, dup).is_some()
     }
 
@@ -516,6 +570,7 @@ struct Panel {
     /// Last exact viewport published by Slint, in content coordinates.
     viewport_top: Cell<f32>,
     viewport_height: Cell<f32>,
+    item_grid: Cell<Option<GridLayout>>,
     /// Half-open interval currently accepted by `rendered_rows_model`.
     rendered_first: Cell<usize>,
     rendered_end: Cell<usize>,
@@ -535,7 +590,7 @@ struct Panel {
     /// started) → "not found" banner + automatic re-check. Session.
     unavailable: bool,
     /// Current scroll of the tab bar along its MAIN AXIS
-    /// (`viewport-x` in horizontal mode, `viewport-y` in vertical mode, ≤ 0),
+    /// (`content-x` in horizontal mode, `content-y` in vertical mode, ≤ 0),
     /// REPORTED by the view (`panel-tabs-scrolled`). Used for the hit-test of the
     /// insertion gap for a tab received from another instance. Session.
     tabs_viewport_x: f32,
@@ -567,27 +622,43 @@ impl Panel {
         initial: PathBuf,
         columns: Vec<ColumnSpec>,
         tab_bar_mode: u8,
-        preview: bool,
+        display: impl Into<TabDisplayDefaults>,
     ) -> Self {
-        Self::from_tab(Tab::new(initial, preview), columns, tab_bar_mode, 0.0)
+        Self::from_tab(Tab::new(initial, display), columns, tab_bar_mode, 0.0)
     }
 
     /// Shared panel initialization for a new location and a tab moved by drag.
     /// The latter keeps its history and view options instead of rebuilding it.
     fn from_tab(tab: Tab, columns: Vec<ColumnSpec>, tab_bar_mode: u8, vbar_user_w: f32) -> Self {
-        let initial = tab.current_path.clone();
-        let (rows_model, rendered_rows_model) = new_row_models();
-        Self {
-            tabs: TabBook {
+        Self::from_book(
+            TabBook {
                 tabs: vec![tab],
                 active: 0,
             },
+            columns,
+            tab_bar_mode,
+            vbar_user_w,
+        )
+    }
+
+    /// Restored and newly created views share all transient model state.
+    fn from_book(
+        tabs: TabBook,
+        columns: Vec<ColumnSpec>,
+        tab_bar_mode: u8,
+        vbar_user_w: f32,
+    ) -> Self {
+        let initial = tabs.tabs[tabs.active].current_path.clone();
+        let (rows_model, rendered_rows_model) = new_row_models();
+        Self {
+            tabs,
             rows_model,
             rendered_rows_model,
             rows_revision: Cell::new(0),
             viewport_reset_gen: Cell::new(0),
             viewport_top: Cell::new(0.0),
             viewport_height: Cell::new(DEFAULT_RENDER_VIEWPORT_HEIGHT),
+            item_grid: Cell::new(None),
             rendered_first: Cell::new(0),
             rendered_end: Cell::new(0),
             displayed_path: initial,
@@ -609,6 +680,26 @@ impl Panel {
             .set(self.rows_revision.get().wrapping_add(1));
     }
 
+    fn from_detached(view: &ViewState, dirs: &[PathBuf]) -> Option<Self> {
+        if dirs.is_empty() || dirs.len() != view.tabs.len() {
+            return None;
+        }
+        let tabs = dirs
+            .iter()
+            .zip(&view.tabs)
+            .map(|(path, saved)| Tab::restored(path.clone(), saved))
+            .collect();
+        Some(Self::from_book(
+            TabBook {
+                tabs,
+                active: view.active_tab.min(dirs.len() - 1),
+            },
+            view.columns.clone(),
+            view.tab_bar_mode,
+            view.vbar_width,
+        ))
+    }
+
     fn reset_rows_viewport(&self) {
         self.viewport_top.set(0.0);
         self.viewport_reset_gen
@@ -622,6 +713,7 @@ impl Panel {
             &mut rows,
             self.viewport_top.get(),
             self.viewport_height.get(),
+            self.item_grid.get(),
         );
         self.rendered_first.set(first);
         self.rendered_end.set(end);
@@ -632,6 +724,18 @@ impl Panel {
 
 fn file_row_is_rendered(row: &FileRow) -> bool {
     row.rendered
+}
+
+fn panel_to_state(panel: &Panel) -> ViewState {
+    ViewState {
+        // Split proportions live in the workspace layout tree.
+        stretch: 1.0,
+        active_tab: panel.tabs.active,
+        tabs: panel.tabs.tabs.iter().map(tab_to_state).collect(),
+        columns: panel.columns.clone(),
+        tab_bar_mode: panel.tab_bar_mode,
+        vbar_width: panel.vbar_user_w,
+    }
 }
 
 fn new_row_models() -> (Rc<VecModel<FileRow>>, ModelRc<FileRow>) {
@@ -650,7 +754,6 @@ struct AsyncListingDelivery {
     path: PathBuf,
     result: AsyncListingResult,
     lang: Lang,
-    big_icon: bool,
     preserved_selected: Vec<String>,
     preserved_anchor: Option<String>,
 }
@@ -708,6 +811,12 @@ struct OpHandle {
     thumbnail_invalidations: Vec<PathBuf>,
     /// Held until the worker reports completion, then dropped before refresh.
     transient_cleanup: Option<TransientDropGuard>,
+    /// Optional placement requested by an internal drop into a manual-order
+    /// view. Applied only to targets the worker records as created.
+    manual_insertion: Option<ManualOrderInsertion>,
+    /// Top-level destinations actually produced by the worker. Sharing this
+    /// small vector avoids changing the progress and OLE delivery protocols.
+    completed_targets: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 /// Key a destination is reserved under.
@@ -964,6 +1073,9 @@ pub struct AppState {
     /// Kept until the Move/Copy/Link choice from the drop menu.
     external_drop_paths: Rc<RefCell<Vec<PathBuf>>>,
     pending_file_drop: Rc<RefCell<Option<PendingFileDrop>>>,
+    /// Directory captured when a single-folder file drag begins. Opening it
+    /// never depends on a selection or row index that may have changed later.
+    folder_drag_path: Rc<RefCell<Option<PathBuf>>>,
     /// Paste in progress (resolving name conflicts). `None` at rest.
     paste_job: Rc<RefCell<Option<PasteJob>>>,
     archive: Rc<archive::State>,
@@ -1009,6 +1121,10 @@ pub struct AppState {
     /// Set by both local edits and shared-store reloads. Reading the store
     /// during navigation must not consume a pending cosmetic refresh.
     annotations_dirty: Rc<Cell<bool>>,
+    /// Directory-owned presentation state. Manual orders are global so a
+    /// folder keeps the same arrangement across navigation, workspaces and
+    /// windows.
+    folder_state: Rc<RefCell<FolderStateStore>>,
     /// The way back from the last "even out the views": where it was applied,
     /// the ratios it replaced, and the ones it wrote.
     ///
@@ -1034,6 +1150,8 @@ pub struct AppState {
     /// time and length. Two Favnyr instances share one file, and a hand edit
     /// changes it too; comparing this is how a stale copy is noticed.
     annotations_stamp: Rc<RefCell<Option<(std::time::SystemTime, u64)>>>,
+    /// Fingerprint of the directory-owned presentation store.
+    folder_state_stamp: Rc<RefCell<Option<(std::time::SystemTime, u64)>>>,
     /// Same role for the favorites tree, which is shared the same way.
     favorites_stamp: Rc<RefCell<Option<(std::time::SystemTime, u64)>>>,
     /// Volumes seen but not mounted, with the block-topology signature they
@@ -1117,9 +1235,8 @@ pub struct AppState {
     /// "Drives" sidebar compares `places::drives_signature()` to this value
     /// and only rebuilds the model if it has changed (subst, USB, `net use`…).
     last_drives_sig: Rc<Cell<u64>>,
-    /// EPHEMERAL instance (detached via tab tear-off): NEVER persists
-    /// the shared workspace — otherwise it would overwrite the layout of
-    /// the main instance on every mutation (sort, grouping…).
+    /// Folder launches and detached windows never persist the shared workspace,
+    /// so their mutations cannot overwrite the main instance's layout.
     ephemeral: Rc<Cell<bool>>,
     /// Windows SHELL context menu session: the `IContextMenu` object
     /// and its HMENU stay alive between opening the menu and invocation
@@ -1143,7 +1260,7 @@ pub struct AppState {
 /// Maximum number of panels. Splits are "unlimited" by design;
 /// this generous ceiling is just a safeguard against pathological
 /// layouts (the minimum size bounds the useful depth anyway).
-pub const MAX_PANELS: usize = 16;
+pub const MAX_PANELS: usize = 32;
 
 impl AppState {
     /// Default state: one panel, one tab on `$HOME`. The tab bar
@@ -1156,31 +1273,37 @@ impl AppState {
     /// Opens `dirs` as further tabs of the sole view, then comes back to the
     /// first one.
     ///
-    /// Used when a whole view has been detached into a window of its own: the
-    /// new instance starts on the tab that was active and adopts the rest here,
-    /// in the order they had.
+    /// Used by folder launches and detached views: the new instance starts on
+    /// the first requested folder and adopts the rest in their original order.
     pub fn adopt_tabs(&self, dirs: &[PathBuf]) {
         if dirs.is_empty() {
             return;
         }
-        let default_preview = self.config.borrow().default_preview_mode;
+        let default_display = TabDisplayDefaults::from(&*self.config.borrow());
         self.with_tabs_mut(|book| {
             for dir in dirs {
-                book.open(dir.clone(), default_preview);
+                book.open(dir.clone(), default_display);
             }
             book.active = 0;
         });
     }
 
-    /// "Blank" state starting on `initial` (one panel, one tab) — used
-    /// by tab tear-off (`favnyr --detached-tab <folder> [x y [mode]]`).
-    /// `tab_bar_mode`: tab bar position inherited from the source view
+    /// Applies a validated detached view before installing UI callbacks.
+    /// Native paths remain authoritative; the TOML carries only settings.
+    pub fn adopt_detached_view(&self, view: &ViewState, dirs: &[PathBuf]) {
+        if let Some(panel) = Panel::from_detached(view, dirs) {
+            self.panels.borrow_mut()[0] = panel;
+        }
+    }
+
+    /// Starts a single view on `initial` for folder launches and tab tear-off.
+    /// `tab_bar_mode` is the configured or inherited tab bar position
     /// (0 top / 1 left / 2 right).
     pub fn new_at(config: Config, initial: PathBuf, tab_bar_mode: u8) -> Self {
         let (rmtime_tx, rmtime_rx) = mpsc::channel();
         let (imgmeta_tx, imgmeta_rx) = mpsc::channel();
         let default_cols = config.default_columns.clone();
-        let default_preview = config.default_preview_mode;
+        let default_display = TabDisplayDefaults::from(&config);
         let keymap = shortcuts::Keymap::build(&config.shortcut_overrides);
         Self {
             config: Rc::new(RefCell::new(config)),
@@ -1188,7 +1311,7 @@ impl AppState {
                 initial,
                 default_cols,
                 tab_bar_mode,
-                default_preview,
+                default_display,
             )])),
             active_panel: Rc::new(RefCell::new(0)),
             layout: Rc::new(RefCell::new(LayoutNode::Leaf { panel: 0 })),
@@ -1199,6 +1322,7 @@ impl AppState {
             clipboard: Rc::new(RefCell::new(ClipboardState::default())),
             external_drop_paths: Rc::new(RefCell::new(Vec::new())),
             pending_file_drop: Rc::new(RefCell::new(None)),
+            folder_drag_path: Rc::new(RefCell::new(None)),
             paste_job: Rc::new(RefCell::new(None)),
             archive: Rc::new(archive::State::default()),
             rename_source: Rc::new(RefCell::new(None)),
@@ -1215,6 +1339,10 @@ impl AppState {
             )),
             annotations_stamp: Rc::new(RefCell::new(annotations_stamp())),
             annotations_dirty: Rc::new(Cell::new(false)),
+            folder_state: Rc::new(RefCell::new(FolderStateStore::load(
+                &paths::folder_state_path(),
+            ))),
+            folder_state_stamp: Rc::new(RefCell::new(folder_state_stamp())),
             favorites_stamp: Rc::new(RefCell::new(favorites_stamp())),
             equalize_undo: Rc::new(RefCell::new(None)),
             pending_open: Rc::new(RefCell::new(Vec::new())),
@@ -1284,6 +1412,7 @@ impl AppState {
             clipboard: Rc::new(RefCell::new(ClipboardState::default())),
             external_drop_paths: Rc::new(RefCell::new(Vec::new())),
             pending_file_drop: Rc::new(RefCell::new(None)),
+            folder_drag_path: Rc::new(RefCell::new(None)),
             paste_job: Rc::new(RefCell::new(None)),
             archive: Rc::new(archive::State::default()),
             rename_source: Rc::new(RefCell::new(None)),
@@ -1300,6 +1429,10 @@ impl AppState {
             )),
             annotations_stamp: Rc::new(RefCell::new(annotations_stamp())),
             annotations_dirty: Rc::new(Cell::new(false)),
+            folder_state: Rc::new(RefCell::new(FolderStateStore::load(
+                &paths::folder_state_path(),
+            ))),
+            folder_state_stamp: Rc::new(RefCell::new(folder_state_stamp())),
             favorites_stamp: Rc::new(RefCell::new(favorites_stamp())),
             equalize_undo: Rc::new(RefCell::new(None)),
             pending_open: Rc::new(RefCell::new(Vec::new())),
@@ -1380,18 +1513,19 @@ impl AppState {
         // config (user settings).
         let default_cols = self.config.borrow().default_columns.clone();
         let default_mode = self.config.borrow().default_tab_bar_mode.min(2);
-        let default_preview = self.config.borrow().default_preview_mode;
+        let default_display = TabDisplayDefaults::from(&*self.config.borrow());
         *self.panels.borrow_mut() = vec![Panel::with_mode(
             home_dir(),
             default_cols,
             default_mode,
-            default_preview,
+            default_display,
         )];
         *self.layout.borrow_mut() = LayoutNode::Leaf { panel: 0 };
         *self.active_panel.borrow_mut() = 0;
         self.closed_tabs.borrow_mut().clear();
         self.external_drop_paths.borrow_mut().clear();
         *self.pending_file_drop.borrow_mut() = None;
+        *self.folder_drag_path.borrow_mut() = None;
         // Ad hoc state: no longer tied to a named workspace → title "Favnyr".
         *self.current_workspace.borrow_mut() = None;
         *self.saved_workspace.borrow_mut() = None;
@@ -1425,19 +1559,7 @@ impl AppState {
     /// `WorkspaceState`.
     pub fn capture_workspace(&self) -> WorkspaceState {
         let panels = self.panels.borrow();
-        let panel_states = panels
-            .iter()
-            .map(|p| PanelState {
-                // The `layout` tree carries the proportions. `stretch` stays neutral
-                // and is only used as a fallback if the tree is absent.
-                stretch: 1.0,
-                active_tab: p.tabs.active,
-                tabs: p.tabs.tabs.iter().map(tab_to_state).collect(),
-                columns: p.columns.clone(),
-                tab_bar_mode: p.tab_bar_mode,
-                vbar_width: p.vbar_user_w,
-            })
-            .collect();
+        let panel_states = panels.iter().map(panel_to_state).collect();
         WorkspaceState {
             active_panel: *self.active_panel.borrow(),
             panels: panel_states,
@@ -1449,8 +1571,8 @@ impl AppState {
     }
 
     /// Marks this instance as ephemeral: all workspace persistence
-    /// becomes no-ops so that a detached window never replaces the shared
-    /// state of the main instance.
+    /// becomes no-ops so that a folder or detached window never replaces
+    /// the shared state of the main instance.
     pub fn set_ephemeral(&self) {
         self.ephemeral.set(true);
     }
@@ -1459,7 +1581,7 @@ impl AppState {
     /// logged without preventing the application from closing.
     pub fn persist_workspace(&self) {
         if self.ephemeral.get() {
-            return; // detached instance: never write the shared workspace
+            return; // ephemeral instance: never write the shared workspace
         }
         let ws = self.capture_workspace();
         if let Err(err) = ws.save(&paths::workspace_path()) {
@@ -1538,7 +1660,16 @@ impl AppState {
     /// Is the active tab's "extension filter" mode enabled?
     /// Used to route keyboard input (shared with the type-ahead filter).
     fn active_ext_filter_on(&self) -> bool {
-        self.with_tabs(|b| b.tabs[b.active].ext_filter_on)
+        let (path, enabled) = self.with_tabs(|b| {
+            let tab = &b.tabs[b.active];
+            (tab.current_path.clone(), tab.ext_filter_on)
+        });
+        enabled && !folder_state_now(self).is_manual(&path)
+    }
+
+    fn active_manual_order(&self) -> bool {
+        let path = self.with_tabs(|book| book.tabs[book.active].current_path.clone());
+        folder_state_now(self).is_manual(&path)
     }
 
     fn remember_closed_tab(&self, tab: Tab) {
@@ -1602,6 +1733,10 @@ pub fn install(window: &MainWindow, state: AppState) {
     window.set_tabbar_default_pref(cfg.default_tab_bar_mode.min(2) as i32);
     // Display mode for newly created tabs and views (settings).
     window.set_default_view_mode_index(if cfg.default_preview_mode { 1 } else { 0 });
+    window.set_default_item_arrangement_index(i32::from(
+        cfg.default_item_arrangement == ItemArrangement::Grid,
+    ));
+    window.set_default_show_hidden(cfg.default_show_hidden);
     // Tab path tooltip (settings) — unchecked by default.
     window.set_tab_tooltip_enabled(cfg.tab_path_tooltip);
     // "Unsaved changes" guard before loading, checked by
@@ -1787,9 +1922,9 @@ pub fn install(window: &MainWindow, state: AppState) {
             let Some(p) = resolve_sidebar_place_dir(path.as_str()) else {
                 return;
             };
-            let default_preview = st.config.borrow().default_preview_mode;
+            let default_display = TabDisplayDefaults::from(&*st.config.borrow());
             let opened = st.with_tabs_mut(|book| {
-                let a = book.open_after_active(p, default_preview);
+                let a = book.open_after_active(p, default_display);
                 book.tabs[a].current_path.clone()
             });
             load_directory(&w, &st, &opened, false);
@@ -1870,10 +2005,10 @@ pub fn install(window: &MainWindow, state: AppState) {
                         crate::winddrag::IncomingFileDrag::Hover {
                             screen_x,
                             screen_y,
-                            copy,
+                            action,
                         } => {
                             if let Some(w) = file_weak.upgrade() {
-                                set_external_file_hover(&w, screen_x, screen_y, copy);
+                                set_external_file_hover(&w, screen_x, screen_y, action);
                             }
                         }
                         crate::winddrag::IncomingFileDrag::Leave => {
@@ -1885,7 +2020,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                             paths,
                             screen_x,
                             screen_y,
-                            copy,
+                            action,
                             staging,
                         } => {
                             // Own the staging directory before deferring. If
@@ -1914,7 +2049,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                                     paths,
                                     screen_x,
                                     screen_y,
-                                    copy,
+                                    action,
                                     staging,
                                 );
                             });
@@ -1952,7 +2087,7 @@ pub fn install(window: &MainWindow, state: AppState) {
         });
     }
     // Scrolling of a panel's tab bar: the view reports
-    // `tabs-flick.viewport-x` (plain) on every change → used for the hit-test of the
+    // `tabs-flick.content-x` (plain) on every change → used for the hit-test of the
     // insertion gap for a tab received from another instance.
     {
         let st = state.clone();
@@ -2038,20 +2173,25 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_poll_annotations(move || {
             let Some(w) = weak.upgrade() else { return };
+            let folder_state_changed = sync_folder_state(&st);
             refresh_annotations_ui(&w, &st);
+            if folder_state_changed {
+                refresh_all_panels(&w, &st);
+            }
         });
     }
 
-    // A swatch was clicked in the "Colour & note" flyout.
+    // A swatch was clicked in the shared "Colour & note" flyout. The same
+    // strip serves a view selection, a tab, and a directory favorite.
     {
         let st = state.clone();
         let weak = window.as_weak();
         window.on_folder_color_picked(move |slot: i32| {
             let Some(w) = weak.upgrade() else { return };
-            let targets = selected_paths(&st);
+            let targets = annotation_target_paths(&w, &st, true);
             {
                 let mut annotations = annotations_for_update(&st);
-                for path in targets.iter().filter(|p| acts_as_dir(p)) {
+                for path in &targets {
                     // Slot 0 clears the entry rather than storing a default,
                     // which is what makes the first swatch a reset.
                     annotations.set_color(path, u8::try_from(slot).unwrap_or(0));
@@ -2071,9 +2211,9 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_open_comment_editor(move || {
             let Some(w) = weak.upgrade() else { return };
-            // Offered on a single selection only, so the first item IS the
-            // target. The popup is modal, so it cannot drift afterwards.
-            let Some(path) = selected_paths(&st).into_iter().next() else {
+            // Every route addresses exactly one item. The popup is modal, so
+            // the target cannot drift while its note is being edited.
+            let Some(path) = annotation_target_paths(&w, &st, false).into_iter().next() else {
                 return;
             };
             w.set_comment_target_name(path_notice_name(&path).into());
@@ -2086,7 +2226,7 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_comment_confirmed(move |text: SharedString| {
             let Some(w) = weak.upgrade() else { return };
-            let Some(path) = selected_paths(&st).into_iter().next() else {
+            let Some(path) = annotation_target_paths(&w, &st, false).into_iter().next() else {
                 return;
             };
             {
@@ -2157,27 +2297,22 @@ pub fn install(window: &MainWindow, state: AppState) {
     }
     // Drop a navigable sidebar item on a tab gap or panel zone. Exact gaps
     // insert at that position; a panel center appends a tab; an edge creates a
-    // split. Favorite files keep the historical gap behavior (their parent is
-    // opened) but only favorite directories may target a panel zone.
+    // split. Only directories travel this way: a favorite pointing at a file
+    // never starts a drag towards a view, so the target is rechecked here as a
+    // directory whichever destination it reached.
     {
         let st = state.clone();
         let weak = window.as_weak();
         window.on_sidebar_item_dropped(
             move |source: SharedString, kind: i32, panel: i32, gap: i32, zone: i32| {
                 let Some(w) = weak.upgrade() else { return };
-                let panel_drop = gap < 0 && zone > 0;
                 let target = if kind == -1 {
                     let stored = {
                         let favorites = favorites_now(&st);
                         favorites.path_of(source.as_str()).map(PathBuf::from)
                     };
-                    if panel_drop {
-                        stored.filter(|path| path.is_dir())
-                    } else {
-                        stored.and_then(|path| {
-                            resolve_fav_dir(&w, &path, st.snapshot_config().language)
-                        })
-                    }
+                    stored
+                        .and_then(|path| resolve_fav_dir(&w, &path, st.snapshot_config().language))
                 } else if matches!(kind, 0 | 1 | 2 | 4) {
                     resolve_sidebar_place_dir(source.as_str())
                 } else {
@@ -2185,20 +2320,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 };
                 let Some(target) = target else { return };
 
-                if gap >= 0 || zone == 1 {
-                    let insert_at = if gap >= 0 { gap } else { i32::MAX };
-                    open_path_in_tab_at(&w, &st, target, panel, insert_at);
-                } else if panel >= 0 && (2..=5).contains(&zone) {
-                    let dir = if zone == 4 || zone == 5 {
-                        SplitDir::Column
-                    } else {
-                        SplitDir::Row
-                    };
-                    let new_first = zone == 2 || zone == 4;
-                    if split_with_path(&st, target, panel as usize, dir, new_first) {
-                        refresh_all_panels(&w, &st);
-                    }
-                }
+                open_directory_at_drop(&w, &st, target, panel, gap, zone);
             },
         );
     }
@@ -2228,9 +2350,15 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_fav_open_all(move |id: SharedString| {
             let Some(w) = weak.upgrade() else { return };
+            // Directories only: this command opens tabs, and a container
+            // holding files must not turn one click into a burst of launched
+            // programs. Each file favorite stays launchable on its own.
             let paths = favorites_now(&st).descendant_paths(&id);
             for p in paths {
-                fav_open_path_new_tab(&w, &st, PathBuf::from(p));
+                let path = PathBuf::from(p);
+                if path.is_dir() {
+                    fav_open_path_new_tab(&w, &st, path);
+                }
             }
         });
     }
@@ -2438,7 +2566,7 @@ pub fn install(window: &MainWindow, state: AppState) {
             let mut paths = std::mem::take(&mut *st.fav_save_pending.borrow_mut());
             // Recheck at commit time as the filesystem may have changed while
             // the popup was open.
-            paths.retain(|path| favorite_path_is_directory(path));
+            paths.retain(|path| favorite_target_exists(path));
             if paths.is_empty() {
                 return;
             }
@@ -2594,7 +2722,7 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_rmtime_depth_changed(move |v: i32| {
             let Some(w) = weak.upgrade() else { return };
-            let v = v.clamp(0, 8);
+            let v = v.clamp(0, favnyr_core::config::MAX_FOLDER_STAT_DEPTH);
             st.persist_config(|c| c.recursive_mtime_depth = v);
             w.set_rmtime_depth(v);
             // Depth changed → the mtime values are stale. Re-list (restoring the
@@ -2611,13 +2739,76 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_size_depth_changed(move |v: i32| {
             let Some(w) = weak.upgrade() else { return };
-            let v = v.clamp(0, 8);
+            let v = v.clamp(0, favnyr_core::config::MAX_FOLDER_STAT_DEPTH);
             st.persist_config(|c| c.recursive_size_depth = v);
             w.set_size_depth(v);
             // Depth changed → the recursive sizes are stale; re-list, then
             // `request_folder_stats` recomputes them if depth > 0.
             st.size_cache.borrow_mut().clear();
             refresh_all_panels(&w, &st);
+        });
+    }
+    // Dedicated file-view text size. Both properties stay live so the UI can
+    // enable or disable the override without rebuilding any row model.
+    window.set_view_text_font_size_override(cfg.view_text_font_size_override);
+    window.set_view_text_font_size(cfg.view_text_font_size);
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_view_text_font_size_override_changed(move |enabled: bool| {
+            st.persist_config(|c| c.view_text_font_size_override = enabled);
+            if let Some(w) = weak.upgrade() {
+                w.set_view_text_font_size_override(enabled);
+            }
+        });
+    }
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_view_text_font_size_changed(move |size: i32| {
+            let size = size.clamp(MIN_VIEW_TEXT_FONT_SIZE, MAX_VIEW_TEXT_FONT_SIZE);
+            st.persist_config(|c| c.view_text_font_size = size);
+            if let Some(w) = weak.upgrade() {
+                w.set_view_text_font_size(size);
+            }
+        });
+    }
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_view_text_font_size_reset(move || {
+            st.persist_config(|c| {
+                c.view_text_font_size_override = false;
+                c.view_text_font_size = DEFAULT_VIEW_TEXT_FONT_SIZE;
+            });
+            if let Some(w) = weak.upgrade() {
+                w.set_view_text_font_size_override(false);
+                w.set_view_text_font_size(DEFAULT_VIEW_TEXT_FONT_SIZE);
+            }
+        });
+    }
+    // Extra row spacing changes geometry only. Applying it in memory keeps the
+    // setting responsive without re-reading directories or decoding previews.
+    window.set_view_item_spacing(cfg.view_item_spacing);
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_view_item_spacing_changed(move |spacing: i32| {
+            let Some(w) = weak.upgrade() else { return };
+            let spacing = spacing.clamp(MIN_VIEW_ITEM_SPACING, MAX_VIEW_ITEM_SPACING);
+            st.persist_config(|c| c.view_item_spacing = spacing);
+            w.set_view_item_spacing(spacing);
+            refresh_view_item_spacing(&w, &st);
+        });
+    }
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_view_item_spacing_reset(move || {
+            let Some(w) = weak.upgrade() else { return };
+            st.persist_config(|c| c.view_item_spacing = MIN_VIEW_ITEM_SPACING);
+            w.set_view_item_spacing(MIN_VIEW_ITEM_SPACING);
+            refresh_view_item_spacing(&w, &st);
         });
     }
     {
@@ -2983,6 +3174,26 @@ pub fn install(window: &MainWindow, state: AppState) {
             st.persist_config(|c| c.default_preview_mode = preview);
         });
     }
+    {
+        let st = state.clone();
+        window.on_default_item_arrangement_changed(move |index| {
+            let arrangement = if index == 1 {
+                ItemArrangement::Grid
+            } else {
+                ItemArrangement::List
+            };
+            st.persist_config(|config| config.default_item_arrangement = arrangement);
+        });
+    }
+    // Hidden entries in newly created tabs and views. Existing tabs keep the
+    // setting saved with them.
+    {
+        let st = state.clone();
+        window.on_default_show_hidden_changed(move |on: bool| {
+            info!(on, "default hidden entries toggled");
+            st.persist_config(|c| c.default_show_hidden = on);
+        });
+    }
     // Tab path tooltip (settings): opt-in, persisted.
     {
         let st = state.clone();
@@ -3184,28 +3395,43 @@ pub fn install(window: &MainWindow, state: AppState) {
     }
 
     // Rubber-band: we receive (x1, y1, x2, y2) in **content coordinates**
-    // (the Slint side has already subtracted the exact Flickable `viewport-y`).
-    // We only use y1/y2 (band selection). The lookup relies on the rows'
-    // variable geometry, so it stays exact in a list mixing large
-    // thumbnails and small icons, regardless of scroll position.
+    // (the Slint side has already subtracted the exact Flickable `content-y`).
+    // Lists use vertical bands; grids also restrict the intersecting columns.
     {
         let st = state.clone();
         let weak = window.as_weak();
-        window.on_rubber_band_update(move |_x1, y1, _x2, y2| {
+        window.on_rubber_band_update(move |x1, y1, x2, y2| {
             let model = st.active_rows_model();
             let (lo, hi) = row_band_for_content_range(&model, y1, y2);
+            let grid = st.panels.borrow()[*st.active_panel.borrow()]
+                .item_grid
+                .get();
+            let selection = grid.map(|layout| layout.selection(model.row_count(), x1, y1, x2, y2));
             // Combine the band with the base captured at drag start, depending on
             // the mode (replace / add Shift / subtract Ctrl). Empty band (hi < lo):
             // lo > hi → no row is "in_band" → base kept (add/sub) or everything
             // deselected (replace).
             let (mode, count) = RB_STATE.with(|s| {
                 let s = s.borrow();
-                (s.0, selection_apply_band(&model, lo, hi, s.0, &s.1))
+                let count = selection_apply_membership(&model, s.0, &s.1, |index| {
+                    selection
+                        .as_ref()
+                        .map_or((index as i32) >= lo && (index as i32) <= hi, |selection| {
+                            selection.contains(index)
+                        })
+                });
+                (s.0, count)
             });
             // The anchor follows the top edge of the band (for a future Shift+click) — only
             // in replace mode, where the band defines the whole selection.
-            if mode == 0 && hi >= lo {
-                st.set_selection_anchor(lo);
+            let first = selection.as_ref().map_or_else(
+                || (hi >= lo).then_some(lo),
+                |selection| selection.first().map(|index| index as i32),
+            );
+            if mode == 0
+                && let Some(first) = first
+            {
+                st.set_selection_anchor(first);
             }
             if let Some(w) = weak.upgrade() {
                 push_active_footer(&w, &st, count);
@@ -3257,12 +3483,24 @@ pub fn install(window: &MainWindow, state: AppState) {
                 (b.tabs[a].cursor, b.tabs[a].selection_anchor)
             });
             let base = if cur < 0 { 0 } else { cur.min(n - 1) };
-            let new_cursor = match kind {
-                0 => (base - 1).max(0),     // up
-                1 => (base + 1).min(n - 1), // down
-                2 => 0,                     // start
-                3 => n - 1,                 // end
-                _ => base,
+            let grid = st.panels.borrow()[*st.active_panel.borrow()]
+                .item_grid
+                .get();
+            let new_cursor = if let Some(layout) = grid {
+                if cur < 0 && kind != 3 {
+                    0
+                } else {
+                    layout.move_cursor(n as usize, base as usize, kind) as i32
+                }
+            } else {
+                match kind {
+                    0 => (base - 1).max(0),     // up
+                    1 => (base + 1).min(n - 1), // down
+                    2 => 0,                     // start
+                    3 => n - 1,                 // end
+                    4 | 5 => return,
+                    _ => base,
+                }
             };
             if extend {
                 // Extend from the anchor (set if absent) to the new cursor.
@@ -3355,9 +3593,9 @@ pub fn install(window: &MainWindow, state: AppState) {
             // item: a selection whose first entry happens to be a file may
             // still hold folders worth colouring.
             let has_dir = sel.iter().any(|p| acts_as_dir(p));
-            let has_favorite_dir = sel.iter().any(|p| favorite_path_is_directory(p));
+            let has_favorite_target = sel.iter().any(|p| favorite_target_exists(p));
             w.set_ctx_selection_has_dir(has_dir);
-            w.set_ctx_selection_has_favorite_dir(has_favorite_dir);
+            w.set_ctx_selection_has_favorite_target(has_favorite_target);
             // Slot already applied, so the strip can point at it. Taken from
             // the primary item: with a mixed selection the strip shows what the
             // first folder carries and assigns to all of them.
@@ -3384,8 +3622,13 @@ pub fn install(window: &MainWindow, state: AppState) {
             // The two sides have to be changed together.
             let h = 350.0
                 + if primary_dir { 0.0 } else { 26.0 }
+                + if primary_dir && sel.len() == 1 {
+                    26.0
+                } else {
+                    0.0
+                }
                 + if sel.len() == 1 { 26.0 } else { 0.0 }
-                + if has_favorite_dir { 26.0 } else { 0.0 }
+                + if has_favorite_target { 26.0 } else { 0.0 }
                 + if has_dir || sel.len() == 1 { 26.0 } else { 0.0 }
                 + if n_custom > 0 {
                     n_custom as f32 * 26.0 + 1.0
@@ -3579,19 +3822,33 @@ pub fn install(window: &MainWindow, state: AppState) {
             let Some(w) = weak.upgrade() else { return };
             let paths = selected_paths(&st);
             let target = match paths.first() {
-                Some(p) if p.is_dir() => p.clone(),
-                Some(p) => p
-                    .parent()
-                    .map(|pp| pp.to_path_buf())
-                    .unwrap_or_else(|| st.current_path()),
+                Some(p) => directory_target(p).unwrap_or_else(|| {
+                    p.parent()
+                        .map(|pp| pp.to_path_buf())
+                        .unwrap_or_else(|| st.current_path())
+                }),
                 None => st.current_path(),
             };
-            let default_preview = st.config.borrow().default_preview_mode;
+            let default_display = TabDisplayDefaults::from(&*st.config.borrow());
             let opened = st.with_tabs_mut(|book| {
-                let a = book.open_after_active(target, default_preview);
+                let a = book.open_after_active(target, default_display);
                 book.tabs[a].current_path.clone()
             });
             load_directory(&w, &st, &opened, false);
+        });
+    }
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_action_open_new_pane(move |orientation: i32| {
+            let Some(w) = weak.upgrade() else { return };
+            let paths = selected_paths(&st);
+            let Some(target) = single_directory_target(&paths) else {
+                return;
+            };
+            let panel = *st.active_panel.borrow();
+            let zone = if orientation == 1 { 5 } else { 3 };
+            open_directory_at_drop(&w, &st, target, panel as i32, -1, zone);
         });
     }
     // "Create shortcut": opens the popup (kind 3) pre-filled to create,
@@ -4327,7 +4584,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 clip.op = None;
                 return;
             }
-            begin_paste(&w, &st, op, cur, paths);
+            begin_paste(&w, &st, op, cur, paths, None);
         });
     }
     // Live validation of the name typed in the conflict popup.
@@ -4476,6 +4733,16 @@ pub fn install(window: &MainWindow, state: AppState) {
             };
             let Some(w) = weak.upgrade() else { return };
             sync_op_busy(&w, &st);
+            let completed_targets = std::mem::take(
+                &mut *handle
+                    .completed_targets
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            );
+            append_paths_to_manual_order(&st, &completed_targets);
+            if let Some(insertion) = handle.manual_insertion.as_ref() {
+                apply_manual_order_insertion(&st, insertion, &completed_targets);
+            }
             // The item to highlight is handed to the upcoming re-listing: the row
             // only exists once the views have been re-read. Operations complete
             // independently, so the last one to finish is the one highlighted.
@@ -4508,7 +4775,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 .map(|(src, dst)| (src, dst, false))
                 .collect();
             let lang = st.snapshot_config().language;
-            start_heavy_op(&w, &st, Heavy::Copy(pairs), lang, None, None);
+            start_heavy_op(&w, &st, Heavy::Copy(pairs), lang, None, None, None);
         });
     }
 
@@ -4573,6 +4840,9 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_filter_type(move |ch: SharedString| {
             let Some(w) = weak.upgrade() else { return };
+            if st.active_manual_order() {
+                return;
+            }
             if st.active_ext_filter_on() {
                 st.with_tabs_mut(|b| {
                     let a = b.active;
@@ -4591,6 +4861,9 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_filter_backspace(move || {
             let Some(w) = weak.upgrade() else { return };
+            if st.active_manual_order() {
+                return;
+            }
             if st.active_ext_filter_on() {
                 st.with_tabs_mut(|b| {
                     let a = b.active;
@@ -4609,6 +4882,9 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_filter_clear(move || {
             let Some(w) = weak.upgrade() else { return };
+            if st.active_manual_order() {
+                return;
+            }
             // In extension mode: "close" = turn off the mode (hides the bar)
             // + clear it; otherwise clear the by-name type-ahead filter.
             if st.active_ext_filter_on() {
@@ -4657,6 +4933,8 @@ pub fn install(window: &MainWindow, state: AppState) {
             let Some(w) = weak.upgrade() else {
                 return false;
             };
+            w.set_file_drag_can_open(false);
+            *st.folder_drag_path.borrow_mut() = None;
             // A previous drop menu may have been closed without choosing an action.
             // No new gesture should keep its stale frozen paths.
             *st.pending_file_drop.borrow_mut() = None;
@@ -4688,9 +4966,31 @@ pub fn install(window: &MainWindow, state: AppState) {
                     push_active_footer(&w, &st, count);
                 }
             }
-            panel_selected_paths(&st, src)
-                .iter()
-                .any(|path| favorite_path_is_directory(path))
+            let paths = panel_selected_paths(&st, src);
+            let directory = single_directory_target(&paths);
+            w.set_file_drag_can_open(directory.is_some());
+            *st.folder_drag_path.borrow_mut() = directory;
+            paths.iter().any(|path| favorite_target_exists(path))
+        });
+    }
+    window.on_file_drag_action_for_modifiers(|control, shift| {
+        crate::file_drag::DropAction::from_modifiers(control, shift) as i32
+    });
+    {
+        let st = state.clone();
+        window.on_folder_drag_cancelled(move || {
+            *st.folder_drag_path.borrow_mut() = None;
+        });
+    }
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_folder_drag_dropped(move |panel: i32, gap: i32, zone: i32| {
+            let Some(w) = weak.upgrade() else { return };
+            let path = st.folder_drag_path.borrow_mut().take();
+            if let Some(path) = path {
+                open_directory_at_drop(&w, &st, path, panel, gap, zone);
+            }
         });
     }
     // Real-time validation of the internal target. In the source view, the
@@ -4703,12 +5003,46 @@ pub fn install(window: &MainWindow, state: AppState) {
             file_drop_target_invalid(&st, src_panel, target_panel, row)
         });
     }
+    {
+        let st = state.clone();
+        window.on_manual_order_gap_noop(move |panel, gap| {
+            if panel < 0 || gap < 0 {
+                return true;
+            }
+            manual_reorder_would_be_noop(&st, panel as usize, gap as usize)
+        });
+    }
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_manual_order_drop(move |source_panel, target_panel, gap| {
+            let Some(window) = weak.upgrade() else { return };
+            if source_panel < 0 || target_panel < 0 || gap < 0 {
+                return;
+            }
+            let source_panel = source_panel as usize;
+            let target_panel = target_panel as usize;
+            if source_panel == target_panel {
+                perform_manual_reorder(&window, &st, target_panel, gap as usize);
+            } else {
+                begin_cross_view_manual_move(
+                    &window,
+                    &st,
+                    source_panel,
+                    target_panel,
+                    gap as usize,
+                );
+            }
+        });
+    }
     // Switches to NATIVE DRAG (OLE) when the cursor leaves the window during a
     // file drag → external applications receive the files as CF_HDROP.
     // Blocking (modal loop) until the
     // drop. Windows only; no-op elsewhere.
     {
         let st = state.clone();
+        #[cfg(windows)]
+        let weak = window.as_weak();
         window.on_start_native_drag(move |src_panel: i32| {
             let src = src_panel.max(0) as usize;
             let paths = panel_selected_paths(&st, src);
@@ -4717,8 +5051,30 @@ pub fn install(window: &MainWindow, state: AppState) {
             }
             #[cfg(windows)]
             {
-                let dropped = crate::winddrag::drag_files(&paths);
-                debug!(count = paths.len(), dropped, "native OLE drag finished");
+                let outcome = crate::winddrag::drag_files(&paths);
+                debug!(
+                    count = paths.len(),
+                    dropped = outcome.dropped,
+                    "native OLE drag finished"
+                );
+                if !outcome.cleanup.is_empty() {
+                    if let Some(w) = weak.upgrade() {
+                        let lang = st.snapshot_config().language;
+                        start_heavy_op(
+                            &w,
+                            &st,
+                            Heavy::NativeMoveCleanup(outcome.cleanup),
+                            lang,
+                            None,
+                            None,
+                            None,
+                        );
+                    }
+                } else if outcome.moved
+                    && let Some(w) = weak.upgrade()
+                {
+                    refresh_all_panels(&w, &st);
+                }
             }
             #[cfg(not(windows))]
             {
@@ -4804,16 +5160,13 @@ pub fn install(window: &MainWindow, state: AppState) {
             }
             // Never drop a folder INTO itself or one of its
             // descendants (recursion), nor onto itself.
-            let sources: Vec<PathBuf> = sources
-                .into_iter()
-                .filter(|s| !ops::is_within(&dst, s))
-                .collect();
+            let sources = filter_drop_sources(sources, &dst);
             if sources.is_empty() {
                 return;
             }
             match action {
-                0 => begin_paste(&w, &st, ClipOp::Cut, dst, sources), // move
-                1 => begin_paste(&w, &st, ClipOp::Copy, dst, sources), // copy
+                0 => begin_paste(&w, &st, ClipOp::Cut, dst, sources, None), // move
+                1 => begin_paste(&w, &st, ClipOp::Copy, dst, sources, None), // copy
                 2 => {
                     // Link: symbolic link where allowed (both OSes), else a
                     // hard link / junction on the same volume (Windows). Sync
@@ -4821,7 +5174,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                     // (e.g. a cross-volume drop without Developer Mode, or a
                     // network share) is surfaced, not just logged.
                     let mut created = Vec::new();
-                    let mut any_failed = false;
+                    let mut first_failure = None;
                     for src in &sources {
                         match ops::link_into(src, &dst) {
                             Ok(path) => created.push(path),
@@ -4829,15 +5182,18 @@ pub fn install(window: &MainWindow, state: AppState) {
                                 // Full reason (cross-volume, privilege, filesystem)
                                 // goes to the log; the toast stays concise.
                                 error!(error = %err, src = %src.display(), "link failed");
-                                any_failed = true;
+                                if first_failure.is_none() {
+                                    first_failure = Some((src.clone(), err));
+                                }
                             }
                         }
                     }
+                    append_paths_to_manual_order(&st, &created);
                     invalidate_thumbnail_paths(&st, &created);
                     w.invoke_refresh_all();
-                    if any_failed {
+                    if let Some((path, error)) = first_failure {
                         let lang = st.snapshot_config().language;
-                        show_notice(&w, i18n::tr(lang, "link_failed"));
+                        show_file_failure(&w, lang, "link_failed", &path, &error);
                     }
                 }
                 _ => {}
@@ -4879,7 +5235,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                         weak.clone(),
                         vec![from.clone()],
                         st.snapshot_config().language,
-                        err.to_string(),
+                        file_error_kind(&err),
                     );
                     None
                 }
@@ -4936,7 +5292,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                         weak.clone(),
                         candidates,
                         st.snapshot_config().language,
-                        err.to_string(),
+                        file_error_kind(&err),
                     );
                     None
                 }
@@ -4990,16 +5346,11 @@ pub fn install(window: &MainWindow, state: AppState) {
                 };
                 let name = name.trim().to_string();
                 let cur = st.current_path();
+                let lang = st.snapshot_config().language;
                 let created = if kind == 2 {
-                    create_shortcut_entry(&cur, &name, target.trim())
+                    create_shortcut_entry(&w, lang, &cur, &name, target.trim())
                 } else if kind == 3 {
-                    create_link_entry(
-                        &w,
-                        st.snapshot_config().language,
-                        &cur,
-                        &name,
-                        target.trim(),
-                    )
+                    create_link_entry(&w, lang, &cur, &name, target.trim())
                 } else if name.is_empty() {
                     return false;
                 } else {
@@ -5025,6 +5376,14 @@ pub fn install(window: &MainWindow, state: AppState) {
                             if late != EntryNameAvailability::Available {
                                 let lang = st.snapshot_config().language;
                                 push_create_name_status(&w, lang, &name, late);
+                            } else {
+                                show_file_failure(
+                                    &w,
+                                    lang,
+                                    "create_failed",
+                                    &cur.join(&name),
+                                    &err,
+                                );
                             }
                             None
                         }
@@ -5043,7 +5402,9 @@ pub fn install(window: &MainWindow, state: AppState) {
                     }
                 }
                 if let Some(created_name) = created.as_ref() {
-                    invalidate_thumbnail_paths(&st, &[cur.join(created_name)]);
+                    let created_path = cur.join(created_name);
+                    append_paths_to_manual_order(&st, std::slice::from_ref(&created_path));
+                    invalidate_thumbnail_paths(&st, &[created_path]);
                 }
                 // Refresh every panel: other views on the same folder must show
                 // the new entry immediately (like delete/copy/move).
@@ -5155,17 +5516,25 @@ pub fn install(window: &MainWindow, state: AppState) {
             // ones had just changed in memory.
             let mut moved: Vec<(PathBuf, PathBuf)> = Vec::new();
             let mut gone: Vec<PathBuf> = Vec::new();
+            let mut trashed: Vec<PathBuf> = Vec::new();
+            let mut manual_added: Vec<PathBuf> = Vec::new();
+            let mut refresh_after_restore = false;
             for event in events {
                 match event {
                     // The colour and the note are keyed by path, so they follow
                     // the item. Moving a folder carries what was annotated
                     // inside it.
-                    OpDelivery::Moved { from, to } => moved.push((from, to)),
+                    OpDelivery::Moved { from, to } => {
+                        moved.push((from, to));
+                    }
                     // Nothing brings this one back, so its annotation goes with
                     // it — and everything that was annotated under it.
-                    OpDelivery::PermanentlyDeleted(path) => gone.push(path),
+                    OpDelivery::PermanentlyDeleted(path) => {
+                        gone.push(path);
+                    }
                     OpDelivery::Replaced(path) => gone.push(path),
                     OpDelivery::Trashed(path) => {
+                        trashed.push(path.clone());
                         *st.last_trashed.borrow_mut() = Some(path);
                     }
                     OpDelivery::RestoreFinished {
@@ -5198,11 +5567,29 @@ pub fn install(window: &MainWindow, state: AppState) {
                             }
                             let message = i18n::tr(lang, "trash_restored").replace("{name}", &name);
                             notice(&w, message, NoticeKind::Success);
-                            // Several views may be displaying the restored folder.
-                            w.invoke_refresh_all();
+                            manual_added.push(original_path);
+                            refresh_after_restore = true;
                         }
                     }
                 }
+            }
+            if !trashed.is_empty()
+                || !manual_added.is_empty()
+                || !moved.is_empty()
+                || !gone.is_empty()
+            {
+                update_folder_state(&st, |folder_state| {
+                    let mut changed = false;
+                    for path in &gone {
+                        changed |= folder_state.forget(path);
+                    }
+                    for (from, to) in &moved {
+                        changed |= folder_state.relocate(from, to);
+                    }
+                    changed |= folder_state.remove_paths(&trashed);
+                    changed |= folder_state.append_paths(&manual_added);
+                    changed
+                });
             }
             if !moved.is_empty() || !gone.is_empty() {
                 let mut annotations = annotations_for_update(&st);
@@ -5221,6 +5608,10 @@ pub fn install(window: &MainWindow, state: AppState) {
                 // not per path. Cosmetic data: a failure is logged and never
                 // interrupts the operation that just succeeded.
                 save_annotations(&st, &annotations);
+            }
+            if refresh_after_restore {
+                // Several views may be displaying the restored folder.
+                w.invoke_refresh_all();
             }
         });
     }
@@ -5249,7 +5640,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 return;
             }
             let lang = st.snapshot_config().language;
-            start_heavy_op(&w, &st, Heavy::Trash(paths), lang, None, None);
+            start_heavy_op(&w, &st, Heavy::Trash(paths), lang, None, None, None);
         });
     }
     // Ctrl+Z (customizable) restores only the last deleted item,
@@ -5282,6 +5673,8 @@ pub fn install(window: &MainWindow, state: AppState) {
                 targets: vec![original_path.clone()],
                 thumbnail_invalidations: vec![original_path.clone()],
                 transient_cleanup: None,
+                manual_insertion: None,
+                completed_targets: Arc::new(Mutex::new(Vec::new())),
             });
             sync_op_busy(&w, &st);
             let deliveries = st.op_deliveries.clone();
@@ -5336,7 +5729,7 @@ pub fn install(window: &MainWindow, state: AppState) {
             } else {
                 Heavy::Trash(paths)
             };
-            start_heavy_op(&w, &st, work, lang, None, None);
+            start_heavy_op(&w, &st, work, lang, None, None, None);
         });
     }
 
@@ -5369,6 +5762,9 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_sort_clicked(move |col_id: SharedString| {
             let Some(w) = weak.upgrade() else { return };
+            if st.active_manual_order() {
+                return;
+            }
             let Some(new_col) = SortColumn::from_code(&col_id) else {
                 warn!(col = %col_id, "unknown sort column id");
                 return;
@@ -5406,9 +5802,20 @@ pub fn install(window: &MainWindow, state: AppState) {
                 warn!(mode = %mode, "unknown group mode");
                 return;
             };
+            let panel_idx = idx.max(0) as usize;
+            let path = {
+                let panels = st.panels.borrow();
+                let Some(panel) = panels.get(panel_idx) else {
+                    return;
+                };
+                panel.tabs.tabs[panel.tabs.active].current_path.clone()
+            };
+            if folder_state_now(&st).is_manual(&path) {
+                return;
+            }
             {
                 let mut panels = st.panels.borrow_mut();
-                let Some(p) = panels.get_mut(idx as usize) else {
+                let Some(p) = panels.get_mut(panel_idx) else {
                     return;
                 };
                 let a = p.tabs.active;
@@ -5429,6 +5836,14 @@ pub fn install(window: &MainWindow, state: AppState) {
         window.on_ext_filter_toggle(move |idx: i32| {
             let Some(w) = weak.upgrade() else { return };
             let p = idx.max(0) as usize;
+            let path = {
+                let panels = st.panels.borrow();
+                let Some(panel) = panels.get(p) else { return };
+                panel.tabs.tabs[panel.tabs.active].current_path.clone()
+            };
+            if folder_state_now(&st).is_manual(&path) {
+                return;
+            }
             let turned_on = {
                 let mut panels = st.panels.borrow_mut();
                 let Some(pn) = panels.get_mut(p) else { return };
@@ -5450,6 +5865,36 @@ pub fn install(window: &MainWindow, state: AppState) {
             w.set_active_filter(st.filter.borrow().clone().into());
         });
     }
+    // Manual ordering belongs to the displayed directory. Sort, grouping and
+    // filters remain stored on the tab and are merely suspended while that
+    // directory is in manual mode.
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_manual_order_toggle(move |idx: i32| {
+            let Some(w) = weak.upgrade() else { return };
+            let panel_idx = idx.max(0) as usize;
+            let current = {
+                let panels = st.panels.borrow();
+                let Some(panel) = panels.get(panel_idx) else {
+                    return;
+                };
+                let active = panel.tabs.active;
+                panel.tabs.tabs[active].current_path.clone()
+            };
+            update_folder_state(&st, |folder_state| {
+                if folder_state.is_manual(&current) {
+                    folder_state.disable(&current)
+                } else {
+                    folder_state.enable(&current, Vec::new())
+                }
+            });
+            *st.active_panel.borrow_mut() = panel_idx;
+            if !current.as_os_str().is_empty() {
+                refresh_all_panels(&w, &st);
+            }
+        });
+    }
 
     // : Tabs -----
     {
@@ -5457,12 +5902,12 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_tab_new(move || {
             let Some(w) = weak.upgrade() else { return };
-            let default_preview = st.config.borrow().default_preview_mode;
+            let default_display = TabDisplayDefaults::from(&*st.config.borrow());
             let target = st.with_tabs_mut(|book| {
                 // New UX: the new tab inherits the path of the
                 // previously active tab (instead of always $HOME).
                 let inherited = book.tabs[book.active].current_path.clone();
-                book.open(inherited, default_preview);
+                book.open(inherited, default_display);
                 let a = book.active;
                 book.tabs[a].current_path.clone()
             });
@@ -5488,7 +5933,7 @@ pub fn install(window: &MainWindow, state: AppState) {
         });
     }
     // Scroll target of the tab bar (overflow): exact
-    // geometric computation on the Rust side (`TabInfo` widths), returns the `viewport-x` in px.
+    // geometric computation on the Rust side (`TabInfo` widths), returns the `content-x` in px.
     {
         let st = state.clone();
         window.on_panel_scroll_target(
@@ -5511,7 +5956,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 let closed_panel = {
                     let mut panels = st.panels.borrow_mut();
                     if active_panel >= panels.len()
-                        || !st.layout.borrow_mut().remove_panel(active_panel)
+                        || !st.layout.borrow_mut().remove_view(active_panel)
                     {
                         None
                     } else {
@@ -5574,7 +6019,7 @@ pub fn install(window: &MainWindow, state: AppState) {
         window.on_panel_split(move |dir: i32| {
             let Some(w) = weak.upgrade() else { return };
             let inherited = st.current_path();
-            let default_preview = st.config.borrow().default_preview_mode;
+            let default_display = TabDisplayDefaults::from(&*st.config.borrow());
             let new_active = {
                 let mut panels = st.panels.borrow_mut();
                 if panels.len() >= MAX_PANELS {
@@ -5597,7 +6042,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                         // is duplicated, as the user expects on split).
                         let cols = panels[active].columns.clone();
                         let mode = panels[active].tab_bar_mode;
-                        panels.push(Panel::with_mode(inherited, cols, mode, default_preview));
+                        panels.push(Panel::with_mode(inherited, cols, mode, default_display));
                         Some(new_idx)
                     } else {
                         None
@@ -5708,35 +6153,97 @@ pub fn install(window: &MainWindow, state: AppState) {
     {
         let st = state.clone();
         let scheduler = state.thumb_scheduler.clone();
-        window.on_panel_viewport_changed(move |panel: i32, top: f32, height: f32| {
-            if panel < 0 {
-                return;
-            }
-            let (first, last) = update_panel_render_window(&st, panel as usize, top, height);
-            scheduler.update_viewport(panel as usize, first, last);
-        });
+        window.on_panel_viewport_changed(
+            move |panel: i32, top: f32, height: f32, grid: crate::ItemGrid| {
+                if panel < 0 {
+                    return top;
+                }
+                let layout = grid_from_ui(grid);
+                let top = st
+                    .panels
+                    .try_borrow()
+                    .ok()
+                    .and_then(|panels| {
+                        let panel = panels.get(panel as usize)?;
+                        let old = panel.item_grid.replace(layout);
+                        if old == layout {
+                            return Some(top);
+                        }
+                        let geometry = arranged_model_geometry(&*panel.rows_model, old);
+                        let anchor = geometry.capture_anchor(
+                            panel.viewport_top.get(),
+                            panel.viewport_height.get(),
+                            0.0,
+                            None,
+                        );
+                        Some(
+                            arranged_model_geometry(&*panel.rows_model, layout)
+                                .restore_top(anchor, top, height),
+                        )
+                    })
+                    .unwrap_or(top);
+                let (first, last) = update_panel_render_window(&st, panel as usize, top, height);
+                scheduler.update_viewport(panel as usize, first, last);
+                top
+            },
+        );
     }
     // All interactive uses (hover, click, drag, visible range) go
     // through this single hit-test on the rows' precomputed geometry.
     {
         let weak = window.as_weak();
-        window.on_panel_row_at_content_y(move |panel: i32, y: f32| -> i32 {
-            if panel < 0 {
-                return -1;
-            }
-            // Reading the model already exposed to Slint avoids borrowing `AppState`
-            // during a synchronous notification from `VecModel::set_vec` (listings
-            // apply their rows under a borrow_mut of the panels).
-            let Some(window) = weak.upgrade() else {
-                return -1;
-            };
-            window
-                .get_panels()
-                .row_data(panel as usize)
-                .map(|view| row_index_at_content_y(&view.rows, y))
-                .unwrap_or(-1)
-        });
+        window.on_panel_item_at_content_point(
+            move |panel: i32, x: f32, y: f32, grid: crate::ItemGrid| -> i32 {
+                if panel < 0 {
+                    return -1;
+                }
+                // Reading the model already exposed to Slint avoids borrowing `AppState`
+                // during a synchronous notification from `VecModel::set_vec` (listings
+                // apply their rows under a borrow_mut of the panels).
+                let Some(window) = weak.upgrade() else {
+                    return -1;
+                };
+                window
+                    .get_panels()
+                    .row_data(panel as usize)
+                    .map(|view| match grid_from_ui(grid) {
+                        Some(layout) => layout
+                            .index_at(view.rows.row_count(), x, y)
+                            .map_or(-1, |index| index as i32),
+                        None => row_index_at_content_y(&view.rows, y),
+                    })
+                    .unwrap_or(-1)
+            },
+        );
     }
+    window.on_grid_layout(|width, zoom, font, spacing, left| {
+        grid_to_ui(GridLayout::fit(
+            width,
+            grid_image_size(zoom),
+            font,
+            spacing,
+            left,
+        ))
+    });
+    window.on_grid_item_rect(|grid, index| {
+        grid_from_ui(grid)
+            .filter(|_| index >= 0)
+            .map(|layout| {
+                let rect = layout.rect(index as usize);
+                crate::ItemRect {
+                    left: rect.left,
+                    top: rect.top,
+                    width: rect.width,
+                    height: rect.height,
+                }
+            })
+            .unwrap_or_default()
+    });
+    window.on_grid_insertion_gap(|grid, count, x, y, keep| {
+        grid_from_ui(grid)
+            .and_then(|layout| layout.insertion_gap(count.max(0) as usize, x, y, keep))
+            .map_or(-1, |index| index as i32)
+    });
     // Background worker for the recursive mtime — same pattern.
     if let Some(rx) = state.rmtime_rx.borrow_mut().take() {
         spawn_rmtime_worker(rx, state.rmtime_gen.clone(), window.as_weak());
@@ -5788,14 +6295,65 @@ pub fn install(window: &MainWindow, state: AppState) {
             },
         );
     }
-    // Toggles list <-> previews for panel `idx`'s active tab.
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_set_item_arrangement(move |idx, grid| {
+            let Some(w) = weak.upgrade() else { return };
+            {
+                let mut panels = st.panels.borrow_mut();
+                let Some(panel) = usize::try_from(idx)
+                    .ok()
+                    .and_then(|index| panels.get_mut(index))
+                else {
+                    return;
+                };
+                let tab = &mut panel.tabs.tabs[panel.tabs.active];
+                let arrangement = if grid {
+                    ItemArrangement::Grid
+                } else {
+                    ItemArrangement::List
+                };
+                if tab.item_arrangement == arrangement {
+                    return;
+                }
+                tab.item_arrangement = arrangement;
+                if !grid && tab.preview != (tab.zoom >= THUMB_ZOOM) {
+                    tab.zoom = if tab.preview {
+                        THUMB_DEFAULT_ZOOM
+                    } else {
+                        LIST_DEFAULT_ZOOM
+                    };
+                }
+                let (preview, zoom) = (tab.preview, tab.zoom);
+                let config = st.config.borrow();
+                refresh_panel_visuals(
+                    panel,
+                    preview,
+                    zoom,
+                    config.compact_icon_rows_in_preview,
+                    config.view_item_spacing,
+                );
+            }
+            update_panels_ui(&w, &st);
+            request_thumbnails(&st);
+            request_imgmeta(&st);
+        });
+    }
+    // Toggle content previews independently of the grid's size.
     {
         let st = state.clone();
         let weak = window.as_weak();
         window.on_toggle_preview_mode(move |idx: i32| {
             let Some(w) = weak.upgrade() else { return };
             let idx = idx as usize;
-            let compact = st.config.borrow().compact_icon_rows_in_preview;
+            let (compact, item_spacing) = {
+                let config = st.config.borrow();
+                (
+                    config.compact_icon_rows_in_preview,
+                    config.view_item_spacing,
+                )
+            };
             let preview_now = {
                 let mut panels = st.panels.borrow_mut();
                 if idx >= panels.len() {
@@ -5806,14 +6364,16 @@ pub fn install(window: &MainWindow, state: AppState) {
                     let t = &mut panels[idx].tabs.tabs[active];
                     t.preview = !t.preview;
                     // The button toggles between the list/thumbnail default levels.
-                    t.zoom = if t.preview {
-                        THUMB_DEFAULT_ZOOM
-                    } else {
-                        LIST_DEFAULT_ZOOM
-                    };
+                    if t.item_arrangement == ItemArrangement::List {
+                        t.zoom = if t.preview {
+                            THUMB_DEFAULT_ZOOM
+                        } else {
+                            LIST_DEFAULT_ZOOM
+                        };
+                    }
                     (t.preview, t.zoom)
                 };
-                refresh_panel_visuals(&panels[idx], preview, zoom, compact);
+                refresh_panel_visuals(&panels[idx], preview, zoom, compact, item_spacing);
                 preview
             };
             update_panels_ui(&w, &st);
@@ -5832,11 +6392,43 @@ pub fn install(window: &MainWindow, state: AppState) {
         let st = state.clone();
         let weak = window.as_weak();
         window.on_zoom_view(
-            move |idx: i32, delta: i32, top: f32, height: f32, pointer_y: f32| {
+            move |idx: i32,
+                  delta: i32,
+                  top: f32,
+                  width: f32,
+                  height: f32,
+                  pointer_x: f32,
+                  pointer_y: f32| {
                 let Some(w) = weak.upgrade() else {
                     return top.max(0.0);
                 };
                 let idx = idx as usize;
+                let grid_top = {
+                    let mut panels = st.panels.borrow_mut();
+                    panels
+                        .get_mut(idx)
+                        .filter(|panel| {
+                            panel.tabs.tabs[panel.tabs.active].item_arrangement
+                                == ItemArrangement::Grid
+                        })
+                        .map(|panel| {
+                            zoom_grid(
+                                panel,
+                                &st.config.borrow(),
+                                delta,
+                                top,
+                                width,
+                                height,
+                                (pointer_x, pointer_y),
+                            )
+                        })
+                };
+                if let Some(top) = grid_top {
+                    let (first, last) = update_panel_render_window(&st, idx, top, height);
+                    st.thumb_scheduler.update_viewport(idx, first, last);
+                    update_panels_ui(&w, &st);
+                    return top;
+                }
                 let crossed_mode;
                 {
                     let mut panels = st.panels.borrow_mut();
@@ -5854,7 +6446,13 @@ pub fn install(window: &MainWindow, state: AppState) {
                     t.preview = new_zoom >= THUMB_ZOOM;
                     crossed_mode = t.preview != was_preview;
                 }
-                let compact = st.config.borrow().compact_icon_rows_in_preview;
+                let (compact, item_spacing) = {
+                    let config = st.config.borrow();
+                    (
+                        config.compact_icon_rows_in_preview,
+                        config.view_item_spacing,
+                    )
+                };
                 {
                     let panels = st.panels.borrow();
                     if let Some(panel) = panels.get(idx) {
@@ -5868,6 +6466,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                             tab.preview,
                             tab.zoom,
                             compact,
+                            item_spacing,
                             crossed_mode,
                             ZoomViewport {
                                 top,
@@ -6401,19 +7000,40 @@ pub fn install(window: &MainWindow, state: AppState) {
         });
     }
 
-    // Two views exchange their places. Only the layout tree is touched, and
-    // only by two leaf indices: the views themselves, their tabs and their
-    // history stay exactly where they are in `panels`.
+    // Reposition whole views through the tree only. Panel indices and their
+    // models stay stable, including every tab, selection and navigation history.
     {
         let st = state.clone();
         let weak = window.as_weak();
-        window.on_views_swapped(move |a: i32, b: i32| {
+        window.on_view_dropped(move |source: i32, target: i32, zone: i32| {
             let Some(w) = weak.upgrade() else { return };
-            let (a, b) = (a.max(0) as usize, b.max(0) as usize);
-            // No proportion changes, so the way back from an "even out the
-            // views" stays valid and is deliberately left on offer.
-            if st.layout.borrow_mut().swap_panels(a, b) {
+            let n = st.panels.borrow().len();
+            if source < 0 || target < 0 || source as usize >= n || target as usize >= n {
+                return;
+            }
+            let (source, target) = (source as usize, target as usize);
+            let changed = match zone {
+                1 => st.layout.borrow_mut().swap_views(source, target),
+                2..=5 => st.layout.borrow_mut().move_view_beside(
+                    source,
+                    target,
+                    if zone >= 4 {
+                        SplitDir::Column
+                    } else {
+                        SplitDir::Row
+                    },
+                    zone == 2 || zone == 4,
+                ),
+                _ => false,
+            };
+            if changed {
+                // A center swap preserves proportions. An edge move changes
+                // the tree shape, so old equalize ratios no longer apply.
+                if zone != 1 {
+                    *st.equalize_undo.borrow_mut() = None;
+                }
                 push_geometry_inplace(&w, &st);
+                push_equalize_state(&w, &st);
             }
         });
     }
@@ -6537,6 +7157,89 @@ pub fn install(window: &MainWindow, state: AppState) {
                 if let Some(w) = weak.upgrade() {
                     load_named_into(&w, &st, &id);
                 }
+            });
+        });
+    }
+    // Hands a keyboard slot to a workspace, or takes its slot away with zero.
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_ws_set_slot(move |id: SharedString, slot: i32| {
+            let st = st.clone();
+            let weak = weak.clone();
+            let id = id.to_string();
+            defer(move || {
+                let Some(w) = weak.upgrade() else { return };
+                let wanted = u8::try_from(slot).ok().filter(|value| *value > 0);
+                match workspace::set_workspace_slot(&paths::workspaces_dir(), &id, wanted) {
+                    Ok(previous) => {
+                        info!(id = %id, slot, "workspace slot assigned");
+                        refresh_workspaces_ui(&w, &st);
+                        // Say whose slot was taken. The picker names the holder
+                        // before the click, but the row that lost it may be out
+                        // of sight, and a shortcut that silently stopped working
+                        // is the kind of thing found much later.
+                        if previous.is_some() {
+                            w.set_ws_toast(w.get_strings().ws_toast_slot_moved);
+                        }
+                    }
+                    Err(err) => {
+                        error!(error = %err, id = %id, slot, "assign workspace slot failed")
+                    }
+                }
+            });
+        });
+    }
+    // A keyboard slot loads its workspace straight away. The current one is
+    // saved on the way when it is a named workspace with changes, deliberately
+    // without asking: the shortcut exists to switch in one keystroke, and a
+    // dialog in the middle would defeat it. Nothing is lost either way, since
+    // what the dialog offers is exactly what happens here.
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_ws_load_slot_action(move |action: SharedString| {
+            let Some(slot) = action
+                .as_str()
+                .strip_prefix("load-workspace-")
+                .and_then(|digit| digit.parse::<u8>().ok())
+            else {
+                return;
+            };
+            let st = st.clone();
+            let weak = weak.clone();
+            defer(move || {
+                let Some(w) = weak.upgrade() else { return };
+                let dir = paths::workspaces_dir();
+                let Some(target) = workspace::workspace_with_slot(&dir, slot) else {
+                    // The slot answers to nobody. Staying silent is the point:
+                    // a stray digit must not interrupt with a message.
+                    return;
+                };
+                // Already there: save the pending changes and stop, rather than
+                // reload the same layout and lose scroll positions on the way.
+                let already_current = current_workspace_id(&st).as_deref() == Some(target.as_str());
+                if let Some((current_id, name)) = dirty_current_workspace(&st)
+                    && let Err(err) = overwrite_named_from_live(&st, &current_id)
+                {
+                    // Saving failed, so switching now would drop the changes
+                    // the user believes are being kept. The move is abandoned
+                    // and said out loud.
+                    error!(error = %err, id = %current_id, "saving before a slot switch failed");
+                    let msg = w
+                        .get_strings()
+                        .ws_notice_save_failed
+                        .replace("{name}", &name);
+                    notice(&w, msg, NoticeKind::Error);
+                    return;
+                }
+                if already_current {
+                    update_window_title(&w, &st);
+                    refresh_workspaces_ui(&w, &st);
+                    return;
+                }
+                load_named_into(&w, &st, &target);
+                refresh_workspaces_ui(&w, &st);
             });
         });
     }
@@ -6669,6 +7372,11 @@ pub fn install(window: &MainWindow, state: AppState) {
                     Ok(()) => {
                         info!(id = %id, name, "workspace saved from shortcut");
                         update_window_title(&w, &st);
+                        // The list carries the "unsaved changes" dot, and this
+                        // save is reachable from the panel showing it: without
+                        // this the dot would sit there contradicting the notice
+                        // that just confirmed the save.
+                        refresh_workspaces_ui(&w, &st);
                         let msg = w.get_strings().ws_notice_saved.replace("{name}", &name);
                         notice_for(&w, msg, NoticeKind::Success, 2_000);
                     }
@@ -6927,6 +7635,8 @@ type TabSig = (
     bool,
     GroupMode,
     Option<i32>,
+    ItemArrangement,
+    Option<i32>,
 );
 type WorkspaceSig = (Vec<(Vec<TabSig>, u8)>, SidebarSectionsState);
 fn workspace_signature(ws: &WorkspaceState) -> WorkspaceSig {
@@ -6946,6 +7656,8 @@ fn workspace_signature(ws: &WorkspaceState) -> WorkspaceSig {
                         t.show_hidden,
                         t.group_mode,
                         t.zoom,
+                        t.item_arrangement,
+                        t.grid_zoom,
                     )
                 })
                 .collect();
@@ -7022,14 +7734,58 @@ fn refresh_workspaces_ui(window: &MainWindow, state: &AppState) {
             WorkspaceEntry {
                 id: m.id.into(),
                 name: m.name.into(),
-                panels: m.panels as i32,
+                panels: m.views as i32,
                 tabs: m.tabs as i32,
                 is_current,
                 is_dirty,
+                slot: i32::from(m.slot.unwrap_or(0)),
             }
         })
         .collect();
     window.set_workspaces(ModelRc::new(VecModel::from(entries)));
+    push_workspace_slots_ui(window, state);
+}
+
+/// Publishes, for each keyboard slot, who holds it and what fires it.
+///
+/// Both are finished sentences rather than raw values: the view has no way to
+/// fill a template, and every other message of the application is composed
+/// here. An empty holder sentence therefore means the slot is free.
+///
+/// The combination is read from the keymap rather than written as `Ctrl+N`:
+/// the nine actions are rebindable like every other, and a tooltip that
+/// insisted on Ctrl after the user moved the binding would simply be wrong. It
+/// is also rendered with the keyboard's own key names, so it reads `Strg+1` in
+/// German.
+fn push_workspace_slots_ui(window: &MainWindow, state: &AppState) {
+    let lang = state.config.borrow().language;
+    let km = state.keymap.borrow();
+    let metas = workspace::list_named_workspaces(&paths::workspaces_dir());
+    let mut taken: Vec<SharedString> = Vec::with_capacity(workspace::MAX_WORKSPACE_SLOT as usize);
+    let mut tips: Vec<SharedString> = Vec::with_capacity(workspace::MAX_WORKSPACE_SLOT as usize);
+    for slot in 1..=workspace::MAX_WORKSPACE_SLOT {
+        taken.push(
+            metas
+                .iter()
+                .find(|meta| meta.slot == Some(slot))
+                .map(|meta| {
+                    SharedString::from(
+                        i18n::tr(lang, "ws_slot_taken").replace("{name}", &meta.name),
+                    )
+                })
+                .unwrap_or_default(),
+        );
+        // Interpolated here, like every other message of the application: the
+        // view receives a finished sentence rather than a template to fill.
+        let chord = chord_display(lang, km.chord_of(&format!("load-workspace-{slot}")));
+        tips.push(if chord.is_empty() {
+            SharedString::new()
+        } else {
+            SharedString::from(i18n::tr(lang, "ws_slot_tooltip").replace("{key}", &chord))
+        });
+    }
+    window.set_ws_slot_taken(ModelRc::new(VecModel::from(taken)));
+    window.set_ws_slot_tips(ModelRc::new(VecModel::from(tips)));
 }
 
 fn normalized_workspace_name(name: &str) -> String {
@@ -7098,6 +7854,73 @@ fn path_notice_name(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
+/// Keeps typed error categories through core and native API context wrappers.
+fn file_error_kind(error: &(dyn std::error::Error + 'static)) -> Option<std::io::ErrorKind> {
+    let mut current = Some(error);
+    while let Some(cause) = current {
+        if let Some(error) = cause.downcast_ref::<favnyr_core::error::Error>()
+            && let Some(kind) = error.io_kind()
+        {
+            return Some(kind);
+        }
+        if let Some(error) = cause.downcast_ref::<std::io::Error>() {
+            return Some(error.kind());
+        }
+        #[cfg(windows)]
+        if let Some(error) = cause.downcast_ref::<windows::core::Error>()
+            && let Some(kind) = favnyr_core::error::windows_hresult_kind(error.code().0)
+        {
+            return Some(kind);
+        }
+        current = cause.source();
+    }
+    None
+}
+
+fn show_file_failure(
+    window: &MainWindow,
+    lang: Lang,
+    key: &str,
+    path: &Path,
+    error: &(dyn std::error::Error + 'static),
+) {
+    show_notice(
+        window,
+        i18n::file_operation_failed(
+            lang,
+            key,
+            &path_notice_name(path),
+            &i18n::file_error_reason(lang, file_error_kind(error)),
+        ),
+    );
+}
+
+/// Shell trash failures can omit their error code. Only a failed DELETE-rights
+/// probe justifies an access-denied explanation in that otherwise unknown case.
+fn delete_failure_kind(
+    path: &Path,
+    kind: Option<std::io::ErrorKind>,
+) -> Option<std::io::ErrorKind> {
+    #[cfg(windows)]
+    if kind.is_none() && favnyr_core::process_lock::delete_access_denied(path) {
+        return Some(std::io::ErrorKind::PermissionDenied);
+    }
+    #[cfg(not(windows))]
+    let _ = path;
+    kind
+}
+
+fn delete_failure_notice(path: &Path, lang: Lang, kind: Option<std::io::ErrorKind>) -> String {
+    locked_item_notice(path, lang).unwrap_or_else(|| {
+        i18n::file_operation_failed(
+            lang,
+            "delete_failed",
+            &path_notice_name(path),
+            &i18n::file_error_reason(lang, delete_failure_kind(path, kind)),
+        )
+    })
+}
+
 /// Shared source of truth for deletions and renames refused by a
 /// Windows lock. The diagnostic is only triggered AFTER the actual failure.
 fn locked_item_notice(path: &Path, lang: Lang) -> Option<String> {
@@ -7112,49 +7935,51 @@ fn locked_item_notice(path: &Path, lang: Lang) -> Option<String> {
 
 /// Opens the menu to the keyboard, with nothing highlighted yet.
 ///
-/// The menu builds itself right after this and each row registers as it
-/// appears, so nothing here has to restate which entries the menu will show.
-/// Set from here rather than from a `changed` handler so the order is certain:
-/// the state is ready before the first entry exists.
+/// Rows declare whether they belong to the main menu or its submenu. Arming
+/// only activates the main level and clears the previous highlights.
 fn arm_context_menu_navigation(window: &MainWindow) {
     let nav = window.global::<CtxNav>();
     nav.set_menu_y(-1.0);
     nav.set_sub_y(-1.0);
-    nav.set_registering(1);
     nav.set_level(1);
 }
 
 /// Message for an entry an operation stepped over. Names the program holding
-/// it when Windows attributes the conflict — the useful half of the answer,
-/// since the user then knows what to close — and falls back to the system
-/// error everywhere that diagnostic does not exist.
-fn skipped_entry_notice(path: &Path, lang: Lang, error: &str) -> String {
-    locked_item_notice(path, lang)
-        .unwrap_or_else(|| i18n::item_skipped(lang, &path_notice_name(path), error))
+/// it when Windows attributes the conflict, which helps explain the failure,
+/// since the user then knows what to close. Other failures use a translated
+/// filesystem category and keep their full technical details in the log.
+fn skipped_entry_notice(path: &Path, lang: Lang, kind: Option<std::io::ErrorKind>) -> String {
+    locked_item_notice(path, lang).unwrap_or_else(|| {
+        i18n::item_skipped(
+            lang,
+            &path_notice_name(path),
+            &i18n::file_error_reason(lang, kind),
+        )
+    })
 }
 
 /// Message for a move that copied its item but could not remove the original.
-/// Runs the same lock diagnostic as a refused deletion — it is only reached
-/// after an actual failure, and always from a worker thread — so the program
-/// holding the file can be named when Windows attributes it. Falls back to the
-/// system error, which stays informative where no such diagnostic exists.
-fn move_source_kept_notice(path: &Path, lang: Lang, error: &str) -> String {
+/// Runs the same lock diagnostic as a refused deletion, only after an actual
+/// failure and always from a worker thread, so the program
+/// holding the file can be named when Windows attributes it. Other failures
+/// use the translated category of the refused deletion.
+fn move_source_kept_notice(path: &Path, lang: Lang, kind: Option<std::io::ErrorKind>) -> String {
     i18n::move_source_kept(
         lang,
         &path_notice_name(path),
-        &lock_reason(path, lang, error),
+        &lock_reason(path, lang, delete_failure_kind(path, kind)),
     )
 }
 
 /// Why an entry resisted: the program holding it where Windows attributes the
-/// conflict, the system error everywhere else. Only ever reached after an
-/// actual failure, and always from a worker thread — the diagnostic can probe
+/// conflict, the translated failure category everywhere else. Only reached
+/// after an actual failure, and always from a worker thread, the diagnostic can probe
 /// a folder's children and must never run on the UI thread.
-fn lock_reason(path: &Path, lang: Lang, error: &str) -> String {
+fn lock_reason(path: &Path, lang: Lang, kind: Option<std::io::ErrorKind>) -> String {
     favnyr_core::process_lock::diagnose(path)
         .map(|lock| i18n::process_list(lang, &lock.processes, lock.truncated))
         .filter(|processes| !processes.is_empty())
-        .unwrap_or_else(|| error.to_string())
+        .unwrap_or_else(|| i18n::file_error_reason(lang, kind))
 }
 
 /// A locked folder may require a bounded probe of its children: never
@@ -7164,13 +7989,13 @@ fn report_rename_failure(
     weak: slint::Weak<MainWindow>,
     candidates: Vec<PathBuf>,
     lang: Lang,
-    reason: String,
+    kind: Option<std::io::ErrorKind>,
 ) {
     let item = candidates
         .first()
         .map(|path| path_notice_name(path))
         .unwrap_or_default();
-    let fallback = i18n::rename_failed(lang, &item, &reason);
+    let fallback = i18n::rename_failed(lang, &item, &i18n::file_error_reason(lang, kind));
 
     // Restart Manager doesn't exist outside Windows: don't create a thread that
     // could only immediately return the generic message already prepared.
@@ -7235,12 +8060,13 @@ fn notice_for(w: &MainWindow, text: impl Into<SharedString>, kind: NoticeKind, d
     w.set_notice_text(text.into());
 }
 
-/// Non-blocking startup-by-workspace-name warning. Exposed to the
-/// binary only to reuse exactly the global toast route.
-pub fn show_workspace_not_found_notice(window: &MainWindow, state: &AppState, name: &str) {
+/// Uses the global notice route when a startup argument cannot name a folder.
+pub fn show_invalid_startup_location_notice(window: &MainWindow, state: &AppState, location: &str) {
     let lang = state.config.borrow().language;
-    let message = i18n::tr(lang, "ws_not_found").replace("{name}", name);
-    notice(window, message, NoticeKind::Error);
+    show_notice(
+        window,
+        i18n::tr(lang, "startup_location_invalid").replace("{location}", location),
+    );
 }
 
 /// Warns ONCE (state persisted in the config) that `ffmpeg` is missing
@@ -7740,6 +8566,10 @@ fn annotations_stamp() -> Option<(std::time::SystemTime, u64)> {
     file_stamp(&paths::annotations_path())
 }
 
+fn folder_state_stamp() -> Option<(std::time::SystemTime, u64)> {
+    file_stamp(&paths::folder_state_path())
+}
+
 fn favorites_stamp() -> Option<(std::time::SystemTime, u64)> {
     file_stamp(&paths::favorites_path())
 }
@@ -7793,6 +8623,76 @@ fn save_annotations(state: &AppState, annotations: &favnyr_core::annotations::An
     *state.annotations_stamp.borrow_mut() = annotations_stamp();
 }
 
+/// Re-reads directory-owned state when another process changed it. The return
+/// value lets the polling path re-list visible folders only when needed.
+fn sync_folder_state(state: &AppState) -> bool {
+    let stamp = folder_state_stamp();
+    if *state.folder_state_stamp.borrow() == stamp {
+        return false;
+    }
+    *state.folder_state.borrow_mut() = FolderStateStore::load(&paths::folder_state_path());
+    *state.folder_state_stamp.borrow_mut() = stamp;
+    true
+}
+
+fn folder_state_now(state: &AppState) -> std::cell::Ref<'_, FolderStateStore> {
+    sync_folder_state(state);
+    state.folder_state.borrow()
+}
+
+fn folder_state_for_update(state: &AppState) -> std::cell::RefMut<'_, FolderStateStore> {
+    sync_folder_state(state);
+    state.folder_state.borrow_mut()
+}
+
+fn save_folder_state(state: &AppState, folder_state: &FolderStateStore) {
+    if let Err(err) = folder_state.save(&paths::folder_state_path()) {
+        error!(error = %err, "save folder state failed");
+        return;
+    }
+    *state.folder_state_stamp.borrow_mut() = folder_state_stamp();
+}
+
+/// Resolves the item addressed by the shared "Colour & note" flyout.
+///
+/// Tabs remain valid annotation targets while their drive is temporarily
+/// unavailable. Favorites are rechecked because their stored target can change
+/// while the menu is open. Only view selections need filtering by operation:
+/// notes accept any single item, while colours apply to directories only.
+fn annotation_target_paths(
+    window: &MainWindow,
+    state: &AppState,
+    selection_folders_only: bool,
+) -> Vec<PathBuf> {
+    match window.get_mark_target_kind() {
+        1 => {
+            let panels = state.panels.borrow();
+            panels
+                .get(window.get_tab_menu_panel().max(0) as usize)
+                .and_then(|panel| {
+                    panel
+                        .tabs
+                        .tabs
+                        .get(window.get_tab_menu_tab().max(0) as usize)
+                        .map(|tab| tab.current_path.clone())
+                })
+                .into_iter()
+                .collect()
+        }
+        2 => favorites_now(state)
+            .path_of(window.get_fav_menu_id().as_str())
+            .map(PathBuf::from)
+            .filter(|path| favorite_path_is_directory(path))
+            .into_iter()
+            .collect(),
+        _ if selection_folders_only => selected_paths(state)
+            .into_iter()
+            .filter(|path| acts_as_dir(path))
+            .collect(),
+        _ => selected_paths(state),
+    }
+}
+
 /// Carries every path-owned reference after a successful in-app rename.
 /// Annotations, favorites and sidebar redirects are persisted immediately;
 /// tabs and their histories remain workspace state and follow the normal
@@ -7833,14 +8733,129 @@ fn track_renamed_path(window: &MainWindow, state: &AppState, from: &Path, to: &P
         refresh_sidebar(window, state);
     }
 
-    let open_paths_changed = {
+    {
+        let mut folder_state = folder_state_for_update(state);
+        if folder_state.relocate(from, to) {
+            save_folder_state(state, &folder_state);
+        }
+    }
+
+    let workspace_changed = {
         let mut panels = state.panels.borrow_mut();
         let mut closed_tabs = state.closed_tabs.borrow_mut();
         relocate_open_paths(&mut panels, &mut closed_tabs, from, to)
     };
-    if open_paths_changed {
+    if workspace_changed {
         state.persist_workspace();
     }
+}
+
+fn update_folder_state(
+    state: &AppState,
+    mutate: impl FnOnce(&mut FolderStateStore) -> bool,
+) -> bool {
+    let mut folder_state = folder_state_for_update(state);
+    let changed = mutate(&mut folder_state);
+    if changed {
+        save_folder_state(state, &folder_state);
+    }
+    changed
+}
+
+fn append_paths_to_manual_order(state: &AppState, paths: &[PathBuf]) -> bool {
+    update_folder_state(state, |folder_state| folder_state.append_paths(paths))
+}
+
+fn manual_order_insertion_for_panel(
+    state: &AppState,
+    panel_index: usize,
+    gap: usize,
+) -> Option<ManualOrderInsertion> {
+    let (directory, names) = {
+        let panels = state.panels.borrow();
+        let panel = panels.get(panel_index)?;
+        let tab = panel.tabs.tabs.get(panel.tabs.active)?;
+        (
+            tab.current_path.clone(),
+            panel
+                .rows_model
+                .iter()
+                .map(|row| row.name.to_string())
+                .collect::<Vec<_>>(),
+        )
+    };
+    if !folder_state_now(state).is_manual(&directory) {
+        return None;
+    }
+    let gap = gap.min(names.len());
+    Some(ManualOrderInsertion {
+        directory,
+        before: names.get(gap).cloned(),
+        after: gap
+            .checked_sub(1)
+            .and_then(|index| names.get(index))
+            .cloned(),
+        fallback_gap: gap,
+    })
+}
+
+fn insert_manual_order_names(
+    order: &mut Vec<String>,
+    insertion: &ManualOrderInsertion,
+    names: &[String],
+) -> bool {
+    let mut seen = HashSet::new();
+    let names: Vec<&String> = names
+        .iter()
+        .filter(|name| seen.insert(name.as_str()))
+        .collect();
+    if names.is_empty() {
+        return false;
+    }
+    let previous = order.clone();
+    order.retain(|candidate| !seen.contains(candidate.as_str()));
+    let insert_at = insertion
+        .before
+        .as_ref()
+        .and_then(|before| order.iter().position(|name| name == before))
+        .or_else(|| {
+            insertion.after.as_ref().and_then(|after| {
+                order
+                    .iter()
+                    .position(|name| name == after)
+                    .map(|index| index + 1)
+            })
+        })
+        .unwrap_or_else(|| insertion.fallback_gap.min(order.len()));
+    order.splice(insert_at..insert_at, names.into_iter().cloned());
+    *order != previous
+}
+
+fn apply_manual_order_insertion(
+    state: &AppState,
+    insertion: &ManualOrderInsertion,
+    targets: &[PathBuf],
+) -> bool {
+    let names: Vec<String> = targets
+        .iter()
+        .filter(|target| {
+            target
+                .parent()
+                .is_some_and(|parent| ops::paths_equal(parent, &insertion.directory))
+        })
+        .filter_map(|target| {
+            target
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_string)
+        })
+        .collect();
+    update_folder_state(state, |folder_state| {
+        let Some(order) = folder_state.order_mut(&insertion.directory) else {
+            return false;
+        };
+        insert_manual_order_names(order, insertion, &names)
+    })
 }
 
 fn redirect_shortcuts_after_rename(
@@ -7924,13 +8939,22 @@ fn refresh_annotations_ui(window: &MainWindow, state: &AppState) {
 /// and vertical geometry change. Cursor and range-selection anchors continue
 /// to designate the same entries after the move.
 fn regroup_colored_folder_panels(state: &AppState) -> bool {
-    let compact_icon_rows = state.config.borrow().compact_icon_rows_in_preview;
+    let (compact_icon_rows, item_spacing) = {
+        let config = state.config.borrow();
+        (
+            config.compact_icon_rows_in_preview,
+            config.view_item_spacing,
+        )
+    };
+    let folder_state = folder_state_now(state);
     let mut regrouped = false;
     let mut panels = state.panels.borrow_mut();
     for panel in panels.iter_mut() {
         let active = panel.tabs.active;
         let tab = &panel.tabs.tabs[active];
-        if tab.group_mode != GroupMode::ColoredFoldersFirst {
+        if folder_state.is_manual(&tab.current_path)
+            || tab.group_mode != GroupMode::ColoredFoldersFirst
+        {
             continue;
         }
 
@@ -7966,7 +8990,7 @@ fn regroup_colored_folder_panels(state: &AppState) -> bool {
             .as_deref()
             .and_then(|name| rows.iter().position(|row| row.name == name))
             .map_or(-1, |index| index as i32);
-        layout_rows(&mut rows, tab.zoom, compact_icon_rows);
+        layout_rows(&mut rows, tab.zoom, compact_icon_rows, item_spacing);
         panel.replace_rows(rows);
         regrouped = true;
     }
@@ -8070,6 +9094,15 @@ fn flat_to_favnode(
         .flatten();
     let available = f.is_container || f.path.is_empty() || metadata.is_some();
     let is_dir = metadata.is_some_and(|entry| entry.is_dir());
+    // A file favorite is drawn with its own icon, resolved the way the views
+    // resolve one and cached by path, so a tree of them costs one extraction
+    // each per session. An empty image leaves the row on its document glyph.
+    let icon = if !f.is_container && available && !is_dir {
+        let path = Path::new(f.path.as_str());
+        self_icon(path, &ext_of(path), false)
+    } else {
+        Image::default()
+    };
     let mut node = FavNode {
         id: f.id.clone().into(),
         label: f.name.clone().into(),
@@ -8081,6 +9114,7 @@ fn flat_to_favnode(
         available,
         is_dir,
         folder_slot: 0,
+        icon,
     };
     node.folder_slot = favorite_folder_slot(&node, annotations);
     node
@@ -9020,7 +10054,13 @@ fn apply_default_exts(state: &AppState, id: &str, exts: &[String]) {
 /// Empty `name` → derived from the target's name. Adds the `.lnk` extension if
 /// missing; refuses an invalid name or an already-existing target/`.lnk`. Returns the
 /// created file name (for the cursor), or `None` on failure.
-fn create_shortcut_entry(cur: &Path, name: &str, target: &str) -> Option<String> {
+fn create_shortcut_entry(
+    window: &MainWindow,
+    lang: Lang,
+    cur: &Path,
+    name: &str,
+    target: &str,
+) -> Option<String> {
     if target.is_empty() {
         return None;
     }
@@ -9055,6 +10095,7 @@ fn create_shortcut_entry(cur: &Path, name: &str, target: &str) -> Option<String>
         }
         Err(err) => {
             error!(error = %err, "create shortcut failed");
+            show_file_failure(window, lang, "create_failed", &lnk_path, err.as_ref());
             None
         }
     }
@@ -9091,12 +10132,12 @@ fn create_link_entry(
                 // reason (cross-volume, privilege, filesystem) goes to the log;
                 // the toast stays concise.
                 error!(error = %err, "create symlink failed");
-                show_notice(window, i18n::tr(lang, "link_failed"));
+                show_file_failure(window, lang, "link_failed", &dst, &err);
                 None
             }
         }
     } else {
-        create_shortcut_entry(cur, name, target)
+        create_shortcut_entry(window, lang, cur, name, target)
     }
 }
 
@@ -9105,9 +10146,9 @@ fn create_link_entry(
 // Only used by the `.lnk` path (see `open_shortcut_as_tab`, Windows).
 #[cfg(windows)]
 fn open_dir_in_new_tab(window: &MainWindow, state: &AppState, dir: &Path) {
-    let default_preview = state.config.borrow().default_preview_mode;
+    let default_display = TabDisplayDefaults::from(&*state.config.borrow());
     let opened = state.with_tabs_mut(|book| {
-        let a = book.open_after_active(dir.to_path_buf(), default_preview);
+        let a = book.open_after_active(dir.to_path_buf(), default_display);
         book.tabs[a].current_path.clone()
     });
     load_directory(window, state, &opened, false);
@@ -9143,14 +10184,14 @@ fn open_shortcut_as_tab(window: &MainWindow, state: &AppState, path: &Path) -> b
     }
 }
 
-/// Whether `p` should be treated as a FOLDER in the context menu: a real
+/// Resolves a path that should be treated as a folder: a real
 /// directory, a folder symlink/junction (already followed by `Path::is_dir`), or
 /// a Windows `.lnk` whose target is a directory. The `.lnk` case is a COM
-/// resolution, so the cheap extension test gates it and it runs only for the
-/// single right-clicked item — never in a hot loop.
-fn acts_as_dir(p: &Path) -> bool {
+/// resolution, so the cheap extension test gates it. Callers resolve selected
+/// items when an action or drag starts, never during pointer movement.
+fn directory_target(p: &Path) -> Option<PathBuf> {
     if p.is_dir() {
-        return true;
+        return Some(p.to_path_buf());
     }
     #[cfg(windows)]
     {
@@ -9158,12 +10199,21 @@ fn acts_as_dir(p: &Path) -> bool {
             .map(|e| e.eq_ignore_ascii_case("lnk"))
             .unwrap_or(false)
         {
-            return crate::openwith::resolve_shortcut(p)
-                .map(|t| t.is_dir())
-                .unwrap_or(false);
+            return crate::openwith::resolve_shortcut(p).filter(|target| target.is_dir());
         }
     }
-    false
+    None
+}
+
+fn acts_as_dir(p: &Path) -> bool {
+    directory_target(p).is_some()
+}
+
+fn single_directory_target(paths: &[PathBuf]) -> Option<PathBuf> {
+    match paths {
+        [path] => directory_target(path),
+        _ => None,
+    }
 }
 
 /// Lowercase extension of `path`, empty when it carries none.
@@ -9381,32 +10431,20 @@ fn push_favorites_ui(window: &MainWindow, state: &AppState) {
     *state.fav_container_ids.borrow_mut() = ids;
 }
 
-/// Resolves the target FOLDER of a favorite `p`: the folder itself, or the parent
-/// of a file. `None` + "not found" toast if absent/inaccessible.
+/// Confirms that a favorite directory is still there, with the "not found"
+/// notice when it is not. Only directories reach this: a favorite pointing at a
+/// file is launched instead of being navigated, and never stands in for the
+/// folder around it.
 fn resolve_fav_dir(window: &MainWindow, p: &Path, lang: Lang) -> Option<PathBuf> {
-    let target = if p.is_dir() {
-        p.to_path_buf()
-    } else if p.is_file() {
-        p.parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| p.to_path_buf())
-    } else {
-        notice(
-            window,
-            i18n::strings_for(lang).fav_toast_missing.clone(),
-            NoticeKind::FavMissing,
-        );
-        return None;
-    };
-    if !target.is_dir() {
-        notice(
-            window,
-            i18n::strings_for(lang).fav_toast_missing.clone(),
-            NoticeKind::FavMissing,
-        );
-        return None;
+    if p.is_dir() {
+        return Some(p.to_path_buf());
     }
-    Some(target)
+    notice(
+        window,
+        i18n::strings_for(lang).fav_toast_missing.clone(),
+        NoticeKind::FavMissing,
+    );
+    None
 }
 
 /// Returns a sidebar place only when Favnyr can navigate it without a
@@ -9430,7 +10468,7 @@ fn open_path_in_tab_at(
     let Some(panel) = usize::try_from(panel).ok() else {
         return false;
     };
-    let default_preview = state.config.borrow().default_preview_mode;
+    let default_display = TabDisplayDefaults::from(&*state.config.borrow());
     {
         let mut panels = state.panels.borrow_mut();
         let Some(target) = panels.get_mut(panel) else {
@@ -9438,10 +10476,42 @@ fn open_path_in_tab_at(
         };
         target
             .tabs
-            .insert_tab_at(gap.max(0) as usize, Tab::new(path.clone(), default_preview));
+            .insert_tab_at(gap.max(0) as usize, Tab::new(path.clone(), default_display));
     }
     *state.active_panel.borrow_mut() = panel;
     load_directory(window, state, &path, false);
+    true
+}
+
+/// Shared navigation drop for directories from views and the sidebar.
+/// An exact tab gap wins over the panel center or its split edges.
+fn open_directory_at_drop(
+    window: &MainWindow,
+    state: &AppState,
+    path: PathBuf,
+    panel: i32,
+    gap: i32,
+    zone: i32,
+) -> bool {
+    if gap >= 0 || zone == 1 {
+        let insert_at = if gap >= 0 { gap } else { i32::MAX };
+        return open_path_in_tab_at(window, state, path, panel, insert_at);
+    }
+    let Ok(panel) = usize::try_from(panel) else {
+        return false;
+    };
+    if !(2..=5).contains(&zone) {
+        return false;
+    }
+    let dir = if zone == 4 || zone == 5 {
+        SplitDir::Column
+    } else {
+        SplitDir::Row
+    };
+    if !split_with_path(state, path, panel, dir, zone == 2 || zone == 4) {
+        return false;
+    }
+    refresh_all_panels(window, state);
     true
 }
 
@@ -9453,31 +10523,80 @@ fn fav_open_path_new_tab(window: &MainWindow, state: &AppState, p: PathBuf) {
     let Some(target) = resolve_fav_dir(window, &p, lang) else {
         return;
     };
-    let default_preview = state.config.borrow().default_preview_mode;
+    let default_display = TabDisplayDefaults::from(&*state.config.borrow());
     let opened = state.with_tabs_mut(|book| {
-        let a = book.open_after_active(target, default_preview);
+        let a = book.open_after_active(target, default_display);
         book.tabs[a].current_path.clone()
     });
     load_directory(window, state, &opened, false);
 }
 
-/// Opens a favorite IN the active tab (overwrites the current view) — LEFT
-/// click in the sidebar (MIDDLE click keeps opening in a new tab).
+/// What acting on a favorite leaf means, decided by what its target is.
+enum FavAction {
+    /// A directory, which the sidebar navigates to.
+    Enter(PathBuf),
+    /// A file, which is launched the way the views launch one.
+    Launch(PathBuf),
+}
+
+/// Classifies a favorite target by what it is. `None` once it is gone, which
+/// includes a path that exists as neither, such as a dangling symlink.
+fn fav_action_for(path: PathBuf) -> Option<FavAction> {
+    if path.is_dir() {
+        return Some(FavAction::Enter(path));
+    }
+    if path.is_file() {
+        return Some(FavAction::Launch(path));
+    }
+    None
+}
+
+/// Resolves a favorite leaf into the action its target calls for. `None` when
+/// the favorite is unknown, or its target gone, the notice already shown.
+fn fav_action(window: &MainWindow, state: &AppState, id: &str) -> Option<FavAction> {
+    let path = PathBuf::from(favorites_now(state).path_of(id)?);
+    let action = fav_action_for(path);
+    if action.is_none() {
+        notice(
+            window,
+            i18n::strings_for(state.config.borrow().language)
+                .fav_toast_missing
+                .clone(),
+            NoticeKind::FavMissing,
+        );
+    }
+    action
+}
+
+/// Launches a favorite file: the Favnyr opener set as the default for its
+/// extension when there is one, otherwise the system's. The same single entry
+/// point the views use, so a file behaves identically wherever it is opened
+/// from.
+fn fav_launch(window: &MainWindow, state: &AppState, path: &PathBuf) {
+    open_one_file_default(window, state, path);
+}
+
+/// Acts on a favorite IN the active tab: a directory replaces what the view
+/// shows, where a file is launched.
+///
+/// Both buttons launch a file. A directory has two destinations worth telling
+/// apart, this view or a new tab, but a file has only itself: offering it twice
+/// would be offering the same thing twice.
 fn fav_open_here(window: &MainWindow, state: &AppState, id: &str) {
-    let lang = state.config.borrow().language;
-    let Some(p) = favorites_now(state).path_of(id).map(PathBuf::from) else {
-        return;
-    };
-    if let Some(target) = resolve_fav_dir(window, &p, lang) {
-        load_directory(window, state, &target, true);
+    match fav_action(window, state, id) {
+        Some(FavAction::Enter(dir)) => load_directory(window, state, &dir, true),
+        Some(FavAction::Launch(file)) => fav_launch(window, state, &file),
+        None => {}
     }
 }
 
-/// Opens a favorite by its `id` in a NEW tab (no-op if container / unknown).
+/// Acts on a favorite in a NEW tab, or launches it when it is a file (no-op if
+/// container / unknown).
 fn fav_open(window: &MainWindow, state: &AppState, id: &str) {
-    let path = favorites_now(state).path_of(id);
-    if let Some(p) = path {
-        fav_open_path_new_tab(window, state, PathBuf::from(p));
+    match fav_action(window, state, id) {
+        Some(FavAction::Enter(dir)) => fav_open_path_new_tab(window, state, dir),
+        Some(FavAction::Launch(file)) => fav_launch(window, state, &file),
+        None => {}
     }
 }
 
@@ -9488,10 +10607,19 @@ fn default_alias(p: &Path) -> String {
         .unwrap_or_else(|| p.display().to_string())
 }
 
-/// Only existing directories may be newly added to Favorites. Loading and
-/// manipulating older favorite entries remains independent from this gate.
+/// Folder colours and notes apply to directories only, so the shared flyout
+/// filters its favorite target through this. Unrelated to what may be added to
+/// Favorites, which accepts files as well.
 fn favorite_path_is_directory(path: &Path) -> bool {
     path.is_dir()
+}
+
+/// Only an existing target may be newly added to Favorites, a file as readily
+/// as a directory. The two behave differently once there, a directory being
+/// navigated where a file is launched, but both are worth bookmarking.
+/// Loading and manipulating older entries stays independent of this gate.
+fn favorite_target_exists(path: &Path) -> bool {
+    path.exists()
 }
 
 /// Saves `paths` into the `container` favorites folder: deduplication
@@ -9506,11 +10634,11 @@ fn add_paths_to_favorite(
     container: &str,
 ) -> bool {
     // EMPTY `container` = root (""): drop on the "no favorites" zone / favorites
-    // dead zone. The model handles "" as the root container; this boundary
-    // keeps regular files out without changing how older entries are loaded.
+    // dead zone. The model handles "" as the root container; the boundary here
+    // only keeps out what no longer exists.
     let paths: Vec<&PathBuf> = paths
         .iter()
-        .filter(|path| favorite_path_is_directory(path))
+        .filter(|path| favorite_target_exists(path))
         .collect();
     if paths.is_empty() {
         return false;
@@ -9554,7 +10682,7 @@ fn add_paths_to_favorite(
 
 /// Opens the "Save as favorite" popup for a set of paths.
 fn open_fav_save_popup(window: &MainWindow, state: &AppState, mut paths: Vec<PathBuf>) {
-    paths.retain(|path| favorite_path_is_directory(path));
+    paths.retain(|path| favorite_target_exists(path));
     if paths.is_empty() {
         return;
     }
@@ -9672,8 +10800,9 @@ fn fav_perform_move(state: &AppState, src_id: &str, target_index: i32, zone: i32
 fn initial_populate_async(window: &MainWindow, state: &AppState) {
     // Jobs frozen on the UI thread (path + view settings of the active tab).
     let active = *state.active_panel.borrow();
-    let mut jobs: Vec<(usize, PathBuf, bool, SortState, GroupMode)> = Vec::new();
+    let mut jobs: Vec<(usize, PathBuf, bool, SortState, GroupMode, bool)> = Vec::new();
     {
+        let folder_state = folder_state_now(state);
         let mut panels = state.panels.borrow_mut();
         for (i, p) in panels.iter_mut().enumerate() {
             p.pending_initial = true;
@@ -9684,6 +10813,7 @@ fn initial_populate_async(window: &MainWindow, state: &AppState) {
                 t.show_hidden,
                 t.sort,
                 t.group_mode,
+                folder_state.is_manual(&t.current_path),
             ));
         }
     }
@@ -9716,8 +10846,8 @@ fn initial_populate_async(window: &MainWindow, state: &AppState) {
     }
     let weak = window.as_weak();
     std::thread::spawn(move || {
-        for (idx, path, show_hidden, sort, group) in jobs {
-            let res = match rfs::list_dir_counted(&path, show_hidden) {
+        for (idx, path, show_hidden, sort, group, manual_order) in jobs {
+            let res = match rfs::list_dir_counted(&path, show_hidden || manual_order) {
                 Ok((mut entries, hidden)) => {
                     rfs::sort(&mut entries, sort.column, sort.order, group);
                     Ok((entries, hidden))
@@ -9755,11 +10885,16 @@ fn apply_initial_listing(
     path: &Path,
     res: std::result::Result<(Vec<Entry>, usize), bool>,
 ) {
-    let (lang, compact_icon_rows) = {
+    let (lang, compact_icon_rows, item_spacing) = {
         let config = state.config.borrow();
-        (config.language, config.compact_icon_rows_in_preview)
+        (
+            config.language,
+            config.compact_icon_rows_in_preview,
+            config.view_item_spacing,
+        )
     };
     let is_active = idx == *state.active_panel.borrow();
+    let manual_order = folder_state_now(state).is_manual(path);
     {
         let mut panels = state.panels.borrow_mut();
         let Some(p) = panels.get_mut(idx) else { return };
@@ -9768,11 +10903,16 @@ fn apply_initial_listing(
             return; // stale delivery (the user has already navigated / listed)
         }
         let big_icon = tab.preview;
+        let grid = tab.item_arrangement == ItemArrangement::Grid;
         let zoom = tab.zoom;
         let group_mode = tab.group_mode;
+        let show_hidden = tab.show_hidden;
         p.pending_initial = false;
         match res {
-            Ok((entries, hidden_count)) => {
+            Ok((mut entries, hidden_count)) => {
+                if manual_order {
+                    apply_manual_order(state, path, &mut entries, show_hidden);
+                }
                 let parent_display = path.display().to_string();
                 let now = now_unix();
                 let rows = entries_to_rows(
@@ -9782,9 +10922,11 @@ fn apply_initial_listing(
                         lang,
                         now_unix: now,
                         big_icon,
+                        grid,
                         zoom,
                         compact_icon_rows,
-                        group_mode,
+                        item_spacing,
+                        group_mode: effective_group_mode(group_mode, manual_order),
                         annotations: &annotations_now(state),
                     },
                 );
@@ -9874,9 +11016,13 @@ fn refresh_all_panels(window: &MainWindow, state: &AppState) {
 /// thumbnails (the caller handles that for the active panel). Leaves the panel
 /// unavailable if the listing still fails.
 fn relist_panel(state: &AppState, i: usize) {
-    let (lang, compact_icon_rows) = {
+    let (lang, compact_icon_rows, item_spacing) = {
         let config = state.config.borrow();
-        (config.language, config.compact_icon_rows_in_preview)
+        (
+            config.language,
+            config.compact_icon_rows_in_preview,
+            config.view_item_spacing,
+        )
     };
     let mut panels = state.panels.borrow_mut();
     let Some(panel) = panels.get_mut(i) else {
@@ -9889,7 +11035,9 @@ fn relist_panel(state: &AppState, i: usize) {
     let sort = panel.tabs.tabs[panel.tabs.active].sort;
     let show_hidden = panel.tabs.tabs[panel.tabs.active].show_hidden;
     let group_mode = panel.tabs.tabs[panel.tabs.active].group_mode;
+    let manual_order = folder_state_now(state).is_manual(&path);
     let big_icon = panel.tabs.tabs[panel.tabs.active].preview;
+    let grid = panel.tabs.tabs[panel.tabs.active].item_arrangement == ItemArrangement::Grid;
     let zoom = panel.tabs.tabs[panel.tabs.active].zoom;
     let ext_on = panel.tabs.tabs[panel.tabs.active].ext_filter_on;
     let ext_txt = panel.tabs.tabs[panel.tabs.active].ext_filter.clone();
@@ -9915,10 +11063,14 @@ fn relist_panel(state: &AppState, i: usize) {
     } else {
         None
     };
-    match rfs::list_dir_counted(&path, show_hidden) {
+    match rfs::list_dir_counted(&path, show_hidden || manual_order) {
         Ok((mut entries, hidden_count)) => {
             rfs::sort(&mut entries, sort.column, sort.order, group_mode);
-            apply_ext_filter(&mut entries, ext_on, &ext_txt);
+            if manual_order {
+                apply_manual_order(state, &path, &mut entries, show_hidden);
+            } else {
+                apply_ext_filter(&mut entries, ext_on, &ext_txt);
+            }
             let parent_display = path.display().to_string();
             let now = now_unix();
             let mut rows = entries_to_rows(
@@ -9928,9 +11080,11 @@ fn relist_panel(state: &AppState, i: usize) {
                     lang,
                     now_unix: now,
                     big_icon,
+                    grid,
                     zoom,
                     compact_icon_rows,
-                    group_mode,
+                    item_spacing,
+                    group_mode: effective_group_mode(group_mode, manual_order),
                     annotations: &annotations_now(state),
                 },
             );
@@ -10149,7 +11303,7 @@ fn take_view(state: &AppState, idx: usize) -> Option<Panel> {
     if panels.len() <= 1 || idx >= panels.len() {
         return None;
     }
-    if !state.layout.borrow_mut().remove_panel(idx) {
+    if !state.layout.borrow_mut().remove_view(idx) {
         return None;
     }
     let taken = panels.remove(idx);
@@ -10192,26 +11346,21 @@ fn dropped_outside(window: &MainWindow, x: f32, y: f32) -> bool {
 /// Refused for the only view of a window, which would empty itself just to
 /// reopen identical — the same guard the tab tear-off already carries.
 fn tear_off_view(state: &AppState, src: usize, at: (i32, i32)) -> bool {
-    let (dirs, mode) = {
+    let (dirs, saved) = {
         let panels = state.panels.borrow();
         if src >= panels.len() || panels.len() <= 1 {
             return false;
         }
         let view = &panels[src];
-        let active = view.tabs.active.min(view.tabs.tabs.len().saturating_sub(1));
-        // The active tab FIRST: it is the one the new window opens on.
-        let mut dirs = vec![view.tabs.tabs[active].current_path.clone()];
-        dirs.extend(
-            view.tabs
-                .tabs
-                .iter()
-                .enumerate()
-                .filter(|(i, _)| *i != active)
-                .map(|(_, tab)| tab.current_path.clone()),
-        );
-        (dirs, view.tab_bar_mode)
+        let dirs: Vec<_> = view
+            .tabs
+            .tabs
+            .iter()
+            .map(|tab| tab.current_path.clone())
+            .collect();
+        (dirs, panel_to_state(view))
     };
-    if actions::spawn_detached_view(&dirs, at, mode).is_err() {
+    if actions::spawn_detached_view(&saved, &dirs, Some(at)).is_err() {
         return false;
     }
     // Taken, not "closed": the view did not disappear, it moved. Offering to
@@ -10227,7 +11376,7 @@ fn tear_off_view(state: &AppState, src: usize, at: (i32, i32)) -> bool {
 /// the tab isn't lost. If the source panel becomes empty, it is closed (like
 /// a cross-view move). Returns `true` if the tab was torn off.
 fn tear_off_tab(state: &AppState, src: usize, from: usize, at: Option<(i32, i32)>) -> bool {
-    let (path, mode) = {
+    let (path, saved) = {
         let panels = state.panels.borrow();
         if src >= panels.len() || from >= panels[src].tabs.tabs.len() {
             return false;
@@ -10236,14 +11385,14 @@ fn tear_off_tab(state: &AppState, src: usize, from: usize, at: Option<(i32, i32)
         if panels.len() == 1 && panels[src].tabs.tabs.len() == 1 {
             return false;
         }
-        // The new instance inherits the tab bar position of the
-        // source view — the chrome follows the torn-off tab.
-        (
-            panels[src].tabs.tabs[from].current_path.clone(),
-            panels[src].tab_bar_mode,
-        )
+        let view = &panels[src];
+        let tab = &view.tabs.tabs[from];
+        let mut saved = panel_to_state(view);
+        saved.tabs = vec![tab_to_state(tab)];
+        saved.active_tab = 0;
+        (tab.current_path.clone(), saved)
     };
-    if actions::spawn_new_instance(&path, at, mode).is_err() {
+    if actions::spawn_detached_view(&saved, &[path], at).is_err() {
         return false;
     }
     // The removal and pruning shared with the cross-instance transfer also
@@ -10271,11 +11420,11 @@ pub fn suppress_workspace_persist() -> bool {
 /// file name → unambiguous).
 fn serialize_tab(tab: &Tab, drop: (i32, i32)) -> String {
     format!(
-        // The zoom is APPENDED, after the drop point, so the two directions
-        // stay compatible between instances of different versions: an older
-        // receiver reads the fields it knows and ignores the extra one, a
-        // newer receiver finds nothing at that index and falls back.
-        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        // Optional fields are appended after the drop point, so the two
+        // directions stay compatible between instances of different versions:
+        // an older receiver ignores fields it does not know, while a newer
+        // receiver falls back when one is absent.
+        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         tab.current_path.display(),
         tab.sort.column.code(),
         u8::from(matches!(tab.sort.order, SortOrder::Asc)),
@@ -10285,6 +11434,10 @@ fn serialize_tab(tab: &Tab, drop: (i32, i32)) -> String {
         drop.0,
         drop.1,
         tab.zoom,
+        tab.item_arrangement.code(),
+        tab.grid_zoom
+            .map(|zoom| zoom.to_string())
+            .unwrap_or_default(),
     )
 }
 
@@ -10303,11 +11456,19 @@ fn deserialize_tab(payload: &str) -> Option<(Tab, Option<(i32, i32)>)> {
     };
     let tab = Tab::restored(
         PathBuf::from(p[0]),
-        SortState { column, order },
-        p[3] == "1",
-        p.get(8).and_then(|z| z.parse().ok()),
-        p[4] == "1",
-        GroupMode::from_code(p[5]).unwrap_or(GroupMode::FoldersFirst),
+        &TabState {
+            path: p[0].into(),
+            sort_column: column,
+            sort_order: order,
+            preview: p[3] == "1",
+            zoom: p.get(8).and_then(|z| z.parse().ok()),
+            show_hidden: p[4] == "1",
+            group_mode: GroupMode::from_code(p[5]).unwrap_or(GroupMode::FoldersFirst),
+            item_arrangement: p
+                .get(9)
+                .map_or(ItemArrangement::List, |s| ItemArrangement::from_code(s)),
+            grid_zoom: p.get(10).and_then(|z| z.parse().ok()),
+        },
     );
     let drop = match (p.get(6), p.get(7)) {
         (Some(x), Some(y)) => x.parse().ok().zip(y.parse().ok()),
@@ -10336,7 +11497,7 @@ fn remove_tab_pruning(state: &AppState, src: usize, from: usize) -> bool {
             b.active = b.tabs.len() - 1;
         }
     }
-    if panels[src].tabs.tabs.is_empty() && state.layout.borrow_mut().remove_panel(src) {
+    if panels[src].tabs.tabs.is_empty() && state.layout.borrow_mut().remove_view(src) {
         panels.remove(src);
         // Re-indexing the active panel (same rule as panel closing):
         // clamp if the active one pointed past the end, decrement if it was AFTER `src`
@@ -10526,14 +11687,21 @@ fn clear_external_hover(window: &MainWindow) {
 /// logical frame of reference as the internal Slint drag, so we can reuse without divergence
 /// the panel/row hit-test, the hover, and the action ghost.
 #[cfg(windows)]
-fn set_external_file_hover(window: &MainWindow, screen_x: i32, screen_y: i32, copy: bool) {
+fn set_external_file_hover(
+    window: &MainWindow,
+    screen_x: i32,
+    screen_y: i32,
+    action: crate::file_drag::DropAction,
+) {
     let (wx, wy) = screen_to_window_logical(window, screen_x, screen_y);
     window.set_file_drag_source_panel(-1);
     // The OLE hover message carries no paths, so it cannot prove that the
     // payload contains a directory eligible for Favorites.
-    window.set_file_drag_selection_has_dir(false);
+    window.set_file_drag_selection_can_favorite(false);
+    window.set_file_drag_can_open(false);
+    window.set_folder_open_drag_active(false);
     window.set_file_drag_target_invalid(false);
-    window.set_file_drag_copy(copy);
+    window.set_file_drag_action(action as i32);
     window.set_file_drag_abs_x(wx);
     window.set_file_drag_abs_y(wy);
     window.set_file_drag_active(true);
@@ -10543,19 +11711,19 @@ fn set_external_file_hover(window: &MainWindow, screen_x: i32, screen_y: i32, co
 fn clear_external_file_hover(window: &MainWindow) {
     if window.get_file_drag_active() && window.get_file_drag_source_panel() < 0 {
         window.set_file_drag_active(false);
-        window.set_file_drag_selection_has_dir(false);
+        window.set_file_drag_selection_can_favorite(false);
         window.set_file_drag_target_panel(-1);
         window.set_file_drag_target_row(-1);
         window.set_file_drag_target_folder(false);
         window.set_file_drag_target_exec(false);
         window.set_file_drag_target_invalid(false);
-        window.set_file_drag_copy(false);
+        window.set_file_drag_action(-1);
     }
 }
 
 /// Finishes an OLE drop received by Favnyr. The final target is re-read after
-/// replaying the authoritative point: executable → ShellExecute, Ctrl → direct copy,
-/// otherwise the same Move/Copy/Link menu as for a drag between views.
+/// replaying the authoritative point: executables use ShellExecute, Ctrl copies,
+/// Shift moves, and other drops use the Move/Copy/Link menu shared between views.
 #[cfg(windows)]
 fn on_external_file_drop(
     window: &MainWindow,
@@ -10563,14 +11731,14 @@ fn on_external_file_drop(
     paths: Vec<PathBuf>,
     screen_x: i32,
     screen_y: i32,
-    copy: bool,
+    action: crate::file_drag::DropAction,
     staging: Option<IncomingDropStaging>,
 ) {
     if paths.is_empty() {
         clear_external_file_hover(window);
         return;
     }
-    set_external_file_hover(window, screen_x, screen_y, copy);
+    set_external_file_hover(window, screen_x, screen_y, action);
     let target_panel = window.get_file_drag_target_panel();
     if target_panel < 0 {
         clear_external_file_hover(window);
@@ -10603,6 +11771,7 @@ fn on_external_file_drop(
             dest,
             paths,
             Some(staging.cleanup),
+            None,
         );
         return;
     }
@@ -10621,8 +11790,8 @@ fn on_external_file_drop(
     window.set_file_drop_menu_open(false);
     if window.invoke_file_drop_onto_exec() {
         // The callback consumed `external_drop_paths`.
-    } else if copy {
-        window.invoke_file_drop_action(1);
+    } else if action != crate::file_drag::DropAction::Choose {
+        window.invoke_file_drop_action(action as i32);
     } else {
         window.set_file_drop_menu_x(wx);
         window.set_file_drop_menu_y(wy);
@@ -10714,7 +11883,7 @@ fn move_tab_between(
     }
 
     // Source emptied (it was its last tab) → close the source panel.
-    if src_empty && state.layout.borrow_mut().remove_panel(src) {
+    if src_empty && state.layout.borrow_mut().remove_view(src) {
         panels.remove(src);
         if src < target {
             target -= 1;
@@ -10799,7 +11968,7 @@ fn split_with_tab(
 
     // 4. Source emptied → remove the source panel (merge).
     let mut final_active = new_idx;
-    if source_empty && state.layout.borrow_mut().remove_panel(source_panel) {
+    if source_empty && state.layout.borrow_mut().remove_view(source_panel) {
         panels.remove(source_panel);
         if source_panel < final_active {
             final_active -= 1;
@@ -10810,7 +11979,7 @@ fn split_with_tab(
     true
 }
 
-/// Splits a target view with a newly opened directory from the sidebar. Unlike
+/// Splits a target view with a newly opened directory. Unlike
 /// `split_with_tab`, no source view is consumed: the panel count always grows
 /// by one, and the new view inherits the target chrome.
 fn split_with_path(
@@ -10820,7 +11989,7 @@ fn split_with_path(
     dir: SplitDir,
     new_first: bool,
 ) -> bool {
-    let default_preview = state.config.borrow().default_preview_mode;
+    let default_display = TabDisplayDefaults::from(&*state.config.borrow());
     let mut panels = state.panels.borrow_mut();
     if target_panel >= panels.len() || panels.len() >= MAX_PANELS {
         return false;
@@ -10831,7 +12000,7 @@ fn split_with_path(
     let inherited_mode = panels[target_panel].tab_bar_mode;
     let inherited_vbar = panels[target_panel].vbar_user_w;
     let panel = Panel::from_tab(
-        Tab::new(path, default_preview),
+        Tab::new(path, default_display),
         inherited_cols,
         inherited_mode,
         inherited_vbar,
@@ -11121,7 +12290,7 @@ fn advance_paste(window: &MainWindow, state: &AppState) {
             rename_only: bool,
             is_dir: bool,
         },
-        Execute(PasteJob),
+        Execute(Box<PasteJob>),
     }
     let step = {
         let mut guard = state.paste_job.borrow_mut();
@@ -11172,7 +12341,7 @@ fn advance_paste(window: &MainWindow, state: &AppState) {
                 is_dir,
             }
         } else {
-            Step::Execute(guard.take().unwrap())
+            Step::Execute(Box::new(guard.take().unwrap()))
         }
     };
     match step {
@@ -11194,7 +12363,7 @@ fn advance_paste(window: &MainWindow, state: &AppState) {
         }
         Step::Execute(job) => {
             window.set_paste_conflict_open(false);
-            execute_paste(window, state, job);
+            execute_paste(window, state, *job);
         }
     }
 }
@@ -11208,8 +12377,9 @@ fn begin_paste(
     op: ClipOp,
     dst_dir: PathBuf,
     sources: Vec<PathBuf>,
+    manual_insertion: Option<ManualOrderInsertion>,
 ) {
-    begin_paste_with_cleanup(window, state, op, dst_dir, sources, None);
+    begin_paste_with_cleanup(window, state, op, dst_dir, sources, None, manual_insertion);
 }
 
 fn begin_paste_with_cleanup(
@@ -11219,6 +12389,7 @@ fn begin_paste_with_cleanup(
     dst_dir: PathBuf,
     sources: Vec<PathBuf>,
     transient_cleanup: Option<TransientDropGuard>,
+    manual_insertion: Option<ManualOrderInsertion>,
 ) {
     if dst_dir.as_os_str().is_empty() || sources.is_empty() {
         return;
@@ -11243,13 +12414,16 @@ fn begin_paste_with_cleanup(
         );
         return;
     }
+    let source_order = sources.clone();
     let mut job = PasteJob {
         op,
         dst_dir: dst_dir.clone(),
+        source_order,
         pending: std::collections::VecDeque::new(),
         resolved: Vec::new(),
         current: None,
         transient_cleanup,
+        manual_insertion,
     };
     for src in sources {
         // Never write an item into itself or into one of its own descendants.
@@ -11288,12 +12462,13 @@ fn begin_paste_with_cleanup(
 
 /// Executes the resolved copies/moves (targets guaranteed free) on a
 /// background thread with a progress bar.
-fn execute_paste(window: &MainWindow, state: &AppState, job: PasteJob) {
+fn execute_paste(window: &MainWindow, state: &AppState, mut job: PasteJob) {
     if job.resolved.is_empty() {
         // Everything was skipped/cancelled: nothing to execute, just refresh.
         refresh_listing(window, state, &job.dst_dir);
         return;
     }
+    sort_resolved_by_source_order(&mut job.resolved, &job.source_order);
     let lang = state.snapshot_config().language;
     // Item to highlight once the copy/move finishes: the
     // 1st target (the order of `resolved` follows the original selection's order).
@@ -11311,6 +12486,7 @@ fn execute_paste(window: &MainWindow, state: &AppState, job: PasteJob) {
         lang,
         pending_focus,
         job.transient_cleanup,
+        job.manual_insertion,
     );
     // The cut is consumed once the operation is under way, never before: its
     // paths are what the operation moves, and dropping them early would lose
@@ -11320,6 +12496,23 @@ fn execute_paste(window: &MainWindow, state: &AppState, job: PasteJob) {
         clip.paths.clear();
         clip.op = None;
     }
+}
+
+fn sort_resolved_by_source_order(
+    resolved: &mut [(PathBuf, PathBuf, bool)],
+    source_order: &[PathBuf],
+) {
+    let ranks: HashMap<PathBuf, usize> = source_order
+        .iter()
+        .enumerate()
+        .map(|(index, source)| (reservation_key(source), index))
+        .collect();
+    resolved.sort_by_key(|(source, _, _)| {
+        ranks
+            .get(&reservation_key(source))
+            .copied()
+            .unwrap_or(usize::MAX)
+    });
 }
 
 // ---------- Long background operations (progress bar) ----------
@@ -11338,6 +12531,8 @@ enum Heavy {
     Move(Vec<(PathBuf, PathBuf, bool)>),
     Trash(Vec<PathBuf>),
     PermanentDelete(Vec<PathBuf>),
+    #[cfg(windows)]
+    NativeMoveCleanup(Vec<crate::winddrag::NativeMoveSource>),
 }
 
 /// i18n labels captured (owned → Send) for the thread.
@@ -11349,6 +12544,16 @@ struct OpLabels {
     cancelled: String,
     errors: String,
     items: String,
+}
+
+struct HeavyRuntime {
+    op_id: i32,
+    weak: slint::Weak<MainWindow>,
+    cancel: Arc<AtomicBool>,
+    lang: Lang,
+    labels: OpLabels,
+    op_deliveries: Arc<Mutex<VecDeque<OpDelivery>>>,
+    completed_targets: Arc<Mutex<Vec<PathBuf>>>,
 }
 
 /// Toasts drawn in the stack; the rest are summarised by the "+N others" chip.
@@ -11511,6 +12716,7 @@ fn start_heavy_op(
     lang: Lang,
     pending_focus: Option<PathBuf>,
     transient_cleanup: Option<TransientDropGuard>,
+    manual_insertion: Option<ManualOrderInsertion>,
 ) {
     // Destinations are claimed for the whole run: a paste started meanwhile
     // must see these names as taken even though nothing exists on disk yet.
@@ -11520,6 +12726,8 @@ fn start_heavy_op(
             items.iter().map(|(_, dst, _)| dst.clone()).collect()
         }
         Heavy::Trash(_) | Heavy::PermanentDelete(_) => Vec::new(),
+        #[cfg(windows)]
+        Heavy::NativeMoveCleanup(_) => Vec::new(),
     };
     let thumbnail_invalidations = match &work {
         Heavy::Copy(items) => items.iter().map(|(_, dst, _)| dst.clone()).collect(),
@@ -11528,14 +12736,21 @@ fn start_heavy_op(
             .flat_map(|(src, dst, _)| [src.clone(), dst.clone()])
             .collect(),
         Heavy::Trash(paths) | Heavy::PermanentDelete(paths) => paths.clone(),
+        #[cfg(windows)]
+        Heavy::NativeMoveCleanup(sources) => {
+            sources.iter().map(|source| source.path.clone()).collect()
+        }
     };
     let cancel = Arc::new(AtomicBool::new(false));
+    let completed_targets = Arc::new(Mutex::new(Vec::new()));
     let op_id = state.ops.register(OpHandle {
         cancel: Some(cancel.clone()),
         pending_focus,
         targets,
         thumbnail_invalidations,
         transient_cleanup,
+        manual_insertion,
+        completed_targets: completed_targets.clone(),
     });
 
     let s = i18n::strings_for(lang);
@@ -11544,6 +12759,8 @@ fn start_heavy_op(
         Heavy::Move(_) => s.op_moving,
         Heavy::Trash(_) => s.op_deleting,
         Heavy::PermanentDelete(_) => s.op_deleting_permanently,
+        #[cfg(windows)]
+        Heavy::NativeMoveCleanup(_) => s.op_moving,
     }
     .to_string();
     let labels = OpLabels {
@@ -11561,42 +12778,67 @@ fn start_heavy_op(
 
     let weak = window.as_weak();
     let op_deliveries = state.op_deliveries.clone();
-    std::thread::spawn(move || run_heavy(op_id, work, weak, cancel, lang, labels, op_deliveries));
+    std::thread::spawn(move || {
+        run_heavy(
+            work,
+            HeavyRuntime {
+                op_id,
+                weak,
+                cancel,
+                lang,
+                labels,
+                op_deliveries,
+                completed_targets,
+            },
+        )
+    });
 }
 
-fn run_heavy(
-    op_id: i32,
-    work: Heavy,
-    weak: slint::Weak<MainWindow>,
-    cancel: Arc<AtomicBool>,
-    lang: Lang,
-    labels: OpLabels,
-    op_deliveries: Arc<std::sync::Mutex<VecDeque<OpDelivery>>>,
-) {
+fn run_heavy(work: Heavy, runtime: HeavyRuntime) {
+    let HeavyRuntime {
+        op_id,
+        weak,
+        cancel,
+        lang,
+        labels,
+        op_deliveries,
+        completed_targets,
+    } = runtime;
     let start = Instant::now();
     let shown = || start.elapsed() >= Duration::from_millis(400);
     let is_cancelled = || cancel.load(Ordering::Relaxed);
     let mut last = Instant::now() - Duration::from_millis(500);
     let mut had_error = false;
     let mut cancelled = false;
-    let mut lock_notice: Option<String> = None;
-    // First entry the copy had to step over, kept with its system error. Only
+    let mut failure_notice: Option<String> = None;
+    // First entry the copy had to step over, kept with its failure category. Only
     // the first: a toast cannot list a folder's worth of refusals, and the file
     // that blocked first is the one the user has to act on.
-    let mut first_skipped: Option<(PathBuf, String)> = None;
+    let mut first_skipped: Option<(PathBuf, Option<std::io::ErrorKind>)> = None;
 
+    #[cfg(windows)]
+    let native_sources = match &work {
+        Heavy::NativeMoveCleanup(sources) => sources.clone(),
+        _ => Vec::new(),
+    };
     // Breaks down into (kind, copy/move items, delete paths).
-    // kind 2 = trash; kind 3 = explicit permanent deletion.
+    // kind 2 = trash; kind 3 = explicit deletion; kind 4 = native move cleanup.
     let (kind, items, delete_paths): (u8, Vec<(PathBuf, PathBuf, bool)>, Vec<PathBuf>) = match work
     {
         Heavy::Copy(v) => (0, v, Vec::new()),
         Heavy::Move(v) => (1, v, Vec::new()),
         Heavy::Trash(v) => (2, Vec::new(), v),
         Heavy::PermanentDelete(v) => (3, Vec::new(), v),
+        #[cfg(windows)]
+        Heavy::NativeMoveCleanup(sources) => (
+            4,
+            Vec::new(),
+            sources.into_iter().map(|source| source.path).collect(),
+        ),
     };
 
     if kind >= 2 {
-        // Trash / permanent deletion — progress in items.
+        // Trash, permanent deletion and native move cleanup progress in items.
         let total = delete_paths.len();
         let mut done = 0usize;
         for p in &delete_paths {
@@ -11604,7 +12846,14 @@ fn run_heavy(
                 cancelled = true;
                 break;
             }
-            let result = if kind == 3 {
+            let result = if kind >= 3 {
+                #[cfg(windows)]
+                let outcome = if kind == 4 {
+                    native_sources[done].finish_move()
+                } else {
+                    ops::permanent_delete(p)
+                };
+                #[cfg(not(windows))]
                 let outcome = ops::permanent_delete(p);
                 if outcome.is_ok() {
                     deliver_op_event(
@@ -11635,12 +12884,21 @@ fn run_heavy(
             };
             if let Err(err) = result {
                 had_error = true;
-                error!(error = %err, path = %p.display(), permanent = kind == 3, "delete failed");
+                error!(error = %err, path = %p.display(), permanent = kind >= 3, "delete failed");
                 // Diagnostic triggered ONLY after the failure: no probe,
                 // enumeration, or Restart Manager session on the normal path.
                 // A single toast is enough even for a multi-selection.
-                if lock_notice.is_none() {
-                    lock_notice = locked_item_notice(p, lang);
+                if failure_notice.is_none() {
+                    failure_notice = Some(if kind == 4 {
+                        i18n::file_operation_failed(
+                            lang,
+                            "native_move_failed",
+                            &path_notice_name(p),
+                            &i18n::file_error_reason(lang, file_error_kind(&err)),
+                        )
+                    } else {
+                        delete_failure_notice(p, lang, file_error_kind(&err))
+                    });
                 }
             }
             done += 1;
@@ -11701,6 +12959,8 @@ fn run_heavy(
         }
 
         let mut done: u64 = 0;
+        let transfer_start = Instant::now();
+        let mut transfer = TransferMeter::new();
         if !cancelled {
             for (i, (src, target, overwrite)) in items.iter().enumerate() {
                 if is_cancelled() {
@@ -11717,15 +12977,35 @@ fn run_heavy(
                     {
                         had_error = true;
                         error!(error = %err, target = %target.display(), "overwrite: remove existing failed");
+                        if failure_notice.is_none() {
+                            failure_notice =
+                                Some(delete_failure_notice(target, lang, file_error_kind(&err)));
+                        }
                         continue;
                     }
                     deliver_op_event(&weak, &op_deliveries, OpDelivery::Replaced(target.clone()));
                 }
                 let mut on_bytes = |delta: u64| {
                     done += delta;
+                    transfer.add_bytes(delta);
                     if last.elapsed() >= Duration::from_millis(80) {
                         last = Instant::now();
                         let pct = (done.min(total) * 100).checked_div(total).unwrap_or(0) as u32;
+                        let mut detail = format!(
+                            "{} / {}",
+                            rfs::format_size(done, i18n::size_units(lang)),
+                            rfs::format_size(total, i18n::size_units(lang))
+                        );
+                        if let Some(estimate) =
+                            transfer.estimate(transfer_start.elapsed(), total.saturating_sub(done))
+                        {
+                            detail.push('\n');
+                            detail.push_str(&i18n::transfer_status(
+                                lang,
+                                estimate.bytes_per_second,
+                                estimate.remaining_seconds,
+                            ));
+                        }
                         push_op(
                             &weak,
                             op_id,
@@ -11737,11 +13017,7 @@ fn run_heavy(
                                 0.0
                             },
                             labels.running.clone(),
-                            format!(
-                                "{} / {}",
-                                rfs::format_size(done, i18n::size_units(lang)),
-                                rfs::format_size(total, i18n::size_units(lang))
-                            ),
+                            detail,
                             format!("{pct} %"),
                         );
                     }
@@ -11751,6 +13027,7 @@ fn run_heavy(
                     match std::fs::rename(src, target) {
                         Ok(()) => {
                             done += sizes.get(i).copied().unwrap_or(0);
+                            record_completed_target(&completed_targets, target);
                             deliver_op_event(
                                 &weak,
                                 &op_deliveries,
@@ -11774,7 +13051,8 @@ fn run_heavy(
                                         "move: entry skipped"
                                     );
                                     if first_skipped.is_none() {
-                                        first_skipped = Some((path.to_path_buf(), err.to_string()));
+                                        first_skipped =
+                                            Some((path.to_path_buf(), file_error_kind(err)));
                                     }
                                 },
                                 &is_cancelled,
@@ -11786,6 +13064,7 @@ fn run_heavy(
                                 // copied. The move then stops at a copy, which
                                 // the final message says.
                                 Ok(ops::OpStatus::Done) if skipped_here > 0 => {
+                                    record_completed_target(&completed_targets, target);
                                     had_error = true;
                                     // The source is deliberately kept, so the
                                     // item now exists in both places. Saying so
@@ -11793,17 +13072,18 @@ fn run_heavy(
                                     // would let the user believe the rest of the
                                     // move went through, when nothing moved at
                                     // all — the target only holds a copy.
-                                    if lock_notice.is_none()
+                                    if failure_notice.is_none()
                                         && let Some((path, error)) = first_skipped.as_ref()
                                     {
-                                        lock_notice = Some(i18n::move_source_kept(
+                                        failure_notice = Some(i18n::move_source_kept(
                                             lang,
                                             &path_notice_name(src),
-                                            &lock_reason(path, lang, error),
+                                            &lock_reason(path, lang, *error),
                                         ));
                                     }
                                 }
                                 Ok(ops::OpStatus::Done) => {
+                                    record_completed_target(&completed_targets, target);
                                     if let Err(err) = ops::permanent_delete(src) {
                                         // The copy landed but the original stayed
                                         // behind: the move degenerated into a copy,
@@ -11816,11 +13096,11 @@ fn run_heavy(
                                             src = %src.display(),
                                             "move: delete source failed"
                                         );
-                                        if lock_notice.is_none() {
-                                            lock_notice = Some(move_source_kept_notice(
+                                        if failure_notice.is_none() {
+                                            failure_notice = Some(move_source_kept_notice(
                                                 src,
                                                 lang,
-                                                &err.to_string(),
+                                                file_error_kind(&err),
                                             ));
                                         }
                                     } else {
@@ -11840,7 +13120,7 @@ fn run_heavy(
                                     had_error = true;
                                     error!(error = %err, src = %src.display(), "move failed");
                                     if first_skipped.is_none() {
-                                        first_skipped = Some((src.clone(), err.to_string()));
+                                        first_skipped = Some((src.clone(), file_error_kind(&err)));
                                     }
                                 }
                             }
@@ -11861,19 +13141,21 @@ fn run_heavy(
                                 "copy: entry skipped"
                             );
                             if first_skipped.is_none() {
-                                first_skipped = Some((path.to_path_buf(), err.to_string()));
+                                first_skipped = Some((path.to_path_buf(), file_error_kind(err)));
                             }
                         },
                         &is_cancelled,
                     );
                     match copied {
                         Ok(ops::OpStatus::Cancelled) => cancelled = true,
-                        Ok(ops::OpStatus::Done) => {}
+                        Ok(ops::OpStatus::Done) => {
+                            record_completed_target(&completed_targets, target);
+                        }
                         Err(err) => {
                             had_error = true;
                             error!(error = %err, src = %src.display(), "copy failed");
                             if first_skipped.is_none() {
-                                first_skipped = Some((src.clone(), err.to_string()));
+                                first_skipped = Some((src.clone(), file_error_kind(&err)));
                             }
                         }
                     }
@@ -11894,10 +13176,10 @@ fn run_heavy(
     // and only this says what did not make it through. A notice already set
     // (a move that kept its source) describes the same failure more precisely,
     // so it keeps the floor.
-    if lock_notice.is_none()
+    if failure_notice.is_none()
         && let Some((path, error)) = first_skipped.as_ref()
     {
-        lock_notice = Some(skipped_entry_notice(path, lang, error));
+        failure_notice = Some(skipped_entry_notice(path, lang, *error));
     }
 
     // Final state.
@@ -11935,7 +13217,7 @@ fn run_heavy(
                 // Finished below the appearance threshold: make sure no row lingers.
                 w.invoke_op_dismiss(op_id);
             }
-            if let Some(message) = lock_notice {
+            if let Some(message) = failure_notice {
                 show_notice(&w, message);
             }
             // Releases the operation, which then schedules the re-listing of ALL
@@ -11944,6 +13226,13 @@ fn run_heavy(
             w.invoke_op_finished(op_id);
         }
     });
+}
+
+fn record_completed_target(completed: &Arc<Mutex<Vec<PathBuf>>>, target: &Path) {
+    completed
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .push(target.to_path_buf());
 }
 
 /// Connection target for the network credentials prompt: a
@@ -11988,23 +13277,26 @@ fn request_async_panel_listing(
 ) {
     let path = path.to_path_buf();
     let lang = state.snapshot_config().language;
+    let manual_order = folder_state_now(state).is_manual(&path);
 
     let (
         same_dir,
         show_hidden,
         sort,
         group,
-        big_icon,
+        manual_order,
         ext_on,
         ext_text,
         preserved_selected,
         preserved_anchor,
     ) = {
-        let panels = state.panels.borrow();
-        let Some(panel) = panels.get(panel_idx) else {
+        let mut panels = state.panels.borrow_mut();
+        let Some(panel) = panels.get_mut(panel_idx) else {
             return;
         };
-        let tab = &panel.tabs.tabs[panel.tabs.active];
+        let active = panel.tabs.active;
+        let tab = &mut panel.tabs.tabs[active];
+        tab.current_path = path.clone();
         let same_dir = panel.displayed_path == path;
         let model = panel.rows_model.clone();
         let selected = if same_dir {
@@ -12028,7 +13320,7 @@ fn request_async_panel_listing(
             tab.show_hidden,
             tab.sort,
             tab.group_mode,
-            tab.preview,
+            manual_order,
             tab.ext_filter_on,
             tab.ext_filter.clone(),
             selected,
@@ -12067,18 +13359,18 @@ fn request_async_panel_listing(
     let queue = state.async_listings.clone();
     let weak = window.as_weak();
     std::thread::spawn(move || {
-        let mut listing = rfs::list_dir_counted(&path, show_hidden);
+        let mut listing = rfs::list_dir_counted(&path, show_hidden || manual_order);
         if listing_denied(&listing)
             && rfs::is_unc_path(&path)
             && favnyr_core::places::net_connect_prompt(&net_connect_target(&path))
         {
-            listing = rfs::list_dir_counted(&path, show_hidden);
+            listing = rfs::list_dir_counted(&path, show_hidden || manual_order);
         }
         let result = match listing {
             Ok((mut entries, hidden)) => {
                 rfs::sort(&mut entries, sort.column, sort.order, group);
-                apply_name_filter(&mut entries, &name_filter);
-                if !ext_text.is_empty() || ext_on {
+                if !manual_order {
+                    apply_name_filter(&mut entries, &name_filter);
                     apply_ext_filter(&mut entries, ext_on, &ext_text);
                 }
                 Ok((entries, hidden))
@@ -12099,7 +13391,6 @@ fn request_async_panel_listing(
             path,
             result,
             lang,
-            big_icon,
             preserved_selected,
             preserved_anchor,
         };
@@ -12119,7 +13410,14 @@ fn request_async_panel_listing(
 
 fn apply_async_listing(window: &MainWindow, state: &AppState, delivery: AsyncListingDelivery) {
     let is_active = delivery.panel == *state.active_panel.borrow();
-    let compact_icon_rows = state.config.borrow().compact_icon_rows_in_preview;
+    let (compact_icon_rows, item_spacing) = {
+        let config = state.config.borrow();
+        (
+            config.compact_icon_rows_in_preview,
+            config.view_item_spacing,
+        )
+    };
+    let manual_order = folder_state_now(state).is_manual(&delivery.path);
     let mut denied_notice = false;
     let mut count = 0usize;
     let pending_focus = {
@@ -12133,11 +13431,15 @@ fn apply_async_listing(window: &MainWindow, state: &AppState, delivery: AsyncLis
         }
         let zoom = panel.tabs.tabs[active].zoom;
         let group_mode = panel.tabs.tabs[active].group_mode;
+        let show_hidden = panel.tabs.tabs[active].show_hidden;
         panel.pending_listing = false;
         let pending_select = panel.pending_select.take();
         let pending_focus = pending_select.clone();
         match delivery.result {
-            Ok((entries, hidden_count)) => {
+            Ok((mut entries, hidden_count)) => {
+                if manual_order {
+                    apply_manual_order(state, &delivery.path, &mut entries, show_hidden);
+                }
                 let parent_display = delivery.path.display().to_string();
                 let now = now_unix();
                 let mut rows = entries_to_rows(
@@ -12146,10 +13448,12 @@ fn apply_async_listing(window: &MainWindow, state: &AppState, delivery: AsyncLis
                     &RowContext {
                         lang: delivery.lang,
                         now_unix: now,
-                        big_icon: delivery.big_icon,
+                        big_icon: panel.tabs.tabs[active].preview,
+                        grid: panel.tabs.tabs[active].item_arrangement == ItemArrangement::Grid,
                         zoom,
                         compact_icon_rows,
-                        group_mode,
+                        item_spacing,
+                        group_mode: effective_group_mode(group_mode, manual_order),
                         annotations: &annotations_now(state),
                     },
                 );
@@ -12250,6 +13554,8 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
         panels[active_idx].pending_initial = false;
         panels[active_idx].pending_listing = false;
         panels[active_idx].pending_select = None;
+        let active = panels[active_idx].tabs.active;
+        panels[active_idx].tabs.tabs[active].current_path = path.to_path_buf();
         let same_dir = panels[active_idx].displayed_path == path;
         if !same_dir {
             panels[active_idx].reset_rows_viewport();
@@ -12279,13 +13585,18 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
         (Vec::new(), None)
     };
 
-    let show_hidden = state.with_tabs(|book| book.tabs[book.active].show_hidden);
+    let show_hidden = state.with_tabs(|book| {
+        let tab = &book.tabs[book.active];
+        tab.show_hidden
+    });
+    let manual_order = folder_state_now(state).is_manual(path);
     // Local listing only. `refresh_listing` routes every network path to the
     // asynchronous version, which is where the system credentials prompt and
     // its retry live — a copy of them here could never run, since the path is
     // local by construction, and a blocking prompt has no business on this
     // thread anyway.
-    let (mut entries, hidden_count) = match rfs::list_dir_counted(path, show_hidden) {
+    let (mut entries, hidden_count) = match rfs::list_dir_counted(path, show_hidden || manual_order)
+    {
         Ok(ec) => ec,
         Err(err) => {
             error!(error = %err, path = %path.display(), "list_dir failed");
@@ -12329,6 +13640,8 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
     });
     let group_mode = state.with_tabs(|book| book.tabs[book.active].group_mode);
     let big_icon = state.with_tabs(|book| book.tabs[book.active].preview);
+    let grid =
+        state.with_tabs(|book| book.tabs[book.active].item_arrangement == ItemArrangement::Grid);
     let zoom = state.with_tabs(|book| book.tabs[book.active].zoom);
     rfs::sort(
         &mut entries,
@@ -12336,10 +13649,15 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
         sort_state.order,
         group_mode,
     );
+    if manual_order {
+        apply_manual_order(state, path, &mut entries, show_hidden);
+    }
 
     // Active view's "type-ahead" filter: searches for the fragment anywhere
     // in the name (case-insensitive).
-    apply_name_filter(&mut entries, &state.filter.borrow());
+    if !manual_order {
+        apply_name_filter(&mut entries, &state.filter.borrow());
+    }
     // Extension filter — orthogonal to type-ahead; doesn't touch
     // folders. Read from the active tab.
     {
@@ -12347,7 +13665,9 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
             let a = book.active;
             (book.tabs[a].ext_filter_on, book.tabs[a].ext_filter.clone())
         });
-        apply_ext_filter(&mut entries, on, &txt);
+        if !manual_order {
+            apply_ext_filter(&mut entries, on, &txt);
+        }
     }
 
     let parent_display = path.display().to_string();
@@ -12359,9 +13679,11 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
             lang,
             now_unix: now,
             big_icon,
+            grid,
             zoom,
             compact_icon_rows: cfg.compact_icon_rows_in_preview,
-            group_mode,
+            item_spacing: cfg.view_item_spacing,
+            group_mode: effective_group_mode(group_mode, manual_order),
             annotations: &annotations_now(state),
         },
     );
@@ -12418,7 +13740,6 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
     request_thumbnails(state);
     request_folder_stats(state);
     request_imgmeta(state);
-
     debug!(path = %path.display(), count, "listing refreshed");
 }
 
@@ -12568,9 +13889,9 @@ fn panel_rects(geom: &Layout, n: usize) -> Vec<Rect> {
         h: 1.0,
     };
     let mut rects = vec![full; n];
-    for pg in &geom.panels {
-        if pg.panel < n {
-            rects[pg.panel] = pg.rect;
+    for pg in &geom.views {
+        if pg.view < n {
+            rects[pg.view] = pg.rect;
         }
     }
     rects
@@ -12645,7 +13966,13 @@ fn push_geometry_inplace(window: &MainWindow, state: &AppState) {
         // In-place update: doesn't recreate the elements → the drag survives.
         for (i, v) in new_sv.iter().enumerate() {
             if let Some(cur) = sp_model.row_data(i)
-                && ((cur.pos - v.pos).abs() > 1e-5
+                && (cur.vertical != v.vertical
+                    || cur.governs != v.governs
+                    || (cur.area_x - v.area_x).abs() > 1e-5
+                    || (cur.area_y - v.area_y).abs() > 1e-5
+                    || (cur.area_w - v.area_w).abs() > 1e-5
+                    || (cur.area_h - v.area_h).abs() > 1e-5
+                    || (cur.pos - v.pos).abs() > 1e-5
                     || (cur.cross_start - v.cross_start).abs() > 1e-5
                     || (cur.cross_len - v.cross_len).abs() > 1e-5)
             {
@@ -12662,6 +13989,7 @@ fn push_geometry_inplace(window: &MainWindow, state: &AppState) {
 /// path, its pre-formatted footer, etc.).
 fn update_panels_ui(window: &MainWindow, state: &AppState) {
     let annotations = annotations_now(state);
+    let folder_state = folder_state_now(state);
     let panels = state.panels.borrow();
     let lang = state.config.borrow().language;
     let strings = i18n::strings_for(lang);
@@ -12780,13 +14108,16 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
                         .collect::<Vec<_>>(),
                 )),
                 preview_mode: tab.preview,
+                grid_mode: tab.item_arrangement == ItemArrangement::Grid,
+                grid_zoom: tab.grid_zoom.unwrap_or(GRID_DEFAULT_ZOOM),
                 content_width: content_w,
                 show_hidden: tab.show_hidden,
                 group_mode: tab.group_mode.code().into(),
+                manual_order: folder_state.is_manual(&tab.current_path),
                 cursor_row: tab.cursor,
                 scroll_gen: tab.scroll_gen,
                 unavailable: p.unavailable, // folder unreachable → banner
-                ext_filter_on: tab.ext_filter_on,
+                ext_filter_on: tab.ext_filter_on && !folder_state.is_manual(&tab.current_path),
                 ext_filter: tab.ext_filter.as_str().into(),
                 tab_bar_mode: p.tab_bar_mode as i32, // 0 top · 1 left · 2 right
                 vbar_user_w: p.vbar_user_w,          // handle width, 0 = auto
@@ -12800,8 +14131,15 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
     // routing (Backspace/Escape) on the Slint side, shared with type-ahead.
     let active_ext_on = panels
         .get(active as usize)
-        .map(|p| p.tabs.tabs[p.tabs.active].ext_filter_on)
+        .map(|p| {
+            let tab = &p.tabs.tabs[p.tabs.active];
+            tab.ext_filter_on && !folder_state.is_manual(&tab.current_path)
+        })
         .unwrap_or(false);
+    let active_manual = panels.get(active as usize).is_some_and(|panel| {
+        let tab = &panel.tabs.tabs[panel.tabs.active];
+        folder_state.is_manual(&tab.current_path)
+    });
     drop(panels);
     // IN-PLACE update if the number of panels is unchanged (active view
     // switch, refresh, sort, navigation…): each `PanelView` is mutated via
@@ -12843,6 +14181,11 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
     push_equalize_state(window, state);
     window.set_active_panel_idx(active);
     window.set_active_ext_filter_on(active_ext_on);
+    window.set_active_filter(if active_manual {
+        SharedString::new()
+    } else {
+        state.filter.borrow().clone().into()
+    });
     window.set_can_add_panel(can_add);
     // Is there at least one "unavailable" panel? Drives the auto
     // re-check Timer on the Slint side.
@@ -13867,11 +15210,13 @@ fn update_panel_render_window(
                 panel.viewport_height.set(height);
             }
             let effective_height = panel.viewport_height.get().max(1.0);
-            let low = (top - effective_height).max(0.0);
-            let high = top + effective_height * 2.0;
-            let (new_first, new_end) = row_range_for_content_span(&*panel.rows_model, low, high);
+            let render_range = arranged_model_geometry(&*panel.rows_model, panel.item_grid.get())
+                .render_range(top, effective_height);
+            let (new_first, new_end) = (render_range.start, render_range.end);
             let visible = if height > 0.0 {
-                row_range_for_content_span(&*panel.rows_model, top, top + height)
+                let range = arranged_model_geometry(&*panel.rows_model, panel.item_grid.get())
+                    .visible_range(top, top + height);
+                (range.start, range.end)
             } else {
                 (0, 0)
             };
@@ -14178,31 +15523,31 @@ fn spawn_imgmeta_worker(
     });
 }
 
-/// `true` if a panel displays the `resolution` or `depth` column.
-fn imgmeta_columns_active(state: &AppState) -> bool {
-    state.panels.borrow().iter().any(|p| {
-        p.columns
+fn panel_shows_imgmeta(panel: &Panel) -> bool {
+    panel.tabs.tabs[panel.tabs.active].item_arrangement == ItemArrangement::List
+        && panel
+            .columns
             .iter()
-            .any(|c| c.visible && (c.id == "resolution" || c.id == "depth"))
-    })
+            .any(|column| column.visible && (column.id == "resolution" || column.id == "depth"))
+}
+
+/// `true` if a list panel displays the `resolution` or `depth` column.
+fn imgmeta_columns_active(state: &AppState) -> bool {
+    state.panels.borrow().iter().any(panel_shows_imgmeta)
 }
 
 /// If a resolution/depth column is visible: applies the cached metadata
 /// to IMAGE rows and queues the missing ones. To be called after any
 /// (re)population of rows or column change. Increments the generation.
 fn request_imgmeta(state: &AppState) {
+    let r#gen = state.imgmeta_gen.fetch_add(1, Ordering::Relaxed) + 1;
     if !imgmeta_columns_active(state) {
         return; // no relevant column → no cost
     }
     let lang = state.snapshot_config().language;
-    let r#gen = state.imgmeta_gen.fetch_add(1, Ordering::Relaxed) + 1;
     let panels = state.panels.borrow();
     for (panel_idx, panel) in panels.iter().enumerate() {
-        let shows = panel
-            .columns
-            .iter()
-            .any(|c| c.visible && (c.id == "resolution" || c.id == "depth"));
-        if !shows {
+        if !panel_shows_imgmeta(panel) {
             continue;
         }
         let dir = panel.tabs.tabs[panel.tabs.active].current_path.clone();
@@ -14250,6 +15595,85 @@ const MIN_ZOOM: i32 = 0; // floor = list mode (no zooming out below)
 const MAX_ZOOM: i32 = 8; // 220px ≤ MAX_PX (256) → sharp thumbnails
 const LIST_DEFAULT_ZOOM: i32 = 0; // → 28px (list; coincides with the floor)
 const THUMB_DEFAULT_ZOOM: i32 = 2; // → 76px ("Previews" button's default)
+const MIN_GRID_ZOOM: i32 = 0;
+const MAX_GRID_ZOOM: i32 = 8;
+const GRID_DEFAULT_ZOOM: i32 = 2;
+
+fn grid_image_size(zoom: i32) -> f32 {
+    [48.0, 64.0, 88.0, 112.0, 136.0, 160.0, 192.0, 224.0, 256.0]
+        [zoom.clamp(MIN_GRID_ZOOM, MAX_GRID_ZOOM) as usize]
+}
+
+fn grid_to_ui(grid: GridLayout) -> crate::ItemGrid {
+    crate::ItemGrid {
+        columns: grid.columns as i32,
+        cell_width: grid.cell_width,
+        cell_height: grid.cell_height,
+        gap: grid.gap,
+        left: grid.left,
+        top: grid.top,
+    }
+}
+
+fn grid_from_ui(grid: crate::ItemGrid) -> Option<GridLayout> {
+    (grid.columns > 0 && grid.cell_width > 0.0 && grid.cell_height > 0.0).then_some(GridLayout {
+        columns: grid.columns.max(1) as usize,
+        cell_width: grid.cell_width,
+        cell_height: grid.cell_height,
+        gap: grid.gap.max(0.0),
+        left: grid.left,
+        top: grid.top,
+    })
+}
+
+fn zoom_grid(
+    panel: &mut Panel,
+    config: &Config,
+    delta: i32,
+    top: f32,
+    width: f32,
+    height: f32,
+    pointer: (f32, f32),
+) -> f32 {
+    let tab = &mut panel.tabs.tabs[panel.tabs.active];
+    let old_zoom = tab.grid_zoom.unwrap_or(GRID_DEFAULT_ZOOM);
+    let zoom = (old_zoom + delta).clamp(MIN_GRID_ZOOM, MAX_GRID_ZOOM);
+    if zoom == old_zoom {
+        return top;
+    }
+    let Some(old) = panel.item_grid.get() else {
+        return top;
+    };
+    tab.grid_zoom = Some(zoom);
+    let count = panel.rows_model.row_count();
+    let mut selected = (0..count).filter(|&index| {
+        panel
+            .rows_model
+            .row_data(index)
+            .is_some_and(|row| row.selected)
+    });
+    let first = selected.next();
+    let single = first.filter(|_| selected.next().is_none());
+    let anchor = old.capture_anchor(count, top, height, pointer, single);
+    let font = if config.view_text_font_size_override {
+        config.view_text_font_size
+    } else {
+        DEFAULT_VIEW_TEXT_FONT_SIZE
+    };
+    // Read the live width from the gesture: a resize that preserves the grid
+    // is not published and must not leave zoom using a stale width.
+    let layout = GridLayout::fit(
+        width,
+        grid_image_size(zoom),
+        font as f32,
+        config.view_item_spacing as f32,
+        old.left,
+    );
+    let top = layout.bands(count).restore_top(anchor, top, height);
+    panel.item_grid.set(Some(layout));
+    panel.viewport_top.set(top);
+    top
+}
 // Scale invariants verified at COMPILE TIME: the list is the
 // single floor and the first notch above enters thumbnail mode.
 const _: () = {
@@ -14265,9 +15689,8 @@ const COMPACT_ICON_ROW_HEIGHT: f32 = 28.0;
 /// A one-viewport margin is rendered on each side, so there's no cold screen.
 const DEFAULT_RENDER_VIEWPORT_HEIGHT: f32 = 900.0;
 
-/// Maps a zoom level to a row height in logical px. Must remain
-/// the SOLE source (pushed to Slint via `PanelView.row_h`, and reused for the
-/// rubber-band hit-test). List: 0 (single floor); thumbnails: ≥ 1.
+/// Maps a list zoom level to a content height in logical pixels. `layout_rows`
+/// adds spacing and publishes the same bands for rendering and hit-testing.
 fn zoom_to_height(zoom: i32) -> f32 {
     match zoom.clamp(MIN_ZOOM, MAX_ZOOM) {
         0 => 28.0,                                  // list (floor)
@@ -14287,74 +15710,76 @@ fn effective_row_height(preview_capable: bool, zoom: i32, compact_icon_rows: boo
 /// Computes the full vertical geometry once. The same values are
 /// then consumed by Slint and by all the Rust hit-tests: no parallel
 /// formula can drift when the heights become heterogeneous.
-fn layout_rows(rows: &mut [FileRow], zoom: i32, compact_icon_rows: bool) {
+fn layout_rows(rows: &mut [FileRow], zoom: i32, compact_icon_rows: bool, item_spacing: i32) {
+    let item_spacing = item_spacing.clamp(MIN_VIEW_ITEM_SPACING, MAX_VIEW_ITEM_SPACING) as f32;
     let mut y = 0.0_f32;
     for (index, row) in rows.iter_mut().enumerate() {
         row.model_index = index as i32;
         row.visual_y = y;
-        row.visual_h = effective_row_height(row.preview_capable, zoom, compact_icon_rows);
+        row.visual_h =
+            effective_row_height(row.preview_capable, zoom, compact_icon_rows) + item_spacing;
         row.rendered = false;
         y += row.visual_h;
     }
 }
 
-/// Half-open interval of rows that intersect `[low_y, high_y)`.
-/// The search is exact because `layout_rows` produces contiguous, monotonic
-/// bands. It serves both virtualized rendering and invariant tests.
+fn item_band(row: &FileRow) -> ItemBand {
+    ItemBand {
+        top: row.visual_y,
+        height: row.visual_h,
+    }
+}
+
+/// Read geometry directly from the live model without cloning the collection.
+/// The model must remain dense and unchanged for the duration of a query.
+fn model_geometry<M: Model<Data = FileRow>>(
+    model: &M,
+) -> ItemBands<impl Fn(usize) -> ItemBand + '_> {
+    arranged_model_geometry(model, None)
+}
+
+fn arranged_model_geometry<M: Model<Data = FileRow>>(
+    model: &M,
+    grid: Option<GridLayout>,
+) -> ItemBands<impl Fn(usize) -> ItemBand + '_> {
+    ItemBands::new(model.row_count(), move |index| {
+        grid.map_or_else(
+            || item_band(&model.row_data(index).expect("item geometry model is dense")),
+            |layout| layout.rect(index).band(),
+        )
+    })
+}
+
+fn slice_geometry(rows: &[FileRow]) -> ItemBands<impl Fn(usize) -> ItemBand + '_> {
+    ItemBands::new(rows.len(), |index| item_band(&rows[index]))
+}
+
+/// Half-open interval of items intersecting the viewport in content coordinates.
 fn row_range_for_content_span<M: Model<Data = FileRow>>(
     model: &M,
     low_y: f32,
     high_y: f32,
 ) -> (usize, usize) {
-    let n = model.row_count();
-    if n == 0 || high_y <= low_y {
-        return (0, 0);
-    }
-    let mut first = 0usize;
-    let mut right = n;
-    while first < right {
-        let mid = first + (right - first) / 2;
-        let row = model.row_data(mid).expect("row geometry model is dense");
-        if row.visual_y + row.visual_h <= low_y {
-            first = mid + 1;
-        } else {
-            right = mid;
-        }
-    }
-    let mut end = first;
-    let mut end_right = n;
-    while end < end_right {
-        let mid = end + (end_right - end) / 2;
-        let row = model.row_data(mid).expect("row geometry model is dense");
-        if row.visual_y < high_y {
-            end = mid + 1;
-        } else {
-            end_right = mid;
-        }
-    }
-    (first.min(n), end.min(n).max(first.min(n)))
-}
-
-fn row_range_for_slice(rows: &[FileRow], low_y: f32, high_y: f32) -> (usize, usize) {
-    if rows.is_empty() || high_y <= low_y {
-        return (0, 0);
-    }
-    let first = rows.partition_point(|row| row.visual_y + row.visual_h <= low_y);
-    let end = rows.partition_point(|row| row.visual_y < high_y);
-    (first, end.max(first))
+    let range = model_geometry(model).visible_range(low_y, high_y);
+    (range.start, range.end)
 }
 
 /// Marks a viewport + one overscan screen before/after. The number of delegates
 /// stays proportional to what can actually be displayed, never to the folder.
-fn mark_render_window(rows: &mut [FileRow], top: f32, height: f32) -> (usize, usize) {
-    let height = height.max(1.0);
-    let low = (top - height).max(0.0);
-    let high = top.max(0.0) + height * 2.0;
-    let (first, end) = row_range_for_slice(rows, low, high);
-    for row in &mut rows[first..end] {
+fn mark_render_window(
+    rows: &mut [FileRow],
+    top: f32,
+    height: f32,
+    grid: Option<GridLayout>,
+) -> (usize, usize) {
+    let range = grid.map_or_else(
+        || slice_geometry(rows).render_range(top, height),
+        |layout| layout.bands(rows.len()).render_range(top, height),
+    );
+    for row in &mut rows[range.clone()] {
         row.rendered = true;
     }
-    (first, end)
+    (range.start, range.end)
 }
 
 fn render_window_changed_indices(
@@ -14363,19 +15788,7 @@ fn render_window_changed_indices(
     new_first: usize,
     new_end: usize,
 ) -> Vec<usize> {
-    (old_first..old_end)
-        .filter(|index| *index < new_first || *index >= new_end)
-        .chain((new_first..new_end).filter(|index| *index < old_first || *index >= old_end))
-        .collect()
-}
-
-/// Semantic point preserved during a zoom relayout. `row_fraction` also
-/// keeps the exact point within a row whose height changes.
-#[derive(Debug, Clone, Copy, PartialEq)]
-struct ZoomAnchor {
-    row_index: usize,
-    row_fraction: f32,
-    viewport_y: f32,
+    item_geometry::changed_indices(old_first..old_end, new_first..new_end)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -14383,35 +15796,6 @@ struct ZoomViewport {
     top: f32,
     height: f32,
     pointer_y: f32,
-}
-
-fn row_index_at_content_y_slice(rows: &[FileRow], y: f32) -> Option<usize> {
-    if y < 0.0 {
-        return None;
-    }
-    let index = rows.partition_point(|row| row.visual_y + row.visual_h <= y);
-    rows.get(index)
-        .filter(|row| y >= row.visual_y && y < row.visual_y + row.visual_h)
-        .map(|_| index)
-}
-
-fn zoom_anchor_on_row(
-    rows: &[FileRow],
-    row_index: usize,
-    content_y: f32,
-    viewport_top: f32,
-) -> Option<ZoomAnchor> {
-    let row = rows.get(row_index)?;
-    let row_fraction = if row.visual_h > 0.0 {
-        ((content_y - row.visual_y) / row.visual_h).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    Some(ZoomAnchor {
-        row_index,
-        row_fraction,
-        viewport_y: content_y - viewport_top,
-    })
 }
 
 /// Chooses the zoom anchor without depending on virtualized rendering:
@@ -14427,14 +15811,7 @@ fn capture_zoom_anchor(
     viewport_top: f32,
     viewport_height: f32,
     pointer_y: f32,
-) -> Option<ZoomAnchor> {
-    if rows.is_empty() {
-        return None;
-    }
-    let top = viewport_top.max(0.0);
-    let height = viewport_height.max(1.0);
-    let bottom = top + height;
-
+) -> Option<ItemAnchor> {
     let mut selected = rows
         .iter()
         .enumerate()
@@ -14442,49 +15819,16 @@ fn capture_zoom_anchor(
         .map(|(index, _)| index);
     let first_selected = selected.next();
     let unique_selected = first_selected.filter(|_| selected.next().is_none());
-    if let Some(index) = unique_selected {
-        let row = &rows[index];
-        let visible_top = row.visual_y.max(top);
-        let visible_bottom = (row.visual_y + row.visual_h).min(bottom);
-        if visible_bottom > visible_top {
-            // The middle of the visible portion is always strictly within the
-            // row, even if it's partially cut off by the viewport.
-            let content_y = (visible_top + visible_bottom) * 0.5;
-            return zoom_anchor_on_row(rows, index, content_y, top);
-        }
-    }
-
-    // An event landing exactly on the bottom edge still belongs to this
-    // TouchArea, but `top + height` is already outside the semi-open viewport.
-    let pointer_viewport_y = pointer_y.clamp(0.0, (height - 0.5).max(0.0));
-    let pointer_content_y = top + pointer_viewport_y;
-    if let Some(index) = row_index_at_content_y_slice(rows, pointer_content_y) {
-        return zoom_anchor_on_row(rows, index, pointer_content_y, top);
-    }
-
-    let center_y = top + height * 0.5;
-    row_index_at_content_y_slice(rows, center_y)
-        .and_then(|index| zoom_anchor_on_row(rows, index, center_y, top))
+    slice_geometry(rows).capture_anchor(viewport_top, viewport_height, pointer_y, unique_selected)
 }
 
 fn restore_zoom_viewport_top(
     rows: &[FileRow],
-    anchor: Option<ZoomAnchor>,
+    anchor: Option<ItemAnchor>,
     fallback_top: f32,
     viewport_height: f32,
 ) -> f32 {
-    let content_height = rows
-        .last()
-        .map(|row| row.visual_y + row.visual_h)
-        .unwrap_or(0.0);
-    let max_top = (content_height - viewport_height.max(1.0)).max(0.0);
-    let desired = anchor
-        .and_then(|anchor| {
-            rows.get(anchor.row_index)
-                .map(|row| row.visual_y + row.visual_h * anchor.row_fraction - anchor.viewport_y)
-        })
-        .unwrap_or(fallback_top);
-    desired.clamp(0.0, max_top)
+    slice_geometry(rows).restore_top(anchor, fallback_top, viewport_height)
 }
 
 /// Specialized relayout for Ctrl+wheel. The anchor capture, any
@@ -14496,6 +15840,7 @@ fn zoom_panel_visuals(
     preview: bool,
     zoom: i32,
     compact_icon_rows: bool,
+    item_spacing: i32,
     crossed_mode: bool,
     viewport: ZoomViewport,
 ) -> f32 {
@@ -14509,10 +15854,10 @@ fn zoom_panel_visuals(
         .collect();
 
     if crossed_mode {
-        refresh_rows_visuals(&mut rows, preview, compact_icon_rows);
+        refresh_rows_visuals(&mut rows, preview, compact_icon_rows, false);
     }
 
-    layout_rows(&mut rows, zoom, compact_icon_rows);
+    layout_rows(&mut rows, zoom, compact_icon_rows, item_spacing);
     let geometry_changed = rows.iter().zip(previous).any(|(row, (y, h))| {
         (row.visual_y - y).abs() > f32::EPSILON || (row.visual_h - h).abs() > f32::EPSILON
     });
@@ -14528,9 +15873,9 @@ fn zoom_panel_visuals(
     anchored_top
 }
 
-fn refresh_rows_visuals(rows: &mut [FileRow], preview: bool, compact_icon_rows: bool) {
+fn refresh_rows_visuals(rows: &mut [FileRow], preview: bool, compact_icon_rows: bool, grid: bool) {
     for row in rows {
-        let use_large_icon = preview && (!compact_icon_rows || row.preview_capable);
+        let use_large_icon = grid || preview && (!compact_icon_rows || row.preview_capable);
         let (app_icon, link_folder) = row_app_icon(
             row.path.as_str(),
             row.name.as_str(),
@@ -14546,89 +15891,78 @@ fn refresh_rows_visuals(rows: &mut [FileRow], preview: bool, compact_icon_rows: 
     }
 }
 
-fn refresh_panel_visuals(panel: &Panel, preview: bool, zoom: i32, compact_icon_rows: bool) {
+fn refresh_panel_visuals(
+    panel: &Panel,
+    preview: bool,
+    zoom: i32,
+    compact_icon_rows: bool,
+    item_spacing: i32,
+) {
     let mut rows: Vec<FileRow> = (0..panel.rows_model.row_count())
         .filter_map(|index| panel.rows_model.row_data(index))
         .collect();
-    refresh_rows_visuals(&mut rows, preview, compact_icon_rows);
-    layout_rows(&mut rows, zoom, compact_icon_rows);
+    let grid = panel.tabs.tabs[panel.tabs.active].item_arrangement == ItemArrangement::Grid;
+    refresh_rows_visuals(&mut rows, preview, compact_icon_rows, grid);
+    layout_rows(&mut rows, zoom, compact_icon_rows, item_spacing);
     panel.replace_rows(rows);
 }
 
 fn refresh_preview_panel_visuals(state: &AppState) {
-    let compact = state.config.borrow().compact_icon_rows_in_preview;
+    let (compact, item_spacing) = {
+        let config = state.config.borrow();
+        (
+            config.compact_icon_rows_in_preview,
+            config.view_item_spacing,
+        )
+    };
     let panels = state.panels.borrow();
     for panel in panels.iter() {
         let tab = &panel.tabs.tabs[panel.tabs.active];
-        if tab.preview {
-            refresh_panel_visuals(panel, true, tab.zoom, compact);
+        if tab.preview && tab.item_arrangement == ItemArrangement::List {
+            refresh_panel_visuals(panel, true, tab.zoom, compact, item_spacing);
         }
     }
+}
+
+/// Recomputes only row bands after the global spacing preference changes.
+/// Existing metadata, selection, thumbnails and directory contents are kept.
+fn refresh_view_item_spacing(window: &MainWindow, state: &AppState) {
+    let (compact_icon_rows, item_spacing) = {
+        let config = state.config.borrow();
+        (
+            config.compact_icon_rows_in_preview,
+            config.view_item_spacing,
+        )
+    };
+    {
+        let panels = state.panels.borrow();
+        for panel in panels.iter() {
+            if panel.tabs.tabs[panel.tabs.active].item_arrangement == ItemArrangement::Grid {
+                continue;
+            }
+            let zoom = panel.tabs.tabs[panel.tabs.active].zoom;
+            let mut rows: Vec<FileRow> = panel.rows_model.iter().collect();
+            layout_rows(&mut rows, zoom, compact_icon_rows, item_spacing);
+            panel.replace_rows(rows);
+        }
+    }
+    update_panels_ui(window, state);
+    request_thumbnails(state);
 }
 
 /// Exact index of the row containing `y` in the vertical content.
 /// O(log n) binary search, used on every drag/hover move.
 fn row_index_at_content_y<M: Model<Data = FileRow>>(model: &M, y: f32) -> i32 {
-    if y < 0.0 {
-        return -1;
-    }
-    let mut lo = 0usize;
-    let mut hi = model.row_count();
-    while lo < hi {
-        let mid = lo + (hi - lo) / 2;
-        let Some(row) = model.row_data(mid) else {
-            return -1;
-        };
-        if y < row.visual_y {
-            hi = mid;
-        } else if y >= row.visual_y + row.visual_h {
-            lo = mid + 1;
-        } else {
-            return mid as i32;
-        }
-    }
-    -1
+    model_geometry(model)
+        .index_at(y)
+        .map_or(-1, |index| index as i32)
 }
 
 /// Indices covered by a vertical content band. The ends outside the
 /// content are naturally clamped, unlike the single-point hit-test.
 fn row_band_for_content_range(model: &VecModel<FileRow>, y1: f32, y2: f32) -> (i32, i32) {
-    let n = model.row_count();
-    if n == 0 {
-        return (0, -1);
-    }
-    let low_y = y1.min(y2);
-    let high_y = y1.max(y2);
-
-    let mut lo = 0usize;
-    let mut right = n;
-    while lo < right {
-        let mid = lo + (right - lo) / 2;
-        let row = model.row_data(mid).expect("row geometry model is dense");
-        if row.visual_y + row.visual_h <= low_y {
-            lo = mid + 1;
-        } else {
-            right = mid;
-        }
-    }
-
-    let mut upper = 0usize;
-    let mut upper_right = n;
-    while upper < upper_right {
-        let mid = upper + (upper_right - upper) / 2;
-        let row = model.row_data(mid).expect("row geometry model is dense");
-        if row.visual_y <= high_y {
-            upper = mid + 1;
-        } else {
-            upper_right = mid;
-        }
-    }
-    let hi = upper.saturating_sub(1);
-    if lo >= n || upper == 0 || hi < lo {
-        (lo as i32, lo as i32 - 1)
-    } else {
-        (lo as i32, hi as i32)
-    }
+    let range = model_geometry(model).selection_range(y1, y2);
+    (range.start as i32, range.end as i32 - 1)
 }
 
 /// Local<->UTC offset (seconds) applied to the "Modified" column. Set
@@ -14916,6 +16250,57 @@ fn apply_ext_filter(entries: &mut Vec<Entry>, on: bool, filter: &str) {
     });
 }
 
+/// Reconciles and applies a directory's explicit order after the regular sort has
+/// established a deterministic starting point. `entries` must be a complete
+/// listing, including hidden items, so names missing from disk can be removed
+/// without confusing them with entries hidden only from the current display.
+fn apply_manual_order(
+    state: &AppState,
+    directory: &Path,
+    entries: &mut Vec<Entry>,
+    show_hidden: bool,
+) -> bool {
+    let names: Vec<String> = entries.iter().map(|entry| entry.name.clone()).collect();
+    let (order, changed) = {
+        let mut folder_state = folder_state_for_update(state);
+        let changed = folder_state.reconcile(directory, &names);
+        let order = folder_state.order(directory).map(<[String]>::to_vec);
+        if changed {
+            save_folder_state(state, &folder_state);
+        }
+        (order, changed)
+    };
+    let Some(order) = order else {
+        if !show_hidden {
+            entries.retain(|entry| !entry.hidden);
+        }
+        return false;
+    };
+    let ranks: HashMap<&str, usize> = order
+        .iter()
+        .enumerate()
+        .map(|(index, name)| (name.as_str(), index))
+        .collect();
+    entries.sort_by_key(|entry| {
+        ranks
+            .get(entry.name.as_str())
+            .copied()
+            .unwrap_or(usize::MAX)
+    });
+    if !show_hidden {
+        entries.retain(|entry| !entry.hidden);
+    }
+    changed
+}
+
+fn effective_group_mode(group_mode: GroupMode, manual_order: bool) -> GroupMode {
+    if manual_order {
+        GroupMode::Mixed
+    } else {
+        group_mode
+    }
+}
+
 /// Everything turning an `Entry` into a displayable row needs beyond the entry
 /// itself. Bundled because both builders below take the same set, and threading
 /// it as loose parameters had grown past the point where a call site reads.
@@ -14925,8 +16310,10 @@ struct RowContext<'a> {
     lang: Lang,
     now_unix: i64,
     big_icon: bool,
+    grid: bool,
     zoom: i32,
     compact_icon_rows: bool,
+    item_spacing: i32,
     group_mode: GroupMode,
     annotations: &'a favnyr_core::annotations::AnnotationStore,
 }
@@ -14936,6 +16323,7 @@ fn entry_to_row(e: &Entry, parent_display: &str, ctx: &RowContext) -> FileRow {
         lang,
         now_unix,
         big_icon,
+        grid,
         compact_icon_rows,
         annotations,
         ..
@@ -14992,7 +16380,7 @@ fn entry_to_row(e: &Entry, parent_display: &str, ctx: &RowContext) -> FileRow {
     // Resolution suited to the mode: 256 px in previews (enlarged), 32 px in list.
     // For `.lnk` shortcuts: we resolve the target → target app icon
     // (file) OR "folder + arrow" marker (folder) via `link_folder`.
-    let use_large_icon = big_icon && (!compact_icon_rows || preview_capable);
+    let use_large_icon = grid || big_icon && (!compact_icon_rows || preview_capable);
     let (app_icon, link_folder) =
         row_app_icon(parent_display, &e.name, &ext_raw, e.is_dir, use_large_icon);
     FileRow {
@@ -15036,6 +16424,7 @@ fn entries_to_rows(entries: &[Entry], parent_display: &str, ctx: &RowContext) ->
     let RowContext {
         zoom,
         compact_icon_rows,
+        item_spacing,
         group_mode,
         ..
     } = *ctx;
@@ -15046,7 +16435,7 @@ fn entries_to_rows(entries: &[Entry], parent_display: &str, ctx: &RowContext) ->
     if group_mode == GroupMode::ColoredFoldersFirst {
         group_colored_folder_rows(&mut rows);
     }
-    layout_rows(&mut rows, zoom, compact_icon_rows);
+    layout_rows(&mut rows, zoom, compact_icon_rows, item_spacing);
     rows
 }
 
@@ -15150,6 +16539,7 @@ fn snapshot_selection<M: slint::Model<Data = FileRow>>(model: &M) -> Vec<bool> {
 
 /// Applies a rubber-band `[lo, hi]` combined with a `base` according to `mode`
 /// (0 = replace, 1 = add, 2 = subtract). Returns the selected count.
+#[cfg(test)]
 fn selection_apply_band<M: slint::Model<Data = FileRow>>(
     model: &M,
     lo: i32,
@@ -15157,10 +16547,19 @@ fn selection_apply_band<M: slint::Model<Data = FileRow>>(
     mode: i32,
     base: &[bool],
 ) -> i32 {
+    selection_apply_membership(model, mode, base, |i| (i as i32) >= lo && (i as i32) <= hi)
+}
+
+fn selection_apply_membership<M: slint::Model<Data = FileRow>>(
+    model: &M,
+    mode: i32,
+    base: &[bool],
+    contains: impl Fn(usize) -> bool,
+) -> i32 {
     let mut count = 0i32;
     let n = model.row_count();
     for i in 0..n {
-        let in_band = (i as i32) >= lo && (i as i32) <= hi;
+        let in_band = contains(i);
         let based = base.get(i).copied().unwrap_or(false);
         let want = match mode {
             1 => based || in_band,  // Shift: add the band to the base selection
@@ -15412,6 +16811,221 @@ fn panel_selected_paths(state: &AppState, panel: usize) -> Vec<PathBuf> {
         .collect()
 }
 
+/// Keeps only sources that can be transferred to the destination without
+/// recursively placing a directory inside itself. Shared by regular drops and
+/// manual-order insertion drops so both routes enforce the same boundary.
+fn filter_drop_sources(sources: Vec<PathBuf>, destination: &Path) -> Vec<PathBuf> {
+    sources
+        .into_iter()
+        .filter(|source| !ops::is_within(destination, source))
+        .collect()
+}
+
+/// A gap in another manual-order view has one unambiguous meaning: move the
+/// selection to that view's directory, then place the successful results at
+/// the claimed gap. Name conflicts and filesystem errors continue through the
+/// regular paste pipeline.
+fn begin_cross_view_manual_move(
+    window: &MainWindow,
+    state: &AppState,
+    source_panel: usize,
+    target_panel: usize,
+    gap: usize,
+) -> bool {
+    let destination = panel_dir(state, target_panel);
+    if destination.as_os_str().is_empty() {
+        return false;
+    }
+    let sources = filter_drop_sources(panel_selected_paths(state, source_panel), &destination);
+    if sources.is_empty() || paths_conflict_with_drop_target(&sources, &destination, true) {
+        return false;
+    }
+    let Some(insertion) = manual_order_insertion_for_panel(state, target_panel, gap)
+        .filter(|insertion| ops::paths_equal(&insertion.directory, &destination))
+    else {
+        return false;
+    };
+
+    // Two views may show the same directory with independent manual orders. In
+    // that case no filesystem move is needed; only the target tab's order changes.
+    let already_there = sources.iter().all(|source| {
+        source
+            .parent()
+            .is_some_and(|parent| ops::paths_equal(parent, &destination))
+    });
+    if already_there {
+        let changed = apply_manual_order_insertion(state, &insertion, &sources);
+        if changed {
+            window.invoke_refresh_all();
+        }
+        return changed;
+    }
+
+    begin_paste(
+        window,
+        state,
+        ClipOp::Cut,
+        destination,
+        sources,
+        Some(insertion),
+    );
+    true
+}
+
+/// Moves selected names to a visible insertion gap while preserving their
+/// relative order. The gap is expressed before removal, like tab and column
+/// reorder targets. `None` means the resulting order would be unchanged.
+fn move_selected_names(
+    names: &[String],
+    selected: &HashSet<String>,
+    gap: usize,
+) -> Option<Vec<String>> {
+    let gap = gap.min(names.len());
+    let moved: Vec<String> = names
+        .iter()
+        .filter(|name| selected.contains(name.as_str()))
+        .cloned()
+        .collect();
+    if moved.is_empty() {
+        return None;
+    }
+    let removed_before = names[..gap]
+        .iter()
+        .filter(|name| selected.contains(name.as_str()))
+        .count();
+    let mut remaining: Vec<String> = names
+        .iter()
+        .filter(|name| !selected.contains(name.as_str()))
+        .cloned()
+        .collect();
+    let insert_at = gap.saturating_sub(removed_before).min(remaining.len());
+    remaining.splice(insert_at..insert_at, moved);
+    (remaining != names).then_some(remaining)
+}
+
+fn manual_reorder_would_be_noop(state: &AppState, panel: usize, gap: usize) -> bool {
+    let panels = state.panels.borrow();
+    let Some(panel) = panels.get(panel) else {
+        return true;
+    };
+    if !folder_state_now(state).is_manual(&panel.tabs.tabs[panel.tabs.active].current_path) {
+        return true;
+    }
+    let names: Vec<String> = panel
+        .rows_model
+        .iter()
+        .map(|row| row.name.to_string())
+        .collect();
+    let selected: HashSet<String> = panel
+        .rows_model
+        .iter()
+        .filter(|row| row.selected)
+        .map(|row| row.name.to_string())
+        .collect();
+    move_selected_names(&names, &selected, gap).is_none()
+}
+
+/// Reorders the live rows without re-reading the directory, then projects the
+/// same visible order into the persisted list. Names currently hidden keep
+/// their slots and reappear in a stable position when made visible again.
+fn perform_manual_reorder(
+    window: &MainWindow,
+    state: &AppState,
+    panel_index: usize,
+    gap: usize,
+) -> bool {
+    let (compact_icon_rows, item_spacing) = {
+        let config = state.config.borrow();
+        (
+            config.compact_icon_rows_in_preview,
+            config.view_item_spacing,
+        )
+    };
+    let directory = {
+        let panels = state.panels.borrow();
+        let Some(panel) = panels.get(panel_index) else {
+            return false;
+        };
+        panel.tabs.tabs[panel.tabs.active].current_path.clone()
+    };
+    if !folder_state_now(state).is_manual(&directory) {
+        return false;
+    }
+    let changed = {
+        let mut panels = state.panels.borrow_mut();
+        let Some(panel) = panels.get_mut(panel_index) else {
+            return false;
+        };
+        let active = panel.tabs.active;
+        let mut rows: Vec<FileRow> = panel.rows_model.iter().collect();
+        let previous: Vec<String> = rows.iter().map(|row| row.name.to_string()).collect();
+        let selected: HashSet<String> = rows
+            .iter()
+            .filter(|row| row.selected)
+            .map(|row| row.name.to_string())
+            .collect();
+        let Some(next) = move_selected_names(&previous, &selected, gap) else {
+            return false;
+        };
+        let rank: HashMap<&str, usize> = next
+            .iter()
+            .enumerate()
+            .map(|(index, name)| (name.as_str(), index))
+            .collect();
+        rows.sort_by_key(|row| rank.get(row.name.as_str()).copied().unwrap_or(usize::MAX));
+
+        let anchor_name = usize::try_from(panel.tabs.tabs[active].selection_anchor)
+            .ok()
+            .and_then(|index| previous.get(index))
+            .cloned();
+        let cursor_name = usize::try_from(panel.tabs.tabs[active].cursor)
+            .ok()
+            .and_then(|index| previous.get(index))
+            .cloned();
+        let zoom = panel.tabs.tabs[active].zoom;
+        layout_rows(&mut rows, zoom, compact_icon_rows, item_spacing);
+
+        let visible: HashSet<&str> = previous.iter().map(String::as_str).collect();
+        let mut replacement = next.iter();
+        update_folder_state(state, |folder_state| {
+            let Some(order) = folder_state.order_mut(&directory) else {
+                return false;
+            };
+            let previous_order = order.clone();
+            for name in order.iter_mut() {
+                if visible.contains(name.as_str())
+                    && let Some(reordered) = replacement.next()
+                {
+                    *name = reordered.clone();
+                }
+            }
+            order.extend(replacement.cloned());
+            *order != previous_order
+        });
+
+        let tab = &mut panel.tabs.tabs[active];
+        tab.selection_anchor = anchor_name
+            .as_deref()
+            .and_then(|name| next.iter().position(|candidate| candidate == name))
+            .map_or(-1, |index| index as i32);
+        tab.cursor = cursor_name
+            .as_deref()
+            .and_then(|name| next.iter().position(|candidate| candidate == name))
+            .map_or(tab.selection_anchor, |index| index as i32);
+        panel.replace_rows(rows);
+        true
+    };
+
+    if changed {
+        update_panels_ui(window, state);
+        request_thumbnails(state);
+        request_folder_stats(state);
+        request_imgmeta(state);
+        window.invoke_refresh_all();
+    }
+    changed
+}
+
 /// Is a row target the source itself, or a descendant into which
 /// a source folder can't be dropped? Pure, no I/O or canonicalization.
 fn paths_conflict_with_drop_target(
@@ -15531,45 +17145,16 @@ fn build_panels(ws: WorkspaceState) -> (Vec<Panel>, LayoutNode, usize) {
         let mut tabs = Vec::with_capacity(ps.tabs.len());
         for ts in &ps.tabs {
             let path = resolve_restored_path(&ts.path);
-            let sort = SortState {
-                column: ts.sort_column,
-                order: ts.sort_order,
-            };
-            tabs.push(Tab::restored(
-                path,
-                sort,
-                ts.preview,
-                ts.zoom,
-                ts.show_hidden,
-                ts.group_mode,
-            ));
+            tabs.push(Tab::restored(path, ts));
         }
         // `tabs` guaranteed non-empty (sanitized removes empty panels).
         let active = ps.active_tab.min(tabs.len() - 1);
-        let initial_display = tabs[active].current_path.clone();
-        let (rows_model, rendered_rows_model) = new_row_models();
-        panels.push(Panel {
-            tabs: TabBook { tabs, active },
-            rows_model,
-            rendered_rows_model,
-            rows_revision: Cell::new(0),
-            viewport_reset_gen: Cell::new(0),
-            viewport_top: Cell::new(0.0),
-            viewport_height: Cell::new(DEFAULT_RENDER_VIEWPORT_HEIGHT),
-            rendered_first: Cell::new(0),
-            rendered_end: Cell::new(0),
-            displayed_path: initial_display,
-            columns: columns::sanitize(ps.columns.clone()),
-            hidden_count: 0,
-            unavailable: false,
-            tabs_viewport_x: 0.0,
-            tab_bar_mode: ps.tab_bar_mode.min(2),
-            vbar_user_w: ps.vbar_width.max(0.0),
-            pending_initial: false,
-            pending_listing: false,
-            listing_gen: 0,
-            pending_select: None,
-        });
+        panels.push(Panel::from_book(
+            TabBook { tabs, active },
+            ps.columns.clone(),
+            ps.tab_bar_mode,
+            ps.vbar_width,
+        ));
     }
     let active_panel = ws.active_panel.min(panels.len() - 1);
     (panels, layout, active_panel)
@@ -15783,7 +17368,7 @@ fn vbar_width(panel_w: f32, user_w: f32) -> f32 {
     base.clamp(110.0, (panel_w * 0.60).max(110.0))
 }
 
-/// Scroll target of the tab bar (px, `viewport-x` ≤ 0) to PROPERLY reveal
+/// Scroll target of the tab bar (px, `content-x` ≤ 0) to PROPERLY reveal
 /// a tab — rather than an arbitrary distance jump. The
 /// geometry (same widths/offsets as the `TabInfo` model) is recomputed here
 /// (the bridge has loops, unlike Slint). `idx >= 0` → reveal
@@ -16041,6 +17626,229 @@ pub fn persist_window_size(window: &MainWindow, state: &AppState) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn hidden_default_applies_to_new_tabs_without_overriding_restored_tabs() {
+        let config = Config {
+            default_show_hidden: true,
+            ..Config::default()
+        };
+        let tab = Tab::new(PathBuf::from("folder01"), TabDisplayDefaults::from(&config));
+        assert!(tab.show_hidden);
+        // A tab read back from a workspace carries its own choice, which the
+        // preference for new tabs must not override.
+        let saved = TabState {
+            show_hidden: false,
+            ..tab_to_state(&tab)
+        };
+        assert!(!Tab::restored(PathBuf::from("folder01"), &saved).show_hidden);
+    }
+
+    #[test]
+    fn grid_default_applies_to_new_tabs_without_overriding_restored_tabs() {
+        let config = Config {
+            default_item_arrangement: ItemArrangement::Grid,
+            default_preview_mode: false,
+            ..Config::default()
+        };
+        let display = TabDisplayDefaults::from(&config);
+        let tab = Tab::new(PathBuf::from("folder01"), display);
+        assert_eq!(tab.item_arrangement, ItemArrangement::Grid);
+        assert!(!tab.preview);
+        assert_eq!(tab.grid_zoom, None);
+        let saved = TabState {
+            item_arrangement: ItemArrangement::List,
+            ..tab_to_state(&tab)
+        };
+        assert_eq!(
+            Tab::restored(PathBuf::from("folder01"), &saved).item_arrangement,
+            ItemArrangement::List
+        );
+        let mut book = TabBook {
+            tabs: vec![tab],
+            active: 0,
+        };
+        let index = book.open_after_active(PathBuf::from("folder02"), display);
+        assert_eq!(book.tabs[index].item_arrangement, ItemArrangement::Grid);
+    }
+
+    #[test]
+    fn grid_selection_reuses_replace_add_and_subtract_semantics() {
+        let grid = GridLayout {
+            columns: 3,
+            cell_width: 80.0,
+            cell_height: 120.0,
+            gap: 10.0,
+            left: 30.0,
+            top: 5.0,
+        };
+        let model = VecModel::from(vec![FileRow::default(); 8]);
+        let base: Vec<_> = (0..8).map(|index| index == 0 || index == 5).collect();
+        let selection = grid.selection(8, 125.0, 10.0, 195.0, 380.0);
+        for (mode, expected) in [
+            (0, vec![1, 4, 7]),
+            (1, vec![0, 1, 4, 5, 7]),
+            (2, vec![0, 5]),
+        ] {
+            let count =
+                selection_apply_membership(&model, mode, &base, |index| selection.contains(index));
+            assert_eq!(count as usize, expected.len());
+            assert_eq!(
+                (0..8)
+                    .filter(|&index| model.row_data(index).unwrap().selected)
+                    .collect::<Vec<_>>(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn grid_manual_gaps_feed_the_same_stable_reorder_as_lists() {
+        let grid = GridLayout {
+            columns: 3,
+            cell_width: 80.0,
+            cell_height: 120.0,
+            gap: 10.0,
+            left: 30.0,
+            top: 5.0,
+        };
+        let names: Vec<_> = (0..8).map(|index| format!("file{index:02}")).collect();
+        let selected = HashSet::from([names[0].clone(), names[2].clone()]);
+        let gap = grid.insertion_gap(8, 35.0, 140.0, false).unwrap();
+        let moved = move_selected_names(&names, &selected, gap).unwrap();
+        assert_eq!(
+            moved,
+            [1, 0, 2, 3, 4, 5, 6, 7].map(|index| names[index].clone())
+        );
+        let tail = grid.insertion_gap(8, 250.0, 300.0, false).unwrap();
+        let moved = move_selected_names(&names, &selected, tail).unwrap();
+        assert_eq!(
+            moved,
+            [1, 3, 4, 5, 6, 7, 0, 2].map(|index| names[index].clone())
+        );
+        assert!(move_selected_names(&names, &HashSet::from([names[3].clone()]), gap).is_none());
+    }
+
+    #[test]
+    fn grid_zoom_preserves_preview_list_size_and_item_identity() {
+        let config = Config {
+            default_item_arrangement: ItemArrangement::Grid,
+            default_preview_mode: false,
+            ..Config::default()
+        };
+        let mut panel = Panel::with_mode(
+            PathBuf::from("folder01"),
+            columns::default_columns(),
+            0,
+            TabDisplayDefaults::from(&config),
+        );
+        let grid = GridLayout::fit(550.0, grid_image_size(GRID_DEFAULT_ZOOM), 13.0, 0.0, 30.0);
+        // A width-only resize can preserve the current grid while changing
+        // how many columns fit at the next zoom level.
+        let width = 590.0;
+        assert_eq!(
+            grid,
+            GridLayout::fit(width, grid_image_size(GRID_DEFAULT_ZOOM), 13.0, 0.0, 30.0)
+        );
+        panel.item_grid.set(Some(grid));
+        panel.viewport_top.set(600.0);
+        panel.viewport_height.set(400.0);
+        let mut rows = vec![FileRow::default(); 300];
+        layout_rows(&mut rows, 0, true, 0);
+        panel.replace_rows(rows);
+        let model = panel.rows_model.clone();
+        let revision = panel.rows_revision.get();
+        let pointer = (180.0, 30.0);
+        let anchor = grid
+            .capture_anchor(300, 600.0, 400.0, pointer, None)
+            .unwrap();
+        let top = zoom_grid(&mut panel, &config, 1, 600.0, width, 400.0, pointer);
+        let tab = &panel.tabs.tabs[0];
+        assert_eq!(tab.grid_zoom, Some(GRID_DEFAULT_ZOOM + 1));
+        assert_eq!(tab.zoom, 0);
+        assert!(!tab.preview);
+        assert!(Rc::ptr_eq(&model, &panel.rows_model));
+        assert_eq!(panel.rows_revision.get(), revision);
+        assert_eq!(panel.item_grid.get().unwrap().columns, 4);
+        let rect = panel.item_grid.get().unwrap().rect(anchor.index);
+        assert!((rect.top + rect.height * anchor.fraction - top - anchor.viewport_y).abs() < 0.01);
+    }
+
+    #[test]
+    fn grid_render_window_is_bounded_and_skips_invisible_image_columns() {
+        let config = Config {
+            default_item_arrangement: ItemArrangement::Grid,
+            ..Config::default()
+        };
+        let mut panel = Panel::with_mode(
+            PathBuf::from("folder01"),
+            columns::default_columns(),
+            0,
+            TabDisplayDefaults::from(&config),
+        );
+        for column in &mut panel.columns {
+            column.visible = true;
+        }
+        assert!(!panel_shows_imgmeta(&panel));
+        panel
+            .item_grid
+            .set(Some(GridLayout::fit(600.0, 88.0, 13.0, 0.0, 30.0)));
+        panel.viewport_top.set(25_000.0);
+        panel.viewport_height.set(400.0);
+        let mut rows = vec![FileRow::default(); 10_000];
+        layout_rows(&mut rows, 2, true, 0);
+        panel.replace_rows(rows);
+        let expected = panel
+            .item_grid
+            .get()
+            .unwrap()
+            .bands(10_000)
+            .render_range(25_000.0, 400.0);
+        assert_eq!(panel.rendered_rows_model.row_count(), expected.len());
+        assert!(expected.len() < 50);
+        assert_eq!(
+            panel.rendered_rows_model.row_data(0).unwrap().model_index,
+            expected.start as i32
+        );
+        panel.tabs.tabs[0].item_arrangement = ItemArrangement::List;
+        assert!(panel_shows_imgmeta(&panel));
+    }
+
+    #[test]
+    fn file_error_categories_survive_context_without_inspecting_paths() {
+        let error = anyhow::Error::new(favnyr_core::error::Error::Operation {
+            message: "file operation failed".into(),
+            source: Box::new(favnyr_core::error::Error::Io(
+                std::io::ErrorKind::PermissionDenied.into(),
+            )),
+        })
+        .context("copy failed");
+        assert_eq!(
+            file_error_kind(error.as_ref()),
+            Some(std::io::ErrorKind::PermissionDenied)
+        );
+        assert_eq!(
+            file_error_kind(&std::io::Error::from(std::io::ErrorKind::StorageFull)),
+            Some(std::io::ErrorKind::StorageFull)
+        );
+        assert_eq!(
+            file_error_kind(anyhow::anyhow!("unclassified failure").as_ref()),
+            None
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn native_shortcut_failure_keeps_its_hresult_through_context() {
+        let error = anyhow::Error::new(windows::core::Error::from_hresult(windows::core::HRESULT(
+            0x8007_0005_u32 as i32,
+        )))
+        .context("Save .lnk");
+        assert_eq!(
+            file_error_kind(error.as_ref()),
+            Some(std::io::ErrorKind::PermissionDenied)
+        );
+    }
+
     /// Stand-in for the user's per-extension defaults.
     fn opener_for(ext: &str) -> Option<String> {
         match ext {
@@ -16154,6 +17962,8 @@ mod tests {
             targets: Vec::new(),
             thumbnail_invalidations: Vec::new(),
             transient_cleanup: None,
+            manual_insertion: None,
+            completed_targets: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -16164,6 +17974,8 @@ mod tests {
             targets: targets.iter().map(PathBuf::from).collect(),
             thumbnail_invalidations: Vec::new(),
             transient_cleanup: None,
+            manual_insertion: None,
+            completed_targets: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -16205,6 +18017,8 @@ mod tests {
             targets: Vec::new(),
             thumbnail_invalidations: Vec::new(),
             transient_cleanup: None,
+            manual_insertion: None,
+            completed_targets: Arc::new(Mutex::new(Vec::new())),
         });
         let without = ops.register(op_handle(None));
 
@@ -16400,7 +18214,9 @@ mod tests {
             // key in the settings. Its visible label must remain exactly the
             // translated action in every bundled language: the icon identifies
             // the tool, so adding a textual prefix would be redundant.
-            for lang in [Lang::En, Lang::Fr, Lang::Es, Lang::De, Lang::It] {
+            // Driven by `Lang::all()`: a hardcoded list is how a newly
+            // added language slips past this check.
+            for &lang in Lang::all() {
                 let action = i18n::tr(lang, r.label_key);
                 assert_ne!(action, r.label_key, "missing translation: {}", r.label_key);
                 assert_eq!(r.label(lang), action);
@@ -16772,6 +18588,25 @@ mod tests {
 
         assert!(favorite_path_is_directory(&folder));
 
+        // What may ENTER Favorites accepts both kinds; what carries a folder
+        // colour still accepts only directories. Two different questions, and
+        // the second one above must not drift into answering the first.
+        assert!(favorite_target_exists(&folder));
+        assert!(favorite_target_exists(&file));
+        assert!(!favorite_target_exists(&root.join("missing")));
+
+        // Acting on a favorite follows its target: a directory is navigated,
+        // a file is launched, and a vanished target is neither.
+        assert!(matches!(
+            fav_action_for(folder.clone()),
+            Some(FavAction::Enter(ref p)) if p == &folder
+        ));
+        assert!(matches!(
+            fav_action_for(file.clone()),
+            Some(FavAction::Launch(ref p)) if p == &file
+        ));
+        assert!(fav_action_for(root.join("missing")).is_none());
+
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -16868,13 +18703,21 @@ mod tests {
                     }
                 );
             }
-            assert_eq!(
-                favorites.row_data(0).unwrap(),
-                FavNode {
-                    folder_slot: i32::from(slot),
-                    ..original_favorite.clone()
-                }
-            );
+            // Same reason as the rows above: a favorite now carries an image
+            // for its file icon, and an empty one never equals another, so the
+            // node is compared field by field. Every field is covered, which
+            // keeps the claim intact: only the colour slot moved.
+            let favorite = favorites.row_data(0).unwrap();
+            assert_eq!(favorite.folder_slot, i32::from(slot));
+            assert_eq!(favorite.id, original_favorite.id);
+            assert_eq!(favorite.label, original_favorite.label);
+            assert_eq!(favorite.path, original_favorite.path);
+            assert_eq!(favorite.is_container, original_favorite.is_container);
+            assert_eq!(favorite.is_dir, original_favorite.is_dir);
+            assert_eq!(favorite.available, original_favorite.available);
+            assert_eq!(favorite.depth, original_favorite.depth);
+            assert_eq!(favorite.expanded, original_favorite.expanded);
+            assert_eq!(favorite.has_children, original_favorite.has_children);
             assert_eq!(favorites.row_data(1).unwrap().folder_slot, 0);
             assert_eq!(favorites.row_data(2).unwrap().folder_slot, 0);
         }
@@ -16937,6 +18780,7 @@ mod tests {
                 &mut rows,
                 tab.zoom,
                 state.config.borrow().compact_icon_rows_in_preview,
+                state.config.borrow().view_item_spacing,
             );
             panel.replace_rows(rows);
         }
@@ -16957,6 +18801,46 @@ mod tests {
         }
         drop(panels);
         assert!(!regroup_colored_folder_panels(&state));
+    }
+
+    #[test]
+    fn folder_navigation_requires_exactly_one_directory() {
+        let root =
+            std::env::temp_dir().join(format!("favnyr-folder-navigation-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("folder01")).unwrap();
+        let folder = root.join("folder01");
+        let file = root.join("my_file.bin");
+        std::fs::write(&file, b"data").unwrap();
+        assert_eq!(
+            single_directory_target(std::slice::from_ref(&folder)),
+            Some(folder.clone())
+        );
+        #[cfg(windows)]
+        {
+            let shortcut = root.join("my_shortcut.lnk");
+            crate::openwith::create_shortcut(&shortcut, &folder).unwrap();
+            assert!(acts_as_dir(&shortcut));
+            let target = single_directory_target(&[shortcut]).unwrap();
+            assert_eq!(
+                target.canonicalize().unwrap(),
+                folder.canonicalize().unwrap()
+            );
+        }
+        #[cfg(unix)]
+        {
+            let link = root.join("my_link");
+            std::os::unix::fs::symlink(&folder, &link).unwrap();
+            assert_eq!(
+                single_directory_target(std::slice::from_ref(&link)),
+                Some(link.clone())
+            );
+        }
+        assert!(single_directory_target(&[]).is_none());
+        assert!(single_directory_target(std::slice::from_ref(&file)).is_none());
+        assert!(single_directory_target(&[folder.clone(), file]).is_none());
+        assert!(single_directory_target(&[folder.clone(), folder]).is_none());
+        assert!(single_directory_target(&[root.join("missing")]).is_none());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -16999,6 +18883,56 @@ mod tests {
         );
         assert_eq!(fav_drop_target(false, -1000.0, 100.0, 1, 3), None);
         assert_eq!(fav_drop_target(true, -1000.0, 100.0, 1, 3), Some(clamped));
+    }
+
+    #[test]
+    fn manual_order_moves_a_multi_selection_as_one_stable_block() {
+        let names: Vec<String> = ["a", "b", "c", "d", "e"]
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let contiguous: HashSet<String> = ["b", "c"].into_iter().map(str::to_string).collect();
+        assert_eq!(
+            move_selected_names(&names, &contiguous, 0).unwrap(),
+            ["b", "c", "a", "d", "e"]
+        );
+        assert_eq!(
+            move_selected_names(&names, &contiguous, names.len()).unwrap(),
+            ["a", "d", "e", "b", "c"]
+        );
+        assert!(move_selected_names(&names, &contiguous, 2).is_none());
+
+        let separated: HashSet<String> = ["b", "d"].into_iter().map(str::to_string).collect();
+        assert_eq!(
+            move_selected_names(&names, &separated, names.len()).unwrap(),
+            ["a", "c", "e", "b", "d"]
+        );
+    }
+
+    #[test]
+    fn manual_drop_inserts_only_completed_names_at_the_requested_neighbor() {
+        let insertion = ManualOrderInsertion {
+            directory: PathBuf::from("folder01"),
+            before: Some("c".to_string()),
+            after: Some("b".to_string()),
+            fallback_gap: 2,
+        };
+        let mut order = vec![
+            "a".to_string(),
+            "b".to_string(),
+            "hidden".to_string(),
+            "c".to_string(),
+            // Operation completion first discovers created targets at the end,
+            // then the insertion intent moves them to the requested neighbors.
+            "copied01".to_string(),
+            "copied02".to_string(),
+        ];
+        assert!(insert_manual_order_names(
+            &mut order,
+            &insertion,
+            &["copied01".to_string(), "copied02".to_string()]
+        ));
+        assert_eq!(order, ["a", "b", "hidden", "copied01", "copied02", "c"]);
     }
 
     #[test]
@@ -17263,10 +19197,11 @@ mod tests {
                     ..Default::default()
                 })
                 .collect();
-            layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true);
+            layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true, 0);
             let top = rows[50].visual_y;
             let height = rows[50].visual_h * 2.0;
-            let visible = row_range_for_slice(&rows, top, top + height);
+            let range = slice_geometry(&rows).visible_range(top, top + height);
+            let visible = (range.start, range.end);
             let expected = (visible.0..visible.1)
                 .map(|index| gallery.join(format!("image-{index:03}.png")))
                 .collect::<Vec<_>>();
@@ -17326,7 +19261,7 @@ mod tests {
                     ..Default::default()
                 })
                 .collect();
-            layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true);
+            layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true, 0);
             panel.replace_rows(rows);
         }
         for index in 0..40 {
@@ -17515,6 +19450,20 @@ mod tests {
     }
 
     #[test]
+    fn item_spacing_expands_row_bands_without_changing_content_height() {
+        let mut rows = vec![FileRow::default(), FileRow::default()];
+        let content_height = effective_row_height(false, LIST_DEFAULT_ZOOM, false);
+
+        layout_rows(&mut rows, LIST_DEFAULT_ZOOM, false, 8);
+
+        assert_eq!(rows[0].visual_h, content_height + 8.0);
+        assert_eq!(rows[1].visual_y, content_height + 8.0);
+        let model = VecModel::from(rows);
+        assert_eq!(row_index_at_content_y(&model, content_height + 7.0), 0);
+        assert_eq!(row_index_at_content_y(&model, content_height + 8.0), 1);
+    }
+
+    #[test]
     fn zoom_keeps_the_single_visible_selection_at_the_same_screen_position() {
         let panel = Panel::with_mode(
             PathBuf::from("gallery"),
@@ -17530,7 +19479,7 @@ mod tests {
                 ..Default::default()
             })
             .collect();
-        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, false);
+        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, false, 0);
         let viewport = ZoomViewport {
             top: rows[20].visual_y + 10.0,
             height: 420.0,
@@ -17540,15 +19489,14 @@ mod tests {
         };
         let anchor =
             capture_zoom_anchor(&rows, viewport.top, viewport.height, viewport.pointer_y).unwrap();
-        assert_eq!(anchor.row_index, 22);
+        assert_eq!(anchor.index, 22);
         panel.viewport_top.set(viewport.top);
         panel.viewport_height.set(viewport.height);
         panel.replace_rows(rows);
 
-        let new_top = zoom_panel_visuals(&panel, true, MAX_ZOOM, false, false, viewport);
-        let selected = panel.rows_model.row_data(anchor.row_index).unwrap();
-        let selected_anchor_y =
-            selected.visual_y + selected.visual_h * anchor.row_fraction - new_top;
+        let new_top = zoom_panel_visuals(&panel, true, MAX_ZOOM, false, 0, false, viewport);
+        let selected = panel.rows_model.row_data(anchor.index).unwrap();
+        let selected_anchor_y = selected.visual_y + selected.visual_h * anchor.fraction - new_top;
         assert!((selected_anchor_y - anchor.viewport_y).abs() < 0.01);
         assert!(selected_anchor_y >= 0.0 && selected_anchor_y <= viewport.height);
         assert!((panel.viewport_top.get() - new_top).abs() < 0.01);
@@ -17571,19 +19519,19 @@ mod tests {
                 ..Default::default()
             })
             .collect();
-        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true);
+        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true, 0);
         let top = rows[30].visual_y;
         let height = 360.0;
         let pointer_y = 95.0;
         let old_content_y = top + pointer_y;
-        let expected_row = row_index_at_content_y_slice(&rows, old_content_y).unwrap();
+        let expected_row = slice_geometry(&rows).index_at(old_content_y).unwrap();
         let anchor = capture_zoom_anchor(&rows, top, height, pointer_y).unwrap();
-        assert_eq!(anchor.row_index, expected_row);
+        assert_eq!(anchor.index, expected_row);
 
-        layout_rows(&mut rows, MAX_ZOOM, true);
+        layout_rows(&mut rows, MAX_ZOOM, true, 0);
         let new_top = restore_zoom_viewport_top(&rows, Some(anchor), top, height);
-        let row = &rows[anchor.row_index];
-        let restored_pointer_y = row.visual_y + row.visual_h * anchor.row_fraction - new_top;
+        let row = &rows[anchor.index];
+        let restored_pointer_y = row.visual_y + row.visual_h * anchor.fraction - new_top;
         assert!((restored_pointer_y - pointer_y).abs() < 0.01);
 
         // Same policy with a single OFF-screen selection: no jump to
@@ -17593,10 +19541,10 @@ mod tests {
         }
         rows[2].selected = true;
         let anchor = capture_zoom_anchor(&rows, new_top, height, pointer_y).unwrap();
-        assert_ne!(anchor.row_index, 2);
+        assert_ne!(anchor.index, 2);
         assert_eq!(
-            anchor.row_index,
-            row_index_at_content_y_slice(&rows, new_top + pointer_y).unwrap()
+            anchor.index,
+            slice_geometry(&rows).index_at(new_top + pointer_y).unwrap()
         );
     }
 
@@ -17608,25 +19556,25 @@ mod tests {
                 ..Default::default()
             })
             .collect();
-        layout_rows(&mut rows, LIST_DEFAULT_ZOOM, false);
+        layout_rows(&mut rows, LIST_DEFAULT_ZOOM, false, 0);
         let viewport_height = 500.0;
         // The pointer is in the blank space below the 280 px of content; the center
         // (250 px), however, stays on a valid row.
         let anchor = capture_zoom_anchor(&rows, 0.0, viewport_height, 450.0).unwrap();
         assert_eq!(anchor.viewport_y, viewport_height * 0.5);
 
-        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, false);
+        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, false, 0);
         let top = restore_zoom_viewport_top(&rows, Some(anchor), 0.0, viewport_height);
-        let row = &rows[anchor.row_index];
+        let row = &rows[anchor.index];
         let max_top =
             rows.last().unwrap().visual_y + rows.last().unwrap().visual_h - viewport_height;
         assert!((top - max_top).abs() < 0.01);
-        let anchored_row_y = row.visual_y + row.visual_h * anchor.row_fraction - top;
+        let anchored_row_y = row.visual_y + row.visual_h * anchor.fraction - top;
         assert!(anchored_row_y >= 0.0 && anchored_row_y <= viewport_height);
 
         // If the content fits in the view again, no negative position or
         // one above the maximum can leak out to the Slint scrollbar.
-        layout_rows(&mut rows, LIST_DEFAULT_ZOOM, false);
+        layout_rows(&mut rows, LIST_DEFAULT_ZOOM, false, 0);
         assert_eq!(
             restore_zoom_viewport_top(&rows, Some(anchor), 9_999.0, viewport_height),
             0.0
@@ -17649,7 +19597,7 @@ mod tests {
                 ..Default::default()
             },
         ];
-        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true);
+        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true, 0);
         let model = VecModel::from(rows);
 
         assert_eq!(row_index_at_content_y(&model, 75.0), 0);
@@ -17668,7 +19616,7 @@ mod tests {
                 ..Default::default()
             })
             .collect();
-        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true);
+        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true, 0);
         let total_height = rows.last().map(|row| row.visual_y + row.visual_h).unwrap();
         let model = VecModel::from(rows.clone());
 
@@ -17700,11 +19648,12 @@ mod tests {
                 ..Default::default()
             })
             .collect();
-        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true);
+        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true, 0);
         let top = rows[8_500].visual_y;
         let height = 720.0;
-        let expected = row_range_for_slice(&rows, top - height, top + height * 2.0);
-        let actual = mark_render_window(&mut rows, top, height);
+        let range = slice_geometry(&rows).visible_range(top - height, top + height * 2.0);
+        let expected = (range.start, range.end);
+        let actual = mark_render_window(&mut rows, top, height, None);
 
         assert_eq!(actual, expected);
         assert!(actual.0 > 8_400, "the window must follow a distant scroll");
@@ -17743,9 +19692,9 @@ mod tests {
                 ..Default::default()
             })
             .collect();
-        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true);
+        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true, 0);
         let top = rows[80].visual_y;
-        let (first, end) = mark_render_window(&mut rows, top, 300.0);
+        let (first, end) = mark_render_window(&mut rows, top, 300.0, None);
         rows_model.set_vec(rows);
 
         assert_eq!(rendered_model.row_count(), end - first);
@@ -17774,7 +19723,7 @@ mod tests {
                 ..Default::default()
             })
             .collect();
-        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true);
+        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true, 0);
         panel.viewport_top.set(rows[1_500].visual_y);
         panel.viewport_height.set(600.0);
         panel.replace_rows(rows.clone());
@@ -17797,7 +19746,7 @@ mod tests {
                 ..Default::default()
             })
             .collect();
-        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true);
+        layout_rows(&mut rows, THUMB_DEFAULT_ZOOM, true, 0);
         let model = VecModel::from(rows);
         let base = snapshot_selection(&model);
 
@@ -18068,6 +20017,7 @@ mod tests {
         let job = PasteJob {
             op: ClipOp::Copy,
             dst_dir: PathBuf::from("/dst"),
+            source_order: vec![PathBuf::from("/src/a.txt")],
             pending: std::collections::VecDeque::new(),
             resolved: vec![(
                 PathBuf::from("/src/a.txt"),
@@ -18076,6 +20026,7 @@ mod tests {
             )],
             current: None,
             transient_cleanup: None,
+            manual_insertion: None,
         };
 
         assert!(job.claims(Path::new("/dst/Merged.txt")), "the exact name");
@@ -18088,6 +20039,44 @@ mod tests {
             job.claims(Path::new("/dst/merged.txt")),
             cfg!(windows),
             "case follows the filesystem's own rule"
+        );
+    }
+
+    #[test]
+    fn resolved_conflicts_return_to_the_original_selection_order() {
+        let source_order = vec![
+            PathBuf::from("source").join("first.txt"),
+            PathBuf::from("source").join("second.txt"),
+            PathBuf::from("source").join("third.txt"),
+        ];
+        let mut resolved = vec![
+            (
+                source_order[1].clone(),
+                PathBuf::from("target").join("second.txt"),
+                false,
+            ),
+            (
+                source_order[2].clone(),
+                PathBuf::from("target").join("third.txt"),
+                false,
+            ),
+            (
+                source_order[0].clone(),
+                PathBuf::from("target").join("renamed_first.txt"),
+                false,
+            ),
+        ];
+
+        sort_resolved_by_source_order(&mut resolved, &source_order);
+        assert_eq!(
+            resolved
+                .iter()
+                .map(|(source, _, _)| source.as_path())
+                .collect::<Vec<_>>(),
+            source_order
+                .iter()
+                .map(PathBuf::as_path)
+                .collect::<Vec<_>>()
         );
     }
 
@@ -18107,6 +20096,12 @@ mod tests {
             &PathBuf::from("gallery").join("other"),
             true
         ));
+
+        let filtered = filter_drop_sources(
+            vec![album.clone(), PathBuf::from("gallery").join("notes.txt")],
+            &album.join("subfolder"),
+        );
+        assert_eq!(filtered, [PathBuf::from("gallery").join("notes.txt")]);
 
         let file = PathBuf::from("gallery").join("notes.txt");
         assert!(paths_conflict_with_drop_target(
@@ -18234,6 +20229,152 @@ mod tests {
 
     // Workspace "modified" detection -----
 
+    #[test]
+    fn grid_state_restoration_preserves_legacy_zoom_precedence() {
+        for preview in [false, true] {
+            for zoom in [None, Some(-4), Some(0), Some(5), Some(100)] {
+                let mut saved = tab("folder01");
+                saved.preview = preview;
+                saved.zoom = zoom;
+                let restored = tab_from_state(saved.clone());
+                let expected_zoom =
+                    zoom.map(|z| z.clamp(MIN_ZOOM, MAX_ZOOM))
+                        .unwrap_or(if preview {
+                            THUMB_DEFAULT_ZOOM
+                        } else {
+                            LIST_DEFAULT_ZOOM
+                        });
+                assert_eq!(restored.item_arrangement, ItemArrangement::List);
+                assert_eq!(restored.zoom, expected_zoom);
+                assert_eq!(restored.preview, expected_zoom >= THUMB_ZOOM);
+                assert_eq!(restored.grid_zoom, None);
+
+                saved.item_arrangement = ItemArrangement::Grid;
+                saved.grid_zoom = Some(100);
+                let restored = tab_from_state(saved);
+                assert_eq!(restored.zoom, expected_zoom);
+                assert_eq!(restored.preview, preview);
+                assert_eq!(restored.grid_zoom, Some(MAX_GRID_ZOOM));
+            }
+        }
+        let mut saved = tab("folder01");
+        saved.grid_zoom = Some(-4);
+        assert_eq!(tab_from_state(saved).grid_zoom, Some(MIN_GRID_ZOOM));
+    }
+
+    #[test]
+    fn grid_state_follows_duplication_closed_tabs_and_workspace_restore() {
+        for item_arrangement in [ItemArrangement::List, ItemArrangement::Grid] {
+            for preview in [false, true] {
+                let mut saved = tab("folder01");
+                saved.item_arrangement = item_arrangement;
+                saved.preview = preview;
+                saved.zoom = Some(if preview { 5 } else { 0 });
+                saved.grid_zoom = Some(3);
+                saved.show_hidden = true;
+                saved.sort_column = SortColumn::Size;
+                saved.sort_order = SortOrder::Desc;
+                saved.group_mode = GroupMode::Mixed;
+                let mut original = tab_from_state(saved.clone());
+                original.cursor = 7;
+                original.selection_anchor = 4;
+                let mut book = TabBook {
+                    tabs: vec![original],
+                    active: 0,
+                };
+                assert!(book.duplicate(0));
+                assert_eq!(tab_to_state(&book.tabs[1]), saved);
+                assert_eq!(book.tabs[1].cursor, -1);
+                assert_eq!(book.tabs[1].selection_anchor, -1);
+
+                let closed = tab_to_state(&book.close(1).unwrap());
+                assert_eq!(tab_to_state(&tab_from_state(closed)), saved);
+                let workspace = ws(vec![panel(vec![saved.clone()])]);
+                let (panels, _, _) = build_panels(workspace.clone());
+                assert_eq!(tab_to_state(&panels[0].tabs.tabs[0]), saved);
+                let captured = ws(panels.iter().map(panel_to_state).collect());
+                assert!(!workspaces_differ(&workspace, &captured));
+            }
+        }
+    }
+
+    #[test]
+    fn grid_state_changes_are_part_of_the_workspace_signature() {
+        let original = ws(vec![panel(vec![tab("folder01")])]);
+        let mut changed = original.clone();
+        changed.panels[0].tabs[0].item_arrangement = ItemArrangement::Grid;
+        assert!(workspaces_differ(&original, &changed));
+        changed = original.clone();
+        changed.panels[0].tabs[0].grid_zoom = Some(3);
+        assert!(workspaces_differ(&original, &changed));
+    }
+
+    #[test]
+    fn grid_state_transfer_accepts_old_payloads_and_appends_new_fields() {
+        for payload in [
+            "folder01\tsize\t1\t1\t0\tfolders",
+            "folder01\tsize\t1\t1\t0\tfolders\t20\t40",
+            "folder01\tsize\t1\t1\t0\tfolders\t20\t40\t5",
+        ] {
+            let (tab, _) = deserialize_tab(payload).unwrap();
+            assert_eq!(tab.item_arrangement, ItemArrangement::List);
+            assert_eq!(tab.grid_zoom, None);
+            assert!(tab.preview);
+        }
+        for preview in [false, true] {
+            let mut saved = tab("folder01");
+            saved.item_arrangement = ItemArrangement::Grid;
+            saved.preview = preview;
+            saved.zoom = Some(5);
+            saved.grid_zoom = Some(3);
+            let original = tab_from_state(saved.clone());
+            let payload = serialize_tab(&original, (-200, 400));
+            let fields: Vec<_> = payload.split('\t').collect();
+            assert_eq!(&fields[6..9], &["-200", "400", "5"]);
+            assert_eq!(&fields[9..], &["grid", "3"]);
+            let (restored, drop) = deserialize_tab(&payload).unwrap();
+            assert_eq!(drop, Some((-200, 400)));
+            assert_eq!(tab_to_state(&restored), saved);
+            let (legacy, _) = deserialize_tab(&fields[..9].join("\t")).unwrap();
+            assert_eq!(legacy.item_arrangement, ItemArrangement::List);
+            assert_eq!(legacy.zoom, 5);
+        }
+        let (fallback, _) =
+            deserialize_tab("folder01\tname\t1\t0\t0\tfolders\t0\t0\t0\tfuture\tbad").unwrap();
+        assert_eq!(fallback.item_arrangement, ItemArrangement::List);
+        assert_eq!(fallback.grid_zoom, None);
+    }
+
+    #[test]
+    fn grid_state_detachment_keeps_tab_order_active_index_and_native_paths() {
+        let mut saved = panel(vec![tab("ignored01"), tab("ignored02")]);
+        saved.active_tab = 1;
+        saved.tab_bar_mode = 2;
+        saved.vbar_width = 170.0;
+        saved.tabs[0].item_arrangement = ItemArrangement::Grid;
+        saved.tabs[0].zoom = Some(5);
+        saved.tabs[0].grid_zoom = Some(3);
+        saved.tabs[0].preview = false;
+        saved.tabs[1].zoom = Some(0);
+        let dirs = vec![PathBuf::from("folder01"), PathBuf::from("folder02")];
+        let arguments = crate::detached_view::arguments(&saved, &dirs, None).unwrap();
+        let packet = crate::detached_view::parse(arguments.into_iter().skip(1)).unwrap();
+        let restored = Panel::from_detached(&packet.view, &packet.dirs).unwrap();
+        assert_eq!(restored.tabs.active, 1);
+        assert_eq!(restored.displayed_path, dirs[1]);
+        assert_eq!(restored.tab_bar_mode, 2);
+        assert_eq!(restored.vbar_user_w, 170.0);
+        for (tab, path) in restored.tabs.tabs.iter().zip(&dirs) {
+            assert_eq!(&tab.current_path, path);
+        }
+        for (tab, path) in saved.tabs.iter_mut().zip(&dirs) {
+            tab.path = path.display().to_string();
+        }
+        assert_eq!(panel_to_state(&restored), saved);
+        assert!(Panel::from_detached(&saved, &[]).is_none());
+        assert!(Panel::from_detached(&saved, &dirs[..1]).is_none());
+    }
+
     fn tab(path: &str) -> TabState {
         TabState {
             path: path.into(),
@@ -18243,11 +20384,13 @@ mod tests {
             show_hidden: false,
             group_mode: GroupMode::FoldersFirst,
             zoom: None,
+            item_arrangement: ItemArrangement::List,
+            grid_zoom: None,
         }
     }
 
-    fn panel(tabs: Vec<TabState>) -> PanelState {
-        PanelState {
+    fn panel(tabs: Vec<TabState>) -> ViewState {
+        ViewState {
             stretch: 1.0,
             active_tab: 0,
             tabs,
@@ -18257,7 +20400,7 @@ mod tests {
         }
     }
 
-    fn ws(panels: Vec<PanelState>) -> WorkspaceState {
+    fn ws(panels: Vec<ViewState>) -> WorkspaceState {
         WorkspaceState {
             active_panel: 0,
             panels,

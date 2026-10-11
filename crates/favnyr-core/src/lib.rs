@@ -10,6 +10,7 @@ pub mod config;
 pub mod eject;
 pub mod error;
 pub mod favorites;
+pub mod folder_state;
 pub mod fs;
 pub mod i18n;
 pub mod layout;
@@ -29,10 +30,10 @@ pub use error::{Error, Result};
 pub use favorites::{FavNode, FavStore, FlatFav};
 pub use fs::{Entry, FileKind, SortColumn, SortOrder};
 pub use i18n::{Lang, Theme};
-pub use layout::{Layout, LayoutNode, PanelGeom, Rect, Side, SplitDir, SplitterGeom};
+pub use layout::{Layout, LayoutNode, Rect, Side, SplitDir, SplitterGeom, ViewGeom};
 pub use openers::{Opener, OpenerIcon, OpenerStore, TagContext};
 pub use places::{Place, PlaceKind};
 pub use thumbnail::Thumbnail;
 pub use workspace::{
-    NamedWorkspaceMeta, PanelState, SidebarSectionsState, TabState, WorkspaceState,
+    NamedWorkspaceMeta, SidebarSectionsState, TabState, ViewState, WorkspaceState,
 };

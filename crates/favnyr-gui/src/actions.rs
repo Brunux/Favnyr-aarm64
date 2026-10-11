@@ -516,68 +516,20 @@ pub fn run_opener_dir(opener: &Opener, dir: &Path) -> Result<()> {
     spawn_detached(&program, opener.render_for_file(&ctx), opener.elevated)
 }
 
-/// Opens a NEW Favnyr instance on `dir` (browser-style tab tear-off).
-/// The binary is relaunched with the explicit internal protocol
-/// `--detached-tab <path> ...`, so this path isn't confused with the
-/// new public "workspace name" argument (cf. `main.rs`).
-/// The path is passed as `OsStr` (no loss on non-UTF-8 paths).
-///
-/// `at` = SCREEN (physical) position where the window should open — the
-/// cursor's drop point, so the window appears under the mouse. `None` → default
-/// (centered) position. `tab_bar_mode` = tab bar position inherited from
-/// the source view (0 top / 1 left / 2 right).
-pub fn spawn_new_instance(dir: &Path, at: Option<(i32, i32)>, tab_bar_mode: u8) -> Result<()> {
-    let exe = std::env::current_exe().map_err(|e| anyhow!("Favnyr executable not found: {e}"))?;
-    info!(dir = %dir.display(), at = ?at, "spawn new Favnyr instance (tab tear-off)");
-    let mut cmd = Command::new(&exe);
-    cmd.arg("--detached-tab").arg(dir);
-    // Position + bar mode as positional args after the internal marker.
-    if let Some((x, y)) = at {
-        cmd.arg(x.to_string()).arg(y.to_string());
-        if tab_bar_mode > 0 {
-            cmd.arg(tab_bar_mode.to_string());
-        }
-    }
-    cmd.stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
-    cmd.spawn()
-        .map(|_| ())
-        .map_err(|e| anyhow!("new Favnyr instance: {e}"))
-}
-
-/// Opens a NEW Favnyr instance holding a whole VIEW: all its tabs, in order,
-/// the FIRST being the one that stays active.
-///
-/// Its own marker rather than an extension of `--detached-tab`, which is left
-/// untouched — so the proven single-tab path cannot regress, and two builds of
-/// different versions keep understanding each other.
-///
-/// Every folder travels in the SAME launch, so the operation succeeds whole or
-/// fails whole: there is no state where some tabs have moved and the others are
-/// stranded. Paths go as `OsStr`, so no shell interprets them and a name that
-/// is not valid UTF-8 survives the trip.
-pub fn spawn_detached_view(dirs: &[PathBuf], at: (i32, i32), tab_bar_mode: u8) -> Result<()> {
-    if dirs.is_empty() {
-        return Err(anyhow!("a detached view needs at least one tab"));
-    }
+/// Launches one window with all tabs, their settings and the active index.
+/// Positions are physical screen coordinates. Paths travel as native arguments
+/// independently of the serialized settings. A failed spawn leaves the source
+/// untouched, whether the caller is detaching a single tab or a whole view.
+pub fn spawn_detached_view(
+    view: &favnyr_core::workspace::ViewState,
+    dirs: &[PathBuf],
+    at: Option<(i32, i32)>,
+) -> Result<()> {
+    let args = crate::detached_view::arguments(view, dirs, at)?;
     let exe = std::env::current_exe().map_err(|e| anyhow!("Favnyr executable not found: {e}"))?;
     info!(tabs = dirs.len(), at = ?at, "spawn new Favnyr instance (view tear-off)");
     let mut cmd = Command::new(&exe);
-    // Position and bar mode FIRST, fixed arity; the folders last, however many
-    // there are. The list can then be read without any ambiguity.
-    cmd.arg("--detached-view")
-        .arg(at.0.to_string())
-        .arg(at.1.to_string())
-        .arg(tab_bar_mode.to_string());
-    for dir in dirs {
-        cmd.arg(dir);
-    }
+    cmd.args(args);
     cmd.stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
@@ -1051,6 +1003,7 @@ pub fn open_terminal(path: &Path) -> Result<()> {
             .ok_or_else(|| anyhow!("no terminal detected ($TERMINAL or known candidates)"))?;
         info!(terminal = %term, cwd = %cwd.display(), "opening a terminal");
         Command::new(&term)
+            .args(working_directory_args(&term, &cwd))
             .current_dir(&cwd)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
@@ -1062,6 +1015,38 @@ pub fn open_terminal(path: &Path) -> Result<()> {
 }
 
 // ----- Internal helpers (Linux only) -----
+
+/// The argument that names the working directory, for terminals that ignore
+/// the one their process was started in.
+///
+/// A single-instance terminal does not open the window itself: it hands the
+/// request to a server already running elsewhere, usually over D-Bus, and that
+/// server has its own working directory. Setting `current_dir` then reaches a
+/// process that only forwards the message, and the window opens in the home
+/// folder. Naming the directory in an argument travels with the request.
+///
+/// Terminals absent from this list are left alone: they honour the directory
+/// they are started in, and an argument they do not know would make them
+/// refuse to start at all.
+#[cfg(not(windows))]
+fn working_directory_args(term: &str, cwd: &Path) -> Vec<std::ffi::OsString> {
+    use std::ffi::OsString;
+
+    // $TERMINAL may hold a full path, and the table is keyed by program name.
+    let name = Path::new(term)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(term);
+    match name {
+        "gnome-terminal" | "kgx" | "xfce4-terminal" | "tilix" | "lxterminal" => {
+            let mut arg = OsString::from("--working-directory=");
+            arg.push(cwd.as_os_str());
+            vec![arg]
+        }
+        "konsole" => vec![OsString::from("--workdir"), cwd.as_os_str().to_os_string()],
+        _ => Vec::new(),
+    }
+}
 
 #[cfg(not(windows))]
 pub(crate) fn pick_terminal() -> Option<String> {
@@ -1465,6 +1450,62 @@ mod image_activation_tests {
             b'g' as u16,
         ]);
         assert!(photos_gallery_target(std::path::Path::new(&invalid)).is_err());
+    }
+}
+
+#[cfg(all(test, not(windows)))]
+mod unix_terminal_tests {
+    use super::working_directory_args;
+    use std::path::Path;
+
+    fn args_of(term: &str) -> Vec<String> {
+        working_directory_args(term, Path::new("/folder01/folder02"))
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn single_instance_terminals_are_told_the_directory() {
+        for term in [
+            "gnome-terminal",
+            "kgx",
+            "xfce4-terminal",
+            "tilix",
+            "lxterminal",
+        ] {
+            assert_eq!(
+                args_of(term),
+                vec!["--working-directory=/folder01/folder02"],
+                "{term}"
+            );
+        }
+        assert_eq!(args_of("konsole"), vec!["--workdir", "/folder01/folder02"]);
+    }
+
+    #[test]
+    fn a_terminal_outside_the_table_is_given_no_argument() {
+        // An option it does not know would stop it from starting at all, and
+        // these honour the directory they are launched in.
+        for term in [
+            "kitty",
+            "alacritty",
+            "foot",
+            "wezterm",
+            "xterm",
+            "unknown-term",
+        ] {
+            assert!(args_of(term).is_empty(), "{term}");
+        }
+    }
+
+    #[test]
+    fn a_full_path_in_the_variable_still_matches_the_table() {
+        // $TERMINAL may hold a path rather than a bare program name.
+        assert_eq!(
+            args_of("/usr/bin/konsole"),
+            vec!["--workdir", "/folder01/folder02"]
+        );
     }
 }
 

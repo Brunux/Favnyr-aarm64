@@ -32,19 +32,12 @@ pub fn read_files() -> Option<(Vec<PathBuf>, bool /*cut*/)> {
 // bytes of the `OsStr`.
 #[cfg(any(target_os = "linux", test))]
 mod uri_list {
+    use crate::file_uri::decode_local_uri as decode_file_uri;
+
     fn hex(byte: u8) -> char {
         match byte {
             0..=9 => (b'0' + byte) as char,
             _ => (b'A' + byte - 10) as char,
-        }
-    }
-
-    fn unhex(byte: u8) -> Option<u8> {
-        match byte {
-            b'0'..=b'9' => Some(byte - b'0'),
-            b'a'..=b'f' => Some(byte - b'a' + 10),
-            b'A'..=b'F' => Some(byte - b'A' + 10),
-            _ => None,
         }
     }
 
@@ -61,51 +54,6 @@ mod uri_list {
             }
         }
         uri
-    }
-
-    fn percent_decode(encoded: &[u8]) -> Option<Vec<u8>> {
-        let mut decoded = Vec::with_capacity(encoded.len());
-        let mut index = 0;
-        while index < encoded.len() {
-            if encoded[index] == b'%' {
-                let high = unhex(*encoded.get(index + 1)?)?;
-                let low = unhex(*encoded.get(index + 2)?)?;
-                decoded.push((high << 4) | low);
-                index += 3;
-            } else {
-                decoded.push(encoded[index]);
-                index += 1;
-            }
-        }
-        (!decoded.contains(&0)).then_some(decoded)
-    }
-
-    fn strip_local_authority(uri_path: &[u8]) -> Option<&[u8]> {
-        let Some(authority_and_path) = uri_path.strip_prefix(b"//") else {
-            return Some(uri_path);
-        };
-        if authority_and_path.starts_with(b"/") {
-            return Some(authority_and_path);
-        }
-        const LOCALHOST: &[u8] = b"localhost";
-        if authority_and_path.len() >= LOCALHOST.len()
-            && authority_and_path[..LOCALHOST.len()].eq_ignore_ascii_case(LOCALHOST)
-            && authority_and_path.get(LOCALHOST.len()) == Some(&b'/')
-        {
-            return Some(&authority_and_path[LOCALHOST.len()..]);
-        }
-        // Favnyr doesn't know how to copy a remote KIO resource
-        // (`file://host`) as a local path: it's ignored rather than
-        // misinterpreted.
-        None
-    }
-
-    pub fn decode_file_uri(uri: &[u8]) -> Option<Vec<u8>> {
-        let path = strip_local_authority(uri.strip_prefix(b"file:")?)?;
-        if !path.starts_with(b"/") {
-            return None;
-        }
-        percent_decode(path)
     }
 
     pub fn parse_uri_list(data: &[u8]) -> Vec<Vec<u8>> {

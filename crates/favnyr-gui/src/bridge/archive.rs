@@ -179,6 +179,8 @@ fn start(window: &MainWindow, state: &AppState, job: Job, password: String) {
         targets: Vec::new(),
         thumbnail_invalidations: Vec::new(),
         transient_cleanup: None,
+        manual_insertion: None,
+        completed_targets: Arc::new(Mutex::new(Vec::new())),
     });
     state.archive.running.set(true);
     sync_op_busy(window, state);
@@ -315,6 +317,7 @@ fn poll(window: &MainWindow, state: &AppState) {
                         output.destination,
                         output.sources,
                         Some(cleanup),
+                        None,
                     );
                 }
             }

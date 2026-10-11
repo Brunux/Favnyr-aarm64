@@ -21,7 +21,7 @@
 //! favorites tree has the same property.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
@@ -178,7 +178,7 @@ impl AnnotationStore {
     /// Anything already sitting at the destination is overwritten, which is
     /// what the filesystem did to the item itself.
     pub fn rename(&mut self, from: &Path, to: &Path) {
-        let folded_from = fold(from);
+        let folded_from = crate::paths::fold_for_storage(from);
         let moved: Vec<(String, String, Annotation)> = self
             .entries
             .iter()
@@ -189,7 +189,11 @@ impl AnnotationStore {
                 } else {
                     to.join(rest)
                 };
-                Some((key.clone(), key_of(&destination), entry.clone()))
+                Some((
+                    key.clone(),
+                    crate::paths::storage_key(&destination),
+                    entry.clone(),
+                ))
             })
             .collect();
         for (old, new, entry) in moved {
@@ -205,7 +209,7 @@ impl AnnotationStore {
     /// keeps its annotation: it can come back, and losing a note to a mistaken
     /// delete is worse than carrying an entry that may never be claimed.
     pub fn forget(&mut self, path: &Path) {
-        let folded = fold(path);
+        let folded = crate::paths::fold_for_storage(path);
         self.entries
             .retain(|key, _| Path::new(key).strip_prefix(&folded).is_err());
     }
@@ -297,29 +301,11 @@ fn is_orphan(path: &Path, exists: &impl Fn(&Path) -> bool) -> bool {
     path.parent().is_some_and(exists)
 }
 
-/// The path a key is derived from, under the platform's own rules.
-///
-/// Windows treats two spellings of one path as the same file, and Favnyr can
-/// legitimately reach the same folder under either — the address bar keeps
-/// what the user typed, and a path can also arrive from another application.
-/// Comparing the two as plain text would mean annotating through one spelling
-/// and finding nothing through the other, then losing the colour and the note
-/// for good at the next rename, which strips the prefix it was given.
-#[cfg(windows)]
-fn fold(path: &Path) -> PathBuf {
-    PathBuf::from(path.to_string_lossy().to_lowercase())
-}
-
-#[cfg(not(windows))]
-fn fold(path: &Path) -> PathBuf {
-    path.to_path_buf()
-}
-
 /// Key under which a path is stored. Lossy conversion is deliberate: a path
 /// the platform cannot render as text cannot be annotated either, and the
 /// alternative is refusing to load the whole file over one odd entry.
 fn key_of(path: &Path) -> String {
-    fold(path).to_string_lossy().into_owned()
+    crate::paths::storage_key(path)
 }
 
 #[cfg(test)]

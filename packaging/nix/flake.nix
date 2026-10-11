@@ -24,6 +24,12 @@
           default = favnyr;
         };
 
+        # Without this, `nix flake check` has nothing to check and passes on a
+        # recipe that does not build.
+        checks = {
+          default = favnyr;
+        };
+
         apps = {
           default = flake-utils.lib.mkApp {
             drv = favnyr;

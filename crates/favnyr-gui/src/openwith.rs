@@ -368,26 +368,23 @@ mod imp {
     /// `IShellLinkW::SetPath` + `IPersistFile::Save` (COM). The shortcut's working
     /// directory is the target's own directory.
     pub fn create_shortcut(lnk_path: &Path, target: &Path) -> Result<()> {
+        use anyhow::Context;
         use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance, IPersistFile};
         use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
         use windows::core::Interface;
         unsafe {
             let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
             let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
-                .map_err(|e| anyhow::anyhow!("CoCreateInstance ShellLink: {e}"))?;
+                .context("CoCreateInstance ShellLink")?;
             let target_w = wide(&target.to_string_lossy());
-            link.SetPath(PCWSTR(target_w.as_ptr()))
-                .map_err(|e| anyhow::anyhow!("SetPath: {e}"))?;
+            link.SetPath(PCWSTR(target_w.as_ptr())).context("SetPath")?;
             if let Some(dir) = target.parent() {
                 let dir_w = wide(&dir.to_string_lossy());
                 let _ = link.SetWorkingDirectory(PCWSTR(dir_w.as_ptr()));
             }
-            let pf: IPersistFile = link
-                .cast()
-                .map_err(|e| anyhow::anyhow!("cast IPersistFile: {e}"))?;
+            let pf: IPersistFile = link.cast().context("cast IPersistFile")?;
             let lnk_w = wide(&lnk_path.to_string_lossy());
-            pf.Save(PCWSTR(lnk_w.as_ptr()), true)
-                .map_err(|e| anyhow::anyhow!("Save .lnk: {e}"))?;
+            pf.Save(PCWSTR(lnk_w.as_ptr()), true).context("Save .lnk")?;
             Ok(())
         }
     }
