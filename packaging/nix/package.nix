@@ -4,8 +4,6 @@
   fetchurl,
   autoPatchelfHook,
   makeWrapper,
-  copyDesktopItems,
-  makeDesktopItem,
   fontconfig,
   wayland,
   libxkbcommon,
@@ -19,7 +17,7 @@
 
 stdenv.mkDerivation rec {
   pname = "favnyr";
-  version = "0.3.4";
+  version = "0.3.5";
 
   # One release, one architecture. A second architecture cannot be another entry
   # in the flake's system list: each one has its own archive and its own hash, so
@@ -27,13 +25,12 @@ stdenv.mkDerivation rec {
   # here, and `meta.platforms` widened to match.
   src = fetchurl {
     url = "https://github.com/GlitchAwakened/Favnyr/releases/download/v${version}/favnyr-linux-x86_64.tar.gz";
-    hash = "sha256-ft0MkM4Dz1Mq+brX2SCHagsAiISuYIuF0v2u7lAhfkk=";
+    hash = "sha256-lv7MZcmn77gAhTNrMJ97kaWjcQxUrKut2xs0T7QQQWM=";
   };
 
   nativeBuildInputs = [
     autoPatchelfHook
     makeWrapper
-    copyDesktopItems
   ];
 
   buildInputs = [
@@ -51,27 +48,12 @@ stdenv.mkDerivation rec {
 
   sourceRoot = ".";
 
-  desktopItems = [
-    (makeDesktopItem {
-      name = "favnyr";
-      exec = "favnyr";
-      icon = "favnyr";
-      comment = "A modern and lightweight file manager";
-      desktopName = "Favnyr";
-      genericName = "File Manager";
-      categories = [
-        "System"
-        "FileManager"
-        "Utility"
-      ];
-    })
-  ];
-
   installPhase = ''
     runHook preInstall
 
     install -Dm755 favnyr $out/bin/favnyr
     install -Dm644 favnyr.svg $out/share/icons/hicolor/scalable/apps/favnyr.svg
+    install -Dm644 favnyr.desktop $out/share/applications/favnyr.desktop
 
     runHook postInstall
   '';
