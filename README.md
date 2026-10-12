@@ -1,24 +1,28 @@
 # Favnyr
+
+**Favnyr** : A portable file browser for Windows and Linux. Single executable, no installer, no administrator rights, no telemetry.
+
 <p align="center">
 <img width="30%" alt="favnyr" src="https://github.com/user-attachments/assets/1132cb2d-c7c2-4554-8e2d-d285b07139bd" />
 
 <img width="60%" alt="ScreenShotFavnyr01" src="https://github.com/user-attachments/assets/086c3a57-9f72-401f-837b-40887c60919c">
 </p>
 
-https://github.com/user-attachments/assets/78f459cc-ada4-4f07-9ed5-2132f3062fa6
+https://github.com/user-attachments/assets/a59d8aac-5b9d-499d-bc37-f774ffce9066
 
-*(Worth watching to the end. It goes well past the basics and shows most of the
+https://github.com/user-attachments/assets/2522fd49-1803-4419-8fa6-deba85dacc20
+
+*(It's worth watching the videos part 1 & 2 until the end. It goes well past the basics and shows most of the
 gestures and shortcuts collected under [Pro tips](#pro-tips).)*
 
-**Favnyr** : A portable file browser for Windows and Linux. Single executable, no installer, no administrator rights, no telemetry.
+---
 
 Favnyr came out of a simple frustration: wanting several folders open side by side, being able to come back to the same arrangement tomorrow, and not wondering what the program does when nobody is looking. It is written in Rust with [Slint](https://slint.dev), which is why it starts fast and stays small.
 I am Favnyr's first user, and I use it daily literally every day.
 
 Copy the executable where you want and run it. That is the whole installation.
 
-**Special case** : on NixOS there is a footnote.
-
+**Special case** : on NixOS, see the [NixOS footnote](#nixos) below.
 
 ## Private by construction
 
