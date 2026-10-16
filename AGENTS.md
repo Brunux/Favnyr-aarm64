@@ -93,6 +93,50 @@ automatically.
 - **`/tmp` is a ~1.9 GiB tmpfs** — too small for kernel/rootfs work. Keep large artifacts on
   the real filesystem; the scripts default to `$HOME/.cache/debian-aarch64`
   (`BUILD_ROOT`, `WORK_DIR`, `SRC_DIR`). `/tmp/opencode` is fine only for small scratch files.
+- **Never edit a script while it is executing.** The shell re-reads the file as it goes and can
+  die with `unexpected EOF while looking for matching '"'`. Write the new version elsewhere and
+  `mv` it into place.
+
+### Host toolchain
+
+- The kernel build also needs the **`openssl`** binary (module signing) and **`findutils`** (the
+  kernel's initramfs scripts use `find -printf`, which BusyBox find lacks).
+
+### Debian naming
+
+- `deviceinfo_arch` uses distro/Alpine names (`aarch64`), but **debootstrap requires the Debian
+  name** (`arm64`). `lib.sh` maps between them; passing `aarch64` yields
+  `Invalid Release file, no entry for main/binary-aarch64/Packages`.
+
+### Kernel staging
+
+- `make zinstall` installs the image as **`vmlinuz-<release>`** only; there is no plain `vmlinuz`
+  in the staged tree.
+- `CONFIG_MMC_MTK`, `CONFIG_DRM_MEDIATEK` and `CONFIG_EXT4_FS` are built-in (`=y`), so the root
+  filesystem and the display work without any initramfs module.
+
+### ChromeOS GPT (`cgpt`)
+
+- **Do not pass `-z` to `cgpt create`**: it zeroes the GPT areas *after* writing them, so the
+  following `cgpt add` fails with `GptSanityCheck() returned 2: GPT_ERROR_INVALID_HEADERS`.
+- **`cgpt` does not write a protective MBR**, and the Linux kernel refuses to parse a GPT without
+  one (`0xAA55` signature plus a `0xEE` entry). Run `parted -s <dev> mktable gpt` first — this is
+  why pmbootstrap does it too — then `cgpt create` / `cgpt add` on top of it.
+- After writing the table, refresh the kernel's view with `partx -d` + `partx -a`
+  (`blockdev --rereadpt` returns `EBUSY` on this microSD card).
+- `lsblk -nro PATH <disk>` lists the **disk first**, then its partitions: skip the first line when
+  resolving `p1`/`p2`. A wrong index here formats the whole disk instead of a partition.
+
+### depthcharge FIT
+
+- Build with `deviceinfo_depthcharge_board="mt8192"` (not `asurada`: the hayato DTB has no
+  `google,asurada` compatible). `mkdepthcharge` prepends `kern_guid=%U` by itself, so the cmdline
+  passed to `depthchargectl` must not add it again.
+- Verify with `futility show <kpart>`: expect a dev-signed key block, preamble 2.2 and
+  `Body verification succeeded`.
+- The FIT carries one config per DTB. With `--board mt8192` no config matches by `compatible`, so
+  depthcharge falls back to the **default config, which is the first DTB**: hayato must stay
+  first (the alphabetical order of `deviceinfo_dtb="mediatek/mt8192-asurada*"` does that).
 
 ## Commands
 

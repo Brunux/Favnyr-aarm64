@@ -28,20 +28,30 @@ for part in "$BLOCK" "$BLOCK"p*; do
 	[ -b "$part" ] || continue
 	swapoff "$part" 2>/dev/null || true
 	mountpoint -q "$part" 2>/dev/null && umount "$part" || true
+	wipefs -a "$part" >/dev/null 2>&1 || true
 done
-wipefs -a "$BLOCK" >/dev/null 2>&1 || true
-cgpt create -z "$BLOCK"
+# See write-sd.sh for the cgpt pitfalls: no '-z', and parted must create the
+# protective MBR or the kernel will not parse the GPT.
+TOTAL="$(blockdev --getsz "$BLOCK")"
+dd if=/dev/zero of="$BLOCK" bs=512 count=34 conv=fsync 2>/dev/null
+dd if=/dev/zero of="$BLOCK" bs=512 seek=$((TOTAL - 33)) count=33 conv=fsync 2>/dev/null
+parted -s "$BLOCK" mktable gpt
+cgpt create "$BLOCK"
 cgpt add -i 1 -b "$KPART_START_SECTORS" -s "$KPART_SIZE_SECTORS" -t kernel -l pmOS_kernel \
 	-S 1 -T 5 -P 10 "$BLOCK"
-TOTAL="$(blockdev --getsz "$BLOCK")"
 P2_START=$((KPART_START_SECTORS + KPART_SIZE_SECTORS))
 P2_SIZE=$((TOTAL - P2_START - 2048))
 cgpt add -i 2 -b "$P2_START" -s "$P2_SIZE" -t data -l pmOS_root "$BLOCK"
-partprobe "$BLOCK" 2>/dev/null || true
+partx -d "$BLOCK" 2>/dev/null || true
+partx -a "$BLOCK" 2>/dev/null || blockdev --rereadpt "$BLOCK" 2>/dev/null || true
 command -v udevadm >/dev/null && udevadm settle || sleep 2
 
-KPART_PART="$(lsblk -nro PATH "$BLOCK" | sed -n '1p')"
-ROOT_PART="$(lsblk -nro PATH "$BLOCK" | sed -n '2p')"
+# lsblk lists the whole device first, then its partitions: skip the disk line.
+KPART_PART="$(lsblk -nro PATH "$BLOCK" | sed -n '2p')"
+ROOT_PART="$(lsblk -nro PATH "$BLOCK" | sed -n '3p')"
+[ -n "$KPART_PART" ] && [ -n "$ROOT_PART" ] || die "could not resolve partitions on $BLOCK"
+[ "$KPART_PART" != "$BLOCK" ] && [ "$ROOT_PART" != "$BLOCK" ] ||
+	die "refusing to operate on the whole disk; partition resolution failed for $BLOCK"
 
 log "Formatting $ROOT_PART (ext4)"
 mkfs.ext4 -F -L pmOS_root "$ROOT_PART" >/dev/null
