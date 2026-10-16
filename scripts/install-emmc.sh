@@ -53,7 +53,7 @@ disk_layout_mount "$BLOCK" "$MNT"
 log "Copying the running system to $MNT"
 rsync -aHAX --delete \
 	--exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run \
-	--exclude=/mnt --exclude="$MNT" --exclude=/media \
+	--exclude=/mnt --exclude=/media --exclude="$MNT" --exclude="$WORK_DIR" \
 	--exclude=/tmp/* --exclude=/var/tmp/* \
 	--exclude=/var/cache/* --exclude=/var/log/journal/* \
 	/ "$MNT"/
