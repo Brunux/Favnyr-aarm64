@@ -93,7 +93,16 @@ KPART_PATH="${deviceinfo_cgpt_kpart:-/boot/vmlinuz.kpart}"
 # Debian target
 # ---------------------------------------------------------------------------
 DEBIAN_SUITE="${DEBIAN_SUITE:-forky}"
-DEBIAN_ARCH="${DEBIAN_ARCH:-$DEVICE_ARCH}"
+# Map the deviceinfo arch (distro/Alpine style, e.g. aarch64) to the Debian
+# architecture name (e.g. arm64). debootstrap requires the latter.
+case "$DEVICE_ARCH" in
+	aarch64 | arm64) _debian_arch=arm64 ;;
+	armv7 | arm) _debian_arch=armhf ;;
+	i686 | x86) _debian_arch=i386 ;;
+	x86_64 | amd64) _debian_arch=amd64 ;;
+	*) _debian_arch="$DEVICE_ARCH" ;;
+esac
+DEBIAN_ARCH="${DEBIAN_ARCH:-$_debian_arch}"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-http://deb.debian.org/debian}"
 DEBIAN_COMPONENTS="${DEBIAN_COMPONENTS:-main contrib non-free non-free-firmware}"
 

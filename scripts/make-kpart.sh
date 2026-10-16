@@ -28,7 +28,9 @@ set -- "$ROOTFS"/boot/dtbs/$DTB_GLOB.dtb
 [ -e "$1" ] || die "no DTBs matching '$DTB_GLOB' under $ROOTFS/boot/dtbs"
 cp "$@" "$BUILDDIR"/
 
-CMDLINE="${KERNEL_CMDLINE}kern_guid=%U ${CMDLINE_EXTRA}"
+# depthchargectl/mkdepthcharge prepends "kern_guid=%U" itself (see
+# --no-kern-guid), so it must NOT be added here.
+CMDLINE="${KERNEL_CMDLINE}${CMDLINE_EXTRA}"
 log "Building kpart (device=$DEVICE board=$DEPTHCHARGE_BOARD compression=$DEPTHCHARGE_COMPRESSION)"
 log "  kernel : $KERNEL_IMG"
 log "  initrd : $INITRD"
