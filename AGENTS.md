@@ -137,6 +137,10 @@ automatically.
 - The FIT carries one config per DTB. With `--board mt8192` no config matches by `compatible`, so
   depthcharge falls back to the **default config, which is the first DTB**: hayato must stay
   first (the alphabetical order of `deviceinfo_dtb="mediatek/mt8192-asurada*"` does that).
+- The output is silent by design (`quiet loglevel=2`). For a verbose boot without touching
+  `kernel-cmdline.conf`:
+  `KERNEL_CMDLINE_OVERRIDE="console=tty0 ignore_loglevel loglevel=7" scripts/make-kpart.sh`
+  and write the resulting kpart to the kernel partition.
 
 ## Commands
 

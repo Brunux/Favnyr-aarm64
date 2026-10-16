@@ -50,7 +50,9 @@ DEVICE_DIR="$DEVICES_DIR/$DEVICE"
 
 DEVICE_ARCH="${deviceinfo_arch:-arm64}"
 # Kernel command line base (kernel-cmdline.conf) joined into one line.
-KERNEL_CMDLINE="$(tr '\n' ' ' <"$DEVICE_DIR/kernel-cmdline.conf" 2>/dev/null || true)"
+# KERNEL_CMDLINE_OVERRIDE replaces it entirely; useful for a verbose debug boot
+# (e.g. KERNEL_CMDLINE_OVERRIDE="console=tty0 ignore_loglevel loglevel=7").
+KERNEL_CMDLINE="${KERNEL_CMDLINE_OVERRIDE:-$(tr '\n' ' ' <"$DEVICE_DIR/kernel-cmdline.conf" 2>/dev/null || true)}"
 # Modules to force into the initramfs.
 INITFS_MODULES="$(tr '\n' ' ' <"$DEVICE_DIR/modules-initfs" 2>/dev/null || true)"
 # DTBs to embed (relative to /boot/dtbs; may contain a glob).
