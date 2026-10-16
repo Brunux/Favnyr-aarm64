@@ -42,8 +42,8 @@ parted
 # "no backend DAIs enabled", ACP marks the HiFi profile unsupported and
 # WirePlumber falls back to a dummy sink (no speaker output). See AGENTS.md.
 alsa-utils
-# UCM profiles, including the MediaTek/mt8192 card.
-alsa-ucm-conf
+# (the UCM profiles themselves, alsa-ucm-conf, are part of the UI audio
+# stack and are listed in uis/<ui>/packages.list)
 # Realtime scheduling for PipeWire/WirePlumber (otherwise they log
 # "RTKit error: ServiceUnknown" and run without RT priority).
 rtkit
