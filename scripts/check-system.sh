@@ -25,6 +25,15 @@
 # devices/*/packages.list and uis/*/packages.list is installed.
 #
 # Exit status: 0 when nothing FAILs, 1 otherwise.
+#
+# Pitfall, with `pipefail` set: never test the status of `producer | grep -q ...`.
+# `grep -q` exits on the first match, the producer then dies of SIGPIPE (141) and
+# the pipeline - and therefore the `if` - reports failure even though the pattern
+# was found. Whether it bites depends on how far the producer got before the pipe
+# closed, so it shows up as a random false FAIL/WARN (the firmware check below
+# reported a loaded firmware as missing on the card, and not on the host, with
+# the very same input). Feed `grep` a here-string of an already-captured variable
+# (`grep -q PAT <<<"$var"`) or use `grep -rqs PAT <path>` instead.
 set -uo pipefail
 
 PASS=0 WARN=0 FAIL=0
@@ -42,6 +51,16 @@ skip()    { printf '  %sSKIP%s  %s\n' "$C_DIM" "$C_OFF" "$*"; }
 info()    { printf '  ----  %s\n' "$*"; }
 section() { printf '\n%s==> %s%s\n' "$C_HEAD" "$*" "$C_OFF"; }
 have()    { command -v "$1" >/dev/null 2>&1; }
+
+# A session started by greetd does not necessarily export the sbin directories,
+# and several tools this report needs live there (swapon, findfs, blkid, iw,
+# tuigreet). Fix the PATH once here instead of discovering each of them as a
+# false failure - the first real report from the booted card did exactly that
+# with swapon (which made an active zram swap look absent).
+case ":$PATH:" in
+	*:/usr/sbin:*) ;;
+	*) PATH="$PATH:/usr/sbin:/sbin"; export PATH ;;
+esac
 
 # ---------------------------------------------------------------------------
 # Privileges: privileged reads use `sudo -n`, session commands must run as the
@@ -147,11 +166,16 @@ if [ -n "$_guid" ]; then
 	else
 		ok "kernel partition $_kpart_part (kern_guid=$_guid)"
 		if have futility; then
-			if asroot futility show "$_kpart_part" 2>/dev/null | grep -q 'Body verification succeeded'; then
-				ok "the kernel partition holds a dev-signed FIT"
-			else
-				fail "futility cannot verify a signed kpart in $_kpart_part"
-			fi
+			# Do not pipe futility into `grep -q` (see the header).
+			_fv="$(asroot futility show "$_kpart_part" 2>/dev/null || true)"
+			case "$_fv" in
+				*'Body verification succeeded'*)
+					ok "the kernel partition holds a dev-signed FIT"
+					;;
+				*)
+					fail "futility cannot verify a signed kpart in $_kpart_part"
+					;;
+			esac
 		else
 			skip "futility not installed (package vboot-kernel-utils): kernel partition not verified"
 		fi
@@ -179,15 +203,31 @@ fi
 section "Firmware"
 # ---------------------------------------------------------------------------
 if have dmesg; then
-	_missing="$(asroot dmesg | grep -oE 'Direct firmware load for [^ ]+ failed' |
+	_dmesg="$(asroot dmesg 2>/dev/null)"
+	_missing="$(printf '%s\n' "$_dmesg" | grep -oE 'Direct firmware load for [^ ]+ failed' |
 		awk '{print $5}' | sort -u)"
 	if [ -z "$_missing" ]; then
 		ok "no failed firmware loads in dmesg"
 	else
-		warn "firmware the kernel asked for and did not get:"
-		printf '%s\n' "$_missing" | sed 's/^/          /'
+		# A failed direct load is not necessarily a missing firmware: a driver
+		# built as a module can request its firmware from the initramfs, long
+		# before the root filesystem - and therefore /lib/firmware - exists, and
+		# get it seconds later when the module is loaded for good. That is what
+		# mtk-scp does here (mediatek/mt8192/scp.img: two -2 failures, then
+		# "Booting fw image ... SCP is ready"), so what matters is the outcome,
+		# not the first attempt.
+		for _fw in $_missing; do
+			if grep -q "Booting fw image $_fw" <<<"$_dmesg"; then
+				ok "firmware $_fw: requested before the rootfs was up, then loaded"
+			elif [ -e "/lib/firmware/$_fw" ] || [ -e "/lib/firmware/$_fw.zst" ] ||
+				[ -e "/lib/firmware/$_fw.xz" ]; then
+				warn "firmware $_fw exists in /lib/firmware but the kernel never loaded it"
+			else
+				warn "firmware $_fw is not in /lib/firmware (the kernel asked for it)"
+			fi
+		done
 	fi
-	_dmesg_err="$(asroot dmesg | grep -icE '\b(error|failed)\b.*(rtw88|bluetooth|hci|sound|asoc)' || true)"
+	_dmesg_err="$(printf '%s\n' "$_dmesg" | grep -icE '\b(error|failed)\b.*(rtw88|bluetooth|hci|sound|asoc)' || true)"
 	[ "${_dmesg_err:-0}" -eq 0 ] && ok "no errors from the wireless/Bluetooth/audio subsystems" ||
 		warn "$_dmesg_err dmesg line(s) mention errors in the wireless/Bluetooth/audio subsystems"
 else
@@ -221,8 +261,12 @@ else
 	fail "/etc/fstab root UUID ($_fstab_uuid) != mounted root ($_root_uuid): the next boot will fail"
 fi
 
-if swapon --show=NAME --noheadings 2>/dev/null | grep -q .; then
-	ok "swap active: $(swapon --show=NAME --noheadings | tr '\n' ' ')"
+# Two sources, so a stripped-down PATH or an odd util-linux cannot fake a
+# "no swap" report on a machine that is swapping.
+_swap="$(swapon --show=NAME --noheadings 2>/dev/null || true)"
+[ -n "$_swap" ] || _swap="$(awk 'NR > 1 { print $1 }' /proc/swaps 2>/dev/null || true)"
+if [ -n "$_swap" ]; then
+	ok "swap active: $(printf '%s' "$_swap" | tr '\n' ' ')"
 else
 	warn "no swap active (zram-tools should provide /dev/zram0)"
 fi
@@ -296,8 +340,12 @@ for _b in /sys/class/backlight/*/brightness; do
 done
 [ -n "$_bl" ] || warn "no backlight device"
 if [ "$(id -u)" -ne 0 ]; then
-	id -nG 2>/dev/null | grep -qw video && ok "session user is in group video" ||
+	_groups="$(id -nG 2>/dev/null || true)"
+	if grep -qw video <<<"$_groups"; then
+		ok "session user is in group video"
+	else
 		fail "session user is not in group video: brightnessctl cannot write the backlight"
+	fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -321,7 +369,7 @@ if have keyd || have keyd.rvaiya; then
 	# keyd grabs the keyboard, so a `sleep = ...` mapping swallows KEY_SLEEP
 	# before systemd-logind's button handling sees it and the Lock key stops
 	# suspending the machine. That is exactly what happened once (AGENTS.md).
-	if grep -rsnE '^[[:space:]]*sleep[[:space:]]*=' /etc/keyd/ 2>/dev/null | grep -q .; then
+	if grep -rqsE '^[[:space:]]*sleep[[:space:]]*=' /etc/keyd/ 2>/dev/null; then
 		fail "keyd maps the sleep key: logind never sees KEY_SLEEP and the Lock key cannot suspend"
 	else
 		ok "keyd leaves the sleep key alone"
@@ -392,11 +440,18 @@ section "Audio"
 if have pactl; then
 	if pactl info >/dev/null 2>&1; then
 		ok "audio server: $(pactl info | sed -n 's/^Server Name: //p')"
+		# PipeWire names an ALSA card after the platform device
+		# (alsa_card.platform-sound), not after the codec, so the codec name is
+		# asked of ALSA instead. What matters is that a card exists at all: with
+		# no card there is no UCM boot sequence and no sink but Dummy Output.
 		_cards="$(pactl list cards short 2>/dev/null)"
-		if printf '%s\n' "$_cards" | grep -qiE 'mt8192|rt5682|rt1015'; then
-			ok "sound card: $(printf '%s\n' "$_cards" | head -1 | cut -f2)"
+		if [ -z "$_cards" ]; then
+			fail "no sound card in PipeWire at all (UCM boot sequence did not run?)"
 		else
-			fail "the MT8192 sound card is absent: $(printf '%s' "$_cards" | tr '\n' ' ')"
+			ok "sound card: $(printf '%s\n' "$_cards" | head -1 | cut -f2)"
+			_codec="$(grep -oE 'mt[0-9]+[a-z0-9_]*' /proc/asound/cards 2>/dev/null | sort -u | tr '\n' ' ')"
+			[ -n "$_codec" ] && ok "ALSA codec: $(printf '%s' "$_codec" | sed 's/ $//')" ||
+				warn "no MediaTek codec name in /proc/asound/cards"
 		fi
 		# The card's routing lives in a UCM BootSequence, which alsa-lib only
 		# runs on an explicit `set _boot`; alsactl does it at card add. Without
@@ -419,8 +474,12 @@ else
 fi
 # ALSA-only programs need a usable `default` PCM, which pipewire-alsa supplies.
 if have aplay; then
-	aplay -L 2>/dev/null | grep -qx default && ok "alsa 'default' PCM available (pipewire-alsa)" ||
+	_pcm="$(aplay -L 2>/dev/null || true)"
+	if grep -qx default <<<"$_pcm"; then
+		ok "alsa 'default' PCM available (pipewire-alsa)"
+	else
 		fail "no alsa 'default' PCM: aplay/emulators fail without an explicit -D"
+	fi
 else
 	skip "aplay is not installed (package alsa-utils)"
 fi
@@ -491,8 +550,11 @@ section "Fonts and icons"
 if have fc-list; then
 	_families="$(fc-list : family 2>/dev/null | tr ',' '\n' | sed 's/^ *//' | sort -u)"
 	for _f in "JetBrains Mono" "FontAwesome" "Material Design Icons" "Symbols Nerd Font"; do
-		printf '%s\n' "$_families" | grep -qF "$_f" && ok "font family present: $_f" ||
+		if grep -qF "$_f" <<<"$_families"; then
+			ok "font family present: $_f"
+		else
 			fail "font family missing: $_f (waybar icons render as tofu boxes)"
+		fi
 	done
 else
 	skip "fc-list is not installed"
@@ -509,8 +571,8 @@ if [ -n "$REPO" ] && have dpkg-query; then
 		while read -r _pkg; do
 			case "$_pkg" in '' | '#'*) continue ;; esac
 			_count=$((_count + 1))
-			dpkg-query -W -f='${Status}' "$_pkg" 2>/dev/null |
-				grep -q 'install ok installed' || _missing="$_missing $_pkg"
+			_st="$(dpkg-query -W -f='${Status}' "$_pkg" 2>/dev/null || true)"
+			grep -q 'install ok installed' <<<"$_st" || _missing="$_missing $_pkg"
 		done <"$_list"
 	done
 	if [ -z "$_missing" ]; then

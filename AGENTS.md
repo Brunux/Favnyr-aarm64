@@ -120,6 +120,13 @@ uncommitted changes, since those do not travel into the image.
 - **Never edit a script while it is executing.** The shell re-reads the file as it goes and can
   die with `unexpected EOF while looking for matching '"'`. Write the new version elsewhere and
   `mv` it into place.
+- **`pipefail` is set in every script here, so never test the status of `producer | grep -q PAT`**:
+  `grep -q` exits on the first match, the producer then dies of SIGPIPE (141) and the pipeline -
+  and with it the `if` - reports failure although the pattern *was* found. It depends on how far
+  the producer got before the pipe closed, so the same input passes on a fast machine and fails on
+  a slow one (`check-system.sh`'s firmware check reported a loaded firmware as missing on the card
+  and as present on the host). Capture the output first and use `grep -q PAT <<<"$var"`, or a
+  single `grep -rqs PAT <path>`.
 
 ### Host toolchain
 
@@ -143,6 +150,21 @@ uncommitted changes, since those do not travel into the image.
   `W: Possible missing firmware /lib/firmware/arm/mali/arch14.8/mali_csffw.bin for built-in driver
   panthor`. It is noise, not a missing piece: initramfs-tools scans built-in modules for firmware
   requirements, and panthor never drives the Mali-G57 here.
+- `CONFIG_EXT2_FS` is **not set**, and the `pmOS_boot` partition is formatted ext2 anyway
+  (`scripts/lib-cgpt.sh`). That works because `CONFIG_EXT4_USE_FOR_EXT2=y`: the ext4 driver registers
+  the `ext2` and `ext3` types, so `mount -t ext2` is served by ext4 and `/proc/filesystems` lists
+  ext2/ext3/ext4. Nura's own `/boot` is mounted the same way. Do not "fix" this by enabling
+  CONFIG_EXT2_FS.
+- Not every `Direct firmware load ... failed` line is a missing firmware. `CONFIG_MTK_SCP=m`, and
+  the SCP remoteproc asks for `mediatek/mt8192/scp.img` while only the initramfs exists, so every
+  boot logs two `remoteproc remoteproc0: Direct firmware load for mediatek/mt8192/scp.img failed
+  with error -2` and one `request_firmware failed: -2`; three seconds later the module is loaded
+  from the real root filesystem and the log continues with
+  `Booting fw image mediatek/mt8192/scp.img, size 309164` and `SCP is ready. FW version
+  asurada_scp_v2.0.20536`. The file is installed (`firmware-mediatek`) and Nura loads the very same
+  size, so this is the module being probed after the rootfs, not a missing piece; every function
+  this port uses (display, audio, Wi-Fi, Bluetooth, suspend) works with the SCP coming up late.
+  `check-system.sh` therefore reports the outcome of the load, not the first attempt.
 
 ### Userspace / UI (Debian forky)
 
@@ -154,7 +176,9 @@ uncommitted changes, since those do not travel into the image.
 - `nmtui` lives in the separate **`network-manager-tui`** package (no longer part of
   `network-manager`).
 - `wireless-regdb` provides `regulatory.db`; without it cfg80211 logs
-  `failed to load regulatory.db` and the WiFi stays on the world regulatory domain.
+  `failed to load regulatory.db` and the WiFi stays on the world regulatory domain. `iw` is in
+  `packages/base.list` for `check-system.sh`: without it the wireless interface and the regulatory
+  domain are invisible to the report (it SKIPs both checks).
 - `zstd` lets initramfs-tools compress the initramfs with zstd; otherwise it warns
   `No zstd in /usr/bin:/sbin:/bin, using gzip`.
 - **Bluetooth**: `libspa-0.2-bluetooth` provides PipeWire's BlueZ SPA plugins, but those are
@@ -177,6 +201,7 @@ uncommitted changes, since those do not travel into the image.
   the only sink is a **Dummy Output** (volume keys change nothing, no speaker sound).
   `alsa-utils` is therefore in `packages/base.list`. Verify with `pactl list cards` (Active
   Profile `HiFi`) and `wpctl status` (a *Built-in Audio Speaker* sink, not *Dummy Output*).
+  Confirmed on hardware: the speaker plays a video.
   The same class of bug will hit any card whose routing lives in a UCM `BootSequence`.
 - **ALSA-only applications**: Debian's stock alsa-lib configuration has no usable `default`
   PCM; that device is supplied by **`pipewire-alsa`** (in `uis/sway/packages.list`). Without
@@ -217,6 +242,8 @@ uncommitted changes, since those do not travel into the image.
   (`journalctl` shows `Suspend key pressed short.` in the early boots and not one line of it
   afterwards, while `keyd.rvaiya` logs `DEVICE: match ... (cros_ec)`), so the mapping is left
   out.
+  Confirmed on hardware: the first report from a booted card records `5 suspend/resume cycle(s)`
+  and the Lock key locks the screen and suspends the machine.
   The session can still suspend by itself — `Alt+Shift+Escape` (lock, then sleep; Nura's
   shortcut) and `Alt+Ctrl+Escape` (sleep without locking) run `~/.config/bin/sway-suspend` —
   but that goes through `loginctl suspend`, a D-Bus method guarded by polkitd (stock

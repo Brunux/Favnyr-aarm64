@@ -139,9 +139,15 @@ kpart_verify() {
 		die "futility rejected the kpart: $_img"
 	fi
 	_ver="$(printf '%s\n' "$_out" | sed -n 's/^ *Header version: *//p' | head -1)"
-	if printf '%s\n' "$_out" | grep -q 'Body verification succeeded'; then
-		log "futility: dev-signed FIT, preamble ${_ver:-?}, body verification succeeded"
-	else
-		die "futility could not verify the kpart body: $_img"
-	fi
+	# Not `printf ... | grep -q`: with `pipefail` the SIGPIPE grep causes when it
+	# exits on the match can make the pipeline report failure (the same pitfall is
+	# documented in scripts/check-system.sh).
+	case "$_out" in
+		*'Body verification succeeded'*)
+			log "futility: dev-signed FIT, preamble ${_ver:-?}, body verification succeeded"
+			;;
+		*)
+			die "futility could not verify the kpart body: $_img"
+			;;
+	esac
 }

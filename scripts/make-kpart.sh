@@ -19,9 +19,12 @@ INITRD="$ROOTFS/boot/initrd.img-$KERNEL_RELEASE"
 [ -f "$INITRD" ] || die "initramfs not found: $INITRD"
 [ -n "$DEPTHCHARGE_BOARD" ] || die "deviceinfo_depthcharge_board not set for $DEVICE"
 
-BUILDDIR="$WORK_DIR/kpart-dtbs-$DEVICE"
-rm -rf "$BUILDDIR"
-mkdir -p "$BUILDDIR"
+# Stage the DTBs in a throwaway directory. It is deliberately not a fixed path:
+# install-kpart.sh builds the kpart as root (it rewrites a partition), while
+# build.sh does it as the invoking user, and a shared directory would be left
+# root-owned and unremovable by the other side.
+BUILDDIR="$(mktemp -d "$WORK_DIR/kpart-dtbs-$DEVICE.XXXXXX")"
+trap 'rm -rf "$BUILDDIR"' EXIT
 # Expand the deviceinfo_dtb glob (e.g. "mediatek/mt8192-asurada*").
 # shellcheck disable=SC2086
 set -- "$ROOTFS"/boot/dtbs/$DTB_GLOB.dtb
