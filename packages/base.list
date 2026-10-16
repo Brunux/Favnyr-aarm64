@@ -1,7 +1,11 @@
-# Base system packages for the Hayato Debian image.
+# Base system packages (device-agnostic).
 # One package per line; blank lines and lines starting with # are ignored.
+# Device-specific packages live in devices/<codename>/packages.list.
 
 # init / kernel plumbing
+systemd-sysv
+dbus
+dbus-user-session
 initramfs-tools
 kmod
 zram-tools
@@ -19,11 +23,6 @@ openssh-server
 e2fsprogs
 dosfstools
 parted
-
-# firmware (non-free-firmware)
-firmware-realtek
-firmware-mediatek
-firmware-misc-nonfree
 
 # quality of life
 ca-certificates

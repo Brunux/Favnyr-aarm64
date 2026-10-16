@@ -13,10 +13,10 @@ log "Installing host build dependencies"
 apk add --no-cache \
 	bash bc bison flex \
 	clang clang-libclang lld llvm \
-	rust rust-bindgen \
-	openssl-dev elfutils-dev pahole \
+	rust rust-bindgen rust-src rustfmt \
+	openssl openssl-dev elfutils-dev pahole \
 	perl python3 \
-	rsync cpio \
+	findutils rsync cpio \
 	xz zstd lz4 gzip \
 	git curl wget \
 	dtc kmod \

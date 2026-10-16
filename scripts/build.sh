@@ -1,10 +1,10 @@
 #!/bin/bash
-# Full build pipeline (does NOT touch any block device).
+# Full build pipeline for the selected device (does NOT touch any block device).
 #
 # Produces, under $WORK_DIR:
-#   kernel-stage/    built kernel, modules, dtbs
-#   rootfs/          Debian forky rootfs with the kernel installed
-#   vmlinuz.kpart    signed depthcharge FIT kernel partition image
+#   kernel-stage-<flavor>/  built kernel, modules, dtbs
+#   rootfs-<device>/        Debian rootfs with the kernel installed
+#   <device>.vmlinuz.kpart  signed depthcharge FIT kernel partition image
 #
 # To write the result to a microSD/USB device, run scripts/write-sd.sh.
 set -euo pipefail
@@ -16,6 +16,7 @@ set -euo pipefail
 "$REPO_DIR/scripts/make-kpart.sh"
 
 log "Build complete."
-log "  rootfs : $WORK_DIR/rootfs"
-log "  kpart  : $WORK_DIR/vmlinuz.kpart"
+log "  device : $DEVICE"
+log "  rootfs : $ROOTFS"
+log "  kpart  : $KPART"
 log "Next: scripts/write-sd.sh /dev/mmcblk1"

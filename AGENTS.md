@@ -53,13 +53,37 @@ yet present in `scripts/` as not implemented.
 
 Nura's proven disk layout (reuse it): `p1 pmOS_kernel` 128 MB (kpart), `p2` /boot, `p3` root.
 
+## Repository layout (device-agnostic)
+
+The build is generic on purpose: any device supported by Nura can be ported by adding a
+directory, and kernels are shared between devices.
+
+```
+devices/<codename>/        one directory per device
+  deviceinfo               pmaports-style device description (sourceable shell)
+  kernel                   kernel flavor to use (name under kernels/)
+  kernel-cmdline.conf      base kernel command line
+  modules-initfs           modules forced into the initramfs
+  packages.list            device-specific Debian packages
+  APKBUILD.reference       upstream device package (reference only)
+kernels/<flavor>/          one directory per kernel
+  version                  upstream version (e.g. 7.2.7)
+  config.aarch64           kernel config (CONFIG_LOCALVERSION gives the release suffix)
+  patches/                 *.patch + a `series` file with the apply order
+  APKBUILD.reference       upstream kernel package (reference only)
+packages/                  device-agnostic package lists (base.list, <ui>.list)
+scripts/                   lib.sh (device/kernel resolution) + build scripts
+```
+
+Select a device with `DEVICE=<codename> scripts/...`; with a single device it is picked
+automatically.
+
 ## Vendored reference (pinned)
 
 - Upstream: `pmaports` commit `0e458a2417d6f5ed61c7b70621d5632e30136091` (2026-10-15).
-- `kernel/mt81/` — kernel config + patches (mainline Linux **7.2.7** from `cdn.kernel.org`,
-  patches, `APKBUILD.reference`). Kernel is built with `make LLVM=1` (clang/lld).
-- `device/google-asurada/` — `deviceinfo`, `kernel-cmdline.conf`, `modules-initfs`,
-  `APKBUILD.reference`.
+- `kernels/mediatek-mt81/` — mainline Linux **7.2.7** from `cdn.kernel.org` + patches + config.
+  Built with `make LLVM=1` (clang/lld).
+- `devices/google-asurada/` — `deviceinfo`, `kernel-cmdline.conf`, `modules-initfs`.
 
 ## Conventions and gotchas
 

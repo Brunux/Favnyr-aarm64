@@ -5,29 +5,36 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-ROOTFS="${1:-${ROOTFS:-$WORK_DIR/rootfs}}"
-STAGE="${KERNEL_STAGE:-$WORK_DIR/kernel-stage}"
-KREL="$KERNEL_RELEASE"
+[ -n "${1:-}" ] && ROOTFS="$1"
 
 if [ "$(id -u)" -ne 0 ]; then
-	export BUILD_ROOT WORK_DIR SRC_DIR REPO_DIR
-	exec sudo -n -E "$(readlink -f "$0")" "$@"
+	exec sudo -n DEVICE="$DEVICE" "$(readlink -f "$0")" "${1:-}"
 fi
 
 [ -d "$ROOTFS" ] || die "rootfs not found: $ROOTFS (run build-rootfs.sh first)"
-[ -d "$STAGE/lib/modules/$KREL" ] || die "staged kernel not found: $STAGE (run build-kernel.sh first)"
+[ -d "$KERNEL_STAGE/lib/modules/$KERNEL_RELEASE" ] || die "staged kernel not found: $KERNEL_STAGE (run build-kernel.sh first)"
 
-log "Installing modules for $KREL"
+log "Installing modules for $KERNEL_RELEASE"
 mkdir -p "$ROOTFS/lib/modules"
-rm -rf "$ROOTFS/lib/modules/$KREL"
-cp -a "$STAGE/lib/modules/$KREL" "$ROOTFS/lib/modules/"
+rm -rf "$ROOTFS/lib/modules/$KERNEL_RELEASE"
+cp -a "$KERNEL_STAGE/lib/modules/$KERNEL_RELEASE" "$ROOTFS/lib/modules/"
 
 log "Installing vmlinuz / config / dtbs"
 mkdir -p "$ROOTFS/boot/dtbs"
-cp "$STAGE/boot/vmlinuz" "$ROOTFS/boot/vmlinuz-$KREL"
-[ -f "$STAGE/boot/config" ] && cp "$STAGE/boot/config" "$ROOTFS/boot/config-$KREL"
-[ -f "$STAGE/boot/System.map" ] && cp "$STAGE/boot/System.map" "$ROOTFS/boot/System.map-$KREL"
-cp -a "$STAGE/boot/dtbs/." "$ROOTFS/boot/dtbs/"
+cp "$KERNEL_STAGE/boot/vmlinuz" "$ROOTFS/boot/vmlinuz-$KERNEL_RELEASE"
+[ -f "$KERNEL_STAGE/boot/config" ] && cp "$KERNEL_STAGE/boot/config" "$ROOTFS/boot/config-$KERNEL_RELEASE"
+[ -f "$KERNEL_STAGE/boot/System.map" ] && cp "$KERNEL_STAGE/boot/System.map" "$ROOTFS/boot/System.map-$KERNEL_RELEASE"
+cp -a "$KERNEL_STAGE/boot/dtbs/." "$ROOTFS/boot/dtbs/"
+
+# Force the device's early modules into the initramfs.
+if [ -n "$INITFS_MODULES" ]; then
+	log "Adding initramfs modules: $INITFS_MODULES"
+	mkdir -p "$ROOTFS/etc/initramfs-tools"
+	touch "$ROOTFS/etc/initramfs-tools/modules"
+	for m in $INITFS_MODULES; do
+		grep -qxF "$m" "$ROOTFS/etc/initramfs-tools/modules" || echo "$m" >>"$ROOTFS/etc/initramfs-tools/modules"
+	done
+fi
 
 log "depmod + initramfs"
 mount --bind /dev "$ROOTFS/dev"
@@ -35,12 +42,12 @@ mount -t proc proc "$ROOTFS/proc"
 mount -t sysfs sys "$ROOTFS/sys"
 cleanup() {
 	for m in dev proc sys; do
-		mountpoint -q "$ROOTFS/$m" && umount -lf "$ROOTFS/$m" || true
+		umount -lf "$ROOTFS/$m" 2>/dev/null || true
 	done
 }
 trap cleanup EXIT
-chroot "$ROOTFS" depmod -a "$KREL"
-chroot "$ROOTFS" update-initramfs -c -k "$KREL"
+chroot "$ROOTFS" depmod -a "$KERNEL_RELEASE"
+chroot "$ROOTFS" update-initramfs -c -k "$KERNEL_RELEASE"
 
 log "Kernel installed into $ROOTFS"
 ls -la "$ROOTFS/boot"

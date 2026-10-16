@@ -65,8 +65,10 @@ Nura builds the kpart with `depthcharge-tools` + `boot-deploy` and signs it with
 
 **F3 — Kernel (port from Nura)**
 - Source: `https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.2.7.tar.xz` + 7 patches
-  (`kernel/mt81/patches/`) + `kernel/mt81/config-postmarketos-mediatek-mt81.aarch64`.
-- Build with `make LLVM=1` (clang/lld). Package as a `.deb`.
+  (`kernels/mediatek-mt81/patches/`, order in `series`) +
+  `kernels/mediatek-mt81/config.aarch64`.
+- Build with `make LLVM=1` (clang/lld); the release string (`7.2.7-mt81`) is derived from
+  `CONFIG_LOCALVERSION`.
 
 **F4 — Initramfs**
 - `initramfs-tools` with modules: `panfrost`, `rtw88_8822ce`, `rtl_bt`, `cros-ec-keyb`,

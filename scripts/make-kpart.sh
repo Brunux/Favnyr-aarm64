@@ -1,7 +1,7 @@
 #!/bin/bash
-# Build the signed depthcharge FIT kernel partition image (vmlinuz.kpart).
+# Build the signed depthcharge FIT kernel partition image (kpart) for the device.
 #
-# This mirrors what pmOS `boot-deploy` does for ChromeOS devices:
+# Mirrors pmOS boot-deploy for ChromeOS devices:
 #   depthchargectl build --root none --board <board> --kernel ... \
 #       --kernel-cmdline ... --initramfs ... --fdtdir ... --compress ... -o ...
 #
@@ -9,39 +9,41 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-ROOTFS="${1:-${ROOTFS:-$WORK_DIR/rootfs}}"
-OUT="${2:-$WORK_DIR/vmlinuz.kpart}"
+[ -n "${1:-}" ] && ROOTFS="$1"
+OUT="${2:-$KPART}"
 CMDLINE_EXTRA="${3:-}"
-KREL="$KERNEL_RELEASE"
-DTB_GLOB="${DTB_GLOB:-mt8192-asurada*.dtb}"
 
-KERNEL="$ROOTFS/boot/vmlinuz-$KREL"
-INITRD="$ROOTFS/boot/initrd.img-$KREL"
-[ -f "$KERNEL" ] || die "kernel not found: $KERNEL"
+KERNEL_IMG="$ROOTFS/boot/vmlinuz-$KERNEL_RELEASE"
+INITRD="$ROOTFS/boot/initrd.img-$KERNEL_RELEASE"
+[ -f "$KERNEL_IMG" ] || die "kernel not found: $KERNEL_IMG"
 [ -f "$INITRD" ] || die "initramfs not found: $INITRD"
+[ -n "$DEPTHCHARGE_BOARD" ] || die "deviceinfo_depthcharge_board not set for $DEVICE"
 
-BUILDDIR="$WORK_DIR/kpart-dtbs"
+BUILDDIR="$WORK_DIR/kpart-dtbs-$DEVICE"
 rm -rf "$BUILDDIR"
 mkdir -p "$BUILDDIR"
-find "$ROOTFS/boot/dtbs" -name "$DTB_GLOB" -exec cp -t "$BUILDDIR" {} +
-[ -n "$(ls -A "$BUILDDIR")" ] || die "no DTBs matching '$DTB_GLOB' under $ROOTFS/boot/dtbs"
+# Expand the deviceinfo_dtb glob (e.g. "mediatek/mt8192-asurada*").
+# shellcheck disable=SC2086
+set -- "$ROOTFS"/boot/dtbs/$DTB_GLOB.dtb
+[ -e "$1" ] || die "no DTBs matching '$DTB_GLOB' under $ROOTFS/boot/dtbs"
+cp "$@" "$BUILDDIR"/
 
-CMDLINE="kern_guid=%U quiet loglevel=2 ${CMDLINE_EXTRA}"
-log "Building kpart (board=$DEPTHCHARGE_BOARD)"
-log "  kernel : $KERNEL"
+CMDLINE="${KERNEL_CMDLINE}kern_guid=%U ${CMDLINE_EXTRA}"
+log "Building kpart (device=$DEVICE board=$DEPTHCHARGE_BOARD compression=$DEPTHCHARGE_COMPRESSION)"
+log "  kernel : $KERNEL_IMG"
 log "  initrd : $INITRD"
 log "  dtbs   : $(ls "$BUILDDIR")"
 log "  cmdline: $CMDLINE"
 
 depthchargectl build --root none \
 	--board "$DEPTHCHARGE_BOARD" \
-	--kernel "$KERNEL" \
+	--kernel "$KERNEL_IMG" \
 	--kernel-cmdline "$CMDLINE" \
 	--initramfs "$INITRD" \
 	--fdtdir "$BUILDDIR" \
-	--compress lzma \
+	--compress "$DEPTHCHARGE_COMPRESSION" \
 	--timestamp "${SOURCE_DATE_EPOCH:-$(date +%s)}" \
-	--tmpdir "$WORK_DIR/dct" \
+	--tmpdir "$WORK_DIR/dct-$DEVICE" \
 	--output "$OUT"
 
 log "Built $OUT ($(du -h "$OUT" | cut -f1))"
