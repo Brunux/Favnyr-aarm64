@@ -159,6 +159,14 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
   nothing else in the system grants it, so `/sys/class/backlight` stays root-only (0644) and
   the sway `XF86MonBrightness*` bindings fail with *Permission denied* for the session user.
   `uis/sway/files/etc/udev/rules.d/90-brightnessctl.rules` (group `video`, `g+w`) fixes it.
+- **Lock key**: the right-most key of the top row emits `KEY_SLEEP`, and keyd maps
+  `sleep = coffee`, so sway receives `KEY_COFFEE`. That keycode's xkb keysym is
+  **`XF86ScreenSaver`**, and sway binds nothing to it by default, so the key did nothing:
+  keyd owns the keyboard, so systemd-logind never sees `KEY_SLEEP` and does not suspend
+  either. `uis/sway/files/etc/sway/config.d/21-lock-screen.conf` binds `XF86ScreenSaver` to
+  `swaylock`. Reading a keymap dump is misleading here: `xkbcli compile-keymap` prints **X**
+  keycodes, which are evdev + 8, so `KEY_COFFEE` (evdev 152) shows up as keycode 160 and
+  `KEY_BRIGHTNESSDOWN` (evdev 224) as keycode 232.
 
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
   key opens bemenu, waybar, Alacritty). `rootfs-setup.sh` rewrites `/home/brunux` inside the

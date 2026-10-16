@@ -66,12 +66,13 @@ launcher, waybar and the Alacritty terminal.
 * `etc/sway/config.d/01-status-bar.conf` disables swaybar (waybar is used
   instead); the block is kept commented out for reference.
 
-## Brightness and volume keys
+## Brightness, volume and lock keys
 
 The top row is handled by sway: `XF86MonBrightness{Down,Up}` run `brightnessctl`
-(`etc/sway/config.d/20-brightness.conf`), and `XF86Audio{Raise,Lower}Volume` /
-`XF86AudioMute` run `pactl` (`etc/sway/config.d/21-volume.conf`). Two host-side
-prerequisites are easy to miss:
+(`etc/sway/config.d/20-brightness.conf`), `XF86Audio{Raise,Lower}Volume` /
+`XF86AudioMute` run `pactl` (`etc/sway/config.d/21-volume.conf`), and the Lock key
+runs `swaylock` (`etc/sway/config.d/21-lock-screen.conf`). Some of the pieces are
+easy to miss:
 
 * **Backlight permissions.** Debian's `brightnessctl` ships no udev rule and nothing
   else in the system touches `/sys/class/backlight`, so the brightness file stays
@@ -82,6 +83,11 @@ prerequisites are easy to miss:
   sequence has not run, the card exposes no sink and WirePlumber falls back to a *Dummy
   Output*, so the volume keys "work" but nothing is audible. The `alsa-utils` package in
   `packages/base.list` fixes this (see `AGENTS.md`).
+* **The Lock key is `XF86ScreenSaver`.** The right-most key of the top row emits `KEY_SLEEP`;
+  keyd turns that into `KEY_COFFEE`, whose xkb keysym is `XF86ScreenSaver`. Sway binds nothing
+  to that keysym, and because keyd owns the keyboard systemd-logind never sees `KEY_SLEEP`
+  either, so the key did nothing at all. `21-lock-screen.conf` binds it to `swaylock`, the
+  same action as `$mod+Escape`.
 
 ## Virtual terminals and the missing F-keys
 
