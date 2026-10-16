@@ -40,6 +40,13 @@ pipewire-pulse
 wireplumber
 # Bluetooth audio support for PipeWire (BlueZ SPA plugins).
 libspa-0.2-bluetooth
+# ...and the BlueZ daemon they talk to. The SPA plugins are only a client of
+# org.bluez over D-Bus: without bluez there is no bluetoothd, no
+# bluetoothctl/btmgmt and no bluetooth.service, the controller is never
+# powered up and the plugins have nothing to connect to. Debian 5.87 has no
+# separate bluez-utils package - bluetoothctl and btmgmt ship in bluez, and
+# bluetoothd lives in /usr/libexec/bluetooth/.
+bluez
 pavucontrol
 alsa-ucm-conf
 

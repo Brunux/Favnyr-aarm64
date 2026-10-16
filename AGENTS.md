@@ -133,7 +133,15 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
   `failed to load regulatory.db` and the WiFi stays on the world regulatory domain.
 - `zstd` lets initramfs-tools compress the initramfs with zstd; otherwise it warns
   `No zstd in /usr/bin:/sbin:/bin, using gzip`.
-- `libspa-0.2-bluetooth` provides PipeWire's BlueZ SPA plugins (Bluetooth audio).
+- **Bluetooth**: `libspa-0.2-bluetooth` provides PipeWire's BlueZ SPA plugins, but those are
+  only a D-Bus client of `org.bluez`. The `bluez` package is what supplies `bluetoothd`,
+  `bluetoothctl`/`btmgmt` and the `bluetooth.service` unit; without it the HCI controller
+  (`hci0`, bound to `serial0-0` via `hci_uart` in H5 mode, RTL8822CS firmware loaded) is
+  never powered up and there is no Bluetooth at all — no scanning, no pairing, and the SPA
+  plugins have nothing to talk to, so BT audio silently does not exist. `bluez` is therefore
+  in `uis/sway/packages.list` alongside the SPA plugin. Debian 5.87 has **no `bluez-utils`**
+  (the CLI tools ship in `bluez`; `bluetoothd` is `/usr/libexec/bluetooth/bluetoothd`).
+  Verify with `bluetoothctl show` (*Powered: yes*) and `btmgmt info`.
 - **Audio (MT8192)**: the card `mt8192_mt6359_rt1015p_rt5682` is only usable once its UCM
   **boot sequence** has run. That sequence (`MediaTek/mt8192/.../init.conf`) connects the
   front-end and back-end DAIs (`I2S3_CH1 DL1_CH1`, …); alsa-lib runs `BootSequence` **only**

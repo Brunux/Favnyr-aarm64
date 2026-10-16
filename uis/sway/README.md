@@ -58,6 +58,11 @@ launcher, waybar and the Alacritty terminal.
   echo 'exec_always --no-startup-id workstyle' >/etc/sway/config.d/03-workstyle.conf
   ```
 
+* **Bluetooth needs `bluez`, not just the PipeWire plugin.** `libspa-0.2-bluetooth` only gives
+  PipeWire a D-Bus client for `org.bluez`; the daemon that actually powers the controller up
+  (and provides `bluetoothctl`) is in `bluez`, which is now listed next to it in
+  `packages.list` (see `AGENTS.md`).
+
 * `etc/sway/config.d/01-status-bar.conf` disables swaybar (waybar is used
   instead); the block is kept commented out for reference.
 
