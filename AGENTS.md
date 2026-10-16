@@ -137,6 +137,24 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
   key opens bemenu, waybar, Alacritty). `rootfs-setup.sh` rewrites `/home/brunux` inside the
   shipped text files to `$USERNAME`, and merges `uis/sway/files/home/` into that home.
+- **The Chromebook keyboard has no F1-F10**, and that is what breaks virtual terminals:
+  `mt8192-asurada-hayato-r1.dts` maps the top row to action keys (`KEY_BACK`, `KEY_FORWARD`,
+  `KEY_REFRESH`, `KEY_FULL_SCREEN`, `KEY_SCALE`, brightness, mute, volume). Switching VTs needs a
+  real F-key keycode: the kernel maps `Ctrl+Alt+F<n>` to `Console_<n>`, and sway reacts to the
+  `XF86Switch_VT_<n>` keysym that the same keycode produces (`srvr_ctrl(fkey2vt)` is part of the
+  default xkb keymap). `uis/sway/files/etc/keyd/default.conf` (package `keyd`) supplies them:
+  `Ctrl+Alt`+top row = VT 1-10, `Search`+top row = F1-F10. Debian names the binary
+  **`/usr/bin/keyd.rvaiya`** (the package enables `keyd.service`, and `/etc/keyd/` ships empty).
+  keyd reads its config **only at startup** — `keyd.rvaiya reload` after editing — and
+  `backspace+escape+enter` makes it quit and release the keyboard.
+- **keyd must not grab `cros_ec_buttons` or the headset jack**: both share the keyboard's
+  `0000:0000` id, and keyd counts them as keyboards because they report `KEY_VOLUMEUP/DOWN` (its
+  heuristic for laptops whose hotkeys live on a separate node). keyd's virtual device does not
+  forward `EV_SW`, so grabbing them would silently kill suspend-on-lid-close, the tablet-mode
+  switch and the power button (logind loses it). `default.conf` therefore excludes them; the
+  exclusions must precede `k:0000:0000`, because keyd returns on the first matching entry, and
+  they are hashes of the device name, its key count and the abs/rel masks (`keyd.rvaiya monitor`
+  prints them, and `journalctl -u keyd` logs what got matched).
 - **Nerd Fonts / waybar icons**: Debian has no Nerd-patched Adwaita Mono, so the theme uses
   `JetBrains Mono` for the text. Beware `fonts-nerd-symbols`: it is **DFSG-stripped** and only
   ships Octicons, Codicons, Devicons, Seti and Powerline. It has **no Font Awesome

@@ -28,6 +28,7 @@ launcher, waybar and the Alacritty terminal.
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme. |
 | `home/.config/workstyle/config.toml` | Icon map for workstyle (see below). |
 | `home/Pictures/Wallpapers/mountains.jpg` | Wallpaper referenced by `etc/sway/config`. |
+| `etc/keyd/default.conf` | Chromebook keymap for keyd: F-keys and VT switching (see below). |
 
 ## Deviations from the Nura original
 
@@ -58,3 +59,66 @@ launcher, waybar and the Alacritty terminal.
 
 * `etc/sway/config.d/01-status-bar.conf` disables swaybar (waybar is used
   instead); the block is kept commented out for reference.
+
+## Virtual terminals and the missing F-keys
+
+The hayato device tree (`mt8192-asurada-hayato-r1.dts`) maps the top row to
+*action* keys (`KEY_BACK`, `KEY_FORWARD`, `KEY_REFRESH`, `KEY_FULL_SCREEN`,
+`KEY_SCALE`, `KEY_BRIGHTNESS{DOWN,UP}`, `KEY_MUTE`, `KEY_VOLUME{DOWN,UP}`), so
+this keyboard never emits `F1`-`F10`. That breaks virtual-terminal switching,
+which needs a real F-key keycode:
+
+* the kernel maps `Ctrl+Alt+F<n>` to `Console_<n>` (its `defkeymap` has
+  `control alt keycode 59 = Console_1`), and
+* sway reacts to the `XF86Switch_VT_<n>` keysym, which the default xkb keymap
+  produces from that same keycode (`srvr_ctrl(fkey2vt)` puts `XF86Switch_VT_1`
+  on `<FK01>` at the `CTRL+ALT` level).
+
+`keyd` supplies the missing F-keys. `etc/keyd/default.conf` is the maintainer's
+Nura keymap, moved out of `/tmp` (where it was a symlink target that vanished on
+reboot: keyd only reads its configuration at startup, so a config written after
+boot is never picked up).
+
+| Combination | Result |
+|---|---|
+| `Ctrl+Alt` + top row, left to right | `Ctrl+Alt+F1`-`F10` → virtual terminals 1-10 |
+| `Search` + top row | `F1`-`F10` |
+| top row alone | ChromeOS action keys (back, brightness, volume, ...) |
+| `Alt+Backspace` | `Delete` |
+| `Ctrl+Scale` / `Ctrl+F5` | `SysRq` |
+| `AltGr` + arrows | `Home` / `End` / `PgUp` / `PgDn` |
+| Lock key | `KEY_COFFEE` (lock/screensaver) instead of `KEY_SLEEP` |
+
+### Which devices keyd grabs
+
+`[ids]` lists the internal cros-ec keyboard (`k:0000:0000`; keyd matches ids as
+prefixes) plus the Google USB keyboards of the original config, and it *excludes*
+two devices that share the `0000:0000` id but are not keyboards:
+
+* `cros_ec_buttons` — it carries the power button, the volume buttons and the
+  lid and tablet-mode switches. keyd's heuristic counts it as a keyboard because
+  it reports `KEY_VOLUMEUP/DOWN`, but keyd's virtual device does not forward
+  `EV_SW`, so grabbing it would break suspend-on-lid-close and take the power
+  button away from logind.
+* the headset jack — same problem with the headphone/microphone insertion
+  switches.
+
+Exclusions have to come *before* the `k:0000:0000` line (keyd returns on the
+first matching entry) and hold a hash of the device name, key count and abs/rel
+masks. If a kernel update ever changes either device, read the ids back with
+`keyd.rvaiya monitor`, or with `journalctl -u keyd`, which logs what it matched.
+
+Notes:
+
+* Debian's package installs the daemon as `/usr/bin/keyd.rvaiya` and enables
+  `keyd.service` on install; `/etc/keyd/` ships empty, so this file is the only
+  config. Reload it with `sudo keyd.rvaiya reload` after editing.
+* keyd grabs the keyboard and re-emits everything through a virtual device
+  (`kbd_connect()` in the kernel accepts uinput devices, so VT switching works).
+  If it is not running the keyboard still works, just without the remapping.
+* Emergency exit if a config misbehaves: **`backspace`+`escape`+`enter`** makes
+  keyd quit and release the keyboard.
+* Without keyd a console is still reachable from a terminal with `chvt 2`
+  (`chvt` needs root or a controlling tty on the active VT), and you come back
+  with `chvt 7`.
+

@@ -29,6 +29,11 @@ pulseaudio-utils
 greetd
 tuigreet
 
+# Keyboard remapper. The Chromebook's top row is mapped to action keys by the
+# device tree and never emits F1-F10, which leaves no way to switch virtual
+# terminals; see uis/sway/files/etc/keyd/default.conf and the README.
+keyd
+
 # audio
 pipewire
 pipewire-pulse
