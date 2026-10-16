@@ -533,6 +533,16 @@ if have sway; then
 	else
 		fail "sway -C rejected /etc/sway/config"
 	fi
+	# sway starts Xwayland itself (it is not in the configuration), so a missing
+	# package shows up only as two red lines in the journal and as X11 programs
+	# that cannot launch (see AGENTS.md).
+	if grep -rqsE '^[[:space:]]*xwayland[[:space:]]+disable' /etc/sway/config /etc/sway/config.d 2>/dev/null; then
+		skip "Xwayland disabled in the sway configuration"
+	elif [ -x /usr/bin/Xwayland ]; then
+		ok "Xwayland present (X11 programs can run)"
+	else
+		warn "Xwayland is missing: sway logs a startup error and X11 programs cannot run"
+	fi
 fi
 _missing_cmds=""
 for _c in waybar alacritty bemenu swaylock swaynag swaybg brightnessctl grimshot wlsunset wpctl pactl; do

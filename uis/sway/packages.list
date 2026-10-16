@@ -7,6 +7,12 @@
 
 # compositor + session tools
 sway
+# sway starts Xwayland by default. Without the package every session logs two
+# red lines ("cannot find xwayland binary", "Failed to start Xwayland") and
+# X11-only programs (emulators, Wine, some Java/Steam games) cannot run at all;
+# Nura ships Xwayland. `xwayland disable` in the sway configuration is the
+# alternative, and then this package is not needed.
+xwayland
 swaybg
 swayidle
 swaylock

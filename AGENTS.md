@@ -302,6 +302,15 @@ uncommitted changes, since those do not travel into the image.
   git-ignored; `build-rootfs.sh` imports them automatically when that directory exists.
 - **sway `-C` validates headlessly** even inside a chroot (useful before booting):
   `WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 sway -C -c /etc/sway/config`.
+- **Xwayland**: sway starts it on its own (it is not in the sway configuration, so the "every
+  command the configuration invokes is installed" check does not see it). Without the `xwayland`
+  package each session logs exactly two red lines —
+  `[wlr] cannot find xwayland binary "/usr/bin/Xwayland"` and
+  `[sway] Failed to start Xwayland` — and X11-only programs (emulators, Wine, some Java/Steam
+  games) cannot run at all, while everything Wayland-native works. Nura ships Xwayland, so
+  `xwayland` is in `uis/sway/packages.list` (25 extra packages: the X libraries);
+  `check-system.sh` warns when it is missing, unless the session deliberately disables it with
+  `xwayland disable`.
 - **workstyle** (renames workspaces to icons) is not packaged in Debian; Nura ran a cargo build
   linked against musl, which cannot run against glibc. Its drop-in is not shipped, but
   `~/.config/workstyle/config.toml` is kept so `cargo install workstyle` is enough to enable it.
