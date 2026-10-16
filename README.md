@@ -6,16 +6,62 @@ support — kernel, device tree, patches, modules and boot flow — instead of A
 First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada`).
 
 - **Status:** boots from microSD on the Hayato with the Nura-ported sway session (display,
-  input, storage, Wi-Fi, Bluetooth, audio, suspend, greeter). The eMMC install is the next
-  milestone. Not yet a distributable release.
+  input, storage, Wi-Fi, Bluetooth, audio, suspend, greeter), and the hardware report of the
+  booted image comes back clean (kept in [`reports/`](reports/)). The eMMC install is the next
+  milestone.
+- **Release:** [`v0.1.0`](docs/releases/v0.1.0.md) — the precompiled image validated on hardware
+  (see [Download and flash](#download-and-flash-a-precompiled-image)).
 - **Plan:** [`docs/plan.md`](docs/plan.md)
 - **Recon of the reference machine:** [`docs/recon.md`](docs/recon.md)
 - **Agent/build instructions:** [`AGENTS.md`](AGENTS.md)
+
+![The ported sway session on the Hayato rev1](docs/screenshots/hayato-r1-sway.png)
+
+*The ported session on the Hayato: waybar (battery, temperature, backlight, wireless) over
+Alacritty with the solarized theme.*
 
 > **Note on how this project is developed:** the work is carried out **by an AI agent running on
 > [OpenCode](https://opencode.ai)** together with the maintainer (see
 > [Development process](#development-process)). CI/CD is not wired up yet, but the repository is
 > laid out so it can be added later.
+
+---
+
+## Download and flash a precompiled image
+
+The [`v0.1.0`](docs/releases/v0.1.0.md) release publishes the image that was validated on the
+reference Hayato:
+
+| asset | what it is |
+|---|---|
+| `google-asurada.img.xz` | the disk image: the three ChromeOS GPT partitions (kernel, `/boot`, root), ready for `dd` |
+| `google-asurada-rootfs.tar.zst` | the same root filesystem as a tarball, with `/boot` inside it, for building a card by hand |
+| `google-asurada.vmlinuz.kpart` | the signed FIT kernel partition that matches that image |
+| `SHA256SUMS` | SHA-256 of the three assets above |
+
+```sh
+sha256sum -c SHA256SUMS
+xz -dc google-asurada.img.xz | sudo dd of=/dev/mmcblk1 bs=4M conv=fsync
+```
+
+On the Chromebook: developer mode, `crossystem dev_boot_usb=1 dev_boot_signed_only=0`, insert the
+card and press **Ctrl+U**. It comes up silently to a greetd prompt — user `brunux`, password
+`debian`, passwordless sudo. **Change the password** (`passwd`) before using it for anything real.
+
+The image is 4 GiB, so a larger card keeps the space after `p3` unused. To use the whole card,
+write the tarball instead: `write-sd.sh` sizes `p3` to the device it is given.
+
+```sh
+sudo tar -xpf google-asurada-rootfs.tar.zst -C /mnt/rootfs   # as root, so owners and ACLs survive
+ROOTFS=/mnt/rootfs sudo scripts/write-sd.sh /dev/mmcblk1     # from a clone of this repository
+```
+
+The released image carries **no saved Wi-Fi networks** and no host identity: the build rootfs
+deliberately keeps the maintainer's profiles (see [Quick start](#quick-start)), so a published
+artifact is sanitized and asserted clean by [`scripts/lib-dist.sh`](scripts/lib-dist.sh).
+
+To install on internal storage, boot the card and run `CONFIRM=yes sudo scripts/install-emmc.sh`
+from the on-image copy of the repository: it writes `/dev/mmcblk0` and destroys whatever is there.
 
 ---
 
@@ -304,10 +350,12 @@ scripts/install-kpart.sh         # rewrite the kernel partition it booted from (
 ## Roadmap
 
 - [x] Boot the first image on the Hayato from microSD and port the session.
-- [ ] Validate the hardware checklist on the booted image (`scripts/check-system.sh`).
-- [ ] Rebuild from a clean rootfs before installing: the card in use is a hand-patched build.
+- [x] Validate the hardware checklist on the booted image (`scripts/check-system.sh`): 51 OK, and
+      the two WARNs of the first report explained in [`reports/`](reports/).
+- [x] Rebuild from a clean rootfs, so the card and the release come from a committed tree.
+- [x] Build a distributable `.img.xz` (`scripts/make-image.sh`, `scripts/make-release.sh`).
+- [ ] Byte-reproducible artifacts: `SOURCE_DATE_EPOCH` for the FIT, stable filesystem UUIDs.
 - [ ] Install to eMMC with `install-emmc.sh`.
-- [ ] Reproducible image build (`SOURCE_DATE_EPOCH`) producing a distributable `.img.xz`.
 - [ ] CI/CD: kernel build, rootfs build and image assembly, plus a portability check across
       `devices/`. The device-driven layout and the "no block device" `build.sh` are already
       shaped for that.
