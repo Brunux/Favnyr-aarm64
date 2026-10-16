@@ -173,6 +173,13 @@ The tars are gzip so macOS' own \`tar\` can read them; the filesystem they sit o
 
 ## Restoring
 
+The supported way is the repository's own script, from the microSD-booted
+system: \`sudo CONFIRM=yes scripts/restore-system.sh <this-directory>\`. It
+refuses to run from the disk it would overwrite, checks SHA256SUMS before
+writing anything, puts the original filesystem UUIDs back, and can prove itself
+with \`DEEP=yes\` (a full \`tar -d\` comparison afterwards). The steps below are
+what that script does, kept for reference.
+
 1. Put the partition table back. On the same disk, the raw dumps are exact:
    \`\`\`sh
    total=\$(blockdev --getsz /dev/<disk>)

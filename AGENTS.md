@@ -395,6 +395,7 @@ scripts/make-release.sh     # every release asset + SHA256SUMS -> $WORK_DIR/rele
 scripts/install-emmc.sh     # install the running system onto /dev/mmcblk0 (CONFIRM=yes)
 scripts/install-kpart.sh    # rewrite the kernel partition this system booted from
 scripts/backup-system.sh    # kernel partition + GPT + /boot + rootfs tars into a directory
+scripts/restore-system.sh   # put such a backup back onto a disk (root only, from the live SD)
 scripts/wifi.sh export      # saved NetworkManager Wi-Fi profiles -> $WIFI_DIR
 scripts/wifi.sh import      # $WIFI_DIR -> a rootfs (drops interface-name=)
 scripts/check-system.sh     # (on the booted image) hardware + configuration report
@@ -430,6 +431,15 @@ normally a removable disk with **exFAT**, the one filesystem both macOS and Linu
 cannot hold a Linux root filesystem by itself, which is why the trees travel as tars. Caches,
 build directories and the agent's session data are excluded by pattern (`EXCLUDES`), and nothing
 in the backup needs them: they are downloaded or rebuilt again.
+
+`scripts/restore-system.sh <backup-directory> [disk]` is its other half, and the one script that
+insists on being run as root: it does not re-exec through sudo, because silently escalating to
+rewrite a disk is the wrong default. It refuses to run from the disk it would overwrite (that is
+the "live SD" requirement), refuses a disk of a different size than the backup came from (the raw
+GPT dumps are exact byte copies, and the same eMMC is the case that matters), checks SHA256SUMS
+before writing anything, and takes the filesystem UUIDs from the archive's own `/etc/fstab`, so the
+restored system boots with the fstab and kernel command line it had. `CONFIRM=yes` is required;
+`VERIFY=no` skips the checksums and `DEEP=yes` adds a full `tar -d` comparison afterwards.
 
 `build-rootfs.sh` installs `$WIFI_DIR` into the image when that directory exists, so the machine
 comes up already knowing the Wi-Fi networks (see `scripts/wifi.sh`).
