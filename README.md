@@ -47,17 +47,21 @@ packages/                  device-agnostic base package lists (base.list)
 scripts/
   lib.sh                   resolves device + kernel + UI, shared config
   lib-cgpt.sh              the ChromeOS GPT layout (kernel + boot + root)
+  lib-dist.sh              what a published artifact must not carry
   00-deps.sh               host build dependencies (apk)
   build-kernel.sh          download + patch + build + stage the kernel
   build-rootfs.sh          debootstrap the Debian rootfs
   install-kernel.sh        copy the staged kernel into the rootfs, build the initramfs
   make-kpart.sh            build the signed depthcharge FIT kpart
   write-sd.sh              partition + populate a microSD/USB
+  make-image.sh            build a distributable disk image (no card needed)
+  make-release.sh          build every asset of a release, with checksums
   install-emmc.sh          install the running system onto internal storage
   install-kpart.sh         rewrite the kernel partition the system booted from
   check-system.sh          hardware + configuration report (runs on the booted image)
   build.sh                 the full pipeline (no block devices touched)
-docs/                      plan, recon, notes
+docs/                      plan, recon, release notes, screenshots
+reports/                   check-system.sh output captured on real hardware
 ```
 
 `scripts/lib.sh` reads `devices/<codename>/deviceinfo` and `devices/<codename>/kernel` and
@@ -140,6 +144,11 @@ scripts/wifi.sh import ~/.cache/debian-aarch64/wifi /mnt/rootfs
 `build-rootfs.sh` picks `$BUILD_ROOT/wifi` up automatically when it exists, so a fresh image
 already knows the networks. The imported profiles have `interface-name=` removed, because Nura and
 Debian name the wireless interface differently (`wlan0` vs `wlp1s0`).
+
+Those profiles hold the PSK in clear, so they are exactly what a *published* image must not carry:
+`make-image.sh` and `make-release.sh` remove them (together with the SSH host keys and the machine
+id) from the copy they publish and refuse to leave an artifact that still has them — see
+`scripts/lib-dist.sh`.
 
 ---
 

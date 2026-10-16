@@ -83,9 +83,14 @@ uis/<ui>/                  one directory per graphical shell
   README.md                what the shell ships and how it deviates upstream
 packages/                  device-agnostic base package lists (base.list)
 scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
-                           (the ChromeOS GPT layout) + build/install scripts
+                           (the ChromeOS GPT layout), lib-dist.sh (what a
+                           published artifact must not carry) + build/install
+                           scripts, including make-image.sh / make-release.sh
 reports/                   check-system.sh output captured on real hardware, kept
                            as evidence for the checks (see reports/README.md)
+docs/                      plan.md, recon.md, releases/<version>.md (release
+                           notes, reused as the tag message and the GitHub
+                           release body), screenshots/
 ```
 
 Select a device with `DEVICE=<codename> scripts/...`; with a single device it is picked
@@ -385,6 +390,8 @@ scripts/build-rootfs.sh     # debootstrap Debian forky rootfs    -> $WORK_DIR/ro
 scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initramfs
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
+scripts/make-image.sh       # distributable disk image from the rootfs (no card needed)
+scripts/make-release.sh     # every release asset + SHA256SUMS -> $WORK_DIR/release-<device>
 scripts/install-emmc.sh     # install the running system onto /dev/mmcblk0 (CONFIRM=yes)
 scripts/install-kpart.sh    # rewrite the kernel partition this system booted from
 scripts/wifi.sh export      # saved NetworkManager Wi-Fi profiles -> $WIFI_DIR
@@ -395,8 +402,24 @@ scripts/build.sh            # full pipeline (kernel + rootfs + kernel + kpart)
 ```
 
 `scripts/lib-cgpt.sh` holds the one copy of the ChromeOS GPT layout, used by `write-sd.sh`,
-`install-emmc.sh` and `install-kpart.sh`; `BOOT_SIZE_MIB` (512) and `BOOT_FS` (ext2) override its
-boot partition.
+`install-emmc.sh`, `install-kpart.sh`, `make-image.sh` and `make-release.sh`; `BOOT_SIZE_MIB` (512)
+and `BOOT_FS` (ext2) override its boot partition.
+
+`scripts/make-image.sh` reuses that layout on a loop device, so an image is built exactly like a
+card is written, with one difference: its size is an argument (`IMAGE_SIZE_MIB`, default 4096)
+instead of the device's, and the copy it publishes is sanitized. `scripts/lib-dist.sh` is the only
+place that decides what a published artifact may contain, and `dist_assert_clean` refuses the
+artifact while anything is left; the release rule is:
+
+- **Never publish an artifact straight out of `$ROOTFS`.** The build rootfs carries the
+  maintainer's Wi-Fi profiles (PSKs in clear, imported from `$WIFI_DIR`), the SSH host keys and
+  the machine id. `make-image.sh` and `make-release.sh` sanitize a copy and assert it clean;
+  anything that publishes a rootfs has to go through `lib-dist.sh` too.
+- The released image therefore comes up with no known Wi-Fi network, `ssh` host keys are generated
+  on first boot (`sshd-keygen.service`) and `systemd` gets a fresh `machine-id`.
+- A release is: `scripts/make-release.sh`, notes in `docs/releases/<version>.md` (committed, and
+  reused as the annotated tag message and the GitHub release body), and the assets attached to the
+  tag. `docs/releases/v0.1.0.md` is the first one and shows the shape.
 
 `build-rootfs.sh` installs `$WIFI_DIR` into the image when that directory exists, so the machine
 comes up already knowing the Wi-Fi networks (see `scripts/wifi.sh`).
