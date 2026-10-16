@@ -57,8 +57,9 @@ DEVICE_DIR="$DEVICES_DIR/$DEVICE"
 
 DEVICE_ARCH="${deviceinfo_arch:-arm64}"
 # Kernel command line base (kernel-cmdline.conf) joined into one line.
-# KERNEL_CMDLINE_OVERRIDE replaces it entirely; useful for a verbose debug boot
-# (e.g. KERNEL_CMDLINE_OVERRIDE="console=tty0 ignore_loglevel loglevel=7").
+# KERNEL_CMDLINE_OVERRIDE replaces it entirely; the shipped file is verbose
+# because this is a bring-up port, so the override is what gives a silent boot
+# back (e.g. KERNEL_CMDLINE_OVERRIDE="quiet loglevel=2").
 KERNEL_CMDLINE="${KERNEL_CMDLINE_OVERRIDE:-$(tr '\n' ' ' <"$DEVICE_DIR/kernel-cmdline.conf" 2>/dev/null || true)}"
 # Modules to force into the initramfs.
 INITFS_MODULES="$(tr '\n' ' ' <"$DEVICE_DIR/modules-initfs" 2>/dev/null || true)"

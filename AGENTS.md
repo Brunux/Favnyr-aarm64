@@ -355,10 +355,13 @@ uncommitted changes, since those do not travel into the image.
 - The FIT carries one config per DTB. With `--board mt8192` no config matches by `compatible`, so
   depthcharge falls back to the **default config, which is the first DTB**: hayato must stay
   first (the alphabetical order of `deviceinfo_dtb="mediatek/mt8192-asurada*"` does that).
-- The output is silent by design (`quiet loglevel=2`). For a verbose boot without touching
-  `kernel-cmdline.conf`:
-  `KERNEL_CMDLINE_OVERRIDE="console=tty0 ignore_loglevel loglevel=7" scripts/make-kpart.sh`
-  and write the resulting kpart to the kernel partition.
+- The image boots **verbose** (`console=tty0 ignore_loglevel loglevel=7` in
+  `devices/google-asurada/kernel-cmdline.conf`): the panel is the only console this device has, so
+  the kernel log is the only window into a bring-up boot. Nura itself is silent (`quiet loglevel=2`)
+  and that is what a finished image should go back to; do it for one build without touching the
+  file with `KERNEL_CMDLINE_OVERRIDE="quiet loglevel=2" scripts/make-kpart.sh` (and then write the
+  resulting kpart to the kernel partition). Expect the `sbs-8-000b` gauge spam on the screen while
+  verbose.
 
 ## Commands
 
