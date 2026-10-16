@@ -51,7 +51,12 @@ yet present in `scripts/` as not implemented.
 - Boot from microSD/USB requires `crossystem dev_boot_usb=1 dev_boot_signed_only=0` and **Ctrl+U**
   at the developer-mode screen.
 
-Nura's proven disk layout (reuse it): `p1 pmOS_kernel` 128 MB (kpart), `p2` /boot, `p3` root.
+Nura's proven disk layout (reuse it, and this repository reproduces it): `p1 pmOS_kernel` 128 MB
+(kpart), `p2 pmOS_boot` 512 MB (ext2, where `/boot` lives), `p3 pmOS_root` root. It is created in
+exactly one place, `scripts/lib-cgpt.sh`, which `write-sd.sh`, `install-emmc.sh` and
+`install-kpart.sh` share; the kernel partition flags (`-S 1 -T 5 -P 10`), the partition types
+(`kernel`, `efi`, `data`), the labels and the 512 MB boot size are the ones pmbootstrap uses for
+ChromeOS (`pmb/install/partition.py`, whose `Config.boot_size` default is 512).
 
 ## Repository layout (device-agnostic)
 
@@ -77,7 +82,8 @@ uis/<ui>/                  one directory per graphical shell
                            root, `home/` is merged into /home/$USERNAME
   README.md                what the shell ships and how it deviates upstream
 packages/                  device-agnostic base package lists (base.list)
-scripts/                   lib.sh (device/kernel/UI resolution) + build scripts
+scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
+                           (the ChromeOS GPT layout) + build/install scripts
 ```
 
 Select a device with `DEVICE=<codename> scripts/...`; with a single device it is picked
@@ -266,7 +272,20 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
 - After writing the table, refresh the kernel's view with `partx -d` + `partx -a`
   (`blockdev --rereadpt` returns `EBUSY` on this microSD card).
 - `lsblk -nro PATH <disk>` lists the **disk first**, then its partitions: skip the first line when
-  resolving `p1`/`p2`. A wrong index here formats the whole disk instead of a partition.
+  resolving `p1`/`p2`/`p3`. A wrong index here formats the whole disk instead of a partition.
+- The tools needed **on the device** are three separate Debian packages and it is easy to install
+  the wrong one: `cgpt` provides `cgpt`, **`vboot-kernel-utils`** provides `futility` (the
+  similarly named `vboot-utils` ships `crossystem` and symlinks to `futility` but not `futility`
+  itself), and `depthcharge-tools` provides `depthchargectl`/`mkdepthcharge`. All three are in
+  `devices/google-asurada/packages.list`, together with `rsync`, which `install-emmc.sh` needs.
+- A kernel that boots from a ChromeOS kernel partition lives **inside** that partition, so
+  installing a new kernel is not finished until p1 is rewritten: `scripts/install-kpart.sh` does
+  that (the Debian counterpart of boot-deploy's `flash_updated_depthcharge_kernel`, which reads
+  `kern_guid` from `/proc/cmdline`, resolves `findfs PARTUUID=<guid>`, checks the image fits the
+  partition and `dd`s it). On the installed system the sequence is
+  `scripts/install-kernel.sh /` (staged kernel into the running rootfs) followed by
+  `scripts/install-kpart.sh`; without the second step the machine keeps booting the old kernel
+  while `/boot` and `/lib/modules` move on.
 
 ### depthcharge FIT
 
@@ -296,12 +315,17 @@ scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initra
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
 scripts/install-emmc.sh     # install the running system onto /dev/mmcblk0 (CONFIRM=yes)
+scripts/install-kpart.sh    # rewrite the kernel partition this system booted from
 scripts/wifi.sh export      # saved NetworkManager Wi-Fi profiles -> $WIFI_DIR
 scripts/wifi.sh import      # $WIFI_DIR -> a rootfs (drops interface-name=)
 scripts/check-system.sh     # (on the booted image) hardware + configuration report
 
 scripts/build.sh            # full pipeline (kernel + rootfs + kernel + kpart)
 ```
+
+`scripts/lib-cgpt.sh` holds the one copy of the ChromeOS GPT layout, used by `write-sd.sh`,
+`install-emmc.sh` and `install-kpart.sh`; `BOOT_SIZE_MIB` (512) and `BOOT_FS` (ext2) override its
+boot partition.
 
 `build-rootfs.sh` installs `$WIFI_DIR` into the image when that directory exists, so the machine
 comes up already knowing the Wi-Fi networks (see `scripts/wifi.sh`).
@@ -314,7 +338,15 @@ silently replaced by its default. A locale that is not an entry of `/etc/locale.
 timezone that is not under `/usr/share/zoneinfo`, is reported and replaced by the default.
 
 `write-sd.sh` and `install-emmc.sh` are destructive to block devices and refuse to touch the
-internal eMMC from `write-sd.sh` or the running root from either.
+internal eMMC from `write-sd.sh` or the running root from either. Both build the same three
+partitions (see `scripts/lib-cgpt.sh`) and both write a signed kpart into p1;
+`install-emmc.sh` copies the **running** system (rsync) instead of `$ROOTFS`, which is why it
+needs the card to be a system worth cloning.
+
+`install-kpart.sh` is the third one: it does not partition anything, it only rewrites the kernel
+partition the running system was booted from (resolved from `kern_guid` in `/proc/cmdline`), so
+that a kernel update does not leave p1 behind. It backs up what it replaces to
+`$WORK_DIR/kpart-backup-<timestamp>.img` and requires `CONFIRM=yes`.
 
 `check-system.sh` is their counterpart: it runs **on the booted image**, not on the build host, so
 it sources nothing and changes nothing. It needs no repository, but with a checkout it also

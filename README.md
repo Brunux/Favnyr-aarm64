@@ -46,6 +46,7 @@ uis/<ui>/                  one directory per graphical shell (sway, ...)
 packages/                  device-agnostic base package lists (base.list)
 scripts/
   lib.sh                   resolves device + kernel + UI, shared config
+  lib-cgpt.sh              the ChromeOS GPT layout (kernel + boot + root)
   00-deps.sh               host build dependencies (apk)
   build-kernel.sh          download + patch + build + stage the kernel
   build-rootfs.sh          debootstrap the Debian rootfs
@@ -53,6 +54,7 @@ scripts/
   make-kpart.sh            build the signed depthcharge FIT kpart
   write-sd.sh              partition + populate a microSD/USB
   install-emmc.sh          install the running system onto internal storage
+  install-kpart.sh         rewrite the kernel partition the system booted from
   check-system.sh          hardware + configuration report (runs on the booted image)
   build.sh                 the full pipeline (no block devices touched)
 docs/                      plan, recon, notes
@@ -82,6 +84,11 @@ The graphical shell is a separate axis: `uis/<name>/` holds its package list and
 
 The boot chain is the *stock* one: depthcharge loads a **signed FIT "kpart"** from the ChromeOS
 kernel partition (`p1`). **The SPI firmware is never flashed.**
+
+The kpart carries the kernel, the device trees and the initramfs, so it is self-contained; `p2`
+holds `/boot` and `p3` the root filesystem. Because the kernel also lives *inside* the kernel
+partition, `scripts/install-kpart.sh` rewrites that partition after a kernel update - otherwise
+the firmware would go on loading the old kernel.
 
 ---
 
@@ -243,9 +250,10 @@ Verify, in order: the kernel command line and DTBs (`cat /proc/cmdline`, `ls /pr
 **display**, **input** (keyboard/touch), **storage**, **network**, **audio**, suspend/resume.
 Capture `dmesg` for anything that fails and fix it in the device/kernel directories.
 
-Note the external-boot layout here is deliberate: `p1` is the ChromeOS kernel partition and
-`p2` is the ext4 root, with `/boot` on the root filesystem (Nura also adds a `/boot` partition;
-it is not required because the kpart is self-contained).
+Note the layout here is deliberate and is Nura's: `p1` is the ChromeOS kernel partition (the
+signed kpart depthcharge loads), `p2` is the 512 MB ext2 `/boot` and `p3` is the ext4 root. It is
+created by `scripts/lib-cgpt.sh` with the same `cgpt` flags pmbootstrap uses, so a card and the
+internal installation are interchangeable - and a card can be a faithful rehearsal of the eMMC.
 
 ### 6. Install to internal storage (only when external boot is solid)
 
@@ -255,6 +263,17 @@ DEVICE=<codename> scripts/install-emmc.sh          # requires CONFIRM=yes
 
 Run it from the card-booted system. It refuses to run from the target device and it destroys the
 existing internal installation.
+
+Once the system lives on internal storage, a kernel update has two halves, because the kernel is
+inside the ChromeOS kernel partition and not only in `/boot`:
+
+```sh
+scripts/install-kernel.sh /      # staged kernel into the running rootfs (depmod, initramfs)
+scripts/install-kpart.sh         # rewrite the kernel partition it booted from (CONFIRM=yes)
+```
+
+`install-kpart.sh` finds the partition to write from the `kern_guid` depthcharge substituted into
+`/proc/cmdline`, so it cannot write to the wrong device, and it keeps a copy of what it replaced.
 
 ### 7. Submit the port
 
