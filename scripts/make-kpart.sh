@@ -24,7 +24,14 @@ INITRD="$ROOTFS/boot/initrd.img-$KERNEL_RELEASE"
 # build.sh does it as the invoking user, and a shared directory would be left
 # root-owned and unremovable by the other side.
 BUILDDIR="$(mktemp -d "$WORK_DIR/kpart-dtbs-$DEVICE.XXXXXX")"
-trap 'rm -rf "$BUILDDIR"' EXIT
+DCT_TMP="$(mktemp -d "$WORK_DIR/dct-$DEVICE.XXXXXX")"
+trap 'rm -rf "$BUILDDIR" "$DCT_TMP"' EXIT
+# Same reason for the output: write-sd.sh and install-emmc.sh build the kpart as
+# root, and depthchargectl cannot overwrite a root-owned file as brunux.
+if [ -e "$OUT" ] && [ ! -w "$OUT" ]; then
+	rm -f "$OUT" 2>/dev/null || sudo -n rm -f "$OUT" ||
+		die "cannot replace $OUT (root-owned): remove it first"
+fi
 # Expand the deviceinfo_dtb glob (e.g. "mediatek/mt8192-asurada*").
 # shellcheck disable=SC2086
 set -- "$ROOTFS"/boot/dtbs/$DTB_GLOB.dtb
@@ -48,7 +55,7 @@ depthchargectl build --root none \
 	--fdtdir "$BUILDDIR" \
 	--compress "$DEPTHCHARGE_COMPRESSION" \
 	--timestamp "${SOURCE_DATE_EPOCH:-$(date +%s)}" \
-	--tmpdir "$WORK_DIR/dct-$DEVICE" \
+	--tmpdir "$DCT_TMP" \
 	--output "$OUT"
 
 log "Built $OUT ($(du -h "$OUT" | cut -f1))"
