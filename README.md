@@ -5,7 +5,9 @@ support — kernel, device tree, patches, modules and boot flow — instead of A
 
 First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada`).
 
-- **Status:** scaffolding + first build in progress. Not yet an installable release.
+- **Status:** boots from microSD on the Hayato with the Nura-ported sway session (display,
+  input, storage, Wi-Fi, Bluetooth, audio, suspend, greeter). The eMMC install is the next
+  milestone. Not yet a distributable release.
 - **Plan:** [`docs/plan.md`](docs/plan.md)
 - **Recon of the reference machine:** [`docs/recon.md`](docs/recon.md)
 - **Agent/build instructions:** [`AGENTS.md`](AGENTS.md)
@@ -51,6 +53,7 @@ scripts/
   make-kpart.sh            build the signed depthcharge FIT kpart
   write-sd.sh              partition + populate a microSD/USB
   install-emmc.sh          install the running system onto internal storage
+  check-system.sh          hardware + configuration report (runs on the booted image)
   build.sh                 the full pipeline (no block devices touched)
 docs/                      plan, recon, notes
 ```
@@ -106,6 +109,11 @@ Then boot the card: on ChromeOS firmware enter developer mode, ensure external b
 (`crossystem dev_boot_usb=1 dev_boot_signed_only=0`), insert the card and press **Ctrl+U**.
 
 Default credentials of the built image: user `brunux` / password `debian`, passwordless sudo.
+
+Once the card is booted, `scripts/check-system.sh` prints a health report of the running system —
+and, when run from a checkout on the device, it also verifies that every package the repository
+declares is actually installed. It is read-only and exits non-zero if something FAILs, so it is
+the quick way to tell whether a card (or an eMMC install) is still faithful to the repository.
 
 To bring the saved Wi-Fi networks over from the system you are running now, export them once and
 rebuild (or re-import into an existing rootfs):
@@ -260,7 +268,9 @@ existing internal installation.
 
 ## Roadmap
 
-- [ ] Boot the first image on the Hayato; validate the hardware checklist.
+- [x] Boot the first image on the Hayato from microSD and port the session.
+- [ ] Validate the hardware checklist on the booted image (`scripts/check-system.sh`).
+- [ ] Rebuild from a clean rootfs before installing: the card in use is a hand-patched build.
 - [ ] Install to eMMC with `install-emmc.sh`.
 - [ ] Reproducible image build (`SOURCE_DATE_EPOCH`) producing a distributable `.img.xz`.
 - [ ] CI/CD: kernel build, rootfs build and image assembly, plus a portability check across
