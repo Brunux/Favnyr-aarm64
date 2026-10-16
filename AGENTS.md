@@ -84,6 +84,8 @@ uis/<ui>/                  one directory per graphical shell
 packages/                  device-agnostic base package lists (base.list)
 scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
                            (the ChromeOS GPT layout) + build/install scripts
+reports/                   check-system.sh output captured on real hardware, kept
+                           as evidence for the checks (see reports/README.md)
 ```
 
 Select a device with `DEVICE=<codename> scripts/...`; with a single device it is picked
