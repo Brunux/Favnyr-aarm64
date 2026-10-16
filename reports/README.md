@@ -44,5 +44,38 @@ states:
   `OK sway configuration is valid`, every sway command present, and all four font
   families found (the tofu-icon fix).
 
+## check-system-2026-10-16-card-2.txt
+
+Second report, from the card rewritten with the three-partition layout of
+`scripts/lib-cgpt.sh` and the fixed checks (image built from `c69d66f`):
+**51 OK, 2 WARN, 0 FAIL**. Every non-OK line of the first report is gone, and
+the three replaced checks now describe the hardware instead of the script:
+
+* `OK firmware mediatek/mt8192/scp.img: requested before the rootfs was up, then
+  loaded` — the outcome, not the retry;
+* `OK swap active: /dev/zram0` — the PATH fix;
+* `OK sound card: alsa_card.platform-sound` plus `OK ALSA codec:
+  mt8192_mt6359_rt1015p_rt5682` — the card exists and the codec is the right one;
+* `OK all 72 declared package(s) are installed` — `zstd`, `upower` and `iw` are
+  in this image, and the wireless check proves it by reading `wlp1s0`.
+
+The checks added the same day (commit `b8e038a` and after) passed on their first
+real run, which is the point of taking a second report: `OK the kernel partition
+holds a dev-signed FIT`, `OK the kernel partition /dev/mmcblk1p1`, `OK /boot is a
+separate filesystem (/dev/mmcblk1p2) matching /etc/fstab`, `OK the running
+kernel's vmlinuz is on /boot`, and `OK 1 suspend/resume cycle(s) recorded in this
+boot` (the Lock key, pressed before the report).
+
+The two remaining WARNs are the ones expected on any boot of this image:
+
+| line in the report | what it is |
+|---|---|
+| `WARN regulatory domain not set (country 00)` | Environment, not a port bug: the world domain is what remains until NetworkManager or the access point's country IE sets one. The check now warns only when cfg80211 actually logs `failed to load regulatory.db` (the `wireless-regdb` bug it exists for) and otherwise prints an `info` line. |
+| `WARN 198 error-priority line(s) this boot` | The `sbs-8-000b` fuel-gauge noise, upstream and present in Nura's own log. |
+
+The layout is visible here too, and it is what the eMMC install reproduces:
+`root /dev/mmcblk1p3 (UUID 376bd20d-…)`, `booted from removable storage`, `root
+filesystem 13% used`.
+
 When a later report is taken, add it here next to this one instead of replacing
 it: the diff between two reports is what shows a regression.

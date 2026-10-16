@@ -394,11 +394,20 @@ if have iw; then
 	else
 		fail "no wireless interface (is rtw88_8822ce loading its firmware?)"
 	fi
+	# A world regulatory domain (country 00) is not a bug by itself: it is what
+	# remains while neither NetworkManager, wpa_supplicant nor the AP's 802.11d
+	# country IE has set one. What *is* a bug is wireless-regdb missing, which
+	# makes cfg80211 log "failed to load regulatory.db" and pins the world domain
+	# no matter what connects (AGENTS.md).
 	_reg="$(asroot iw reg get | sed -n 's/^country \([^:]*\).*/\1/p' | head -1)"
-	case "$_reg" in
-		"" | 00) warn "regulatory domain not set (country ${_reg:-none}): wireless-regdb / NetworkManager" ;;
-		*)       ok "regulatory domain: $_reg" ;;
-	esac
+	_regdb_bad="$(asroot dmesg 2>/dev/null | grep -c 'failed to load regulatory.db' || true)"
+	if [ "${_regdb_bad:-0}" -gt 0 ]; then
+		warn "cfg80211 could not load regulatory.db (package wireless-regdb): the world domain cannot change"
+	elif [ -z "$_reg" ] || [ "$_reg" = 00 ]; then
+		info "regulatory domain: world (country 00), set once NetworkManager or the AP provides one"
+	else
+		ok "regulatory domain: $_reg"
+	fi
 else
 	skip "iw is not installed"
 fi

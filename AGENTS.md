@@ -180,7 +180,10 @@ uncommitted changes, since those do not travel into the image.
 - `wireless-regdb` provides `regulatory.db`; without it cfg80211 logs
   `failed to load regulatory.db` and the WiFi stays on the world regulatory domain. `iw` is in
   `packages/base.list` for `check-system.sh`: without it the wireless interface and the regulatory
-  domain are invisible to the report (it SKIPs both checks).
+  domain are invisible to the report (it SKIPs both checks). The world domain (`country 00`) on its
+  own is *not* a failure - it is what remains until NetworkManager or the access point's 802.11d
+  country IE sets one (Nura reaches `country MX` from the AP), so the report says so instead of
+  warning.
 - `zstd` lets initramfs-tools compress the initramfs with zstd; otherwise it warns
   `No zstd in /usr/bin:/sbin:/bin, using gzip`.
 - **Bluetooth**: `libspa-0.2-bluetooth` provides PipeWire's BlueZ SPA plugins, but those are
