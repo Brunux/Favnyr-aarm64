@@ -31,7 +31,7 @@ export KERNEL_RELEASE
 
 ROOT_SRC="$(findmnt -n -o SOURCE /)"
 case "$ROOT_SRC" in
-	"$BLOCK"|"$BLOCK"p*) die "already running from $BLOCK; boot from microSD first" ;;
+	"$BLOCK"|"$BLOCK"p*|"$BLOCK"[0-9]*) die "already running from $BLOCK; boot from microSD first" ;;
 esac
 
 log "About to ERASE and install $DEVICE on $BLOCK"

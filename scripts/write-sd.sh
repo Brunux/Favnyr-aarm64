@@ -26,7 +26,7 @@ case "$BLOCK" in
 	*/mmcblk0|*/mmcblk0p*) die "refusing to write to internal eMMC: $BLOCK" ;;
 esac
 case "$ROOT_SRC" in
-	"$BLOCK"|"$BLOCK"p*) die "refusing to write to the running root device: $BLOCK" ;;
+	"$BLOCK"|"$BLOCK"p*|"$BLOCK"[0-9]*) die "refusing to write to the running root device: $BLOCK" ;;
 esac
 
 log "Device: $DEVICE -> $BLOCK ($(blockdev --getsize64 "$BLOCK") bytes)"

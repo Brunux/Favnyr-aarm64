@@ -16,10 +16,11 @@
 # this machine look the same and the eMMC is a faithful copy of the tested card.
 
 # Release a disk and its partitions: drop mounts and swap, then stale signatures
-# (cgpt trips over leftover GPT headers otherwise).
+# (cgpt trips over leftover GPT headers otherwise). Both naming schemes are
+# covered: mmcblk1p1 and sda1.
 disk_release() {
 	_disk="$1"
-	for _part in "$_disk" "$_disk"p*; do
+	for _part in "$_disk" "$_disk"p* "$_disk"[0-9]*; do
 		[ -b "$_part" ] || continue
 		swapoff "$_part" 2>/dev/null || true
 		mountpoint -q "$_part" 2>/dev/null && umount "$_part" || true

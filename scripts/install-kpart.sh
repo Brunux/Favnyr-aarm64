@@ -19,7 +19,7 @@
 # an argument, that prebuilt image is written instead (e.g. the one produced by
 # scripts/build.sh on the build host).
 #
-# Writing requires CONFIRM=yes; the partition is read and backed up first.
+# Writing requires CONFIRM=yes; what it replaces is backed up first.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 . "$(dirname "$0")/lib-cgpt.sh"
@@ -68,8 +68,21 @@ fi
 kpart_fits "$IMG" "$PART"
 kpart_verify "$IMG"
 
-log "Plan: write $IMG ($(stat -c %s "$IMG") bytes) to $PART"
-cgpt show -i 1 "$DISK" 2>/dev/null || true
+# The partition looked up from kern_guid has to be a ChromeOS kernel partition,
+# not merely a partition: writing a kpart into the root filesystem because a
+# GUID was wrong would be unrecoverable.
+_idx="$(printf '%s' "$PART" | sed -n 's/.*[^0-9]\([0-9][0-9]*\)$/\1/p')"
+if [ -n "$_idx" ] && command -v cgpt >/dev/null 2>&1; then
+	_table="$(cgpt show -i "$_idx" "$DISK" 2>/dev/null || true)"
+	case "$_table" in
+		*"ChromeOS kernel"*) ;;
+		*) die "$PART is not a ChromeOS kernel partition (kernel partition expected)" ;;
+	esac
+	log "Plan: write $IMG ($(stat -c %s "$IMG") bytes) to $PART"
+	printf '%s\n' "$_table"
+else
+	log "Plan: write $IMG ($(stat -c %s "$IMG") bytes) to $PART"
+fi
 [ "${CONFIRM:-}" = "yes" ] || die "refusing to write without CONFIRM=yes (CONFIRM=yes scripts/install-kpart.sh)"
 
 # Keep a copy of what was there, so a bad image is recoverable without going
