@@ -154,6 +154,14 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
   `alsa-utils` is therefore in `packages/base.list`. Verify with `pactl list cards` (Active
   Profile `HiFi`) and `wpctl status` (a *Built-in Audio Speaker* sink, not *Dummy Output*).
   The same class of bug will hit any card whose routing lives in a UCM `BootSequence`.
+- **ALSA-only applications**: Debian's stock alsa-lib configuration has no usable `default`
+  PCM; that device is supplied by **`pipewire-alsa`** (in `uis/sway/packages.list`). Without
+  it, `aplay`/`arecord` without an explicit `-D`, emulators and some Java/game audio fail
+  with *audio open error: No such file or directory* while PipeWire clients (and therefore
+  everything using PulseAudio) work fine, which makes the gap easy to overlook.
+- **Clock**: Debian enables no NTP client, so a fresh image never synchronises
+  (`timedatectl` says *System clock synchronized: no*, *NTP service: n/a*) and only the RTC
+  keeps time. `systemd-timesyncd` is in `packages/base.list` for this.
 - **Backlight keys**: `brightnessctl` needs write access to
   `/sys/class/backlight/*/brightness`. Debian's `brightnessctl` ships no udev rule and
   nothing else in the system grants it, so `/sys/class/backlight` stays root-only (0644) and

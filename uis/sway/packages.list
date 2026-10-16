@@ -37,6 +37,11 @@ keyd
 # audio
 pipewire
 pipewire-pulse
+# pipewire-alsa routes the ALSA `default` PCM through PipeWire. Without it the
+# stock alsa-lib configuration has no usable `default`, so ALSA-only programs
+# (aplay/arecord without -D, emulators, some Java/Steam games) fail with
+# "audio open error: No such file or directory" while PipeWire clients are fine.
+pipewire-alsa
 wireplumber
 # Bluetooth audio support for PipeWire (BlueZ SPA plugins).
 libspa-0.2-bluetooth

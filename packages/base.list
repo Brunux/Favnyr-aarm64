@@ -12,6 +12,10 @@ initramfs-tools
 zstd
 kmod
 zram-tools
+# NTP client. Debian ships no enabled one by default, and without it the clock
+# is never synchronised (`timedatectl` reports "System clock synchronized: no"
+# and "NTP service: n/a"); the RTC alone drifts.
+systemd-timesyncd
 
 # users / auth
 sudo
@@ -54,3 +58,5 @@ bash-completion
 nano
 htop
 less
+# lsusb, for diagnosing USB devices (webcam, docks).
+usbutils

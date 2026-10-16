@@ -63,6 +63,11 @@ launcher, waybar and the Alacritty terminal.
   (and provides `bluetoothctl`) is in `bluez`, which is now listed next to it in
   `packages.list` (see `AGENTS.md`).
 
+* **ALSA-only programs need `pipewire-alsa`.** Debian's alsa-lib configuration has no usable
+  `default` PCM by itself, so `aplay`/`arecord` without an explicit `-D`, emulators and some
+  games fail with *audio open error: No such file or directory* even though PipeWire (and
+  therefore PulseAudio clients) works. `pipewire-alsa` is listed in `packages.list`.
+
 * `etc/sway/config.d/01-status-bar.conf` disables swaybar (waybar is used
   instead); the block is kept commented out for reference.
 
