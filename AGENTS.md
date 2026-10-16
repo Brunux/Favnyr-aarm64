@@ -169,16 +169,30 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
   `uis/sway/files/etc/udev/rules.d/90-brightnessctl.rules` (group `video`, `g+w`) fixes it.
 - **Lock key**: the right-most key of the top row emits `KEY_SLEEP`, and keyd maps
   `sleep = coffee`, so sway receives `KEY_COFFEE`. That keycode's xkb keysym is
-  **`XF86ScreenSaver`**, and sway binds nothing to it by default, so the key did nothing:
-  keyd owns the keyboard, so systemd-logind never sees `KEY_SLEEP` and does not suspend
-  either. `uis/sway/files/etc/sway/config.d/21-lock-screen.conf` binds `XF86ScreenSaver` to
-  `swaylock`. Reading a keymap dump is misleading here: `xkbcli compile-keymap` prints **X**
-  keycodes, which are evdev + 8, so `KEY_COFFEE` (evdev 152) shows up as keycode 160 and
+  **`XF86ScreenSaver`**, and sway binds nothing to it by default. keyd owns the keyboard, so
+  systemd-logind never sees `KEY_SLEEP` and cannot suspend on the key either: the key has to
+  be handled inside the session. `uis/sway/files/etc/sway/config.d/21-lock-screen.conf` binds
+  `XF86ScreenSaver` to `swaylock` **and** `loginctl suspend`, i.e. lock then sleep — which is
+  what the Nura session does with its `Alt+Shift+Escape` shortcut. In Nura the Lock key itself
+  does *nothing*: its generated keyd config maps it to `KEY_COFFEE` and neither elogind nor
+  sway reacts to that keysym (elogind handles only `KEY_SLEEP`, `KEY_SUSPEND`, `KEY_POWER`,
+  `KEY_POWER2`, `KEY_RESTART` and `KEY_ESC`).
+  Suspending through logind needs the daemon (D-Bus activated; Debian keeps `systemd-logind`
+  inside the `systemd` package) plus polkitd, whose stock
+  `org.freedesktop.login1.suspend` policy has `allow_active=yes`.
+  Reading a keymap dump is misleading here: `xkbcli compile-keymap` prints **X** keycodes,
+  which are evdev + 8, so `KEY_COFFEE` (evdev 152) shows up as keycode 160 and
   `KEY_BRIGHTNESSDOWN` (evdev 224) as keycode 232.
 
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
   key opens bemenu, waybar, Alacritty). `rootfs-setup.sh` rewrites `/home/brunux` inside the
   shipped text files to `$USERNAME`, and merges `uis/sway/files/home/` into that home.
+- **tuigreet**: Debian ships the *original* tuigreet **0.9.1**, which has no `--config`/TOML
+  support and no background animations (Nura runs the fork, which has both). The greeter's
+  personalisation is therefore expressed as flags in `/etc/greetd/config.toml`; the `matrix`
+  backdrop and the `custom_title`/widget positions have no 0.9.1 equivalent. Unknown
+  components or colour names in `--theme` are silently ignored (they do not break the
+  greeter), and `--remember*` needs `/var/cache/tuigreet` owned by the greeter user.
 - **The Chromebook keyboard has no F1-F10**, and that is what breaks virtual terminals:
   `mt8192-asurada-hayato-r1.dts` maps the top row to action keys (`KEY_BACK`, `KEY_FORWARD`,
   `KEY_REFRESH`, `KEY_FULL_SCREEN`, `KEY_SCALE`, brightness, mute, volume). Switching VTs needs a

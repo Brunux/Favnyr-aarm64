@@ -93,6 +93,18 @@ easy to miss:
   to that keysym, and because keyd owns the keyboard systemd-logind never sees `KEY_SLEEP`
   either, so the key did nothing at all. `21-lock-screen.conf` binds it to `swaylock`, the
   same action as `$mod+Escape`.
+* **The Lock key also sleeps.** Locking alone was not what the key does on this machine's
+  other system: `21-lock-screen.conf` runs `swaylock` and then `loginctl suspend`, exactly
+  like the `Alt+Shift+Escape` shortcut in `22-sleep.conf` (which is what the Nura session
+  uses for this — there the Lock key itself is inert). The suspend goes through
+  systemd-logind, so it needs polkitd to allow the active session to suspend, which Debian's
+  default `org.freedesktop.login1.suspend` policy does. Without the daemon (or from a session
+  logind does not consider active) the command fails with *Access denied* and only the lock
+  happens.
+* **tuigreet is the original 0.9.1**, not the fork Nura runs, so it has no `--config`: the
+  greeter's personalisation lives as flags in `/etc/greetd/config.toml` (theme, greeting,
+  time format, padding, F-key menus). The `matrix` background, the custom title and the
+  widget positions have no equivalent and are dropped.
 
 ## Virtual terminals and the missing F-keys
 

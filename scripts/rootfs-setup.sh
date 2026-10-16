@@ -74,12 +74,21 @@ if [ -f "$PKGDIR/$UI.list" ] && [ "$UI" = "sway" ]; then
 	mkdir -p /etc/greetd
 	# vt 7: Debian's greetd.service declares Conflicts=getty@tty7.service, so it
 	# expects to own tty7; on vt 1 it collides with getty@tty1.
+	#
+	# The personalisation below is the maintainer's Nura greeter (solarized
+	# colours, greeting, time format, F-key menus).  Nura runs the tuigreet fork,
+	# which reads a TOML config; Debian ships the original 0.9.1, which has no
+	# --config, so the same look is expressed with flags.  Unknown --theme
+	# components/colours are ignored by 0.9.1 instead of being fatal.  Not
+	# portable: the fork's `matrix` backdrop, custom title and widget positions.
+	# --remember* needs this cache directory to belong to the greeter user.
+	install -d -o "$GREETD_USER" -g "$GREETD_USER" -m 0755 /var/cache/tuigreet
 	cat >/etc/greetd/config.toml <<EOF
 [terminal]
 vt = 7
 
 [default_session]
-command = "tuigreet --time --remember --remember-session --cmd sway"
+command = "tuigreet --time --time-format '%a, %d %b  %H:%M' --greeting 'Welcome back to Debian' --greet-align center --width 60 --window-padding 2 --container-padding 1 --prompt-padding 1 --asterisks --asterisks-char '*' --kb-command 2 --kb-sessions 3 --kb-power 12 --power-no-setsid --remember --remember-session --theme 'border=cyan;text=white;time=cyan;container=black;title=yellow;greet=cyan;prompt=cyan;input=white;action=blue;button=yellow' --cmd sway"
 user = "$GREETD_USER"
 EOF
 	systemctl enable greetd 2>/dev/null || true
