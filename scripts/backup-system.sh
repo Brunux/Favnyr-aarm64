@@ -11,9 +11,12 @@
 #                                from the kern_guid in /proc/cmdline, so it cannot
 #                                be the wrong partition (the same trick
 #                                install-kpart.sh uses).
-#   <host>-gpt.bin               the partition table, as a binary GPT backup
-#                                (sgdisk), plus <host>-partitions.txt, a readable
-#                                `cgpt show` / `lsblk` transcript of it.
+#   <host>-gpt-primary.img       the partition table: the GPT header and entries,
+#   <host>-gpt-backup.img          the GPT's own backup copy at the end of the
+#                                disk, and (when sgdisk is installed) the same
+#                                table as a portable <host>-gpt.bin. Plus
+#                                <host>-partitions.txt, a readable `cgpt show` /
+#                                `lsblk` transcript of it.
 #   <host>-boot.tar.gz           /boot, as mounted.
 #   <host>-rootfs.tar.gz         the root filesystem, without /boot.
 #   README.md                    what the files are and how to restore them.
@@ -121,10 +124,19 @@ fi
 
 if [ -n "$ROOT_BLK" ]; then
 	log "Recording the partition table of /dev/$ROOT_BLK"
+	# The GPT areas themselves, so the table can be put back exactly with dd: the
+	# protective MBR, the header and the entry array at the start, the backup
+	# copy at the end. Restoring needs the same disk size, which is the case when
+	# the backup is of the machine it would be restored to. sgdisk writes a
+	# portable backup as well when it is installed.
+	_gpt_total="$(blockdev --getsz "/dev/$ROOT_BLK")"
+	dd if="/dev/$ROOT_BLK" of="$DEST/$HOST-gpt-primary.img" bs=512 count=34 2>/dev/null
+	dd if="/dev/$ROOT_BLK" of="$DEST/$HOST-gpt-backup.img" bs=512 \
+		skip=$((_gpt_total - 33)) count=33 2>/dev/null
 	if command -v sgdisk >/dev/null 2>&1; then
 		sgdisk --backup="$DEST/$HOST-gpt.bin" "/dev/$ROOT_BLK" >/dev/null
 	else
-		warn "sgdisk not installed (gptfdisk): the GPT is only recorded as a transcript"
+		warn "sgdisk not installed (gptfdisk): only the raw GPT dumps, no portable backup"
 	fi
 	{
 		printf '# %s\n\n' "/dev/$ROOT_BLK"
@@ -147,7 +159,9 @@ Taken from the running system on $(date -Is) with \`scripts/backup-system.sh\` f
 | file | what it is |
 |---|---|
 | \`$HOST-kernel-partition.img\` | raw copy of the ChromeOS kernel partition the system booted from (the signed FIT depthcharge loads) |
-| \`$HOST-gpt.bin\` | binary GPT backup of /dev/${ROOT_BLK:-disk} (restore with \`sgdisk --load-backup\`) |
+| \`$HOST-gpt-primary.img\` | the first 34 sectors of /dev/${ROOT_BLK:-disk}: protective MBR, GPT header, entry array |
+| \`$HOST-gpt-backup.img\` | the last 33 sectors: the GPT's own backup copy |
+| \`$HOST-gpt.bin\` | the same table as a portable \`sgdisk --load-backup\` file (when sgdisk is available) |
 | \`$HOST-partitions.txt\` | readable partition table: \`cgpt show\` and \`lsblk\` with UUIDs |
 | \`$HOST-boot.tar.gz\` | /boot, with owners, permissions, ACLs and xattrs |
 | \`$HOST-rootfs.tar.gz\` | the root filesystem, /boot excluded |
@@ -159,9 +173,16 @@ The tars are gzip so macOS' own \`tar\` can read them; the filesystem they sit o
 
 ## Restoring
 
-1. Recreate the partition table: \`sgdisk --load-backup=$HOST-gpt.bin /dev/<disk>\`,
-   or build the same three partitions with \`scripts/lib-cgpt.sh\` in this
-   repository (\`$HOST-partitions.txt\` records what they were).
+1. Put the partition table back. On the same disk, the raw dumps are exact:
+   \`\`\`sh
+   total=\$(blockdev --getsz /dev/<disk>)
+   sudo dd if=$HOST-gpt-primary.img of=/dev/<disk> bs=512 count=34 conv=fsync
+   sudo dd if=$HOST-gpt-backup.img of=/dev/<disk> bs=512 seek=\$((total - 33)) count=33 conv=fsync
+   sudo partx -d /dev/<disk>; sudo partx -a /dev/<disk>
+   \`\`\`
+   On a different disk use \`sgdisk --load-backup=$HOST-gpt.bin /dev/<disk>\`, or build
+   the same three partitions with \`scripts/lib-cgpt.sh\` from this repository
+   (\`$HOST-partitions.txt\` records exactly what they were).
 2. Kernel partition and /boot:
    \`\`\`sh
    sudo dd if=$HOST-kernel-partition.img of=/dev/<disk>p1 bs=1M conv=fsync
@@ -188,7 +209,8 @@ EOF
 log "Checksums"
 (
 	cd "$DEST"
-	for f in "$HOST-kernel-partition.img" "$HOST-boot.tar.gz" "$HOST-rootfs.tar.gz"; do
+	for f in "$HOST-kernel-partition.img" "$HOST-gpt-primary.img" "$HOST-gpt-backup.img" \
+		"$HOST-gpt.bin" "$HOST-boot.tar.gz" "$HOST-rootfs.tar.gz"; do
 		if [ -f "$f" ]; then
 			sha256sum "$f"
 		fi
