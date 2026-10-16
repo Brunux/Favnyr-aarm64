@@ -162,6 +162,16 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
 - **Clock**: Debian enables no NTP client, so a fresh image never synchronises
   (`timedatectl` says *System clock synchronized: no*, *NTP service: n/a*) and only the RTC
   keeps time. `systemd-timesyncd` is in `packages/base.list` for this.
+- **Battery gauge**: the fuel gauge (`sbs-battery 8-000b`) registers fine (`battery gas gauge
+  device registered`) and its capacity is readable, but it reports `Unknown chemistry: OTC0` and
+  the kernel repeatedly logs `power_supply sbs-8-000b: driver failed to report
+  'status'/'health'/'time_to_empty_now' property: -5/-6`. This is **upstream, not this port**:
+  Nura's own log carries the same messages (1296 of them). What waybar shows is the capacity,
+  which works, because its `battery` module reads `/sys/class/power_supply` directly
+  (`"bat": "sbs-8-000b"`, see `waybar-battery(5)`) — `upower` is *not* what draws it.
+  `upower` is in `uis/sway/packages.list` anyway: WirePlumber asks it for the battery
+  percentage, and without the daemon every start logs
+  `default: Failed to get percentage from UPower: NameHasNoOwner`.
 - **Backlight keys**: `brightnessctl` needs write access to
   `/sys/class/backlight/*/brightness`. Debian's `brightnessctl` ships no udev rule and
   nothing else in the system grants it, so `/sys/class/backlight` stays root-only (0644) and
@@ -285,9 +295,10 @@ scripts/build-rootfs.sh     # debootstrap Debian forky rootfs    -> $WORK_DIR/ro
 scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initramfs
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
-scripts/install-emmc.sh     # (later) install the running system onto /dev/mmcblk0
+scripts/install-emmc.sh     # install the running system onto /dev/mmcblk0 (CONFIRM=yes)
 scripts/wifi.sh export      # saved NetworkManager Wi-Fi profiles -> $WIFI_DIR
 scripts/wifi.sh import      # $WIFI_DIR -> a rootfs (drops interface-name=)
+scripts/check-system.sh     # (on the booted image) hardware + configuration report
 
 scripts/build.sh            # full pipeline (kernel + rootfs + kernel + kpart)
 ```
@@ -304,6 +315,16 @@ timezone that is not under `/usr/share/zoneinfo`, is reported and replaced by th
 
 `write-sd.sh` and `install-emmc.sh` are destructive to block devices and refuse to touch the
 internal eMMC from `write-sd.sh` or the running root from either.
+
+`check-system.sh` is their counterpart: it runs **on the booted image**, not on the build host, so
+it sources nothing and changes nothing. It needs no repository, but with a checkout it also
+verifies that every package declared in `packages/*.list`, `devices/*/packages.list` and
+`uis/*/packages.list` is installed. Run it as the desktop user; from a root shell it re-executes
+itself as that user, and the privileged reads go through `sudo -n`. Every check maps to a bug this
+port has already hit — keyd swallowing `KEY_SLEEP`, greetd's `vt`/user, the UCM boot sequence, ALSA's
+missing `default` PCM, the backlight udev rule, the font fallback, `interface-name=` in the Wi-Fi
+profiles, the clock, the `fstab` UUID — so a FAIL there is a regression, not a hypothetical. It
+exits non-zero when something FAILs.
 
 ### Boot from microSD
 

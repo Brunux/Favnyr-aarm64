@@ -55,6 +55,15 @@ bluez
 pavucontrol
 alsa-ucm-conf
 
+# power / battery
+# UPower is what WirePlumber asks for the battery percentage; without it every
+# start logs `default: Failed to get percentage from UPower: NameHasNoOwner`.
+# waybar's battery module does not need it - it reads /sys/class/power_supply
+# directly (its `bat` option takes the device name) - but UPower is the
+# component that tracks the battery for everything else, and `upower -d` is the
+# way to inspect the fuel gauge.
+upower
+
 # graphics (panfrost) + portals
 libgl1-mesa-dri
 mesa-utils
