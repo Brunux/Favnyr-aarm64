@@ -29,6 +29,13 @@ mkdir -p "$WORK_DIR" "$SRC_DIR"
 DEVICES_DIR="$REPO_DIR/devices"
 KERNELS_DIR="$REPO_DIR/kernels"
 PACKAGES_DIR="$REPO_DIR/packages"
+# A UI (graphical shell) is a package list plus a file tree:
+#   uis/<name>/packages.list   packages to install
+#   uis/<name>/files/          tree overlaid onto the rootfs (etc/ as root,
+#                              home/ into /home/$USERNAME)
+UIS_DIR="$REPO_DIR/uis"
+UI="${UI:-sway}"
+UI_DIR="$UIS_DIR/$UI"
 
 log()  { printf '\n\033[1;34m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33mWARN: %s\033[0m\n' "$*" >&2; }
@@ -116,3 +123,4 @@ KERNEL_STAGE="${KERNEL_STAGE:-$WORK_DIR/kernel-stage-$KERNEL_FLAVOR}"
 KPART="${KPART:-$WORK_DIR/$DEVICE.vmlinuz.kpart}"
 
 export REPO_DIR BUILD_ROOT WORK_DIR SRC_DIR DEVICE DEVICE_DIR KERNEL_DIR
+export UI UIS_DIR UI_DIR

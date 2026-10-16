@@ -13,6 +13,7 @@ export DEBIAN_FRONTEND=noninteractive
 PKGDIR="/tmp/packages"
 
 log() { printf '\n\033[1;34m[rootfs] ==> %s\033[0m\n' "$*"; }
+warn() { printf '\n\033[1;33m[rootfs] WARN: %s\033[0m\n' "$*" >&2; }
 pkgs() { grep -vE '^\s*(#|$)' "$1" 2>/dev/null | tr '\n' ' '; }
 
 log "Configuring apt sources ($DEBIAN_SUITE)"
@@ -63,7 +64,7 @@ systemctl enable zramswap 2>/dev/null || true
 systemctl set-default graphical.target 2>/dev/null || true
 
 if [ -f "$PKGDIR/$UI.list" ] && [ "$UI" = "sway" ]; then
-	log "Configuring greetd + sway"
+	log "Configuring greetd"
 	# Debian's greetd package creates the '_greetd' system user while the
 	# upstream documentation uses 'greetd'. Pick whichever exists, otherwise
 	# greetd exits with "configured default session user 'greetd' not found".
@@ -71,34 +72,41 @@ if [ -f "$PKGDIR/$UI.list" ] && [ "$UI" = "sway" ]; then
 	grep -q "^$GREETD_USER:" /etc/passwd || GREETD_USER=greetd
 	grep -q "^$GREETD_USER:" /etc/passwd || GREETD_USER=root
 	mkdir -p /etc/greetd
+	# vt 7: Debian's greetd.service declares Conflicts=getty@tty7.service, so it
+	# expects to own tty7; on vt 1 it collides with getty@tty1.
 	cat >/etc/greetd/config.toml <<EOF
 [terminal]
-vt = 1
+vt = 7
 
 [default_session]
 command = "tuigreet --time --remember --remember-session --cmd sway"
 user = "$GREETD_USER"
 EOF
 	systemctl enable greetd 2>/dev/null || true
+fi
 
-	install -d -o "$USERNAME" -g "$USERNAME" "/home/$USERNAME/.config/sway"
-	cat >"/home/$USERNAME/.config/sway/config" <<EOF
-# Minimal sway configuration for this device
-set \$mod Mod4
-set \$term foot
-
-output * bg #000000 solid_color
-input * {
-	xkb_layout us
-}
-exec dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
-exec swaybg -c '#1d2021'
-bindsym \$mod+Return exec \$term
-bindsym \$mod+d exec fuzzel
-bindsym \$mod+Shift+q kill
-include /etc/sway/config.d/*
-EOF
-	chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.config"
+log "Installing UI files ($UI)"
+# uis/<ui>/files is a tree: everything but home/ is copied over / as root,
+# home/ is merged into the user's home directory.
+if [ -d /tmp/ui-files ]; then
+	# The shipped configuration is written against the default user's home;
+	# rewrite it when a different USERNAME was requested.
+	if [ "$USERNAME" != "brunux" ]; then
+		grep -rlZ --binary-files=without-match '/home/brunux' /tmp/ui-files 2>/dev/null |
+			xargs -0 -r sed -i "s|/home/brunux|/home/$USERNAME|g"
+	fi
+	for entry in /tmp/ui-files/*; do
+		[ -e "$entry" ] || continue
+		[ "$(basename "$entry")" = home ] && continue
+		cp -a "$entry" /
+	done
+	if [ -d /tmp/ui-files/home ]; then
+		install -d -o "$USERNAME" -g "$USERNAME" "/home/$USERNAME"
+		cp -a /tmp/ui-files/home/. "/home/$USERNAME/"
+		chown -R "$USERNAME:$USERNAME" "/home/$USERNAME"
+	fi
+else
+	warn "no UI files staged for '$UI'"
 fi
 
 log "Rootfs configuration done"

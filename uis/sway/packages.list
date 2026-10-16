@@ -1,0 +1,64 @@
+# Sway desktop, ported from the maintainer's Nura (postmarketOS) session.
+# One package per line; blank lines and lines starting with # are ignored.
+# Files shipped alongside this list live in uis/sway/files/.
+#
+# Deliberately NOT here:
+#   * workstyle - not packaged in Debian (see uis/sway/README.md).
+
+# compositor + session tools
+sway
+swaybg
+swayidle
+swaylock
+wl-clipboard
+
+# what /etc/sway/config and the drop-ins actually invoke
+waybar
+bemenu
+libbemenu-wayland
+alacritty
+grimshot
+grim
+slurp
+wlsunset
+brightnessctl
+# pactl(1) for the XF86Audio* keys; pipewire-pulse provides the server only.
+pulseaudio-utils
+
+# login manager
+greetd
+tuigreet
+
+# audio
+pipewire
+pipewire-pulse
+wireplumber
+# Bluetooth audio support for PipeWire (BlueZ SPA plugins).
+libspa-0.2-bluetooth
+pavucontrol
+alsa-ucm-conf
+
+# graphics (panfrost) + portals
+libgl1-mesa-dri
+mesa-utils
+xdg-desktop-portal-wlr
+xdg-user-dirs
+
+# fonts / input
+fonts-dejavu-core
+# The theme is written for "AdwaitaMono Nerd Font" / "JetBrainsMono Nerd Font",
+# which Debian does not ship (fonts-adwaita has no Mono variant). JetBrains Mono
+# draws the text; the icon glyphs come from fontconfig fallback:
+#   * Font Awesome (U+F000-U+F2FF)      -> fonts-font-awesome-legacy
+#   * Material Design Icons (plane 15)  -> fonts-materialdesignicons-legacy
+#   * Octicons / Codicons / Devicons    -> fonts-nerd-symbols
+# The two "legacy" packages are required: Debian's fonts-nerd-symbols is
+# DFSG-stripped (no FA, no MDI) and on its own every waybar icon renders as a
+# tofu box with the hex codepoint inside. Verified by rendering the icons with
+# pango-view, which is what waybar uses.
+fonts-jetbrains-mono
+fonts-adwaita
+fonts-nerd-symbols
+fonts-font-awesome-legacy
+fonts-materialdesignicons-legacy
+playerctl

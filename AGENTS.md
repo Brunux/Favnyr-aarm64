@@ -71,12 +71,17 @@ kernels/<flavor>/          one directory per kernel
   config.aarch64           kernel config (CONFIG_LOCALVERSION gives the release suffix)
   patches/                 *.patch + a `series` file with the apply order
   APKBUILD.reference       upstream kernel package (reference only)
-packages/                  device-agnostic package lists (base.list, <ui>.list)
-scripts/                   lib.sh (device/kernel resolution) + build scripts
+uis/<ui>/                  one directory per graphical shell
+  packages.list            UI packages (Debian names)
+  files/                   tree overlaid onto the rootfs; `etc/` is copied as
+                           root, `home/` is merged into /home/$USERNAME
+  README.md                what the shell ships and how it deviates upstream
+packages/                  device-agnostic base package lists (base.list)
+scripts/                   lib.sh (device/kernel/UI resolution) + build scripts
 ```
 
 Select a device with `DEVICE=<codename> scripts/...`; with a single device it is picked
-automatically.
+automatically. Select the graphical shell with `UI=<name>` (default `sway`).
 
 ## Vendored reference (pinned)
 
@@ -129,6 +134,27 @@ automatically.
 - `zstd` lets initramfs-tools compress the initramfs with zstd; otherwise it warns
   `No zstd in /usr/bin:/sbin:/bin, using gzip`.
 - `libspa-0.2-bluetooth` provides PipeWire's BlueZ SPA plugins (Bluetooth audio).
+- **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
+  key opens bemenu, waybar, Alacritty). `rootfs-setup.sh` rewrites `/home/brunux` inside the
+  shipped text files to `$USERNAME`, and merges `uis/sway/files/home/` into that home.
+- **Nerd Fonts / waybar icons**: Debian has no Nerd-patched Adwaita Mono, so the theme uses
+  `JetBrains Mono` for the text. Beware `fonts-nerd-symbols`: it is **DFSG-stripped** and only
+  ships Octicons, Codicons, Devicons, Seti and Powerline. It has **no Font Awesome
+  (U+F000-U+F2FF) and no Material Design Icons (plane 15)** — which is exactly what the theme's
+  icons are — so on its own every icon renders as a *tofu* box with the hex codepoint inside.
+  `fonts-font-awesome-legacy` and `fonts-materialdesignicons-legacy` supply those two sets and
+  fontconfig's fallback then resolves every glyph, with no change to the configuration.
+  Verify with the engine waybar actually uses:
+  `pango-view --no-display --font="JetBrains Mono 13" --output=/tmp/i.png <text>` (package
+  `pango1.0-tools`) and look at the PNG.
+- **sway `-C` validates headlessly** even inside a chroot (useful before booting):
+  `WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 sway -C -c /etc/sway/config`.
+- **workstyle** (renames workspaces to icons) is not packaged in Debian; Nura ran a cargo build
+  linked against musl, which cannot run against glibc. Its drop-in is not shipped, but
+  `~/.config/workstyle/config.toml` is kept so `cargo install workstyle` is enough to enable it.
+- `bemenu` in Debian pulls one backend through an alternative dependency; add
+  **`libbemenu-wayland`** explicitly for the Wayland session. `grimshot` is a package of its own.
+  `pactl` (the XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
 
 ### ChromeOS GPT (`cgpt`)
 

@@ -36,9 +36,14 @@ kernels/<flavor>/          one directory per kernel (shared by devices)
   patches/*.patch          patches
   patches/series           apply order, one filename per line
   APKBUILD.reference       upstream kernel package (reference only)
-packages/                  device-agnostic package lists (base.list, <ui>.list)
+uis/<ui>/                  one directory per graphical shell (sway, ...)
+  packages.list            packages to install (Debian names)
+  files/                   tree overlaid onto the rootfs (etc/ as root,
+                           home/ merged into the user's home)
+  README.md                what the shell ships and how it differs upstream
+packages/                  device-agnostic base package lists (base.list)
 scripts/
-  lib.sh                   resolves device + kernel, shared config
+  lib.sh                   resolves device + kernel + UI, shared config
   00-deps.sh               host build dependencies (apk)
   build-kernel.sh          download + patch + build + stage the kernel
   build-rootfs.sh          debootstrap the Debian rootfs
@@ -55,6 +60,11 @@ resolves everything: architecture, DTBs, depthcharge board, kpart geometry, kern
 version/release. Select a device with `DEVICE=<codename> scripts/...` (with a single device it is
 picked automatically).
 
+The graphical shell is a separate axis: `uis/<name>/` holds its package list and a file tree that
+`build-rootfs.sh` stages and `rootfs-setup.sh` installs. Select it with `UI=<name>` (default
+`sway`). `uis/sway/` ports the maintainer's Nura session — see
+[`uis/sway/README.md`](uis/sway/README.md) for the layout and the deliberate deviations.
+
 ### What comes from Nura and what is Debian
 
 | Nura (Alpine/apk) | Here (Debian) |
@@ -65,6 +75,7 @@ picked automatically).
 | `boot-deploy` | `scripts/make-kpart.sh` |
 | `depthcharge-tools`, `cgpt` | same tools (Debian/Alpine packages) |
 | `pmbootstrap install --disk` | `scripts/install-emmc.sh` |
+| `postmarketos-ui-sway` + the maintainer's dotfiles | `uis/sway/` |
 
 The boot chain is the *stock* one: depthcharge loads a **signed FIT "kpart"** from the ChromeOS
 kernel partition (`p1`). **The SPI firmware is never flashed.**

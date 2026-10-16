@@ -7,12 +7,13 @@ set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
 UI="${UI:-sway}"
+[ -d "$UI_DIR" ] || die "unknown UI '$UI' (see $UIS_DIR)"
 TARGET_HOSTNAME="${TARGET_HOSTNAME:-$(echo "$DEVICE" | sed 's/.*-//')}"
 USERNAME="${USERNAME:-brunux}"
 USERPASS="${USERPASS:-debian}"
 
 if [ "$(id -u)" -ne 0 ]; then
-	exec sudo -n DEVICE="$DEVICE" "$(readlink -f "$0")" "$@"
+	exec sudo -n DEVICE="$DEVICE" UI="$UI" "$(readlink -f "$0")" "$@"
 fi
 
 cleanup_mounts() {
@@ -44,6 +45,16 @@ rm -rf "$ROOTFS/tmp/packages"
 mkdir -p "$ROOTFS/tmp/packages"
 cp "$PACKAGES_DIR"/*.list "$ROOTFS/tmp/packages/"
 [ -f "$DEVICE_DIR/packages.list" ] && cp "$DEVICE_DIR/packages.list" "$ROOTFS/tmp/packages/device.list"
+# The UI package list is staged under the name rootfs-setup.sh expects.
+cp "$UI_DIR/packages.list" "$ROOTFS/tmp/packages/$UI.list"
+# The UI file tree is staged aside; rootfs-setup.sh decides where it goes.
+# The staged copy is normalised to root:root because `cp -a` would otherwise
+# carry the host owner (uid 10000 on postmarketOS hosts) into the image.
+rm -rf "$ROOTFS/tmp/ui-files"
+if [ -d "$UI_DIR/files" ]; then
+	cp -a "$UI_DIR/files" "$ROOTFS/tmp/ui-files"
+	chown -R root:root "$ROOTFS/tmp/ui-files"
+fi
 
 log "Running rootfs-setup.sh in chroot"
 chroot "$ROOTFS" env \
@@ -56,5 +67,5 @@ chroot "$ROOTFS" env \
 	UI="$UI" \
 	/bin/bash /root/rootfs-setup.sh
 
-rm -rf "$ROOTFS/tmp/packages" "$ROOTFS/root/rootfs-setup.sh"
+rm -rf "$ROOTFS/tmp/packages" "$ROOTFS/tmp/ui-files" "$ROOTFS/root/rootfs-setup.sh"
 log "Rootfs ready: $ROOTFS"
