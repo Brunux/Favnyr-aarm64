@@ -2,20 +2,16 @@
 # What a *published* artifact must not carry, shared by the scripts that produce
 # one (make-image.sh, make-release.sh).
 #
-# Sourced after lib.sh, which provides die()/log()/warn() and $USERNAME.
+# Sourced after lib.sh, which provides die()/log()/warn() and $ROOTFS/$USERNAME.
 #
 # The build rootfs keeps state that belongs to the maintainer's machine on
 # purpose: build-rootfs.sh imports the Wi-Fi profiles from $WIFI_DIR so the
 # maintainer's own cards come up already knowing the networks. That state must
-# never leave the machine it was built on, so a released artifact is copied,
-# sanitized, and then *asserted* clean - the assertion is what makes it
-# impossible to publish a profile by accident, which is the failure this file
-# exists for:
+# never leave the machine it was built on:
 #
 #   * /etc/NetworkManager/system-connections/*.nmconnection holds the Wi-Fi PSK
 #     in clear. Shipping one publishes the maintainer's Wi-Fi password.
-#   * /var/lib/NetworkManager is the state NetworkManager built from those
-#     profiles (including the BSSIDs it has seen).
+#   * /var/lib/NetworkManager is the state NetworkManager built from them.
 #   * /etc/ssh/ssh_host_* makes every installation of the image share one host
 #     identity, so it stops identifying a machine at all.
 #   * /etc/machine-id and /var/lib/dbus/machine-id are the same problem for
@@ -23,25 +19,56 @@
 #   * the build root itself ($HOME/.cache/debian-aarch64) contains the exported
 #     Wi-Fi profiles, so a copy of it inside an artifact leaks them too.
 #
-# Everything else removed here is a build leftover. Nothing personal is rescued:
-# sanitize is destructive by design, which is why it runs on a copy (an image
-# mount or a staging tree) and never on $ROOTFS.
+# Two consequences shape this file:
 #
-# /etc/machine-id is emptied rather than deleted: systemd-machine-id-setup
-# generates a fresh one on the first boot when the file is empty. The SSH host
-# keys are simply deleted because the image ships sshd-keygen.service (wanted by
-# ssh.service), which generates the ones it is missing.
+# 1. Removing the state afterwards is NOT enough. Deleting a file inside an image
+#    leaves its data in the filesystem's free blocks, and that is measurable: the
+#    first v0.1.0 image had no *.nmconnection anywhere, `find` over the mounted
+#    root found nothing, and `grep -a` over the .img still printed both SSIDs and
+#    the PSK. So these paths are *excluded from the copy* (DIST_EXCLUDES) and the
+#    finished artifact is searched for their contents
+#    (dist_assert_no_profile_bytes), which is the check that would have caught
+#    it.
+# 2. /etc/machine-id is left empty rather than absent: systemd-machine-id-setup
+#    generates a fresh one on first boot. The SSH host keys are simply not copied
+#    because the image ships sshd-keygen.service (wanted by ssh.service), which
+#    generates the ones it is missing.
 
-# Remove the state above from a rootfs tree. <dir> must be a copy.
+# rsync patterns, anchored at the transfer root. Also excludes the build
+# leftovers that would otherwise be deleted after being copied (see above).
+DIST_EXCLUDES='
+/etc/NetworkManager/system-connections/
+/var/lib/NetworkManager/
+/etc/ssh/ssh_host_*
+/etc/machine-id
+/var/lib/dbus/machine-id
+/root/.ssh/
+/home/*/.cache/debian-aarch64/
+/var/log/bootstrap.log
+/tmp/repo/
+'
+
+# Write the patterns where rsync can read them: rsync -aHAX --delete
+# --exclude-from=<file> <rootfs>/ <destination>/
+dist_write_excludes() {
+	[ -n "${1:-}" ] || die "dist_write_excludes: no destination file given"
+	printf '%s\n' "$DIST_EXCLUDES" | sed '/^$/d' >"$1"
+}
+
+# Make sure the state above is absent from a rootfs tree (an image mount or a
+# staging tree), for callers that did not use DIST_EXCLUDES. Destructive by
+# design: it runs on a copy, never on $ROOTFS.
 dist_sanitize() {
 	_d="${1%/}"
 	[ -d "$_d/etc" ] || die "dist_sanitize: $_d does not look like a root filesystem"
 
 	log "Sanitizing $_d for publication"
 	rm -rf "$_d/etc/NetworkManager/system-connections"
-	rm -rf "${_d:?}"/var/lib/NetworkManager/*
-	mkdir -p "$_d/var/lib/NetworkManager"
-	# A build root left inside the tree carries $WIFI_DIR with it.
+	rm -rf "${_d:?}"/var/lib/NetworkManager
+	# NetworkManager and dbus recreate these; keeping them (empty, 0700) leaves
+	# an image that looks like a normal system.
+	install -d -m700 -o root -g root "$_d/etc/NetworkManager/system-connections"
+	install -d -m700 -o root -g root "$_d/var/lib/NetworkManager"
 	rm -rf "${_d:?}"/home/*/.cache/debian-aarch64
 
 	rm -f "$_d"/etc/ssh/ssh_host_*
@@ -54,10 +81,7 @@ dist_sanitize() {
 	rm -rf "$_d/tmp/repo"
 }
 
-# Refuse to publish <dir> if any of the state above is still in it. This runs on
-# the artifact itself (the mounted image, the staging tree) right before it is
-# compressed, so a future change to dist_sanitize() cannot silently ship a
-# profile.
+# Refuse to publish <dir> if any of the state above is still in it, as files.
 dist_assert_clean() {
 	_d="${1%/}"
 	_bad=""
@@ -79,4 +103,44 @@ dist_assert_clean() {
 		die "refusing to publish: $_d still carries state that is not meant to leave this machine"
 	fi
 	log "Clean: no Wi-Fi profile, host key or machine id in $_d"
+}
+
+# Search the artifact itself (an image file, a staging tree) for the *contents*
+# of the maintainer's profiles: their SSIDs and their PSKs, one pattern per line.
+# The patterns come from the build rootfs, which is where those profiles live -
+# the artifact is not supposed to contain them at all, in a file or in the free
+# space of a filesystem.
+dist_assert_no_profile_bytes() {
+	_d="${1%/}"
+	[ -e "$_d" ] || die "dist_assert_no_profile_bytes: $_d does not exist"
+	# The profiles live in a 0700 root-only directory, so as an ordinary user the
+	# glob below matches nothing and the check would pass without looking at
+	# anything. Refuse the ambiguous case instead of trusting it.
+	if [ -d "$ROOTFS/etc/NetworkManager/system-connections" ] &&
+		! ls -A "$ROOTFS/etc/NetworkManager/system-connections" >/dev/null 2>&1; then
+		die "dist_assert_no_profile_bytes: cannot read $ROOTFS/etc/NetworkManager/system-connections (run as root), so the check would be empty"
+	fi
+	_pat="$WORK_DIR/dist-profile-patterns.txt"
+	: >"$_pat"
+	for _p in "$ROOTFS"/etc/NetworkManager/system-connections/*.nmconnection; do
+		[ -f "$_p" ] || continue
+		basename "$_p" .nmconnection >>"$_pat"
+		sed -n 's/^psk=//p' "$_p" >>"$_pat"
+	done
+	sed -i '/^$/d' "$_pat"
+
+	if [ ! -s "$_pat" ]; then
+		log "No Wi-Fi profile in $ROOTFS: nothing to look for in $_d"
+		rm -f "$_pat"
+		return 0
+	fi
+	# -l: report the file that matched and stop, not the matching bytes (the
+	# artifact is 4 GiB of mostly zeros).
+	_hits="$(grep -raF -l -f "$_pat" "$_d" 2>/dev/null | head -3 || true)"
+	rm -f "$_pat"
+	if [ -n "$_hits" ]; then
+		printf '%s\n' "$_hits" | sed 's/^/  /' >&2
+		die "$_d still contains Wi-Fi credentials: deleting a profile after copying it leaves its bytes in the image"
+	fi
+	log "Byte-checked: no SSID and no PSK anywhere in $_d"
 }

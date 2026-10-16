@@ -57,8 +57,12 @@ disk_layout_create "$LOOP"
 disk_layout_parts "$LOOP"
 disk_layout_mount "$LOOP" "$MNT"
 
+# The maintainer's state is excluded from the copy, not deleted after it: a
+# deleted file is still in the image's free blocks (scripts/lib-dist.sh).
 log "Copying root filesystem"
-rsync -aHAX --delete "$ROOTFS"/ "$MNT"/
+EXCLUDES="$WORK_DIR/dist-excludes-$DEVICE.txt"
+dist_write_excludes "$EXCLUDES"
+rsync -aHAX --delete --exclude-from="$EXCLUDES" "$ROOTFS"/ "$MNT"/
 disk_layout_fstab "$MNT"
 dist_sanitize "$MNT"
 dist_assert_clean "$MNT"
@@ -75,6 +79,8 @@ sync
 disk_layout_umount "$MNT"
 losetup -d "$LOOP"
 trap - EXIT
+# The filesystem being clean is not enough: the image is what gets published.
+dist_assert_no_profile_bytes "$IMG"
 
 log "Done: $IMG ($(du -h "$IMG" | cut -f1) of data, $(du -h --apparent-size "$IMG" | cut -f1) apparent)"
 log "Flash it with: xz -dc ${IMG##*/}.xz | sudo dd of=<card> bs=4M conv=fsync"

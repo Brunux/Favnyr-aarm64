@@ -60,9 +60,14 @@ xz -T0 -6 -f -k "$IMG"
 log "3/4 Root filesystem tarball"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-rsync -aHAX --delete "$ROOTFS"/ "$STAGE"/
+# Same exclusion as the image: the profiles must not be copied and then deleted,
+# or their bytes survive in the staging filesystem (scripts/lib-dist.sh).
+EXCLUDES="$WORK_DIR/dist-excludes-$DEVICE.txt"
+dist_write_excludes "$EXCLUDES"
+rsync -aHAX --delete --exclude-from="$EXCLUDES" "$ROOTFS"/ "$STAGE"/
 dist_sanitize "$STAGE"
 dist_assert_clean "$STAGE"
+dist_assert_no_profile_bytes "$STAGE"
 # --acls/--xattrs/--xattrs-include keep what rsync -A/-X preserved, and
 # --numeric-owner because the tarball is extracted as root, where the numbers
 # are what count.
