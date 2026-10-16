@@ -89,6 +89,19 @@ scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
 Select a device with `DEVICE=<codename> scripts/...`; with a single device it is picked
 automatically. Select the graphical shell with `UI=<name>` (default `sway`).
 
+### The image carries this repository
+
+`build-rootfs.sh` stages the **committed** tree (`git archive HEAD`, so never an untested working
+copy) into the image at `/home/$USERNAME/Dev/<repo directory name>`, next to a `REVISION` file, and
+writes the same information to `/etc/debian-aarch64-revision` (commit, device, UI, kernel, date).
+It also installs `check-system.sh` as `/usr/local/sbin/check-system.sh`. This is not decoration:
+`install-emmc.sh`, `install-kpart.sh` and the package checks in `check-system.sh` are meant to run
+**on the device**, they source `scripts/lib.sh`, and the card that installs to the eMMC is the same
+system that has to rewrite its own kernel partition later. A copy found on a card can therefore be
+told apart from the checkout it came from - check `REVISION` before trusting it. It is a snapshot:
+update it by rebuilding, not by editing it in place. The script warns when the working tree has
+uncommitted changes, since those do not travel into the image.
+
 ## Vendored reference (pinned)
 
 - Upstream: `pmaports` commit `0e458a2417d6f5ed61c7b70621d5632e30136091` (2026-10-15).
@@ -349,13 +362,16 @@ that a kernel update does not leave p1 behind. It backs up what it replaces to
 `$WORK_DIR/kpart-backup-<timestamp>.img` and requires `CONFIRM=yes`.
 
 `check-system.sh` is their counterpart: it runs **on the booted image**, not on the build host, so
-it sources nothing and changes nothing. It needs no repository, but with a checkout it also
+it sources nothing and changes nothing, and the image also ships it as
+`/usr/local/sbin/check-system.sh` so no checkout is needed to run it. With a checkout it also
 verifies that every package declared in `packages/*.list`, `devices/*/packages.list` and
-`uis/*/packages.list` is installed. Run it as the desktop user; from a root shell it re-executes
+`uis/*/packages.list` is installed (`check-system.sh ~/Dev/<repo>`). Run it as the desktop user;
+from a root shell it re-executes
 itself as that user, and the privileged reads go through `sudo -n`. Every check maps to a bug this
 port has already hit — keyd swallowing `KEY_SLEEP`, greetd's `vt`/user, the UCM boot sequence, ALSA's
 missing `default` PCM, the backlight udev rule, the font fallback, `interface-name=` in the Wi-Fi
-profiles, the clock, the `fstab` UUID — so a FAIL there is a regression, not a hypothetical. It
+profiles, the clock, the `fstab` UUID, the kernel partition holding a signed FIT — so a FAIL there is
+a regression, not a hypothetical. It
 exits non-zero when something FAILs.
 
 ### Boot from microSD

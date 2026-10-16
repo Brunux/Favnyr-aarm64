@@ -10,6 +10,7 @@ export DEBIAN_FRONTEND=noninteractive
 : "${DEBIAN_MIRROR:=http://deb.debian.org/debian}"
 : "${DEBIAN_COMPONENTS:=main contrib non-free non-free-firmware}"
 : "${UI:=sway}"
+: "${REPO_NAME:=debian-aarch64}"
 PKGDIR="/tmp/packages"
 
 log() { printf '\n\033[1;34m[rootfs] ==> %s\033[0m\n' "$*"; }
@@ -139,6 +140,26 @@ if [ -d /tmp/ui-files ]; then
 	fi
 else
 	warn "no UI files staged for '$UI'"
+fi
+
+log "Installing the repository copy ($REPO_NAME)"
+# The device-side scripts (install-emmc.sh, install-kpart.sh) source
+# scripts/lib.sh and read devices/, kernels/ and uis/, so the checkout has to be
+# on the booted system for them to run there at all.  build-rootfs.sh stages it
+# from git (HEAD) and writes /etc/debian-aarch64-revision, which also travels
+# with the copy.
+if [ -d /tmp/repo ]; then
+	DEST="/home/$USERNAME/Dev/$REPO_NAME"
+	install -d -o "$USERNAME" -g "$USERNAME" "${DEST%/*}"
+	rm -rf "$DEST"
+	cp -a /tmp/repo "$DEST"
+	[ -f /etc/debian-aarch64-revision ] && cp /etc/debian-aarch64-revision "$DEST/REVISION"
+	chown -R "$USERNAME:$USERNAME" "$DEST"
+	# The health report is standalone by design, so ship it as a system tool too
+	# (it still takes the checkout as an argument for its package checks).
+	install -Dm755 /tmp/repo/scripts/check-system.sh /usr/local/sbin/check-system.sh
+else
+	warn "no repository staged for the image: the device-side scripts will be missing"
 fi
 
 log "Rootfs configuration done"

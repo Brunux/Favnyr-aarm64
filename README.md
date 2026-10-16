@@ -117,10 +117,17 @@ Then boot the card: on ChromeOS firmware enter developer mode, ensure external b
 
 Default credentials of the built image: user `brunux` / password `debian`, passwordless sudo.
 
-Once the card is booted, `scripts/check-system.sh` prints a health report of the running system —
-and, when run from a checkout on the device, it also verifies that every package the repository
-declares is actually installed. It is read-only and exits non-zero if something FAILs, so it is
-the quick way to tell whether a card (or an eMMC install) is still faithful to the repository.
+The image also carries the repository it was built from: the committed tree at
+`~/Dev/<repo directory name>` (with a `REVISION` file, and the same information in
+`/etc/debian-aarch64-revision`), because the scripts that install to internal storage and update the
+kernel partition run *on* the device. `check-system.sh` is additionally installed as
+`/usr/local/sbin/check-system.sh`.
+
+Once the card is booted, `check-system.sh` prints a health report of the running system —
+and, when run from a checkout on the device (`check-system.sh ~/Dev/<repo>`), it also verifies that
+every package the repository declares is actually installed. It is read-only and exits non-zero if
+something FAILs, so it is the quick way to tell whether a card (or an eMMC install) is still faithful
+to the repository.
 
 To bring the saved Wi-Fi networks over from the system you are running now, export them once and
 rebuild (or re-import into an existing rootfs):
