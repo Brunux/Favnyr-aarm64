@@ -42,7 +42,7 @@ debian-aarch64 system report  2026-10-16 08:56:51 CST
   OK    nmtui present
 
 ==> Bluetooth
-  ----  controller 74:4C:A1:89:F9:88 (public)
+  ----  controller 74:4C:A1:XX:XX:XX (public)
   OK    controller powered
   ----  btmgmt: 	current settings: powered ssp br/edr le secure-conn wide-band-speech 
 
