@@ -1,0 +1,6 @@
+# Build artifacts and scratch files (kept outside the repo, but just in case)
+*.img
+*.img.xz
+*.kpart
+build/
+out/

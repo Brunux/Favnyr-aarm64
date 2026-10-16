@@ -1,0 +1,33 @@
+# Base system packages for the Hayato Debian image.
+# One package per line; blank lines and lines starting with # are ignored.
+
+# init / kernel plumbing
+initramfs-tools
+kmod
+zram-tools
+
+# users / auth
+sudo
+locales
+
+# network
+network-manager
+wpasupplicant
+openssh-server
+
+# filesystems / storage
+e2fsprogs
+dosfstools
+parted
+
+# firmware (non-free-firmware)
+firmware-realtek
+firmware-mediatek
+firmware-misc-nonfree
+
+# quality of life
+ca-certificates
+bash-completion
+nano
+htop
+less

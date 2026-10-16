@@ -66,7 +66,9 @@ Nura's proven disk layout (reuse it): `p1 pmOS_kernel` 128 MB (kpart), `p2` /boo
 - The shell in this environment is **ash (busybox)**: no brace expansion (`{a,b}`), no `[[ ]]`.
   Write POSIX sh, or call `bash` explicitly.
 - Build/run natively on this aarch64 machine; no cross-compiler needed.
-- `/tmp/opencode` is the approved scratch directory.
+- **`/tmp` is a ~1.9 GiB tmpfs** — too small for kernel/rootfs work. Keep large artifacts on
+  the real filesystem; the scripts default to `$HOME/.cache/debian-aarch64`
+  (`BUILD_ROOT`, `WORK_DIR`, `SRC_DIR`). `/tmp/opencode` is fine only for small scratch files.
 
 ## Commands
 
