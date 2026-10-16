@@ -119,6 +119,16 @@ DEBIAN_COMPONENTS="${DEBIAN_COMPONENTS:-main contrib non-free non-free-firmware}
 # They contain the PSK, so they deliberately live outside the repository.
 WIFI_DIR="${WIFI_DIR:-$BUILD_ROOT/wifi}"
 
+# Locale and timezone of the built image.  Both are baked into the rootfs, not
+# into the kernel, so they are ordinary build inputs:
+#   LOCALE=en_US.UTF-8 scripts/build-rootfs.sh
+#   TIMEZONE=UTC scripts/build-rootfs.sh
+# The locale must be an entry of /etc/locale.gen (Debian ships every entry
+# commented out; rootfs-setup.sh uncomments and generates the requested one),
+# the timezone a name under /usr/share/zoneinfo (e.g. UTC, Europe/Madrid).
+LOCALE="${LOCALE:-en_US.UTF-8}"
+TIMEZONE="${TIMEZONE:-America/Mexico_City}"
+
 # ---------------------------------------------------------------------------
 # Build directories
 # ---------------------------------------------------------------------------
@@ -128,3 +138,4 @@ KPART="${KPART:-$WORK_DIR/$DEVICE.vmlinuz.kpart}"
 
 export REPO_DIR BUILD_ROOT WORK_DIR SRC_DIR DEVICE DEVICE_DIR KERNEL_DIR
 export UI UIS_DIR UI_DIR WIFI_DIR
+export LOCALE TIMEZONE

@@ -13,7 +13,17 @@ USERNAME="${USERNAME:-brunux}"
 USERPASS="${USERPASS:-debian}"
 
 if [ "$(id -u)" -ne 0 ]; then
-	exec sudo -n DEVICE="$DEVICE" UI="$UI" WIFI_DIR="$WIFI_DIR" "$(readlink -f "$0")" "$@"
+	# Forward every resolved build input: sudo does not preserve the caller's
+	# environment, so an override passed to this script (USERNAME, TIMEZONE, …)
+	# would otherwise be silently dropped and replaced by the default.
+	exec sudo -n \
+		BUILD_ROOT="$BUILD_ROOT" WORK_DIR="$WORK_DIR" SRC_DIR="$SRC_DIR" \
+		DEVICE="$DEVICE" UI="$UI" WIFI_DIR="$WIFI_DIR" \
+		LOCALE="$LOCALE" TIMEZONE="$TIMEZONE" \
+		TARGET_HOSTNAME="$TARGET_HOSTNAME" USERNAME="$USERNAME" USERPASS="$USERPASS" \
+		DEBIAN_SUITE="$DEBIAN_SUITE" DEBIAN_MIRROR="$DEBIAN_MIRROR" \
+		DEBIAN_COMPONENTS="$DEBIAN_COMPONENTS" ROOTFS="$ROOTFS" \
+		"$(readlink -f "$0")" "$@"
 fi
 
 cleanup_mounts() {
@@ -64,6 +74,8 @@ chroot "$ROOTFS" env \
 	DEBIAN_SUITE="$DEBIAN_SUITE" \
 	DEBIAN_MIRROR="$DEBIAN_MIRROR" \
 	DEBIAN_COMPONENTS="$DEBIAN_COMPONENTS" \
+	LOCALE="$LOCALE" \
+	TIMEZONE="$TIMEZONE" \
 	UI="$UI" \
 	/bin/bash /root/rootfs-setup.sh
 

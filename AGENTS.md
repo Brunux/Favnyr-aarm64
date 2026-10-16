@@ -284,6 +284,13 @@ scripts/build.sh            # full pipeline (kernel + rootfs + kernel + kpart)
 `build-rootfs.sh` installs `$WIFI_DIR` into the image when that directory exists, so the machine
 comes up already knowing the Wi-Fi networks (see `scripts/wifi.sh`).
 
+Its rootfs inputs are environment variables: `TARGET_HOSTNAME`, `USERNAME`, `USERPASS`,
+`LOCALE` (default `en_US.UTF-8`) and `TIMEZONE` (default `America/Mexico_City`, e.g.
+`TIMEZONE=UTC`). The script re-execs itself through `sudo`, which does not preserve
+the environment, so it forwards every resolved input explicitly — anything not forwarded is
+silently replaced by its default. A locale that is not an entry of `/etc/locale.gen`, or a
+timezone that is not under `/usr/share/zoneinfo`, is reported and replaced by the default.
+
 `write-sd.sh` and `install-emmc.sh` are destructive to block devices and refuse to touch the
 internal eMMC from `write-sd.sh` or the running root from either.
 

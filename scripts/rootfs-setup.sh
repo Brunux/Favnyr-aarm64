@@ -39,10 +39,33 @@ if [ -f "$PKGDIR/$UI.list" ]; then
 fi
 
 log "Locale / timezone / hostname"
-sed -i 's/^# *en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+# Both are build inputs (scripts/lib.sh); the defaults here keep the script
+# usable on its own.
+LOCALE="${LOCALE:-en_US.UTF-8}"
+TIMEZONE="${TIMEZONE:-America/Mexico_City}"
+
+# /etc/locale.gen ships every entry commented out.  Uncomment the requested
+# locale and generate it: a name that is not in the file makes locale-gen
+# produce nothing at all, silently leaving the image without a UTF-8 locale.
+if grep -q "^# *$LOCALE " /etc/locale.gen; then
+	sed -i "s|^# *$LOCALE |$LOCALE |" /etc/locale.gen
+elif ! grep -q "^$LOCALE " /etc/locale.gen; then
+	warn "locale '$LOCALE' is not in /etc/locale.gen, using en_US.UTF-8"
+	LOCALE=en_US.UTF-8
+	sed -i 's|^# *en_US.UTF-8 |en_US.UTF-8 |' /etc/locale.gen
+fi
 locale-gen
-echo "LANG=en_US.UTF-8" >/etc/default/locale
-ln -sf /usr/share/zoneinfo/UTC /etc/localtime
+echo "LANG=$LOCALE" >/etc/default/locale
+
+# A bad name would leave /etc/localtime a dangling symlink (and every timestamp
+# wrong), so check it against the tzdata database first.
+if [ ! -e "/usr/share/zoneinfo/$TIMEZONE" ]; then
+	warn "unknown timezone '$TIMEZONE', using UTC"
+	TIMEZONE=UTC
+fi
+ln -sf "/usr/share/zoneinfo/$TIMEZONE" /etc/localtime
+# /etc/timezone is what dpkg-reconfigure tzdata reads; keep it in sync.
+printf '%s\n' "$TIMEZONE" >/etc/timezone
 echo "$HOSTNAME" >/etc/hostname
 cat >/etc/hosts <<EOF
 127.0.0.1	localhost
