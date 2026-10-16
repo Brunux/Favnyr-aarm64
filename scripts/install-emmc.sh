@@ -1,79 +1,74 @@
 #!/bin/bash
 # Install the currently running system onto the internal eMMC (default /dev/mmcblk0).
 #
-# WARNING: DESTROYS the existing eMMC contents. Run it from the microSD-booted
-# Debian system with CONFIRM=yes.
+# This is the counterpart of pmbootstrap's ChromeOS install path
+# (partition_cgpt + write_cgpt_kpart in pmb/) without pmbootstrap: the same
+# ChromeOS GPT layout, the same cgpt flags, and the kpart written to p1. The
+# difference is the source of the files: pmbootstrap copies a rootfs it built in
+# a chroot, this script rsyncs the system it is running from - i.e. the card
+# that has already been tested.
+#
+# WARNING: DESTROYS the existing eMMC contents (that is where Nura lives).
+# Run it from the microSD-booted Debian system with CONFIRM=yes.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
+. "$(dirname "$0")/lib-cgpt.sh"
 
 BLOCK="${DEVICE_BLOCK:-/dev/mmcblk0}"
 
 if [ "$(id -u)" -ne 0 ]; then
-	exec sudo -n DEVICE="$DEVICE" DEVICE_BLOCK="$BLOCK" "$(readlink -f "$0")" "$@"
+	exec sudo -n DEVICE="$DEVICE" DEVICE_BLOCK="$BLOCK" \
+		BOOT_SIZE_MIB="$BOOT_SIZE_MIB" BOOT_FS="$BOOT_FS" \
+		"$(readlink -f "$0")" "$@"
 fi
 
 [ -b "$BLOCK" ] || die "not a block device: $BLOCK"
+# The kernel that is running has to be the one that ends up in the kpart, so
+# the release is not taken from the repository but from the running kernel.
+KERNEL_RELEASE="$(uname -r)"
+export KERNEL_RELEASE
+[ -d "/lib/modules/$KERNEL_RELEASE" ] || die "no modules for the running kernel $KERNEL_RELEASE"
+
 ROOT_SRC="$(findmnt -n -o SOURCE /)"
 case "$ROOT_SRC" in
 	"$BLOCK"|"$BLOCK"p*) die "already running from $BLOCK; boot from microSD first" ;;
 esac
 
 log "About to ERASE and install $DEVICE on $BLOCK"
-log "  running root: $ROOT_SRC"
+log "  running root: $ROOT_SRC (kernel $KERNEL_RELEASE)"
 lsblk "$BLOCK"
 [ "${CONFIRM:-}" = "yes" ] || die "refusing to continue without CONFIRM=yes"
 
-log "Creating ChromeOS GPT on $BLOCK"
-for part in "$BLOCK" "$BLOCK"p*; do
-	[ -b "$part" ] || continue
-	swapoff "$part" 2>/dev/null || true
-	mountpoint -q "$part" 2>/dev/null && umount "$part" || true
-	wipefs -a "$part" >/dev/null 2>&1 || true
-done
-# See write-sd.sh for the cgpt pitfalls: no '-z', and parted must create the
-# protective MBR or the kernel will not parse the GPT.
-TOTAL="$(blockdev --getsz "$BLOCK")"
-dd if=/dev/zero of="$BLOCK" bs=512 count=34 conv=fsync 2>/dev/null
-dd if=/dev/zero of="$BLOCK" bs=512 seek=$((TOTAL - 33)) count=33 conv=fsync 2>/dev/null
-parted -s "$BLOCK" mktable gpt
-cgpt create "$BLOCK"
-cgpt add -i 1 -b "$KPART_START_SECTORS" -s "$KPART_SIZE_SECTORS" -t kernel -l pmOS_kernel \
-	-S 1 -T 5 -P 10 "$BLOCK"
-P2_START=$((KPART_START_SECTORS + KPART_SIZE_SECTORS))
-P2_SIZE=$((TOTAL - P2_START - 2048))
-cgpt add -i 2 -b "$P2_START" -s "$P2_SIZE" -t data -l pmOS_root "$BLOCK"
-partx -d "$BLOCK" 2>/dev/null || true
-partx -a "$BLOCK" 2>/dev/null || blockdev --rereadpt "$BLOCK" 2>/dev/null || true
-command -v udevadm >/dev/null && udevadm settle || sleep 2
+log "Creating ChromeOS GPT on $BLOCK (kernel $((KPART_SIZE_SECTORS * 512 / 1024 / 1024)) MiB, boot ${BOOT_SIZE_MIB} MiB)"
+disk_release "$BLOCK"
+disk_layout_create "$BLOCK"
+disk_layout_parts "$BLOCK"
 
-# lsblk lists the whole device first, then its partitions: skip the disk line.
-KPART_PART="$(lsblk -nro PATH "$BLOCK" | sed -n '2p')"
-ROOT_PART="$(lsblk -nro PATH "$BLOCK" | sed -n '3p')"
-[ -n "$KPART_PART" ] && [ -n "$ROOT_PART" ] || die "could not resolve partitions on $BLOCK"
-[ "$KPART_PART" != "$BLOCK" ] && [ "$ROOT_PART" != "$BLOCK" ] ||
-	die "refusing to operate on the whole disk; partition resolution failed for $BLOCK"
-
-log "Formatting $ROOT_PART (ext4)"
-mkfs.ext4 -F -L pmOS_root "$ROOT_PART" >/dev/null
-ROOT_UUID="$(blkid -s UUID -o value "$ROOT_PART")"
-
-log "Copying the running system to $ROOT_PART"
 MNT="$WORK_DIR/emmc-mnt-$DEVICE"
-mkdir -p "$MNT"
-mount "$ROOT_PART" "$MNT"
+disk_layout_mount "$BLOCK" "$MNT"
+
+# Copy the running system. /boot ends up on the separate boot partition because
+# it is mounted inside the target, and everything volatile is left out so the
+# eMMC does not inherit the card's journal, caches and temporary files.
+log "Copying the running system to $MNT"
 rsync -aHAX --delete \
 	--exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run \
 	--exclude=/mnt --exclude="$MNT" --exclude=/media \
+	--exclude=/tmp/* --exclude=/var/tmp/* \
+	--exclude=/var/cache/* --exclude=/var/log/journal/* \
 	/ "$MNT"/
-cat >"$MNT/etc/fstab" <<EOF
-UUID=$ROOT_UUID	/	ext4	defaults,noatime,errors=remount-ro	0 1
-EOF
+disk_layout_fstab "$MNT"
 
-log "Building kpart for the eMMC root"
+log "Building kpart for the eMMC root (root=UUID=$ROOT_UUID, kernel $KERNEL_RELEASE)"
 "$REPO_DIR/scripts/make-kpart.sh" "$MNT" "$KPART.emmc" "root=UUID=$ROOT_UUID rootwait rw"
+kpart_fits "$KPART.emmc" "$KPART_PART"
+kpart_verify "$KPART.emmc"
+
+log "Writing kpart to $KPART_PART"
 dd if="$KPART.emmc" of="$KPART_PART" bs=1M conv=fsync
 sync
-umount "$MNT"
+disk_layout_umount "$MNT"
 
 log "Done. Reboot and remove the microSD to boot from eMMC."
+log "  After a kernel update on the eMMC system, run scripts/install-kpart.sh there."
 cgpt show "$BLOCK"

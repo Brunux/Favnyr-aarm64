@@ -35,6 +35,9 @@ openssh-server
 e2fsprogs
 dosfstools
 parted
+# rsync: scripts/install-emmc.sh copies the running system to the internal
+# storage with it, so it has to exist on the device, not only on the build host.
+rsync
 
 # audio
 # alsa-utils provides /usr/sbin/alsactl. On card add, udev

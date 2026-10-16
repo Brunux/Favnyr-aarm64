@@ -87,7 +87,9 @@ esac
 KERNEL_SRC="$SRC_DIR/linux-$KERNEL_VERSION"
 # Derive the release string from the kernel config (no duplication).
 KERNEL_LOCALVERSION="$(sed -n 's/^CONFIG_LOCALVERSION="\(.*\)"$/\1/p' "$KERNEL_CONFIG")"
-KERNEL_RELEASE="${KERNEL_VERSION}${KERNEL_LOCALVERSION}"
+# The release can be overridden for a kernel that was not built from this repo,
+# e.g. the kernel a booted system is actually running (see install-kpart.sh).
+KERNEL_RELEASE="${KERNEL_RELEASE:-${KERNEL_VERSION}${KERNEL_LOCALVERSION}}"
 
 # ---------------------------------------------------------------------------
 # Boot chain (depthcharge / ChromeOS GPT)
@@ -97,6 +99,14 @@ DEPTHCHARGE_COMPRESSION="${deviceinfo_depthcharge_compression:-lzma}"
 KPART_START_SECTORS="${deviceinfo_cgpt_kpart_start:-8192}"
 KPART_SIZE_SECTORS="${deviceinfo_cgpt_kpart_size:-262144}"   # 128 MiB
 KPART_PATH="${deviceinfo_cgpt_kpart:-/boot/vmlinuz.kpart}"
+# The rest of the layout, after the kernel partition: a boot partition and the
+# root filesystem (see scripts/lib-cgpt.sh, which creates and resolves it).
+# Both values mirror Nura/pmbootstrap, which are what already worked on this
+# machine: pmbootstrap's Config.boot_size defaults to 512 MiB (pmb/core/config.py)
+# and the pmaports deviceinfo schema defaults flash.boot_filesystem to ext2.
+# Nura's own eMMC partition table is p1 128 MiB kernel + p2 512 MiB /boot + p3 root.
+BOOT_SIZE_MIB="${BOOT_SIZE_MIB:-512}"
+BOOT_FS="${BOOT_FS:-ext2}"
 
 # ---------------------------------------------------------------------------
 # Debian target
@@ -139,3 +149,4 @@ KPART="${KPART:-$WORK_DIR/$DEVICE.vmlinuz.kpart}"
 export REPO_DIR BUILD_ROOT WORK_DIR SRC_DIR DEVICE DEVICE_DIR KERNEL_DIR
 export UI UIS_DIR UI_DIR WIFI_DIR
 export LOCALE TIMEZONE
+export BOOT_SIZE_MIB BOOT_FS KERNEL_RELEASE
