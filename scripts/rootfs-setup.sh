@@ -64,6 +64,12 @@ systemctl set-default graphical.target 2>/dev/null || true
 
 if [ -f "$PKGDIR/$UI.list" ] && [ "$UI" = "sway" ]; then
 	log "Configuring greetd + sway"
+	# Debian's greetd package creates the '_greetd' system user while the
+	# upstream documentation uses 'greetd'. Pick whichever exists, otherwise
+	# greetd exits with "configured default session user 'greetd' not found".
+	GREETD_USER=_greetd
+	grep -q "^$GREETD_USER:" /etc/passwd || GREETD_USER=greetd
+	grep -q "^$GREETD_USER:" /etc/passwd || GREETD_USER=root
 	mkdir -p /etc/greetd
 	cat >/etc/greetd/config.toml <<EOF
 [terminal]
@@ -71,7 +77,7 @@ vt = 1
 
 [default_session]
 command = "tuigreet --time --remember --remember-session --cmd sway"
-user = "greetd"
+user = "$GREETD_USER"
 EOF
 	systemctl enable greetd 2>/dev/null || true
 
@@ -87,7 +93,6 @@ input * {
 }
 exec dbus-update-activation-environment --systemd DISPLAY WAYLAND_DISPLAY XDG_CURRENT_DESKTOP
 exec swaybg -c '#1d2021'
-exec nm-applet --indicator
 bindsym \$mod+Return exec \$term
 bindsym \$mod+d exec fuzzel
 bindsym \$mod+Shift+q kill

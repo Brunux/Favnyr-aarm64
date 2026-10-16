@@ -7,6 +7,9 @@ systemd-sysv
 dbus
 dbus-user-session
 initramfs-tools
+# zstd: initramfs-tools compresses the initramfs with zstd when the binary is
+# present, otherwise it falls back to gzip and warns.
+zstd
 kmod
 zram-tools
 
@@ -16,7 +19,12 @@ locales
 
 # network
 network-manager
+network-manager-tui
 wpasupplicant
+# Regulatory database: without it cfg80211 logs
+# "failed to load regulatory.db" and the WiFi stays on the world domain.
+wireless-regdb
+iw
 openssh-server
 
 # filesystems / storage

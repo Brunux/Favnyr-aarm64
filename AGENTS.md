@@ -115,6 +115,21 @@ automatically.
 - `CONFIG_MMC_MTK`, `CONFIG_DRM_MEDIATEK` and `CONFIG_EXT4_FS` are built-in (`=y`), so the root
   filesystem and the display work without any initramfs module.
 
+### Userspace / UI (Debian forky)
+
+- **greetd**: Debian's package creates the **`_greetd`** system user (upstream docs say
+  `greetd`), and its unit declares `Conflicts=getty@tty7.service`, i.e. it expects `vt = 7` in
+  `/etc/greetd/config.toml`. With the upstream name the service dies with
+  `configured default session user 'greetd' not found` and the machine silently falls back to a
+  console login on tty1.
+- `nmtui` lives in the separate **`network-manager-tui`** package (no longer part of
+  `network-manager`).
+- `wireless-regdb` provides `regulatory.db`; without it cfg80211 logs
+  `failed to load regulatory.db` and the WiFi stays on the world regulatory domain.
+- `zstd` lets initramfs-tools compress the initramfs with zstd; otherwise it warns
+  `No zstd in /usr/bin:/sbin:/bin, using gzip`.
+- `libspa-0.2-bluetooth` provides PipeWire's BlueZ SPA plugins (Bluetooth audio).
+
 ### ChromeOS GPT (`cgpt`)
 
 - **Do not pass `-z` to `cgpt create`**: it zeroes the GPT areas *after* writing them, so the
