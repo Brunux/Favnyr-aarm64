@@ -167,21 +167,32 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
   nothing else in the system grants it, so `/sys/class/backlight` stays root-only (0644) and
   the sway `XF86MonBrightness*` bindings fail with *Permission denied* for the session user.
   `uis/sway/files/etc/udev/rules.d/90-brightnessctl.rules` (group `video`, `g+w`) fixes it.
-- **Lock key**: the right-most key of the top row emits `KEY_SLEEP`, and keyd maps
-  `sleep = coffee`, so sway receives `KEY_COFFEE`. That keycode's xkb keysym is
-  **`XF86ScreenSaver`**, and sway binds nothing to it by default. keyd owns the keyboard, so
-  systemd-logind never sees `KEY_SLEEP` and cannot suspend on the key either: the key has to
-  be handled inside the session. `uis/sway/files/etc/sway/config.d/21-lock-screen.conf` binds
-  `XF86ScreenSaver` to `swaylock` **and** `loginctl suspend`, i.e. lock then sleep — which is
-  what the Nura session does with its `Alt+Shift+Escape` shortcut. In Nura the Lock key itself
-  does *nothing*: its generated keyd config maps it to `KEY_COFFEE` and neither elogind nor
-  sway reacts to that keysym (elogind handles only `KEY_SLEEP`, `KEY_SUSPEND`, `KEY_POWER`,
-  `KEY_POWER2`, `KEY_RESTART` and `KEY_ESC`).
-  Suspending through logind needs the daemon (D-Bus activated; Debian keeps `systemd-logind`
-  inside the `systemd` package) plus polkitd, whose stock
-  `org.freedesktop.login1.suspend` policy has `allow_active=yes`.
+- **Lock key**: the right-most key of the top row emits `KEY_SLEEP`, and that is precisely the
+  key systemd-logind turns into a suspend on its own — its button handling consults no polkit and
+  no session, which makes it the only suspend path that always works.
+  `uis/sway/files/etc/keyd/default.conf` therefore leaves the key alone, and
+  `uis/sway/files/etc/sway/config.d/21-lock-screen.conf` binds the keysym the same keycode
+  produces (**`XF86Sleep`**) to `swaylock`: the key locks the screen and logind suspends the
+  machine ~0.3 s later.
+  Nura instead maps `sleep = coffee` — `KEY_COFFEE`, the kernel's lock/screensaver key, whose
+  xkb keysym is `XF86ScreenSaver`. Because keyd grabs the keyboard, logind then never sees
+  `KEY_SLEEP`, and since nothing consumes `KEY_COFFEE` either, the Lock key there does
+  *nothing* (elogind handles only `KEY_SLEEP`, `KEY_SUSPEND`, `KEY_POWER`, `KEY_POWER2`,
+  `KEY_RESTART` and `KEY_ESC`). **That remap is what broke suspend on this image**: the first
+  boot suspended on the key, and it stopped the moment keyd started grabbing the keyboard
+  (`journalctl` shows `Suspend key pressed short.` in the early boots and not one line of it
+  afterwards, while `keyd.rvaiya` logs `DEVICE: match ... (cros_ec)`), so the mapping is left
+  out.
+  The session can still suspend by itself — `Alt+Shift+Escape` (lock, then sleep; Nura's
+  shortcut) and `Alt+Ctrl+Escape` (sleep without locking) run `~/.config/bin/sway-suspend` —
+  but that goes through `loginctl suspend`, a D-Bus method guarded by polkitd (stock
+  `org.freedesktop.login1.suspend` has `allow_active=yes`), which fails with *Access denied*
+  and no output from a session logind does not consider active. The helper therefore walks a
+  fallback chain (`sudo -n loginctl suspend`, then `echo mem > /sys/power/state`) and logs
+  every attempt to `~/.cache/sway-suspend.log`. Suspending through logind needs the daemon
+  (D-Bus activated; Debian keeps `systemd-logind` inside the `systemd` package).
   Reading a keymap dump is misleading here: `xkbcli compile-keymap` prints **X** keycodes,
-  which are evdev + 8, so `KEY_COFFEE` (evdev 152) shows up as keycode 160 and
+  which are evdev + 8, so `KEY_SLEEP` (evdev 142) shows up as keycode 150 and
   `KEY_BRIGHTNESSDOWN` (evdev 224) as keycode 232.
 
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search

@@ -75,8 +75,8 @@ launcher, waybar and the Alacritty terminal.
 
 The top row is handled by sway: `XF86MonBrightness{Down,Up}` run `brightnessctl`
 (`etc/sway/config.d/20-brightness.conf`), `XF86Audio{Raise,Lower}Volume` /
-`XF86AudioMute` run `pactl` (`etc/sway/config.d/21-volume.conf`), and the Lock key
-runs `swaylock` (`etc/sway/config.d/21-lock-screen.conf`). Some of the pieces are
+`XF86AudioMute` run `pactl` (`etc/sway/config.d/21-volume.conf`), and the Lock key locks
+the screen (`etc/sway/config.d/21-lock-screen.conf`). Some of the pieces are
 easy to miss:
 
 * **Backlight permissions.** Debian's `brightnessctl` ships no udev rule and nothing
@@ -88,19 +88,22 @@ easy to miss:
   sequence has not run, the card exposes no sink and WirePlumber falls back to a *Dummy
   Output*, so the volume keys "work" but nothing is audible. The `alsa-utils` package in
   `packages/base.list` fixes this (see `AGENTS.md`).
-* **The Lock key is `XF86ScreenSaver`.** The right-most key of the top row emits `KEY_SLEEP`;
-  keyd turns that into `KEY_COFFEE`, whose xkb keysym is `XF86ScreenSaver`. Sway binds nothing
-  to that keysym, and because keyd owns the keyboard systemd-logind never sees `KEY_SLEEP`
-  either, so the key did nothing at all. `21-lock-screen.conf` binds it to `swaylock`, the
-  same action as `$mod+Escape`.
-* **The Lock key also sleeps.** Locking alone was not what the key does on this machine's
-  other system: `21-lock-screen.conf` runs `swaylock` and then `loginctl suspend`, exactly
-  like the `Alt+Shift+Escape` shortcut in `22-sleep.conf` (which is what the Nura session
-  uses for this — there the Lock key itself is inert). The suspend goes through
-  systemd-logind, so it needs polkitd to allow the active session to suspend, which Debian's
-  default `org.freedesktop.login1.suspend` policy does. Without the daemon (or from a session
-  logind does not consider active) the command fails with *Access denied* and only the lock
-  happens.
+* **The Lock key sleeps by itself.** The right-most key of the top row emits `KEY_SLEEP`, the
+  one key systemd-logind suspends on without consulting polkit or even the session, so
+  `etc/keyd/default.conf` deliberately leaves it alone (Nura's keymap maps `sleep = coffee`
+  instead, which swallows the key: logind stops seeing `KEY_SLEEP` and nothing consumes
+  `KEY_COFFEE`, so the key is dead there — and that remap is what killed suspend on this image
+  as soon as keyd was configured). `21-lock-screen.conf` binds `XF86Sleep`, the keysym that
+  keycode produces, to `swaylock`: the key locks the screen and the machine sleeps ~0.3 s
+  later, with no shortcut and no polkit in the path.
+* **Locking and sleeping from the session** is what the two Escape shortcuts in `22-sleep.conf`
+  are for — `Alt+Shift+Escape` locks first, `Alt+Ctrl+Escape` only sleeps. Being plain
+  commands, they call `loginctl suspend`, a D-Bus method that needs polkitd to allow the active
+  session (Debian's stock `org.freedesktop.login1.suspend` policy has `allow_active=yes`) and
+  that otherwise fails with *Access denied* — silently. Both go through
+  `~/.config/bin/sway-suspend`, which tries `loginctl suspend`, then `sudo -n loginctl suspend`,
+  then `echo mem > /sys/power/state`, appends every attempt to `~/.cache/sway-suspend.log` and
+  shows a swaynag pointing at that file when all three fail.
 * **tuigreet is the original 0.9.1**, not the fork Nura runs, so it has no `--config`: the
   greeter's personalisation lives as flags in `/etc/greetd/config.toml` (theme, greeting,
   time format, padding, F-key menus). The `matrix` background, the custom title and the
@@ -133,7 +136,7 @@ boot is never picked up).
 | `Alt+Backspace` | `Delete` |
 | `Ctrl+Scale` / `Ctrl+F5` | `SysRq` |
 | `AltGr` + arrows | `Home` / `End` / `PgUp` / `PgDn` |
-| Lock key | `KEY_COFFEE` (lock/screensaver) instead of `KEY_SLEEP` |
+| Lock key | *not* remapped: systemd-logind suspends on `KEY_SLEEP` |
 
 ### Which devices keyd grabs
 
