@@ -32,6 +32,22 @@ e2fsprogs
 dosfstools
 parted
 
+# audio
+# alsa-utils provides /usr/sbin/alsactl. On card add, udev
+# (90-alsa-restore.rules) and alsa-restore.service run `alsactl restore`,
+# which for a card with no saved state applies the UCM boot sequence. That
+# boot sequence is what connects the MT8192 front-end and back-end DAIs: the
+# UCM's BootSequence is never run automatically by alsa-lib (only by an
+# explicit `set _boot`), so without alsactl the mt8192 PCMs fail to open with
+# "no backend DAIs enabled", ACP marks the HiFi profile unsupported and
+# WirePlumber falls back to a dummy sink (no speaker output). See AGENTS.md.
+alsa-utils
+# UCM profiles, including the MediaTek/mt8192 card.
+alsa-ucm-conf
+# Realtime scheduling for PipeWire/WirePlumber (otherwise they log
+# "RTKit error: ServiceUnknown" and run without RT priority).
+rtkit
+
 # quality of life
 ca-certificates
 bash-completion

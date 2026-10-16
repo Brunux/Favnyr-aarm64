@@ -134,6 +134,24 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
 - `zstd` lets initramfs-tools compress the initramfs with zstd; otherwise it warns
   `No zstd in /usr/bin:/sbin:/bin, using gzip`.
 - `libspa-0.2-bluetooth` provides PipeWire's BlueZ SPA plugins (Bluetooth audio).
+- **Audio (MT8192)**: the card `mt8192_mt6359_rt1015p_rt5682` is only usable once its UCM
+  **boot sequence** has run. That sequence (`MediaTek/mt8192/.../init.conf`) connects the
+  front-end and back-end DAIs (`I2S3_CH1 DL1_CH1`, …); alsa-lib runs `BootSequence` **only**
+  on an explicit `set _boot` — never at open or on a verb set — so something must drive it.
+  `/usr/sbin/alsactl` does: on card add `90-alsa-restore.rules` and `alsa-restore.service`
+  run `alsactl restore`, which for a card with no saved state falls back to the UCM init.
+  Without **`alsa-utils`** the PCMs fail to open with `ASoC: no backend DAIs enabled for
+  Playback_*`, ACP marks the `HiFi` profile unsupported, WirePlumber picks profile `off`, and
+  the only sink is a **Dummy Output** (volume keys change nothing, no speaker sound).
+  `alsa-utils` is therefore in `packages/base.list`. Verify with `pactl list cards` (Active
+  Profile `HiFi`) and `wpctl status` (a *Built-in Audio Speaker* sink, not *Dummy Output*).
+  The same class of bug will hit any card whose routing lives in a UCM `BootSequence`.
+- **Backlight keys**: `brightnessctl` needs write access to
+  `/sys/class/backlight/*/brightness`. Debian's `brightnessctl` ships no udev rule and
+  nothing else in the system grants it, so `/sys/class/backlight` stays root-only (0644) and
+  the sway `XF86MonBrightness*` bindings fail with *Permission denied* for the session user.
+  `uis/sway/files/etc/udev/rules.d/90-brightnessctl.rules` (group `video`, `g+w`) fixes it.
+
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
   key opens bemenu, waybar, Alacritty). `rootfs-setup.sh` rewrites `/home/brunux` inside the
   shipped text files to `$USERNAME`, and merges `uis/sway/files/home/` into that home.

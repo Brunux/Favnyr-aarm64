@@ -29,6 +29,7 @@ launcher, waybar and the Alacritty terminal.
 | `home/.config/workstyle/config.toml` | Icon map for workstyle (see below). |
 | `home/Pictures/Wallpapers/mountains.jpg` | Wallpaper referenced by `etc/sway/config`. |
 | `etc/keyd/default.conf` | Chromebook keymap for keyd: F-keys and VT switching (see below). |
+| `etc/udev/rules.d/90-brightnessctl.rules` | Gives the `video` group write access to the backlight, so `brightnessctl` works for the unprivileged session (see below). |
 
 ## Deviations from the Nura original
 
@@ -59,6 +60,23 @@ launcher, waybar and the Alacritty terminal.
 
 * `etc/sway/config.d/01-status-bar.conf` disables swaybar (waybar is used
   instead); the block is kept commented out for reference.
+
+## Brightness and volume keys
+
+The top row is handled by sway: `XF86MonBrightness{Down,Up}` run `brightnessctl`
+(`etc/sway/config.d/20-brightness.conf`), and `XF86Audio{Raise,Lower}Volume` /
+`XF86AudioMute` run `pactl` (`etc/sway/config.d/21-volume.conf`). Two host-side
+prerequisites are easy to miss:
+
+* **Backlight permissions.** Debian's `brightnessctl` ships no udev rule and nothing
+  else in the system touches `/sys/class/backlight`, so the brightness file stays
+  root-only (0644) and `brightnessctl set` fails with *Permission denied* for the
+  session user. `etc/udev/rules.d/90-brightnessctl.rules` puts it in the `video` group
+  and makes it group-writable (this is the rule upstream brightnessctl installs).
+* **A real audio sink.** `pactl` acts on `@DEFAULT_SINK@`. If the MT8192 card's UCM boot
+  sequence has not run, the card exposes no sink and WirePlumber falls back to a *Dummy
+  Output*, so the volume keys "work" but nothing is audible. The `alsa-utils` package in
+  `packages/base.list` fixes this (see `AGENTS.md`).
 
 ## Virtual terminals and the missing F-keys
 
