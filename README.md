@@ -104,6 +104,7 @@ scripts/
   make-release.sh          build every asset of a release, with checksums
   install-emmc.sh          install the running system onto internal storage
   install-kpart.sh         rewrite the kernel partition the system booted from
+  backup-system.sh         back up the running installation into a directory (restorable)
   check-system.sh          hardware + configuration report (runs on the booted image)
   build.sh                 the full pipeline (no block devices touched)
 docs/                      plan, recon, release notes, screenshots

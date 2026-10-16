@@ -394,6 +394,7 @@ scripts/make-image.sh       # distributable disk image from the rootfs (no card 
 scripts/make-release.sh     # every release asset + SHA256SUMS -> $WORK_DIR/release-<device>
 scripts/install-emmc.sh     # install the running system onto /dev/mmcblk0 (CONFIRM=yes)
 scripts/install-kpart.sh    # rewrite the kernel partition this system booted from
+scripts/backup-system.sh    # kernel partition + GPT + /boot + rootfs tars into a directory
 scripts/wifi.sh export      # saved NetworkManager Wi-Fi profiles -> $WIFI_DIR
 scripts/wifi.sh import      # $WIFI_DIR -> a rootfs (drops interface-name=)
 scripts/check-system.sh     # (on the booted image) hardware + configuration report
@@ -420,6 +421,15 @@ artifact while anything is left; the release rule is:
 - A release is: `scripts/make-release.sh`, notes in `docs/releases/<version>.md` (committed, and
   reused as the annotated tag message and the GitHub release body), and the assets attached to the
   tag. `docs/releases/v0.1.0.md` is the first one and shows the shape.
+
+`scripts/backup-system.sh` is the counterpart of `install-emmc.sh`: it writes the kernel partition
+the system booted from (resolved from `kern_guid`, like `install-kpart.sh`), the GPT, `/boot` and
+the root filesystem into a directory, the filesystems as gzip tars with owners, ACLs and xattrs
+preserved, plus a `README.md` with the restore steps and a `SHA256SUMS`. The destination is
+normally a removable disk with **exFAT**, the one filesystem both macOS and Linux read; exFAT
+cannot hold a Linux root filesystem by itself, which is why the trees travel as tars. Caches,
+build directories and the agent's session data are excluded by pattern (`EXCLUDES`), and nothing
+in the backup needs them: they are downloaded or rebuilt again.
 
 `build-rootfs.sh` installs `$WIFI_DIR` into the image when that directory exists, so the machine
 comes up already knowing the Wi-Fi networks (see `scripts/wifi.sh`).
