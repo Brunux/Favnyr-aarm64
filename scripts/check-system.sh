@@ -6,6 +6,12 @@
 # Every check maps to a failure this port has actually hit (see AGENTS.md), so a
 # red line here is a regression, not a hypothetical.
 #
+# It must run on the *booted* system. Inside a chroot over a mounted image the
+# /proc, /sys and dmesg readings describe the host and `systemctl is-active`
+# answers "Running in chroot, ignoring command" with exit status 0 for every
+# unit, so the report would be silently wrong; the script warns when PID 1 is
+# not systemd.
+#
 # Usage:
 #   scripts/check-system.sh [REPO_DIR]
 #
@@ -65,6 +71,24 @@ else
 	asroot true 2>/dev/null || warn "sudo -n does not work here: privileged checks will be skipped"
 fi
 
+# `systemctl is-active` always succeeds inside a chroot ("Running in chroot,
+# ignoring command 'is-active'"), so service checks need their own gate: exit
+# status 2 means "cannot tell", printed as SKIP instead of OK or FAIL.
+if [ -d /run/systemd/system ]; then
+	svc() { systemctl is-active --quiet "$1"; }
+else
+	svc() { return 2; }
+fi
+# check_svc UNIT "message when the unit is active"
+check_svc() {
+	svc "$1"
+	case "$?" in
+		0) ok "$2" ;;
+		2) skip "$2 (cannot tell: not running under systemd)" ;;
+		*) fail "$2" ;;
+	esac
+}
+
 # Optional repository checkout, for the declared-package check.
 _self="$(cd "$(dirname "$0")" && pwd)"
 REPO="${1:-$(cd "$_self/.." 2>/dev/null && pwd)}"
@@ -77,6 +101,15 @@ RUNTIME="$(mktemp -d)"
 trap 'rm -rf "$RUNTIME"' EXIT
 
 printf '%sdebian-aarch64 system report%s  %s\n' "$C_HEAD" "$C_OFF" "$(date '+%Y-%m-%d %H:%M:%S %Z')"
+
+# /proc, /sys and dmesg describe the kernel this script runs under. If PID 1 is
+# not systemd it is not the booted Debian image, and everything read from them
+# belongs to whatever the host is (typically Nura, over a mounted image).
+_init="$(cat /proc/1/comm 2>/dev/null)"
+if [ "$_init" != systemd ]; then
+	warn "PID 1 is '${_init:-unknown}', not systemd: this is not the booted image."
+	warn "The /proc, /sys and dmesg checks below describe the host kernel."
+fi
 
 # ---------------------------------------------------------------------------
 section "Boot"
@@ -231,8 +264,7 @@ else
 fi
 
 if have keyd || have keyd.rvaiya; then
-	systemctl is-active --quiet keyd 2>/dev/null && ok "keyd.service is active" ||
-		fail "keyd.service is not active"
+	check_svc keyd "keyd.service is active"
 	# keyd grabs the keyboard, so a `sleep = ...` mapping swallows KEY_SLEEP
 	# before systemd-logind's button handling sees it and the Lock key stops
 	# suspending the machine. That is exactly what happened once (AGENTS.md).
@@ -270,11 +302,7 @@ else
 	skip "iw is not installed"
 fi
 
-if systemctl is-active --quiet NetworkManager 2>/dev/null; then
-	ok "NetworkManager is active ($(nmcli -t -f STATE,CONNECTIVITY g 2>/dev/null))"
-else
-	fail "NetworkManager is not active"
-fi
+check_svc NetworkManager "NetworkManager is active ($(nmcli -t -f STATE,CONNECTIVITY g 2>/dev/null))"
 # Profiles: ask NetworkManager when it runs, otherwise count the files.
 _profiles="$(nmcli -t -f NAME,TYPE con show 2>/dev/null | grep -c ':802-11-wireless')"
 [ "${_profiles:-0}" -eq 0 ] &&
@@ -349,11 +377,8 @@ section "Suspend and power"
 # ---------------------------------------------------------------------------
 grep -qw mem /sys/power/state 2>/dev/null && ok "/sys/power/state advertises suspend ($(cat /sys/power/state))" ||
 	fail "no 'mem' in /sys/power/state: the kernel cannot suspend"
-systemctl is-active --quiet systemd-logind 2>/dev/null &&
-	ok "systemd-logind is active (its button handling is the polkit-free suspend path)" ||
-	fail "systemd-logind is not active"
-systemctl is-active --quiet polkit 2>/dev/null && ok "polkitd is active (session suspend via loginctl)" ||
-	warn "polkitd is not active: loginctl suspend from the session will be denied"
+check_svc systemd-logind "systemd-logind is active (its button handling is the polkit-free suspend path)"
+check_svc polkit "polkitd is active (session suspend via loginctl)"
 [ -x "$HOME/.config/bin/sway-suspend" ] && ok "sway-suspend helper is executable" ||
 	warn "~/.config/bin/sway-suspend is missing or not executable"
 _susp="$(asroot journalctl -b --no-pager | grep -c 'PM: suspend entry')"
@@ -374,7 +399,7 @@ fi
 # ---------------------------------------------------------------------------
 section "Session"
 # ---------------------------------------------------------------------------
-systemctl is-active --quiet greetd 2>/dev/null && ok "greetd is active" || fail "greetd is not active"
+check_svc greetd "greetd is active"
 if [ -r /etc/greetd/config.toml ]; then
 	# Debian's greetd creates the _greetd user and its unit conflicts with
 	# getty@tty7, so vt must be 7; with any other name the service dies and the
