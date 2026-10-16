@@ -115,6 +115,10 @@ DEBIAN_ARCH="${DEBIAN_ARCH:-$_debian_arch}"
 DEBIAN_MIRROR="${DEBIAN_MIRROR:-http://deb.debian.org/debian}"
 DEBIAN_COMPONENTS="${DEBIAN_COMPONENTS:-main contrib non-free non-free-firmware}"
 
+# NetworkManager Wi-Fi profiles exported from the running system (scripts/wifi.sh).
+# They contain the PSK, so they deliberately live outside the repository.
+WIFI_DIR="${WIFI_DIR:-$BUILD_ROOT/wifi}"
+
 # ---------------------------------------------------------------------------
 # Build directories
 # ---------------------------------------------------------------------------
@@ -123,4 +127,4 @@ KERNEL_STAGE="${KERNEL_STAGE:-$WORK_DIR/kernel-stage-$KERNEL_FLAVOR}"
 KPART="${KPART:-$WORK_DIR/$DEVICE.vmlinuz.kpart}"
 
 export REPO_DIR BUILD_ROOT WORK_DIR SRC_DIR DEVICE DEVICE_DIR KERNEL_DIR
-export UI UIS_DIR UI_DIR
+export UI UIS_DIR UI_DIR WIFI_DIR

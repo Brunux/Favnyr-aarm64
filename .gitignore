@@ -4,3 +4,8 @@
 *.kpart
 build/
 out/
+
+# NetworkManager Wi-Fi profiles: they contain the network PSK, so they are
+# exported to $BUILD_ROOT/wifi (outside the repo) and never committed.
+*.nmconnection
+wifi/

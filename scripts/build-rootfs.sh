@@ -13,7 +13,7 @@ USERNAME="${USERNAME:-brunux}"
 USERPASS="${USERPASS:-debian}"
 
 if [ "$(id -u)" -ne 0 ]; then
-	exec sudo -n DEVICE="$DEVICE" UI="$UI" "$(readlink -f "$0")" "$@"
+	exec sudo -n DEVICE="$DEVICE" UI="$UI" WIFI_DIR="$WIFI_DIR" "$(readlink -f "$0")" "$@"
 fi
 
 cleanup_mounts() {
@@ -66,6 +66,11 @@ chroot "$ROOTFS" env \
 	DEBIAN_COMPONENTS="$DEBIAN_COMPONENTS" \
 	UI="$UI" \
 	/bin/bash /root/rootfs-setup.sh
+
+if [ -d "$WIFI_DIR" ]; then
+	log "Installing Wi-Fi profiles from $WIFI_DIR"
+	"$REPO_DIR/scripts/wifi.sh" import "$WIFI_DIR" "$ROOTFS"
+fi
 
 rm -rf "$ROOTFS/tmp/packages" "$ROOTFS/tmp/ui-files" "$ROOTFS/root/rootfs-setup.sh"
 log "Rootfs ready: $ROOTFS"

@@ -107,6 +107,18 @@ Then boot the card: on ChromeOS firmware enter developer mode, ensure external b
 
 Default credentials of the built image: user `brunux` / password `debian`, passwordless sudo.
 
+To bring the saved Wi-Fi networks over from the system you are running now, export them once and
+rebuild (or re-import into an existing rootfs):
+
+```sh
+scripts/wifi.sh export                                  # -> $BUILD_ROOT/wifi (git-ignored, holds the PSK)
+scripts/wifi.sh import ~/.cache/debian-aarch64/wifi /mnt/rootfs
+```
+
+`build-rootfs.sh` picks `$BUILD_ROOT/wifi` up automatically when it exists, so a fresh image
+already knows the networks. The imported profiles have `interface-name=` removed, because Nura and
+Debian name the wireless interface differently (`wlan0` vs `wlp1s0`).
+
 ---
 
 ## Development process

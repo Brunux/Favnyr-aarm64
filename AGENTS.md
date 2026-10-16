@@ -147,6 +147,11 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
   Verify with the engine waybar actually uses:
   `pango-view --no-display --font="JetBrains Mono 13" --output=/tmp/i.png <text>` (package
   `pango1.0-tools`) and look at the PNG.
+- **Wi-Fi profiles**: Nura and Debian name the wireless interface differently (Nura: `wlan0`,
+  Debian/systemd: `wlp1s0`), so a NetworkManager profile copied verbatim is never activated.
+  `scripts/wifi.sh import` drops `interface-name=` to bind the profile to any Wi-Fi device. The
+  profiles hold the PSK in clear, so they live in `$WIFI_DIR` (`$BUILD_ROOT/wifi`) and are
+  git-ignored; `build-rootfs.sh` imports them automatically when that directory exists.
 - **sway `-C` validates headlessly** even inside a chroot (useful before booting):
   `WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 sway -C -c /etc/sway/config`.
 - **workstyle** (renames workspaces to icons) is not packaged in Debian; Nura ran a cargo build
@@ -196,9 +201,14 @@ scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initra
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
 scripts/install-emmc.sh     # (later) install the running system onto /dev/mmcblk0
+scripts/wifi.sh export      # saved NetworkManager Wi-Fi profiles -> $WIFI_DIR
+scripts/wifi.sh import      # $WIFI_DIR -> a rootfs (drops interface-name=)
 
 scripts/build.sh            # full pipeline (kernel + rootfs + kernel + kpart)
 ```
+
+`build-rootfs.sh` installs `$WIFI_DIR` into the image when that directory exists, so the machine
+comes up already knowing the Wi-Fi networks (see `scripts/wifi.sh`).
 
 `write-sd.sh` and `install-emmc.sh` are destructive to block devices and refuse to touch the
 internal eMMC from `write-sd.sh` or the running root from either.
