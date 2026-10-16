@@ -138,6 +138,11 @@ uncommitted changes, since those do not travel into the image.
   in the staged tree.
 - `CONFIG_MMC_MTK`, `CONFIG_DRM_MEDIATEK` and `CONFIG_EXT4_FS` are built-in (`=y`), so the root
   filesystem and the display work without any initramfs module.
+- `CONFIG_DRM_PANFROST` (the driver this MT8192 uses) and `CONFIG_DRM_PANTHOR` (newer Mali) are both
+  built-in, so every `update-initramfs` prints
+  `W: Possible missing firmware /lib/firmware/arm/mali/arch14.8/mali_csffw.bin for built-in driver
+  panthor`. It is noise, not a missing piece: initramfs-tools scans built-in modules for firmware
+  requirements, and panthor never drives the Mali-G57 here.
 
 ### Userspace / UI (Debian forky)
 
@@ -291,6 +296,17 @@ uncommitted changes, since those do not travel into the image.
   similarly named `vboot-utils` ships `crossystem` and symlinks to `futility` but not `futility`
   itself), and `depthcharge-tools` provides `depthchargectl`/`mkdepthcharge`. All three are in
   `devices/google-asurada/packages.list`, together with `rsync`, which `install-emmc.sh` needs.
+- **`depthcharge-tools`' system hooks are disabled in the image** by
+  `/etc/depthcharge-tools/config` (`[depthchargectl/write] enable-system-hooks = False`, written by
+  `rootfs-setup.sh`). The package ships `/etc/kernel/postinst.d/zz-depthcharge-tools` and
+  `/etc/initramfs/post-update.d/depthcharge-tools`, which build a depthcharge image and write it to
+  a kernel partition on every kernel or initramfs change. They know nothing about this port (the
+  board `mt8192` and the command line come from our `deviceinfo`, applied by `make-kpart.sh`, and
+  the write is `install-kpart.sh`), and enabled they also break the **build**: `update-initramfs`
+  runs in the chroot, where `/proc/cmdline` is the host's — Nura's, which contains `cros_secure` —
+  so the hook thinks it is on a depthcharge system, finds no kernel partition and exits 1, and
+  `run-parts` then fails `install-kernel.sh`. The `enable-system-hooks` check reads section
+  `depthchargectl/write`, not the `[depthcharge-tools]` section the package's own `config.ini` uses.
 - A kernel that boots from a ChromeOS kernel partition lives **inside** that partition, so
   installing a new kernel is not finished until p1 is rewritten: `scripts/install-kpart.sh` does
   that (the Debian counterpart of boot-deploy's `flash_updated_depthcharge_kernel`, which reads

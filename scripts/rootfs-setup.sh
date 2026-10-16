@@ -39,6 +39,26 @@ if [ -f "$PKGDIR/$UI.list" ]; then
 	apt-get install -y --no-install-recommends $(pkgs "$PKGDIR/$UI.list")
 fi
 
+if command -v depthchargectl >/dev/null 2>&1; then
+	log "Disabling depthcharge-tools' system hooks"
+	# depthcharge-tools ships /etc/kernel/postinst.d and
+	# /etc/initramfs/post-update.d hooks that build a depthcharge image and write
+	# it to a kernel partition on every kernel/initramfs change. They know
+	# nothing about this port: the board and the command line come from our
+	# deviceinfo and are applied by scripts/make-kpart.sh, and the write goes
+	# through scripts/install-kpart.sh, which resolves the partition from
+	# kern_guid. Left enabled they also break the *build*: update-initramfs runs
+	# inside the chroot, where /proc/cmdline is the host's (on this machine Nura's,
+	# which does contain cros_secure), so the hook believes it is on a depthcharge
+	# system, finds no kernel partition and exits 1 - and run-parts makes
+	# install-kernel.sh fail. This is the switch the package provides.
+	install -d /etc/depthcharge-tools
+	cat >/etc/depthcharge-tools/config <<'EOF'
+[depthchargectl/write]
+enable-system-hooks = False
+EOF
+fi
+
 log "Locale / timezone / hostname"
 # Both are build inputs (scripts/lib.sh); the defaults here keep the script
 # usable on its own.
