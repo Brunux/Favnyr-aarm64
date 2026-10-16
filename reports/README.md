@@ -77,5 +77,14 @@ The layout is visible here too, and it is what the eMMC install reproduces:
 `root /dev/mmcblk1p3 (UUID 376bd20d-…)`, `booted from removable storage`, `root
 filesystem 13% used`.
 
+The card was then brought from `c69d66f` to `54213ae` without being rewritten: the
+committed tree was staged over it exactly as `build-rootfs.sh` stages it
+(`git archive HEAD`, mode-normalized, `REVISION` and `/etc/debian-aarch64-revision`
+updated), `xwayland` was installed so the card satisfies its own
+`uis/sway/packages.list`, and its kernel partition was rebuilt and written again
+with the quiet command line. That leaves the card equivalent to a build of
+`54213ae` — the only differences between the two commits are files that live in
+the staged tree plus the one package — which is what the eMMC install will copy.
+
 When a later report is taken, add it here next to this one instead of replacing
 it: the diff between two reports is what shows a regression.
