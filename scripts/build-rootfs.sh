@@ -27,7 +27,7 @@ log "debootstrap $DEBIAN_SUITE/$DEBIAN_ARCH -> $ROOTFS"
 rm -rf "$ROOTFS"
 mkdir -p "$ROOTFS"
 debootstrap --arch="$DEBIAN_ARCH" --variant=minbase \
-	--components="main,contrib,non-free-firmware" \
+	--components="main,contrib,non-free,non-free-firmware" \
 	"$DEBIAN_SUITE" "$ROOTFS" "$DEBIAN_MIRROR"
 
 log "Mounting virtual filesystems"

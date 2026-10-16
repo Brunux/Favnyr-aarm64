@@ -77,6 +77,20 @@ Kernel is built with `make LLVM=1` (clang/lld), `INSTALL_MOD_PATH` under `/usr`,
 - `deviceinfo_cgpt_kpart="/boot/vmlinuz.kpart"`, start `8192`, size `262144` sectors (128 MB).
 - `deviceinfo_depthcharge_board="mt8192"`, compression `lzma`,
   `deviceinfo_generate_depthcharge_image="true"`.
+
+### depthcharge-tools notes (verified on this machine)
+
+- `depthchargectl build --board mt8192` resolves to board `chipset-mt8192`
+  (`dt-compatible = mediatek,mt8192`). It has no `image-format` in `boards.ini`, but for
+  arm/arm64 the tool defaults to **FIT** (`mkdepthcharge.py`), which is what the firmware needs.
+- The `asurada` board would set `image-format = fit` explicitly, but its
+  `dt-compatible = google,asurada` — the Hayato DTB does **not** advertise `google,asurada`
+  (it has `google,hayato-rev1`, `google,hayato`, `mediatek,mt8192`), so `mt8192` is the right
+  choice (this matches the comment in upstream `deviceinfo`).
+- Signing uses the vboot devkeys in `/usr/share/vboot/devkeys`
+  (`kernel.keyblock`, `kernel_data_key.vbprivk`, `kernel_subkey.vbpubk`) automatically.
+- The generated kpart is a ChromeOS vboot 2.2 header wrapping a FIT image
+  (verified with `futility show` against the running system's `/boot/vmlinuz.kpart`).
 - `modules-initfs`: `anx7625`, `panel-edp`, `hid-generic`, `hid-multitouch`, `i2c-hid-of`,
   `elan-i2c`, `elants-i2c`, `cros-ec-keyb`.
 - `kernel-cmdline.conf`: `quiet`, `loglevel=2`.

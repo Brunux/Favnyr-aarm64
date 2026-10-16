@@ -72,5 +72,30 @@ Nura's proven disk layout (reuse it): `p1 pmOS_kernel` 128 MB (kpart), `p2` /boo
 
 ## Commands
 
-Not yet implemented — see `docs/plan.md`. Scripts will live in `scripts/` and be documented here
-as they land.
+All scripts live in `scripts/` and read shared config from `scripts/lib.sh`.
+Large artifacts go to `$HOME/.cache/debian-aarch64` (`WORK_DIR`, `SRC_DIR`).
+
+```sh
+scripts/00-deps.sh          # install host build deps (apk), re-execs via sudo
+scripts/build-kernel.sh     # mainline 7.2.7 + patches + config  -> $WORK_DIR/kernel-stage
+scripts/build-rootfs.sh     # debootstrap Debian forky rootfs    -> $WORK_DIR/rootfs
+scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initramfs
+scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
+scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
+scripts/install-emmc.sh     # (later) install the running system onto /dev/mmcblk0
+
+scripts/build.sh            # full pipeline (kernel + rootfs + kernel + kpart)
+```
+
+`write-sd.sh` and `install-emmc.sh` are destructive to block devices and refuse to touch the
+internal eMMC from `write-sd.sh` or the running root from either.
+
+### Boot from microSD
+
+1. `crossystem dev_boot_usb=1 dev_boot_signed_only=0` (from ChromeOS developer mode; already set
+   on this machine).
+2. `scripts/write-sd.sh /dev/mmcblk1`
+3. Insert the card, power on, press **Ctrl+U** at the developer screen.
+
+Default credentials of the built image: user `brunux` / password `debian`, passwordless sudo.
+
