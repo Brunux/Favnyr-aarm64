@@ -130,6 +130,34 @@ case "$CMDLINE" in
 	*)            warn "the cmdline does not select the root filesystem by UUID" ;;
 esac
 
+# The kernel does not come from an ESP or from /boot: depthcharge loads it from
+# the ChromeOS kernel partition named by the kern_guid it substituted. That
+# partition is also what scripts/install-kpart.sh rewrites after a kernel
+# update, so verify it is really there and really holds a signed FIT.
+_guid=""
+for _x in $CMDLINE; do
+	case "$_x" in
+		kern_guid=*) _guid="${_x#kern_guid=}" ;;
+	esac
+done
+if [ -n "$_guid" ]; then
+	_kpart_part="$(findfs PARTUUID="$_guid" 2>/dev/null || true)"
+	if [ -z "$_kpart_part" ]; then
+		fail "kern_guid=$_guid names no partition: nothing to boot from next time"
+	else
+		ok "kernel partition $_kpart_part (kern_guid=$_guid)"
+		if have futility; then
+			if asroot futility show "$_kpart_part" 2>/dev/null | grep -q 'Body verification succeeded'; then
+				ok "the kernel partition holds a dev-signed FIT"
+			else
+				fail "futility cannot verify a signed kpart in $_kpart_part"
+			fi
+		else
+			skip "futility not installed (package vboot-kernel-utils): kernel partition not verified"
+		fi
+	fi
+fi
+
 if [ -r /sys/firmware/devicetree/base/model ]; then
 	_model="$(tr -d '\0' < /sys/firmware/devicetree/base/model)"
 	_compat="$(tr '\0' ' ' < /sys/firmware/devicetree/base/compatible)"
@@ -197,6 +225,31 @@ if swapon --show=NAME --noheadings 2>/dev/null | grep -q .; then
 	ok "swap active: $(swapon --show=NAME --noheadings | tr '\n' ' ')"
 else
 	warn "no swap active (zram-tools should provide /dev/zram0)"
+fi
+
+# p2 is /boot (see scripts/lib-cgpt.sh). If it is missing the system still
+# boots - the kpart is self-contained - but the kernel files would then live in
+# the root filesystem, which is not the layout this repository installs.
+_boot_fstab="$(awk '$2 == "/boot" { print $1 }' /etc/fstab 2>/dev/null | sed -n 's/^UUID=//p')"
+if [ -n "$_boot_fstab" ]; then
+	_boot_src="$(findmnt -n -o SOURCE /boot 2>/dev/null || true)"
+	_boot_uuid="$(findmnt -n -o UUID /boot 2>/dev/null || true)"
+	[ -n "$_boot_uuid" ] && [ -n "$_boot_src" ] ||
+		_boot_uuid="$(blkid -s UUID -o value "$_boot_src" 2>/dev/null || true)"
+	if ! mountpoint -q /boot; then
+		fail "/etc/fstab mounts /boot but it is not mounted"
+	elif [ -n "$_boot_uuid" ] && [ "$_boot_uuid" = "$_boot_fstab" ]; then
+		ok "/boot is a separate filesystem ($_boot_src) matching /etc/fstab"
+	else
+		fail "/boot UUID mismatch: fstab $_boot_fstab, mounted ${_boot_uuid:-unknown}"
+	fi
+	if [ -f "/boot/vmlinuz-$(uname -r)" ]; then
+		ok "the running kernel's vmlinuz is on /boot"
+	else
+		fail "/boot/vmlinuz-$(uname -r) is missing: /boot does not hold the running kernel"
+	fi
+else
+	warn "/etc/fstab has no /boot entry (not the layout this repository installs)"
 fi
 
 _used="$(df -P / | awk 'NR == 2 { print $5 }' | tr -d '%')"
