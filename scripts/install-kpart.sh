@@ -30,7 +30,17 @@ fi
 
 # Never act from a chroot: /proc/cmdline there belongs to the host, so the GUID
 # would point at the host's kernel partition. boot-deploy guards this too.
-if [ "$(stat -c %d:%i /)" = "$(stat -c %d:%i /proc/1/root)" ]; then
+#
+# `stat -L` is what makes the comparison mean anything: without it, stat reports
+# the procfs symlink itself (device 0:28), which can never equal the device:inode
+# of /, so the guard passed silently. And the answer is the other way round from
+# what it looks: *equal* means this root is PID 1's root, i.e. a real system, so a
+# chroot is when they differ -- the original refused when they were equal, which
+# is every real system. Both sides must be known before refusing, so a system
+# where /proc hides PID 1 is not mistaken for a chroot.
+_root="$(stat -Lc %d:%i / 2>/dev/null || true)"
+_pid1_root="$(stat -Lc %d:%i /proc/1/root 2>/dev/null || true)"
+if [ -n "$_root" ] && [ -n "$_pid1_root" ] && [ "$_root" != "$_pid1_root" ]; then
 	die "running in a chroot: /proc/cmdline describes the host, not this system"
 fi
 

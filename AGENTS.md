@@ -361,6 +361,12 @@ uncommitted changes, since those do not travel into the image.
   `scripts/install-kernel.sh /` (staged kernel into the running rootfs) followed by
   `scripts/install-kpart.sh`; without the second step the machine keeps booting the old kernel
   while `/boot` and `/lib/modules` move on.
+  Its chroot guard must keep `stat -L` **and** the comparison in that sense: without `-L`, `stat`
+  reports the procfs symlink itself (device `0:28`), which can never equal `/`, so the guard passed
+  silently; and *equal* is the state of a real system (this root is PID 1's root), so a chroot is when
+  the two **differ**. As it was written the guard never fired, and a chroot would have rewritten the
+  *host's* kernel partition from the host's `kern_guid`. Both sides are now read before refusing, so a
+  system where `/proc` hides PID 1 is not mistaken for a chroot.
 
 ### depthcharge FIT
 
