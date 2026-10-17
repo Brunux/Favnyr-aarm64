@@ -56,8 +56,8 @@ use crate::transfer::TransferMeter;
 use favnyr_core::columns::{self, ColumnSpec};
 
 use crate::{
-    ColumnInfo, Crumb, CtxNav, FavNode, FileRow, MainWindow, MenuShortcuts, OpProgress, OpenerItem,
-    OrphanRow, OwRecipe, PanelBox, PanelView, ShellCtxEntry, ShellExtRow, ShortcutCap,
+    ColumnInfo, Crumb, CtxNav, FavNode, FileRow, KeyAdapter, MainWindow, MenuShortcuts, OpProgress,
+    OpenerItem, OrphanRow, OwRecipe, PanelBox, PanelView, ShellCtxEntry, ShellExtRow, ShortcutCap,
     ShortcutGroup, ShortcutRow, SidebarPlace, SplitterView, TabInfo, WorkspaceEntry,
 };
 
@@ -3467,6 +3467,19 @@ pub fn install(window: &MainWindow, state: AppState) {
             },
         );
     }
+    // Cross-platform key normalization for text input widgets (EditTextInput / EditLineEdit).
+    window
+        .global::<KeyAdapter>()
+        .on_normalize_key(move |text: SharedString| -> SharedString {
+            if text.chars().count() == 1 {
+                let ch = text.chars().next().unwrap();
+                if let Some(canon) = shortcuts::normalize_char(ch) {
+                    return SharedString::from(canon.to_string());
+                }
+            }
+            text
+        });
+
     // Keyboard cursor navigation (arrows / Shift+arrows / Home / End).
     {
         let st = state.clone();
