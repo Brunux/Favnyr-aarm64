@@ -130,7 +130,8 @@ pub fn user_places() -> Vec<Place> {
 ///   - **Linux**: hash of `/proc/self/mountinfo` (mounts) + of the GVFS
 ///     folder (user network shares) → catches (un)mounts.
 ///
-/// Two calls returning the SAME value ⇒ nothing has changed.
+/// An unchanged signature means the mount topology is unchanged. It does not
+/// imply unchanged network reachability or authentication.
 pub fn drives_signature() -> u64 {
     #[cfg(windows)]
     {

@@ -117,7 +117,7 @@ mod tests {
             "file:///folder01/%00",
             "file:///folder01?query",
             "file:///folder01#fragment",
-            "https://localhost/folder01",
+            "remote:folder01",
         ] {
             assert!(decode_local_uri(uri.as_bytes()).is_none(), "{uri}");
         }

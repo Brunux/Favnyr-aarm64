@@ -11,14 +11,16 @@
 //! are built on an English base) → the key itself (never a panic,
 //! never a surprise empty string). Adding a language = adding a `.toml` file +
 //! an entry in `embedded()`/`catalog()`; adding a string = a key in
-//! the TOML files + (if exposed to Slint) a field in `Strings`.
+//! the TOML files + (if exposed to Slint) a property in the `Strings` global.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use favnyr_core::{Lang, paths};
 
-use crate::Strings;
+use slint::ComponentHandle;
+
+use crate::{MainWindow, Strings};
 
 // Embedded catalogs (sources of truth, versioned in the repo).
 const EMBED_EN: &str = include_str!("../i18n/en.toml");
@@ -124,373 +126,423 @@ pub fn tr(lang: Lang, key: &str) -> String {
         .unwrap_or_else(|| key.to_string())
 }
 
-/// Builds the Slint `Strings` struct from the language's catalog.
-/// (The only place that enumerates the fields — values come from the TOML files.)
-pub fn strings_for(lang: Lang) -> Strings {
-    let c = catalog(lang);
+/// Updates the window's translated properties from the existing catalog.
+/// Each binding reads only its own label, avoiding copies of the whole catalog.
+pub fn apply_strings(window: &MainWindow, lang: Lang) {
+    apply_catalog(window, catalog(lang));
+}
+
+fn apply_catalog(window: &MainWindow, c: &HashMap<String, String>) {
+    let strings = window.global::<Strings>();
     let g = |k: &str| -> slint::SharedString { c.get(k).map(|s| s.as_str()).unwrap_or(k).into() };
-    Strings {
-        archive_compress_to: g("archive_compress_to"),
-        archive_name: g("archive_name"),
-        archive_format: g("archive_format"),
-        archive_tar_compression: g("archive_tar_compression"),
-        archive_none: g("archive_none"),
-        archive_level: g("archive_level"),
-        archive_level_hint: g("archive_level_hint"),
-        archive_password: g("archive_password"),
-        archive_confirm_password: g("archive_confirm_password"),
-        archive_password_title: g("archive_password_title"),
-        archive_password_hint: g("archive_password_hint"),
-        archive_password_toggle: g("archive_password_toggle"),
-        archive_tar_hint: g("archive_tar_hint"),
-        archive_create: g("archive_create"),
-        archive_extract: g("archive_extract"),
-        archive_managed: g("archive_managed"),
-        archive_managed_hint: g("archive_managed_hint"),
-        app_title: g("app_title"),
-        settings_language: g("settings_language"),
-        settings_theme: g("settings_theme"),
-        settings_ui_scale: g("settings_ui_scale"),
-        settings_optional_tools_title: g("settings_optional_tools_title"),
-        settings_optional_tools_hint: g("settings_optional_tools_hint"),
-        settings_optional_tools_recheck: g("settings_optional_tools_recheck"),
-        settings_optional_tools_available: g("settings_optional_tools_available"),
-        settings_optional_tools_missing: g("settings_optional_tools_missing"),
-        settings_optional_tools_flatpak: g("settings_optional_tools_flatpak"),
-        settings_tool_ffmpeg_hint: g("settings_tool_ffmpeg_hint"),
-        settings_tool_poppler_hint: g("settings_tool_poppler_hint"),
-        settings_tool_seven_zip_hint: g("settings_tool_seven_zip_hint"),
-        theme_auto: g("theme_auto"),
-        theme_light: g("theme_light"),
-        theme_dark: g("theme_dark"),
-        col_name: g("col_name"),
-        col_path: g("col_path"),
-        col_size: g("col_size"),
-        col_modified: g("col_modified"),
-        col_age: g("col_age"),
-        col_ext: g("col_ext"),
-        ext_filter_label: g("ext_filter_label"),
-        ext_filter_placeholder: g("ext_filter_placeholder"),
-        col_resolution: g("col_resolution"),
-        col_depth: g("col_depth"),
-        fav_title: g("fav_title"),
-        fav_new_container: g("fav_new_container"),
-        fav_collapse_all: g("fav_collapse_all"),
-        fav_expand_all: g("fav_expand_all"),
-        fav_empty: g("fav_empty"),
-        fav_container_empty: g("fav_container_empty"),
-        fav_open: g("fav_open"),
-        fav_execute: g("fav_execute"),
-        fav_open_all: g("fav_open_all"),
-        fav_new_subcontainer: g("fav_new_subcontainer"),
-        fav_rename: g("fav_rename"),
-        fav_delete: g("fav_delete"),
-        fav_delete_confirm: g("fav_delete_confirm"),
-        fav_copy_path: g("fav_copy_path"),
-        fav_save_tab: g("fav_save_tab"),
-        fav_save_all_tabs: g("fav_save_all_tabs"),
-        fav_add: g("fav_add"),
-        fav_popup_title: g("fav_popup_title"),
-        fav_popup_alias: g("fav_popup_alias"),
-        fav_popup_container: g("fav_popup_container"),
-        fav_popup_parent: g("fav_popup_parent"),
-        fav_popup_new: g("fav_popup_new"),
-        fav_popup_root: g("fav_popup_root"),
-        fav_save: g("fav_save"),
-        fav_toast_added: g("fav_toast_added"),
-        fav_toast_missing: g("fav_toast_missing"),
-        fav_toast_exists: g("fav_toast_exists"),
-        footer_items_singular: g("footer_items_singular"),
-        footer_items_plural: g("footer_items_plural"),
-        footer_empty: g("footer_empty"),
-        footer_selected_singular: g("footer_selected_singular"),
-        footer_selected_plural: g("footer_selected_plural"),
-        nav_prev: g("nav_prev"),
-        nav_next: g("nav_next"),
-        nav_parent: g("nav_parent"),
-        nav_refresh: g("nav_refresh"),
-        view_mode_tooltip: g("view_mode_tooltip"),
-        view_layout_list: g("view_layout_list"),
-        view_layout_grid: g("view_layout_grid"),
-        view_sort_tooltip: g("view_sort_tooltip"),
-        show_hidden_tooltip: g("show_hidden_tooltip"),
-        manual_order_label: g("manual_order_label"),
-        manual_order_hint: g("manual_order_hint"),
-        manual_order_drag: g("manual_order_drag"),
-        group_section: g("group_section"),
-        group_folders_first: g("group_folders_first"),
-        group_colored_folders_first: g("group_colored_folders_first"),
-        group_files_first: g("group_files_first"),
-        group_mixed: g("group_mixed"),
-        tab_new_tooltip: g("tab_new_tooltip"),
-        tab_scroll_left: g("tab_scroll_left"),
-        tab_scroll_right: g("tab_scroll_right"),
-        tabbar_menu_tooltip: g("tabbar_menu_tooltip"),
-        tabbar_top: g("tabbar_top"),
-        tabbar_left: g("tabbar_left"),
-        tabbar_right: g("tabbar_right"),
-        settings_tabbar_default: g("settings_tabbar_default"),
-        settings_default_view_mode_label: g("settings_default_view_mode_label"),
-        settings_default_item_arrangement_label: g("settings_default_item_arrangement_label"),
-        settings_default_hidden_label: g("settings_default_hidden_label"),
-        settings_default_view_mode_hint: g("settings_default_view_mode_hint"),
-        settings_view_mode_list: g("settings_view_mode_list"),
-        settings_view_mode_previews: g("settings_view_mode_previews"),
-        settings_tab_tooltip_label: g("settings_tab_tooltip_label"),
-        settings_tab_tooltip_hint: g("settings_tab_tooltip_hint"),
-        settings_clock_label: g("settings_clock_label"),
-        settings_clock_local: g("settings_clock_local"),
-        settings_ws_warn_label: g("settings_ws_warn_label"),
-        settings_ws_warn_hint: g("settings_ws_warn_hint"),
-        settings_compact_preview_label: g("settings_compact_preview_label"),
-        settings_compact_preview_hint: g("settings_compact_preview_hint"),
-        settings_annotations_title: g("settings_annotations_title"),
-        settings_annotations_hint: g("settings_annotations_hint"),
-        settings_annotations_clean: g("settings_annotations_clean"),
-        annotations_cleanup_title: g("annotations_cleanup_title"),
-        annotations_cleanup_all: g("annotations_cleanup_all"),
-        annotations_cleanup_none: g("annotations_cleanup_none"),
-        annotations_cleanup_empty: g("annotations_cleanup_empty"),
-        settings_annotations_cleaned: g("settings_annotations_cleaned"),
-        tab_unavailable: g("tab_unavailable"),
-        tab_unavailable_hint: g("tab_unavailable_hint"),
-        tab_duplicate: g("tab_duplicate"),
-        tab_reopen_closed: g("tab_reopen_closed"),
-        tab_close_tooltip: g("tab_close_tooltip"),
-        panel_prefix: g("panel_prefix"),
-        panel_new_tooltip: g("panel_new_tooltip"),
-        panel_close_tooltip: g("panel_close_tooltip"),
-        panel_move_tooltip: g("panel_move_tooltip"),
-        panel_split_view: g("panel_split_view"),
-        split_side_by_side: g("split_side_by_side"),
-        split_stacked: g("split_stacked"),
-        equalize_all: g("equalize_all"),
-        equalize_restore: g("equalize_restore"),
-        ctx_open: g("ctx_open"),
-        ctx_open_new_tab: g("ctx_open_new_tab"),
-        ctx_open_new_pane: g("ctx_open_new_pane"),
-        ctx_open_with: g("ctx_open_with"),
-        ctx_open_parent: g("ctx_open_parent"),
-        ctx_open_admin: g("ctx_open_admin"),
-        ctx_new: g("ctx_new"),
-        ctx_new_folder: g("ctx_new_folder"),
-        ctx_new_file: g("ctx_new_file"),
-        ctx_new_shortcut: g("ctx_new_shortcut"),
-        create_shortcut_target: g("create_shortcut_target"),
-        create_browse: g("create_browse"),
-        ctx_create_link: g("ctx_create_link"),
-        ctx_mark: g("ctx_mark"),
-        ctx_comment: g("ctx_comment"),
-        comment_title: g("comment_title"),
-        comment_placeholder: g("comment_placeholder"),
-        comment_clear: g("comment_clear"),
-        create_symlink_tab: g("create_symlink_tab"),
-        create_confirm: g("create_confirm"),
-        create_placeholder: g("create_placeholder"),
-        ctx_open_terminal: g("ctx_open_terminal"),
-        ctx_copy: g("ctx_copy"),
-        ctx_cut: g("ctx_cut"),
-        ctx_paste: g("ctx_paste"),
-        ctx_duplicate: g("ctx_duplicate"),
-        ctx_copy_path: g("ctx_copy_path"),
-        ctx_copy_name: g("ctx_copy_name"),
-        ctx_rename: g("ctx_rename"),
-        ctx_delete: g("ctx_delete"),
-        ctx_properties: g("ctx_properties"),
-        prop_kind_folder: g("prop_kind_folder"),
-        prop_kind_file: g("prop_kind_file"),
-        settings_tooltip: g("settings_tooltip"),
-        settings_title: g("settings_title"),
-        settings_tab_general: g("settings_tab_general"),
-        settings_tab_defaults_title: g("settings_tab_defaults_title"),
-        settings_tab_defaults_hint: g("settings_tab_defaults_hint"),
-        settings_new_workspace_title: g("settings_new_workspace_title"),
-        settings_new_workspace_hint: g("settings_new_workspace_hint"),
-        settings_group_dates: g("settings_group_dates"),
-        settings_group_tabs: g("settings_group_tabs"),
-        settings_folder_depth_hint: g("settings_folder_depth_hint"),
-        settings_tab_storage: g("settings_tab_storage"),
-        settings_columns_section: g("settings_columns_section"),
-        settings_col_resolution: g("settings_col_resolution"),
-        settings_col_depth: g("settings_col_depth"),
-        settings_rmtime_label: g("settings_rmtime_label"),
-        settings_rmtime_hint: g("settings_rmtime_hint"),
-        settings_fsize_label: g("settings_fsize_label"),
-        settings_fsize_hint: g("settings_fsize_hint"),
-        settings_view_text_size_title: g("settings_view_text_size_title"),
-        settings_view_text_size_hint: g("settings_view_text_size_hint"),
-        settings_view_text_size_toggle: g("settings_view_text_size_toggle"),
-        settings_view_item_spacing_title: g("settings_view_item_spacing_title"),
-        settings_view_item_spacing_hint: g("settings_view_item_spacing_hint"),
-        settings_paths_section: g("settings_paths_section"),
-        settings_config_path: g("settings_config_path"),
-        settings_data_path: g("settings_data_path"),
-        settings_cache_path: g("settings_cache_path"),
-        settings_open: g("settings_open"),
-        settings_shortcuts_section: g("settings_shortcuts_section"),
-        shortcut_search_placeholder: g("shortcut_search_placeholder"),
-        shortcut_reset_all: g("shortcut_reset_all"),
-        shortcut_reset_all_confirm: g("shortcut_reset_all_confirm"),
-        shortcut_reset_tooltip: g("shortcut_reset_tooltip"),
-        shortcut_listening: g("shortcut_listening"),
-        shortcut_capture_cancel: g("shortcut_capture_cancel"),
-        shortcut_unassigned: g("shortcut_unassigned"),
-        shortcut_unassign: g("shortcut_unassign"),
-        shortcut_no_results: g("shortcut_no_results"),
-        shortcut_conflict_reassign: g("shortcut_conflict_reassign"),
-        shortcut_conflict_keep: g("shortcut_conflict_keep"),
-        rename_title: g("rename_title"),
-        rename_current_prefix: g("rename_current_prefix"),
-        rename_new_placeholder: g("rename_new_placeholder"),
-        rename_confirm: g("rename_confirm"),
-        rename_force_replace: g("rename_force_replace"),
-        rename_select_name: g("rename_select_name"),
-        btn_cancel: g("btn_cancel"),
-        paste_conflict_title: g("paste_conflict_title"),
-        paste_conflict_hint: g("paste_conflict_hint"),
-        paste_conflict_taken: g("paste_conflict_taken"),
-        paste_conflict_skip: g("paste_conflict_skip"),
-        paste_conflict_confirm: g("paste_conflict_confirm"),
-        paste_conflict_replace: g("paste_conflict_replace"),
-        paste_conflict_replace_all: g("paste_conflict_replace_all"),
-        paste_conflict_skip_all: g("paste_conflict_skip_all"),
-        drag_open_with: g("drag_open_with"),
-        op_copying: g("op_copying"),
-        op_moving: g("op_moving"),
-        op_deleting: g("op_deleting"),
-        op_deleting_permanently: g("op_deleting_permanently"),
-        op_duplicating: g("op_duplicating"),
-        op_scanning: g("op_scanning"),
-        op_done: g("op_done"),
-        op_cancelled: g("op_cancelled"),
-        op_errors: g("op_errors"),
-        op_items: g("op_items"),
-        ws_tooltip: g("ws_tooltip"),
-        ws_title: g("ws_title"),
-        ws_save_section: g("ws_save_section"),
-        ws_name_placeholder: g("ws_name_placeholder"),
-        ws_name_taken: g("ws_name_taken"),
-        ws_save_btn: g("ws_save_btn"),
-        ws_saved_section: g("ws_saved_section"),
-        ws_empty: g("ws_empty"),
-        ws_empty_hint: g("ws_empty_hint"),
-        ws_load: g("ws_load"),
-        ws_update: g("ws_update"),
-        ws_rename: g("ws_rename"),
-        ws_delete: g("ws_delete"),
-        ws_delete_confirm: g("ws_delete_confirm"),
-        ws_overwrite_confirm: g("ws_overwrite_confirm"),
-        ws_panels_short: g("ws_panels_short"),
-        ws_tabs_short: g("ws_tabs_short"),
-        ws_toast_saved: g("ws_toast_saved"),
-        ws_toast_updated: g("ws_toast_updated"),
-        ws_toast_renamed: g("ws_toast_renamed"),
-        ws_toast_deleted: g("ws_toast_deleted"),
-        ws_notice_saved: g("ws_notice_saved"),
-        ws_notice_save_failed: g("ws_notice_save_failed"),
-        ws_dirty_title: g("ws_dirty_title"),
-        ws_dirty_body: g("ws_dirty_body"),
-        ws_dirty_discard: g("ws_dirty_discard"),
-        ws_dirty_save_load: g("ws_dirty_save_load"),
-        ws_dirty_tooltip: g("ws_dirty_tooltip"),
-        ws_slot_assign: g("ws_slot_assign"),
-        ws_slot_none: g("ws_slot_none"),
-        ws_toast_slot_moved: g("ws_toast_slot_moved"),
-        ws_dirty_save_action: g("ws_dirty_save_action"),
-        sidebar_tooltip: g("sidebar_tooltip"),
-        sidebar_shortcuts: g("sidebar_shortcuts"),
-        sidebar_drives: g("sidebar_drives"),
-        sidebar_network: g("sidebar_network"),
-        net_ejected: g("net_ejected"),
-        net_disconnected: g("net_disconnected"),
-        net_eject_failed: g("net_eject_failed"),
-        net_eject: g("net_eject"),
-        net_release: g("net_release"),
-        net_released: g("net_released"),
-        net_disconnect: g("net_disconnect"),
-        sidebar_home: g("sidebar_home"),
-        sidebar_trash: g("sidebar_trash"),
-        sidebar_root: g("sidebar_root"),
-        sidebar_empty_trash: g("sidebar_empty_trash"),
-        sidebar_empty_trash_confirm: g("sidebar_empty_trash_confirm"),
-        net_delete_title: g("net_delete_title"),
-        net_delete_body: g("net_delete_body"),
-        permanent_delete_body: g("permanent_delete_body"),
-        net_delete_confirm: g("net_delete_confirm"),
-        open_many_title: g("open_many_title"),
-        open_many_confirm: g("open_many_confirm"),
-        drop_move: g("drop_move"),
-        drop_copy: g("drop_copy"),
-        drop_split: g("drop_split"),
-        drop_link: g("drop_link"),
-        drop_favorite: g("drop_favorite"),
-        drop_swap: g("drop_swap"),
-        drop_detach: g("drop_detach"),
-        ws_reset: g("ws_reset"),
-        ws_new_name: g("ws_new_name"),
-        ws_toast_reset: g("ws_toast_reset"),
-        ws_sort_newest: g("ws_sort_newest"),
-        ws_sort_oldest: g("ws_sort_oldest"),
-        ws_sort_tooltip: g("ws_sort_tooltip"),
-        ow_choose: g("ow_choose"),
-        ow_pick_browse: g("ow_pick_browse"),
-        ow_custom: g("ow_custom"),
-        ow_use_as_app: g("ow_use_as_app"),
-        ow_manage: g("ow_manage"),
-        ow_title: g("ow_title"),
-        ow_name: g("ow_name"),
-        ow_program: g("ow_program"),
-        ow_store_program: g("ow_store_program"),
-        ow_args: g("ow_args"),
-        ow_tags: g("ow_tags"),
-        ow_tag_file: g("ow_tag_file"),
-        ow_tag_dir: g("ow_tag_dir"),
-        ow_tag_dirname: g("ow_tag_dirname"),
-        ow_tag_setname: g("ow_tag_setname"),
-        ow_tag_name: g("ow_tag_name"),
-        ow_tag_stem: g("ow_tag_stem"),
-        ow_tag_ext: g("ow_tag_ext"),
-        ow_tag_uri: g("ow_tag_uri"),
-        ow_tag_files: g("ow_tag_files"),
-        ow_preview: g("ow_preview"),
-        ow_add_suggested: g("ow_add_suggested"),
-        ow_recipes_label: g("ow_recipes_label"),
-        ow_recipes_hint: g("ow_recipes_hint"),
-        ow_launch: g("ow_launch"),
-        ow_default_ext: g("ow_default_ext"),
-        ow_used_ext: g("ow_used_ext"),
-        ow_default_ext_placeholder: g("ow_default_ext_placeholder"),
-        ow_used_ext_placeholder: g("ow_used_ext_placeholder"),
-        ow_set_default: g("ow_set_default"),
-        ow_display_other_apps: g("ow_display_other_apps"),
-        ow_run_as_admin: g("ow_run_as_admin"),
-        ow_default_ext_hint: g("ow_default_ext_hint"),
-        ow_show_in_section: g("ow_show_in_section"),
-        settings_shellext_empty: g("settings_shellext_empty"),
-        ow_ctx_menu: g("ow_ctx_menu"),
-        ow_ctx_files: g("ow_ctx_files"),
-        ow_ctx_dirs: g("ow_ctx_dirs"),
-        ow_ctx_background: g("ow_ctx_background"),
-        ow_ctx_ext: g("ow_ctx_ext"),
-        ow_ctx_ext_hint: g("ow_ctx_ext_hint"),
-        ow_used_ext_hint: g("ow_used_ext_hint"),
-        settings_shellmenu_label: g("settings_shellmenu_label"),
-        settings_shellmenu_hint: g("settings_shellmenu_hint"),
-        settings_shellext_list_label: g("settings_shellext_list_label"),
-        settings_shellext_list_hint: g("settings_shellext_list_hint"),
-        ow_move_up: g("ow_move_up"),
-        ow_move_down: g("ow_move_down"),
-        ow_duplicate_tip: g("ow_duplicate_tip"),
-        ow_edit_tip: g("ow_edit_tip"),
-        ow_delete_tip: g("ow_delete_tip"),
-        settings_openers_section: g("settings_openers_section"),
-        ow_add: g("ow_add"),
-        ow_empty: g("ow_empty"),
-        ow_search_placeholder: g("ow_search_placeholder"),
-        ow_no_results: g("ow_no_results"),
-        ow_promote: g("ow_promote"),
-        ow_promote_add: g("ow_promote_add"),
-    }
+    strings.set_archive_compress_to(g("archive_compress_to"));
+    strings.set_archive_name(g("archive_name"));
+    strings.set_archive_format(g("archive_format"));
+    strings.set_archive_tar_compression(g("archive_tar_compression"));
+    strings.set_archive_none(g("archive_none"));
+    strings.set_archive_level(g("archive_level"));
+    strings.set_archive_level_hint(g("archive_level_hint"));
+    strings.set_archive_password(g("archive_password"));
+    strings.set_archive_confirm_password(g("archive_confirm_password"));
+    strings.set_archive_password_title(g("archive_password_title"));
+    strings.set_archive_password_hint(g("archive_password_hint"));
+    strings.set_archive_password_toggle(g("archive_password_toggle"));
+    strings.set_archive_tar_hint(g("archive_tar_hint"));
+    strings.set_archive_create(g("archive_create"));
+    strings.set_archive_extract(g("archive_extract"));
+    strings.set_archive_managed(g("archive_managed"));
+    strings.set_archive_managed_hint(g("archive_managed_hint"));
+    strings.set_app_title(g("app_title"));
+    strings.set_settings_language(g("settings_language"));
+    strings.set_settings_theme(g("settings_theme"));
+    strings.set_settings_ui_scale(g("settings_ui_scale"));
+    strings.set_settings_optional_tools_title(g("settings_optional_tools_title"));
+    strings.set_settings_optional_tools_hint(g("settings_optional_tools_hint"));
+    strings.set_settings_optional_tools_recheck(g("settings_optional_tools_recheck"));
+    strings.set_settings_optional_tools_available(g("settings_optional_tools_available"));
+    strings.set_settings_optional_tools_missing(g("settings_optional_tools_missing"));
+    strings.set_settings_optional_tools_flatpak(g("settings_optional_tools_flatpak"));
+    strings.set_settings_tool_ffmpeg_hint(g("settings_tool_ffmpeg_hint"));
+    strings.set_settings_tool_poppler_hint(g("settings_tool_poppler_hint"));
+    strings.set_settings_tool_seven_zip_hint(g("settings_tool_seven_zip_hint"));
+    strings.set_theme_auto(g("theme_auto"));
+    strings.set_theme_light(g("theme_light"));
+    strings.set_theme_dark(g("theme_dark"));
+    strings.set_col_name(g("col_name"));
+    strings.set_col_path(g("col_path"));
+    strings.set_col_size(g("col_size"));
+    strings.set_col_modified(g("col_modified"));
+    strings.set_col_created(g("col_created"));
+    strings.set_col_age(g("col_age"));
+    strings.set_col_ext(g("col_ext"));
+    strings.set_ext_filter_label(g("ext_filter_label"));
+    strings.set_search_subfolders(g("search_subfolders"));
+    strings.set_search_reveal(g("search_reveal"));
+    strings.set_search_containing_folder(g("search_containing_folder"));
+    strings.set_search_reveal_new_tab(g("search_reveal_new_tab"));
+    strings.set_ext_filter_placeholder(g("ext_filter_placeholder"));
+    strings.set_col_resolution(g("col_resolution"));
+    strings.set_col_depth(g("col_depth"));
+    strings.set_fav_title(g("fav_title"));
+    strings.set_fav_new_container(g("fav_new_container"));
+    strings.set_fav_collapse_all(g("fav_collapse_all"));
+    strings.set_fav_expand_all(g("fav_expand_all"));
+    strings.set_fav_empty(g("fav_empty"));
+    strings.set_fav_container_empty(g("fav_container_empty"));
+    strings.set_fav_open(g("fav_open"));
+    strings.set_fav_execute(g("fav_execute"));
+    strings.set_fav_open_all(g("fav_open_all"));
+    strings.set_fav_new_subcontainer(g("fav_new_subcontainer"));
+    strings.set_fav_rename(g("fav_rename"));
+    strings.set_fav_delete(g("fav_delete"));
+    strings.set_fav_delete_confirm(g("fav_delete_confirm"));
+    strings.set_fav_copy_path(g("fav_copy_path"));
+    strings.set_fav_save_tab(g("fav_save_tab"));
+    strings.set_fav_save_all_tabs(g("fav_save_all_tabs"));
+    strings.set_fav_add(g("fav_add"));
+    strings.set_fav_popup_title(g("fav_popup_title"));
+    strings.set_fav_popup_alias(g("fav_popup_alias"));
+    strings.set_fav_popup_container(g("fav_popup_container"));
+    strings.set_fav_popup_parent(g("fav_popup_parent"));
+    strings.set_fav_popup_new(g("fav_popup_new"));
+    strings.set_fav_popup_root(g("fav_popup_root"));
+    strings.set_fav_save(g("fav_save"));
+    strings.set_fav_toast_added(g("fav_toast_added"));
+    strings.set_fav_toast_missing(g("fav_toast_missing"));
+    strings.set_fav_toast_exists(g("fav_toast_exists"));
+    strings.set_footer_items_singular(g("footer_items_singular"));
+    strings.set_footer_items_plural(g("footer_items_plural"));
+    strings.set_footer_empty(g("footer_empty"));
+    strings.set_footer_selected_singular(g("footer_selected_singular"));
+    strings.set_footer_selected_plural(g("footer_selected_plural"));
+    strings.set_nav_prev(g("nav_prev"));
+    strings.set_nav_next(g("nav_next"));
+    strings.set_nav_parent(g("nav_parent"));
+    strings.set_nav_refresh(g("nav_refresh"));
+    strings.set_view_mode_tooltip(g("view_mode_tooltip"));
+    strings.set_view_layout_list(g("view_layout_list"));
+    strings.set_view_layout_grid(g("view_layout_grid"));
+    strings.set_view_sort_tooltip(g("view_sort_tooltip"));
+    strings.set_sort_primary(g("sort_primary"));
+    strings.set_sort_secondary(g("sort_secondary"));
+    strings.set_sort_by_day(g("sort_by_day"));
+    strings.set_sort_ascending(g("sort_ascending"));
+    strings.set_sort_descending(g("sort_descending"));
+    strings.set_show_hidden_tooltip(g("show_hidden_tooltip"));
+    strings.set_manual_order_label(g("manual_order_label"));
+    strings.set_manual_order_hint(g("manual_order_hint"));
+    strings.set_manual_order_drag(g("manual_order_drag"));
+    strings.set_group_section(g("group_section"));
+    strings.set_group_folders_first(g("group_folders_first"));
+    strings.set_group_colored_folders_first(g("group_colored_folders_first"));
+    strings.set_group_files_first(g("group_files_first"));
+    strings.set_group_mixed(g("group_mixed"));
+    strings.set_tab_new_tooltip(g("tab_new_tooltip"));
+    strings.set_tab_scroll_left(g("tab_scroll_left"));
+    strings.set_tab_scroll_right(g("tab_scroll_right"));
+    strings.set_tabbar_menu_tooltip(g("tabbar_menu_tooltip"));
+    strings.set_tabbar_top(g("tabbar_top"));
+    strings.set_tabbar_left(g("tabbar_left"));
+    strings.set_tabbar_right(g("tabbar_right"));
+    strings.set_settings_tabbar_default(g("settings_tabbar_default"));
+    strings.set_settings_default_view_mode_label(g("settings_default_view_mode_label"));
+    strings
+        .set_settings_default_item_arrangement_label(g("settings_default_item_arrangement_label"));
+    strings.set_settings_default_hidden_label(g("settings_default_hidden_label"));
+    strings.set_settings_default_view_mode_hint(g("settings_default_view_mode_hint"));
+    strings.set_settings_view_mode_list(g("settings_view_mode_list"));
+    strings.set_settings_view_mode_previews(g("settings_view_mode_previews"));
+    strings.set_settings_tab_tooltip_label(g("settings_tab_tooltip_label"));
+    strings.set_settings_tab_tooltip_hint(g("settings_tab_tooltip_hint"));
+    strings.set_settings_grid_name_tooltip_label(g("settings_grid_name_tooltip_label"));
+    strings.set_settings_grid_name_tooltip_hint(g("settings_grid_name_tooltip_hint"));
+    strings.set_settings_search_path_tooltip_label(g("settings_search_path_tooltip_label"));
+    strings.set_settings_search_path_tooltip_hint(g("settings_search_path_tooltip_hint"));
+    strings.set_settings_clock_label(g("settings_clock_label"));
+    strings.set_settings_clock_local(g("settings_clock_local"));
+    strings.set_settings_ws_panel_hint(g("settings_ws_panel_hint"));
+    strings.set_settings_ws_shortcut_hint(g("settings_ws_shortcut_hint"));
+    strings.set_settings_compact_preview_label(g("settings_compact_preview_label"));
+    strings.set_settings_thumbnail_zoom_label(g("settings_thumbnail_zoom_label"));
+    strings.set_settings_thumbnail_zoom_hint(g("settings_thumbnail_zoom_hint"));
+    strings.set_settings_compact_preview_hint(g("settings_compact_preview_hint"));
+    strings.set_settings_annotations_title(g("settings_annotations_title"));
+    strings.set_settings_annotations_hint(g("settings_annotations_hint"));
+    strings.set_settings_annotations_clean(g("settings_annotations_clean"));
+    strings.set_annotations_cleanup_title(g("annotations_cleanup_title"));
+    strings.set_annotations_cleanup_all(g("annotations_cleanup_all"));
+    strings.set_annotations_cleanup_none(g("annotations_cleanup_none"));
+    strings.set_annotations_cleanup_empty(g("annotations_cleanup_empty"));
+    strings.set_settings_annotations_cleaned(g("settings_annotations_cleaned"));
+    strings.set_tab_unavailable(g("tab_unavailable"));
+    strings.set_tab_unavailable_hint(g("tab_unavailable_hint"));
+    strings.set_tab_duplicate(g("tab_duplicate"));
+    strings.set_tab_reopen_closed(g("tab_reopen_closed"));
+    strings.set_tab_close_tooltip(g("tab_close_tooltip"));
+    strings.set_panel_prefix(g("panel_prefix"));
+    strings.set_panel_new_tooltip(g("panel_new_tooltip"));
+    strings.set_panel_close_tooltip(g("panel_close_tooltip"));
+    strings.set_panel_move_tooltip(g("panel_move_tooltip"));
+    strings.set_panel_split_view(g("panel_split_view"));
+    strings.set_split_side_by_side(g("split_side_by_side"));
+    strings.set_split_stacked(g("split_stacked"));
+    strings.set_equalize_all(g("equalize_all"));
+    strings.set_equalize_restore(g("equalize_restore"));
+    strings.set_ctx_open(g("ctx_open"));
+    strings.set_ctx_open_new_tab(g("ctx_open_new_tab"));
+    strings.set_ctx_open_new_pane(g("ctx_open_new_pane"));
+    strings.set_ctx_open_with(g("ctx_open_with"));
+    strings.set_ctx_open_parent(g("ctx_open_parent"));
+    strings.set_ctx_open_admin(g("ctx_open_admin"));
+    strings.set_ctx_new(g("ctx_new"));
+    strings.set_ctx_new_folder(g("ctx_new_folder"));
+    strings.set_ctx_new_file(g("ctx_new_file"));
+    strings.set_ctx_new_shortcut(g("ctx_new_shortcut"));
+    strings.set_create_shortcut_target(g("create_shortcut_target"));
+    strings.set_create_browse(g("create_browse"));
+    strings.set_ctx_create_link(g("ctx_create_link"));
+    strings.set_ctx_mark(g("ctx_mark"));
+    strings.set_ctx_comment(g("ctx_comment"));
+    strings.set_comment_title(g("comment_title"));
+    strings.set_comment_placeholder(g("comment_placeholder"));
+    strings.set_comment_clear(g("comment_clear"));
+    strings.set_create_symlink_tab(g("create_symlink_tab"));
+    strings.set_create_confirm(g("create_confirm"));
+    strings.set_create_placeholder(g("create_placeholder"));
+    strings.set_ctx_open_terminal(g("ctx_open_terminal"));
+    strings.set_ctx_copy(g("ctx_copy"));
+    strings.set_ctx_cut(g("ctx_cut"));
+    strings.set_ctx_paste(g("ctx_paste"));
+    strings.set_ctx_duplicate(g("ctx_duplicate"));
+    strings.set_ctx_copy_path(g("ctx_copy_path"));
+    strings.set_ctx_copy_name(g("ctx_copy_name"));
+    strings.set_ctx_rename(g("ctx_rename"));
+    strings.set_ctx_delete(g("ctx_delete"));
+    strings.set_ctx_properties(g("ctx_properties"));
+    strings.set_prop_kind_folder(g("prop_kind_folder"));
+    strings.set_prop_kind_file(g("prop_kind_file"));
+    strings.set_settings_tooltip(g("settings_tooltip"));
+    strings.set_settings_title(g("settings_title"));
+    strings.set_settings_tab_general(g("settings_tab_general"));
+    strings.set_settings_tab_defaults_title(g("settings_tab_defaults_title"));
+    strings.set_settings_tab_defaults_hint(g("settings_tab_defaults_hint"));
+    strings.set_settings_new_workspace_title(g("settings_new_workspace_title"));
+    strings.set_settings_new_workspace_hint(g("settings_new_workspace_hint"));
+    strings.set_settings_group_dates(g("settings_group_dates"));
+    strings.set_settings_group_tooltips(g("settings_group_tooltips"));
+    strings.set_settings_group_workspaces(g("settings_group_workspaces"));
+    strings.set_settings_folder_depth_hint(g("settings_folder_depth_hint"));
+    strings.set_settings_tab_storage(g("settings_tab_storage"));
+    strings.set_prop_title(g("prop_title"));
+    strings.set_prop_tab_general(g("prop_tab_general"));
+    strings.set_prop_tab_permissions(g("prop_tab_permissions"));
+    strings.set_prop_tab_checksums(g("prop_tab_checksums"));
+    strings.set_prop_perm_owner(g("prop_perm_owner"));
+    strings.set_prop_perm_group(g("prop_perm_group"));
+    strings.set_prop_perm_others(g("prop_perm_others"));
+    strings.set_prop_perm_execute(g("prop_perm_execute"));
+    strings.set_prop_perm_ownership(g("prop_perm_ownership"));
+    strings.set_prop_perm_mode(g("prop_perm_mode"));
+    strings.set_prop_hash_compute(g("prop_hash_compute"));
+    strings.set_prop_hash_cancel_label(g("prop_hash_cancel_label"));
+    strings.set_prop_hash_hint(g("prop_hash_hint"));
+    strings.set_prop_hash_folder(g("prop_hash_folder"));
+    strings.set_prop_expected_label(g("prop_expected_label"));
+    strings.set_prop_expected_no_match(g("prop_expected_no_match"));
+    strings.set_settings_columns_section(g("settings_columns_section"));
+    strings.set_settings_col_resolution(g("settings_col_resolution"));
+    strings.set_settings_col_depth(g("settings_col_depth"));
+    strings.set_settings_rmtime_label(g("settings_rmtime_label"));
+    strings.set_settings_rmtime_hint(g("settings_rmtime_hint"));
+    strings.set_settings_fsize_label(g("settings_fsize_label"));
+    strings.set_settings_fsize_hint(g("settings_fsize_hint"));
+    strings.set_settings_view_text_size_title(g("settings_view_text_size_title"));
+    strings.set_settings_view_text_size_hint(g("settings_view_text_size_hint"));
+    strings.set_settings_view_text_size_toggle(g("settings_view_text_size_toggle"));
+    strings.set_settings_view_item_spacing_title(g("settings_view_item_spacing_title"));
+    strings.set_settings_view_item_spacing_hint(g("settings_view_item_spacing_hint"));
+    strings.set_settings_paths_section(g("settings_paths_section"));
+    strings.set_settings_config_path(g("settings_config_path"));
+    strings.set_settings_data_path(g("settings_data_path"));
+    strings.set_settings_cache_path(g("settings_cache_path"));
+    strings.set_settings_open(g("settings_open"));
+    strings.set_settings_shortcuts_section(g("settings_shortcuts_section"));
+    strings.set_shortcut_search_placeholder(g("shortcut_search_placeholder"));
+    strings.set_shortcut_reset_all(g("shortcut_reset_all"));
+    strings.set_shortcut_reset_all_confirm(g("shortcut_reset_all_confirm"));
+    strings.set_shortcut_reset_tooltip(g("shortcut_reset_tooltip"));
+    strings.set_shortcut_listening(g("shortcut_listening"));
+    strings.set_shortcut_capture_cancel(g("shortcut_capture_cancel"));
+    strings.set_shortcut_unassigned(g("shortcut_unassigned"));
+    strings.set_shortcut_unassign(g("shortcut_unassign"));
+    strings.set_shortcut_no_results(g("shortcut_no_results"));
+    strings.set_shortcut_conflict_reassign(g("shortcut_conflict_reassign"));
+    strings.set_shortcut_conflict_keep(g("shortcut_conflict_keep"));
+    strings.set_rename_title(g("rename_title"));
+    strings.set_rename_current_prefix(g("rename_current_prefix"));
+    strings.set_rename_new_placeholder(g("rename_new_placeholder"));
+    strings.set_rename_confirm(g("rename_confirm"));
+    strings.set_rename_force_replace(g("rename_force_replace"));
+    strings.set_rename_select_name(g("rename_select_name"));
+    strings.set_btn_cancel(g("btn_cancel"));
+    strings.set_paste_conflict_title(g("paste_conflict_title"));
+    strings.set_paste_conflict_hint(g("paste_conflict_hint"));
+    strings.set_paste_conflict_taken(g("paste_conflict_taken"));
+    strings.set_paste_conflict_skip(g("paste_conflict_skip"));
+    strings.set_paste_conflict_confirm(g("paste_conflict_confirm"));
+    strings.set_paste_conflict_replace(g("paste_conflict_replace"));
+    strings.set_paste_conflict_replace_all(g("paste_conflict_replace_all"));
+    strings.set_paste_conflict_skip_all(g("paste_conflict_skip_all"));
+    strings.set_drag_open_with(g("drag_open_with"));
+    strings.set_op_copying(g("op_copying"));
+    strings.set_op_moving(g("op_moving"));
+    strings.set_op_deleting(g("op_deleting"));
+    strings.set_op_deleting_permanently(g("op_deleting_permanently"));
+    strings.set_op_duplicating(g("op_duplicating"));
+    strings.set_op_scanning(g("op_scanning"));
+    strings.set_op_done(g("op_done"));
+    strings.set_op_cancelled(g("op_cancelled"));
+    strings.set_op_errors(g("op_errors"));
+    strings.set_op_items(g("op_items"));
+    strings.set_ws_tooltip(g("ws_tooltip"));
+    strings.set_ws_title(g("ws_title"));
+    strings.set_ws_save_section(g("ws_save_section"));
+    strings.set_ws_name_placeholder(g("ws_name_placeholder"));
+    strings.set_ws_name_taken(g("ws_name_taken"));
+    strings.set_ws_save_btn(g("ws_save_btn"));
+    strings.set_ws_saved_section(g("ws_saved_section"));
+    strings.set_ws_empty(g("ws_empty"));
+    strings.set_ws_empty_hint(g("ws_empty_hint"));
+    strings.set_ws_load(g("ws_load"));
+    strings.set_ws_update(g("ws_update"));
+    strings.set_ws_rename(g("ws_rename"));
+    strings.set_ws_delete(g("ws_delete"));
+    strings.set_ws_delete_confirm(g("ws_delete_confirm"));
+    strings.set_ws_overwrite_confirm(g("ws_overwrite_confirm"));
+    strings.set_ws_panels_short(g("ws_panels_short"));
+    strings.set_ws_tabs_short(g("ws_tabs_short"));
+    strings.set_ws_toast_saved(g("ws_toast_saved"));
+    strings.set_ws_toast_updated(g("ws_toast_updated"));
+    strings.set_ws_toast_renamed(g("ws_toast_renamed"));
+    strings.set_ws_toast_deleted(g("ws_toast_deleted"));
+    strings.set_ws_notice_saved(g("ws_notice_saved"));
+    strings.set_ws_notice_save_failed(g("ws_notice_save_failed"));
+    strings.set_ws_dirty_title(g("ws_dirty_title"));
+    strings.set_ws_dirty_body(g("ws_dirty_body"));
+    strings.set_ws_dirty_body_new(g("ws_dirty_body_new"));
+    strings.set_ws_dirty_discard(g("ws_dirty_discard"));
+    strings.set_ws_dirty_save_load(g("ws_dirty_save_load"));
+    strings.set_ws_dirty_discard_new(g("ws_dirty_discard_new"));
+    strings.set_ws_dirty_save_new(g("ws_dirty_save_new"));
+    strings.set_ws_shortcut_ask(g("ws_shortcut_ask"));
+    strings.set_ws_shortcut_discard(g("ws_shortcut_discard"));
+    strings.set_ws_shortcut_save(g("ws_shortcut_save"));
+    strings.set_ws_shortcut_remember(g("ws_shortcut_remember"));
+    strings.set_ws_panel_remember(g("ws_panel_remember"));
+    strings.set_ws_dirty_tooltip(g("ws_dirty_tooltip"));
+    strings.set_ws_slot_assign(g("ws_slot_assign"));
+    strings.set_ws_slot_none(g("ws_slot_none"));
+    strings.set_ws_toast_slot_moved(g("ws_toast_slot_moved"));
+    strings.set_ws_dirty_save_action(g("ws_dirty_save_action"));
+    strings.set_sidebar_tooltip(g("sidebar_tooltip"));
+    strings.set_sidebar_shortcuts(g("sidebar_shortcuts"));
+    strings.set_sidebar_drives(g("sidebar_drives"));
+    strings.set_sidebar_network(g("sidebar_network"));
+    strings.set_net_ejected(g("net_ejected"));
+    strings.set_net_disconnected(g("net_disconnected"));
+    strings.set_net_eject_failed(g("net_eject_failed"));
+    strings.set_net_eject(g("net_eject"));
+    strings.set_net_release(g("net_release"));
+    strings.set_net_released(g("net_released"));
+    strings.set_net_disconnect(g("net_disconnect"));
+    strings.set_sidebar_home(g("sidebar_home"));
+    strings.set_sidebar_trash(g("sidebar_trash"));
+    strings.set_sidebar_root(g("sidebar_root"));
+    strings.set_sidebar_empty_trash(g("sidebar_empty_trash"));
+    strings.set_sidebar_empty_trash_confirm(g("sidebar_empty_trash_confirm"));
+    strings.set_exit_title(g("exit_title"));
+    strings.set_exit_body(g("exit_body"));
+    strings.set_exit_stay(g("exit_stay"));
+    strings.set_exit_cancel(g("exit_cancel"));
+    strings.set_exit_confirm(g("exit_confirm"));
+    strings.set_exit_stopping(g("exit_stopping"));
+    strings.set_net_delete_title(g("net_delete_title"));
+    strings.set_net_delete_body(g("net_delete_body"));
+    strings.set_permanent_delete_body(g("permanent_delete_body"));
+    strings.set_net_delete_confirm(g("net_delete_confirm"));
+    strings.set_open_many_title(g("open_many_title"));
+    strings.set_open_many_confirm(g("open_many_confirm"));
+    strings.set_drop_move(g("drop_move"));
+    strings.set_drop_copy(g("drop_copy"));
+    strings.set_drop_split(g("drop_split"));
+    strings.set_drop_link(g("drop_link"));
+    strings.set_drop_favorite(g("drop_favorite"));
+    strings.set_drop_swap(g("drop_swap"));
+    strings.set_drop_detach(g("drop_detach"));
+    strings.set_ws_reset(g("ws_reset"));
+    strings.set_ws_new_name(g("ws_new_name"));
+    strings.set_ws_toast_reset(g("ws_toast_reset"));
+    strings.set_ws_sort_newest(g("ws_sort_newest"));
+    strings.set_ws_sort_oldest(g("ws_sort_oldest"));
+    strings.set_ws_sort_tooltip(g("ws_sort_tooltip"));
+    strings.set_ow_choose(g("ow_choose"));
+    strings.set_ow_pick_browse(g("ow_pick_browse"));
+    strings.set_ow_custom(g("ow_custom"));
+    strings.set_ow_use_as_app(g("ow_use_as_app"));
+    strings.set_ow_manage(g("ow_manage"));
+    strings.set_ow_title(g("ow_title"));
+    strings.set_ow_name(g("ow_name"));
+    strings.set_ow_program(g("ow_program"));
+    strings.set_ow_store_program(g("ow_store_program"));
+    strings.set_ow_args(g("ow_args"));
+    strings.set_ow_tags(g("ow_tags"));
+    strings.set_ow_tag_file(g("ow_tag_file"));
+    strings.set_ow_tag_dir(g("ow_tag_dir"));
+    strings.set_ow_tag_dirname(g("ow_tag_dirname"));
+    strings.set_ow_tag_setname(g("ow_tag_setname"));
+    strings.set_ow_tag_name(g("ow_tag_name"));
+    strings.set_ow_tag_stem(g("ow_tag_stem"));
+    strings.set_ow_tag_ext(g("ow_tag_ext"));
+    strings.set_ow_tag_uri(g("ow_tag_uri"));
+    strings.set_ow_tag_files(g("ow_tag_files"));
+    strings.set_ow_preview(g("ow_preview"));
+    strings.set_ow_add_suggested(g("ow_add_suggested"));
+    strings.set_ow_recipes_label(g("ow_recipes_label"));
+    strings.set_ow_recipes_hint(g("ow_recipes_hint"));
+    strings.set_ow_launch(g("ow_launch"));
+    strings.set_ow_default_ext(g("ow_default_ext"));
+    strings.set_ow_used_ext(g("ow_used_ext"));
+    strings.set_ow_default_ext_placeholder(g("ow_default_ext_placeholder"));
+    strings.set_ow_used_ext_placeholder(g("ow_used_ext_placeholder"));
+    strings.set_ow_set_default(g("ow_set_default"));
+    strings.set_ow_display_other_apps(g("ow_display_other_apps"));
+    strings.set_ow_run_as_admin(g("ow_run_as_admin"));
+    strings.set_ow_default_ext_hint(g("ow_default_ext_hint"));
+    strings.set_ow_show_in_section(g("ow_show_in_section"));
+    strings.set_settings_shellext_empty(g("settings_shellext_empty"));
+    strings.set_ow_ctx_menu(g("ow_ctx_menu"));
+    strings.set_ow_ctx_files(g("ow_ctx_files"));
+    strings.set_ow_ctx_dirs(g("ow_ctx_dirs"));
+    strings.set_ow_ctx_background(g("ow_ctx_background"));
+    strings.set_ow_ctx_ext(g("ow_ctx_ext"));
+    strings.set_ow_ctx_ext_hint(g("ow_ctx_ext_hint"));
+    strings.set_ow_used_ext_hint(g("ow_used_ext_hint"));
+    strings.set_settings_shellmenu_label(g("settings_shellmenu_label"));
+    strings.set_settings_shellmenu_hint(g("settings_shellmenu_hint"));
+    strings.set_settings_shellext_list_label(g("settings_shellext_list_label"));
+    strings.set_settings_shellext_list_hint(g("settings_shellext_list_hint"));
+    strings.set_ow_move_up(g("ow_move_up"));
+    strings.set_ow_move_down(g("ow_move_down"));
+    strings.set_ow_duplicate_tip(g("ow_duplicate_tip"));
+    strings.set_ow_edit_tip(g("ow_edit_tip"));
+    strings.set_ow_delete_tip(g("ow_delete_tip"));
+    strings.set_settings_openers_section(g("settings_openers_section"));
+    strings.set_ow_add(g("ow_add"));
+    strings.set_ow_empty(g("ow_empty"));
+    strings.set_ow_search_placeholder(g("ow_search_placeholder"));
+    strings.set_ow_no_results(g("ow_no_results"));
+    strings.set_ow_promote(g("ow_promote"));
+    strings.set_ow_promote_add(g("ow_promote_add"));
 }
 
 /// Language picker labels: **native names** (each language in its own
@@ -536,6 +588,13 @@ pub fn op_more_text(lang: Lang, count: usize) -> String {
     }
 }
 
+pub fn footer_selection_text(lang: Lang, selected: usize) -> String {
+    match selected {
+        1 => tr(lang, "footer_selected_singular"),
+        n => tr(lang, "footer_selected_plural").replace("{n}", &n.to_string()),
+    }
+}
+
 /// Full footer: "N items", then (if `hidden > 0`) "· K hidden",
 /// then (if there's a selection) "· M selected". The "hidden" segment is only
 /// passed when hidden items are NOT shown (a subtle reminder).
@@ -549,10 +608,7 @@ pub fn footer_text(lang: Lang, total: usize, selected: usize, hidden: usize) -> 
         s = format!("{s}{}{h}", tr(lang, "separator_dot"));
     }
     if selected > 0 {
-        let sel = match selected {
-            1 => tr(lang, "footer_selected_singular"),
-            n => tr(lang, "footer_selected_plural").replace("{n}", &n.to_string()),
-        };
+        let sel = footer_selection_text(lang, selected);
         s = format!("{s}{}{sel}", tr(lang, "separator_dot"));
     }
     s
@@ -881,6 +937,46 @@ pub fn trash_error_message(lang: Lang, err: &favnyr_core::fs::ops::TrashError) -
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn preference_strings_exist_in_each_embedded_language() {
+        for &lang in favnyr_core::Lang::all() {
+            let table: toml::Table = toml::from_str(super::embedded(lang)).unwrap();
+            for key in [
+                "settings_group_tooltips",
+                "settings_group_workspaces",
+                "settings_grid_name_tooltip_label",
+                "settings_grid_name_tooltip_hint",
+                "settings_search_path_tooltip_label",
+                "settings_search_path_tooltip_hint",
+                "settings_ws_panel_label",
+                "settings_ws_panel_hint",
+                "settings_ws_shortcut_label",
+                "settings_ws_shortcut_hint",
+                "settings_ws_shortcut_preview",
+                "ws_shortcut_ask",
+                "ws_shortcut_discard",
+                "ws_shortcut_save",
+                "ws_shortcut_remember",
+                "ws_panel_remember",
+                "ws_dirty_body_new",
+                "ws_dirty_discard_new",
+                "ws_dirty_save_new",
+                "settings_thumbnail_zoom_label",
+                "settings_thumbnail_zoom_hint",
+                "thumbnail_zoom_feedback",
+            ] {
+                assert!(
+                    table
+                        .get(key)
+                        .and_then(toml::Value::as_str)
+                        .is_some_and(|text| !text.is_empty()),
+                    "missing translation: {lang:?}/{key}"
+                );
+            }
+            let feedback = table["thumbnail_zoom_feedback"].as_str().unwrap();
+            assert!(feedback.contains("{level}") && feedback.contains("{max}"));
+        }
+    }
     use super::*;
 
     #[test]
@@ -970,9 +1066,68 @@ mod tests {
     #[test]
     fn every_language_loads_and_has_app_title() {
         for &lang in Lang::all() {
-            let s = strings_for(lang);
-            assert_eq!(s.app_title.as_str(), "Favnyr", "{lang:?}");
+            assert_eq!(tr(lang, "app_title"), "Favnyr", "{lang:?}");
         }
+    }
+
+    #[test]
+    fn translated_properties_update_live_and_remain_local_to_each_window() {
+        // Debug builds can use large temporary stack frames during construction.
+        std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(|| {
+                struct TestPlatform;
+                impl slint::platform::Platform for TestPlatform {
+                    fn create_window_adapter(
+                        &self,
+                    ) -> Result<std::rc::Rc<dyn slint::platform::WindowAdapter>, slint::PlatformError>
+                    {
+                        use slint::platform::software_renderer::{
+                            MinimalSoftwareWindow, RepaintBufferType,
+                        };
+                        Ok(MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer))
+                    }
+                }
+                slint::platform::set_platform(Box::new(TestPlatform)).unwrap();
+                let first = MainWindow::new().unwrap();
+                let second = MainWindow::new().unwrap();
+                let mut english = HashMap::new();
+                overlay(EMBED_EN, &mut english);
+                apply_catalog(&second, &english);
+
+                for &lang in Lang::all().iter().chain(std::iter::once(&Lang::En)) {
+                    let mut translated = english.clone();
+                    overlay(embedded(lang), &mut translated);
+                    apply_catalog(&first, &translated);
+                    let strings = first.global::<Strings>();
+                    for (actual, key) in [
+                        (strings.get_btn_cancel(), "btn_cancel"),
+                        (strings.get_settings_language(), "settings_language"),
+                        (strings.get_archive_create(), "archive_create"),
+                        (strings.get_exit_stay(), "exit_stay"),
+                    ] {
+                        assert_eq!(actual.as_str(), translated[key], "{lang:?}/{key}");
+                    }
+                    assert_eq!(
+                        second.global::<Strings>().get_btn_cancel().as_str(),
+                        english["btn_cancel"]
+                    );
+                }
+
+                // Exercise custom overrides through the same merge and UI bindings.
+                let mut custom = english.clone();
+                overlay("app_title = \"Custom title\"\nbtn_cancel = \"Custom action\"", &mut custom);
+                apply_catalog(&first, &custom);
+                assert_eq!(first.get_window_title(), "Custom title");
+                assert_eq!(first.global::<Strings>().get_btn_cancel(), "Custom action");
+                assert_eq!(second.get_window_title().as_str(), english["app_title"]);
+                apply_catalog(&first, &english);
+                assert_eq!(first.get_window_title().as_str(), english["app_title"]);
+                assert_eq!(first.global::<Strings>().get_btn_cancel().as_str(), english["btn_cancel"]);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
     }
 
     #[test]
@@ -1188,19 +1343,18 @@ mod tests {
     }
 
     #[test]
-    fn all_strings_fields_resolve_nonempty() {
-        // No `Strings` field should fall back to the raw key (= a key
-        // missing from en.toml). Covers all 162 fields via one language.
+    fn all_catalog_values_resolve_nonempty() {
+        // Every catalog value must contain a usable translation.
         let c = catalog(Lang::En);
         for (k, v) in c {
             assert!(!v.is_empty(), "empty key: {k}");
         }
     }
 
-    /// Every key requested by `strings_for` via `g("…")` must exist at the
+    /// Every key requested by `apply_catalog` via `g("…")` must exist at the
     /// root level of the English catalog. A key placed under a `[…]` section
     /// becomes `section.key` and can't be resolved by `g`. This test re-reads
-    /// the source of `strings_for`.
+    /// the source of `apply_catalog`.
     #[test]
     fn every_g_key_present_in_en() {
         let src = include_str!("i18n.rs");

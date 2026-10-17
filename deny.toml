@@ -52,6 +52,17 @@ ignore = [
     # migrates.
     "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0195",
+    # Temporary exceptions for crates merged into zbus 6: zvariant (wire
+    # format), zbus_names (bus names), and zvariant_derive (derive macros).
+    # These advisories report discontinued standalone maintenance, not
+    # vulnerabilities. As of 2026-10-17, published Slint,
+    # AccessKit/AT-SPI and ksni dependencies still require zbus 5 and its
+    # zvariant stack. Adding zbus 6 directly would not replace those versions.
+    # Remove each exception once upstream migrations eliminate its crate
+    # from the resolved dependency graph. Other advisories remain checked.
+    "RUSTSEC-2026-0370", # zvariant
+    "RUSTSEC-2026-0371", # zbus_names
+    "RUSTSEC-2026-0372", # zvariant_derive
 ]
 
 [licenses]

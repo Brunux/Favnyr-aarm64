@@ -8,6 +8,24 @@ use std::path::{Path, PathBuf};
 use windows::Win32::Storage::FileSystem::GetLongPathNameW;
 use windows::core::PCWSTR;
 
+/// A balanced STA initialization owned by the current thread.
+pub struct ComApartment(std::marker::PhantomData<std::rc::Rc<()>>);
+
+impl ComApartment {
+    pub fn sta() -> Option<Self> {
+        use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
+        unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }
+            .is_ok()
+            .then(|| Self(std::marker::PhantomData))
+    }
+}
+
+impl Drop for ComApartment {
+    fn drop(&mut self) {
+        unsafe { windows::Win32::System::Com::CoUninitialize() };
+    }
+}
+
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, DIB_RGB_COLORS, GetDC, GetDIBits, GetObjectW,
     HBITMAP, HGDIOBJ, ReleaseDC,

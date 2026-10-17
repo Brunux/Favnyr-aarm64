@@ -22,7 +22,7 @@ I am Favnyr's first user, and I use it daily literally every day.
 
 Copy the executable where you want and run it. That is the whole installation.
 
-**Special case** : on NixOS, see the [NixOS footnote](#nixos) below.
+**NixOS* : See the [NixOS footnote](#nixos) below.
 
 ## Private by construction
 
@@ -38,7 +38,7 @@ Favnyr runs with ordinary user permissions. It installs no service and no backgr
 
 **Views.** Split the window horizontally or vertically, up to 32 views. Each keeps its own tabs, history, sorting and columns.
 
-**Workspaces.** A workspace is a saved set of views and tabs. Keep one per project and restore the whole arrangement in one click, or give it a number and reach it with Ctrl+1 to Ctrl+9. Switching that way saves what you were doing first, without asking.
+**Workspaces.** A workspace is a saved set of views and tabs. Keep one per project and restore the whole arrangement in one click, or assign it a number to load it with a keyboard shortcut. Settings provide separate save policies for the Workspaces panel and numbered shortcuts (CTRL+1, CTRl+2...).
 
 **Favorites.** Shared across every workspace, so your usual places do not depend on which layout is open.
 
@@ -62,13 +62,15 @@ So if 7-Zip is installed (7zz, 7z or 7za), Favnyr compresses and extracts withou
 
 **Files and folders.** Copy, move, link, rename, create, trash and delete, with progress reported. Several operations can run at once. Multi-selection, drag and drop between views and to other applications, and reopening closed tabs. Folders can be given a color, any item (file/folder) a short note, and both follow it when it is renamed or moved within Favnyr.
 
+**Properties.** A built-in panel for when no desktop file manager offers one: type, location, sizes and dates, Unix permissions and ownership, and MD5, SHA-1, SHA-256 and SHA-512 checksums computed on request. Every value is selectable.
+
 **Interface.** English, French, Spanish, German, Italian, Russian, Simplified Chinese and Japanese. Light and dark themes. Adjustable scaling.
 
 ## Thumbnails
 
 Images are decoded in pure Rust :
 
-`.jpg` `.jpeg` · `.png` · `.gif` · `.webp` · `.bmp` · `.tif` `.tiff` · `.tga` · `.hdr` · `.ico`
+`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.bmp`, `.tif`, `.tiff`, `.tga`, `.hdr`, `.ico`
 
 `.svg` is rendered by Slint's own vector engine.
 
@@ -80,7 +82,9 @@ and `.af`) receive the same lightweight treatment.
 
 MP3 and FLAC files (`.mp3`, `.flac`) display their embedded cover art. A track without embedded artwork simply keeps the normal audio icon.
 
-Videos (`.mp4` `.mkv` `.mov` `.avi` `.webm` `.wmv` `.flv` `.m4v` `.mpg` `.mpeg` `.ts` `.3gp`) and PDFs get a thumbnail too, through a different route on each system:
+3D files `.blend`, `.3mf`, `.stl`, `.glb`, `.gltf`, `.obj` thumbnails are supported. 7-Zip is only necessary for a **compressed** `.blend`.
+
+Videos (`.mp4`, `.mkv`, `.mov`, `.avi`, `.webm`, `.wmv`, `.flv`, `.m4v`, `.mpg`, `.mpeg`, `.ts`, `.3gp`) and PDFs get a thumbnail too, through a different route on each system:
 
 - **Windows** -> the shell's thumbnail providers, so nothing extra to install.
 - **Linux** -> `ffmpeg` for video, Poppler (`pdftoppm` or `pdftocairo`) for PDF. Both optional; without them Favnyr simply shows the file-type icon.
@@ -94,6 +98,9 @@ A few things that are easy to miss.
   entries by name as you go.
 - **Ctrl+wheel resizes the entries**, and past a size threshold they switch to
   thumbnails.
+- **Shift+wheel scrolls a view horizontally** when its columns overflow.
+- **Tab / Shift+Tab select the next / previous view**, wrapping at either end.
+  Both shortcuts can be changed in Settings.
 - **The wheel over a tab bar switches tabs**, forwards and back, wrapping around
   at the ends. It works the same on a vertical tab bar, and a horizontal
   trackpad swipe counts too.
@@ -113,19 +120,22 @@ A few things that are easy to miss.
 - **Middle-click** is three gestures: held down in a view it scrolls from where
   it was pressed, on a sidebar entry or a favorite it opens in a new tab, and on
   a tab it closes it.
-- **Workspace shortcuts.** In the workspaces panel (Ctrl+Q) every saved
-  workspace carries a badge where a slot from 1 to 9 can be assigned, after
-  which Ctrl+1 to Ctrl+9 load it directly. 
-  Switching this way never asks a question:
-  the current workspace is saved first, so changing your mind cannot cost
-  unsaved work.
-  On an AZERTY keyboard the digit row
-  needs Shift, so those defaults don't match. You can rebind them manually if needed in the
-  settings to Ctrl+&, Ctrl+é and so on.
+- **Workspace shortcuts.** In the Workspaces panel (Ctrl+Q by default), each
+  saved workspace has a badge for assigning a slot from 1 to 9. The matching
+  shortcut (Ctrl+1 to Ctrl+9 by default) loads it directly. These shortcuts
+  can be rebound, including on keyboards where the digit row needs Shift.
+- **Unsaved workspace changes.** Settings → General → Workspaces has separate
+  three-choice policies for loading from the panel and from numbered shortcuts:
+  ask when changes are unsaved (the default), continue without saving, or save
+  the current workspace first. The panel policy also applies to
+  **Start new workspace**. In a confirmation, **Remember this choice** updates only the
+  policy for that action's source. Cancel leaves both the workspace and the
+  policy unchanged. If saving fails, the load or new workspace is stopped and
+  an error is shown.
 
 ## About AI-assisted development
 
-Because of the project’s complexity, AI has been used as a development assistant
+Because of the project’s complexity, AI has been used as a development assistant.
 Nothing was accepted because it compiled. Every change was carefully tried by hand on both Windows and Linux, lived with, and reworked until it held up in the awkward cases as well as the obvious ones. That patient testing and finishing took far longer than the writing. 
 
 ## Building
@@ -140,7 +150,7 @@ Install Rust from <https://rust-lang.org/tools/install/> (the x64 `rustup-init.e
 winget install Microsoft.VisualStudio.2022.BuildTools --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
 ```
 
-Nothing else is needed : thumbnails go through the system.
+Video and PDF thumbnails use Windows providers.
 
 ### Linux
 
@@ -155,8 +165,8 @@ Then the build dependencies:
 - Arch -> `sudo pacman -S --needed base-devel fontconfig`
 
 Optionally install `ffmpeg` for video thumbnails, `poppler-utils` for PDF
-thumbnails, and 7-Zip (`7zz`, `7z`, or `7za`) for the advanced compression and
-extraction recipes (ready-made commands).
+thumbnails, and a recent 7-Zip (`7zz` or `7z`) for embedded 3D thumbnails and
+the advanced compression and extraction recipes (ready-made commands).
 
 ### Build and run
 

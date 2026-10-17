@@ -165,6 +165,11 @@ pub const ACTIONS: &[ActionDef] = &[
         default: "Tab",
     },
     ActionDef {
+        id: "view-prev",
+        group: ActionGroup::TabsViews,
+        default: "Shift+Tab",
+    },
+    ActionDef {
         id: "split-side",
         group: ActionGroup::TabsViews,
         default: "Ctrl+Backslash",
@@ -583,6 +588,8 @@ mod tests {
             Some("cursor-down")
         );
         for (chord, action) in [
+            ("Tab", "view-next"),
+            ("Shift+Tab", "view-prev"),
             ("ArrowLeft", "cursor-left"),
             ("ArrowRight", "cursor-right"),
             ("Shift+ArrowLeft", "extend-left"),

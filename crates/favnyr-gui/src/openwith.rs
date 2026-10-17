@@ -267,7 +267,7 @@ mod imp {
                 let hicon = list.GetIcon(shfi.iIcon, ILD_TRANSPARENT.0).ok()?;
                 let out = hicon_to_rgba(hicon);
                 let _ = DestroyIcon(hicon);
-                out
+                out.map(compact_jumbo_icon)
             } else {
                 if shfi.hIcon.is_invalid() {
                     return None;
@@ -277,6 +277,49 @@ mod imp {
                 out
             }
         }
+    }
+
+    /// The shell can place a small resource at the top-left of a jumbo canvas.
+    /// Crop that fallback so the renderer can center and scale the actual icon.
+    fn compact_jumbo_icon(icon: (Vec<u8>, u32, u32)) -> (Vec<u8>, u32, u32) {
+        let (rgba, width, height) = icon;
+        let Some(expected) = (width as usize)
+            .checked_mul(height as usize)
+            .and_then(|pixels| pixels.checked_mul(4))
+        else {
+            return (rgba, width, height);
+        };
+        if width < 128 || height < 128 || rgba.len() != expected {
+            return (rgba, width, height);
+        }
+        let (mut left, mut top, mut right, mut bottom) = (width, height, 0, 0);
+        let mut visible = false;
+        for (index, pixel) in rgba.chunks_exact(4).enumerate() {
+            if pixel[3] != 0 {
+                let x = index as u32 % width;
+                let y = index as u32 / width;
+                left = left.min(x);
+                top = top.min(y);
+                right = right.max(x);
+                bottom = bottom.max(y);
+                visible = true;
+            }
+        }
+        if !visible {
+            return (rgba, width, height);
+        }
+        let content_width = right - left + 1;
+        let content_height = bottom - top + 1;
+        if content_width > width / 4 || content_height > height / 4 {
+            return (rgba, width, height);
+        }
+        let row_bytes = content_width as usize * 4;
+        let mut cropped = Vec::with_capacity(row_bytes * content_height as usize);
+        for y in top..=bottom {
+            let start = ((y * width + left) * 4) as usize;
+            cropped.extend_from_slice(&rgba[start..start + row_bytes]);
+        }
+        (cropped, content_width, content_height)
     }
 
     /// `HICON` → RGBA pixels `(buf, w, h)`: `GetIconInfo` (color bitmap) → GDI.
@@ -435,6 +478,31 @@ mod imp {
             let item = dlg.GetResult().ok()?;
             let p = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
             Some(take_pwstr(p))
+        }
+    }
+
+    #[cfg(test)]
+    mod icon_tests {
+        use super::compact_jumbo_icon;
+
+        #[test]
+        fn small_shell_fallback_is_cropped_but_full_icon_is_preserved() {
+            let mut rgba = vec![0; 256 * 256 * 4];
+            for y in 0..48 {
+                for x in 0..48 {
+                    rgba[(y * 256 + x) * 4 + 3] = 255;
+                }
+            }
+            let (cropped, width, height) = compact_jumbo_icon((rgba, 256, 256));
+            assert_eq!((width, height), (48, 48));
+            assert_eq!(cropped.len(), 48 * 48 * 4);
+            assert!(cropped.chunks_exact(4).all(|pixel| pixel[3] == 255));
+
+            let full = vec![255; 256 * 256 * 4];
+            assert_eq!(
+                compact_jumbo_icon((full.clone(), 256, 256)),
+                (full, 256, 256)
+            );
         }
     }
 }

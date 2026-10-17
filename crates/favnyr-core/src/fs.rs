@@ -88,6 +88,7 @@ pub struct Entry {
     pub path: PathBuf,
     pub size_bytes: Option<u64>,
     pub mtime_unix: Option<i64>,
+    pub created_unix: Option<i64>,
     pub is_dir: bool,
     pub kind: FileKind,
     /// **Hidden** entry (Unix dotfile OR Windows HIDDEN attribute) — for a
@@ -402,6 +403,7 @@ fn list_server_shares(server: &str) -> Result<(Vec<Entry>, usize)> {
                     name: sh,
                     size_bytes: None,
                     mtime_unix: None,
+                    created_unix: None,
                     is_dir: true,
                     kind: FileKind::Folder,
                     hidden: false,
@@ -425,18 +427,40 @@ fn list_server_shares(server: &str) -> Result<(Vec<Entry>, usize)> {
 }
 
 pub fn list_dir_counted(path: &Path, include_hidden: bool) -> Result<(Vec<Entry>, usize)> {
+    let mut out = Vec::with_capacity(64);
+    let hidden = visit_dir_while(path, include_hidden, || false, |entry| out.push(entry))?;
+    Ok((out, hidden))
+}
+
+/// Streams a directory with the same metadata and hidden-file rules as listing.
+/// Cancellation is checked before each entry; a pending OS read may still block.
+pub fn visit_dir_while(
+    path: &Path,
+    include_hidden: bool,
+    stop: impl Fn() -> bool,
+    mut visit: impl FnMut(Entry),
+) -> Result<usize> {
     // UNC server root (`\\HOST`): its SMB SHARES are enumerated (std::fs can
     // only list a single share, not a server). Shares are displayed as folders.
     #[cfg(windows)]
     {
         if let Some(server) = unc_server_root(path) {
-            return list_server_shares(&server);
+            let (entries, hidden) = list_server_shares(&server)?;
+            for entry in entries {
+                if stop() {
+                    break;
+                }
+                visit(entry);
+            }
+            return Ok(hidden);
         }
     }
     let read = std::fs::read_dir(path)?;
-    let mut out = Vec::with_capacity(64);
     let mut hidden_count = 0usize;
     for entry_res in read {
+        if stop() {
+            break;
+        }
         let dir_entry = match entry_res {
             Ok(e) => e,
             Err(err) => {
@@ -484,7 +508,7 @@ pub fn list_dir_counted(path: &Path, include_hidden: bool) -> Result<(Vec<Entry>
             .file_type()
             .map(|t| t.is_symlink())
             .unwrap_or(false);
-        let (is_dir, size_bytes, mtime_unix, executable) = match md_res {
+        let (is_dir, size_bytes, mtime_unix, created_unix, executable) = match md_res {
             Ok(md) => {
                 // A link describes itself, not what it points at: its own
                 // length is the size of the stored path and its own timestamp
@@ -508,6 +532,11 @@ pub fn list_dir_counted(path: &Path, include_hidden: bool) -> Result<(Vec<Entry>
                     .ok()
                     .and_then(|st| st.duration_since(UNIX_EPOCH).ok())
                     .map(|d| d.as_secs() as i64);
+                let created = effective_md
+                    .created()
+                    .ok()
+                    .and_then(|st| st.duration_since(UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64);
                 #[cfg(unix)]
                 let executable = {
                     use std::os::unix::fs::PermissionsExt;
@@ -517,12 +546,12 @@ pub fn list_dir_counted(path: &Path, include_hidden: bool) -> Result<(Vec<Entry>
                 };
                 #[cfg(not(unix))]
                 let executable = false;
-                (is_dir, size, mtime, executable)
+                (is_dir, size, mtime, created, executable)
             }
             Err(err) => {
                 tracing::debug!(error = %err, path = %full_path.display(), "metadata failed");
                 // The entry is kept but without size/mtime, assuming a file.
-                (false, None, None, false)
+                (false, None, None, None, false)
             }
         };
 
@@ -532,11 +561,12 @@ pub fn list_dir_counted(path: &Path, include_hidden: bool) -> Result<(Vec<Entry>
             .map(|s| s.to_owned());
         let kind = classify_kind(ext.as_deref(), is_dir);
 
-        out.push(Entry {
+        visit(Entry {
             name,
             path: full_path,
             size_bytes,
             mtime_unix,
+            created_unix,
             is_dir,
             kind,
             hidden,
@@ -544,7 +574,7 @@ pub fn list_dir_counted(path: &Path, include_hidden: bool) -> Result<(Vec<Entry>
             executable,
         });
     }
-    Ok((out, hidden_count))
+    Ok(hidden_count)
 }
 
 // ----- Sorting ----------------------------------------------------------------
@@ -556,6 +586,7 @@ pub enum SortColumn {
     Path,
     Size,
     Modified,
+    Created,
     /// Modification age — sorts on the same field as `Modified`
     /// (mtime), it's just the "age" column (rendered with a hot→cold color gradient).
     Age,
@@ -564,12 +595,21 @@ pub enum SortColumn {
 }
 
 impl SortColumn {
+    pub fn same_field(self, other: Self) -> bool {
+        self == other
+            || matches!(
+                (self, other),
+                (Self::Modified, Self::Age) | (Self::Age, Self::Modified)
+            )
+    }
+
     pub fn code(self) -> &'static str {
         match self {
             SortColumn::Name => "name",
             SortColumn::Path => "path",
             SortColumn::Size => "size",
             SortColumn::Modified => "modified",
+            SortColumn::Created => "created",
             SortColumn::Age => "age",
             SortColumn::Ext => "ext",
         }
@@ -581,6 +621,7 @@ impl SortColumn {
             "path" => SortColumn::Path,
             "size" => SortColumn::Size,
             "modified" => SortColumn::Modified,
+            "created" => SortColumn::Created,
             "age" => SortColumn::Age,
             "ext" => SortColumn::Ext,
             _ => return None,
@@ -646,7 +687,7 @@ impl GroupMode {
 /// sort direction; the criterion only breaks ties within a group. In `Mixed`
 /// mode, folders and files are sorted together by the criterion alone.
 ///
-/// Sort by name: case-insensitive (consistent with the visual sort).
+/// Sort by name: case-insensitive, with digit runs compared as numbers.
 pub fn sort(entries: &mut [Entry], column: SortColumn, order: SortOrder, group: GroupMode) {
     use std::cmp::Reverse;
     let asc = matches!(order, SortOrder::Asc);
@@ -666,29 +707,35 @@ pub fn sort(entries: &mut [Entry], column: SortColumn, order: SortOrder, group: 
     // lowercases each name once per entry instead. Only the criterion is
     // reversed for a descending sort (via `Reverse`), never the grouping rank.
     match column {
-        SortColumn::Name if asc => entries.sort_by_cached_key(|e| (rank(e), e.name.to_lowercase())),
+        SortColumn::Name if asc => {
+            entries.sort_by_cached_key(|e| (rank(e), NaturalName(e.name.to_lowercase())))
+        }
         SortColumn::Name => {
-            entries.sort_by_cached_key(|e| (rank(e), Reverse(e.name.to_lowercase())))
+            entries.sort_by_cached_key(|e| (rank(e), Reverse(NaturalName(e.name.to_lowercase()))))
         }
         // Type sort: extension (lowercase, dotfiles included), then name so the
         // order stays stable within one type.
         SortColumn::Ext if asc => entries.sort_by_cached_key(|e| {
             (
                 rank(e),
-                ops::ext_of(&e.name).to_string(),
-                e.name.to_lowercase(),
+                ops::ext_of(&e.name),
+                NaturalName(e.name.to_lowercase()),
             )
         }),
         SortColumn::Ext => entries.sort_by_cached_key(|e| {
             (
                 rank(e),
-                Reverse((ops::ext_of(&e.name).to_string(), e.name.to_lowercase())),
+                Reverse((ops::ext_of(&e.name), NaturalName(e.name.to_lowercase()))),
             )
         }),
         // Size / date / path: these comparators allocate nothing, so a direct
         // comparison sort is already optimal — only the grouping is kept apart
         // from the (possibly reversed) criterion.
-        SortColumn::Size | SortColumn::Modified | SortColumn::Age | SortColumn::Path => {
+        SortColumn::Size
+        | SortColumn::Modified
+        | SortColumn::Created
+        | SortColumn::Age
+        | SortColumn::Path => {
             entries.sort_by(|a, b| {
                 rank(a).cmp(&rank(b)).then_with(|| {
                     let ord = match column {
@@ -698,13 +745,208 @@ pub fn sort(entries: &mut [Entry], column: SortColumn, order: SortOrder, group: 
                         SortColumn::Modified | SortColumn::Age => {
                             a.mtime_unix.unwrap_or(0).cmp(&b.mtime_unix.unwrap_or(0))
                         }
+                        SortColumn::Created => {
+                            compare_optional_time(a.created_unix, b.created_unix, order)
+                        }
                         _ => a.path.cmp(&b.path),
                     };
-                    if asc { ord } else { ord.reverse() }
+                    if column == SortColumn::Created || asc {
+                        ord
+                    } else {
+                        ord.reverse()
+                    }
                 })
             });
         }
     }
+}
+
+fn compare_optional_time(a: Option<i64>, b: Option<i64>, order: SortOrder) -> std::cmp::Ordering {
+    match (a, b) {
+        (Some(a), Some(b)) => {
+            let cmp = a.cmp(&b);
+            if matches!(order, SortOrder::Asc) {
+                cmp
+            } else {
+                cmp.reverse()
+            }
+        }
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SecondarySort {
+    pub column: SortColumn,
+    pub order: SortOrder,
+    #[serde(default)]
+    pub group_dates_by_day: bool,
+}
+
+#[derive(Eq, PartialEq, Ord, PartialOrd)]
+enum SortValue {
+    Name(NaturalName),
+    Path(PathBuf),
+    Text(String),
+    Size(u64),
+    Time(i64),
+    Missing,
+}
+
+struct DirectedValue(SortValue, SortOrder);
+
+impl PartialEq for DirectedValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+impl Eq for DirectedValue {}
+impl PartialOrd for DirectedValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for DirectedValue {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if matches!(self.0, SortValue::Missing) || matches!(other.0, SortValue::Missing) {
+            self.0.cmp(&other.0)
+        } else {
+            let cmp = self.0.cmp(&other.0);
+            if matches!(self.1, SortOrder::Asc) {
+                cmp
+            } else {
+                cmp.reverse()
+            }
+        }
+    }
+}
+
+fn sort_value(entry: &Entry, column: SortColumn, by_day: bool, offset_secs: i64) -> SortValue {
+    match column {
+        SortColumn::Name => SortValue::Name(NaturalName(entry.name.to_lowercase())),
+        SortColumn::Path => SortValue::Path(entry.path.clone()),
+        SortColumn::Size => entry.size_bytes.map_or(SortValue::Missing, SortValue::Size),
+        SortColumn::Modified | SortColumn::Age | SortColumn::Created => {
+            let timestamp = if column == SortColumn::Created {
+                entry.created_unix
+            } else {
+                entry.mtime_unix
+            };
+            timestamp.map_or(SortValue::Missing, |value| {
+                SortValue::Time(if by_day {
+                    value.saturating_add(offset_secs).div_euclid(86_400)
+                } else {
+                    value
+                })
+            })
+        }
+        SortColumn::Ext => SortValue::Text(ops::ext_of(&entry.name)),
+    }
+}
+
+/// Sorts with an optional second criterion. Date grouping uses the same offset
+/// as the displayed date; unavailable metadata always follows known values.
+pub fn sort_with_secondary(
+    entries: &mut [Entry],
+    column: SortColumn,
+    order: SortOrder,
+    group: GroupMode,
+    secondary: Option<SecondarySort>,
+    offset_secs: i64,
+) {
+    let Some(secondary) = secondary.filter(|s| !s.column.same_field(column)) else {
+        sort(entries, column, order, group);
+        return;
+    };
+    let rank = |e: &Entry| match group {
+        GroupMode::FoldersFirst | GroupMode::ColoredFoldersFirst => u8::from(!e.is_dir),
+        GroupMode::FilesFirst => u8::from(e.is_dir),
+        GroupMode::Mixed => 0,
+    };
+    let by_day = secondary.group_dates_by_day
+        && matches!(
+            column,
+            SortColumn::Modified | SortColumn::Created | SortColumn::Age
+        );
+    entries.sort_by_cached_key(|entry| {
+        (
+            rank(entry),
+            DirectedValue(sort_value(entry, column, by_day, offset_secs), order),
+            DirectedValue(
+                sort_value(entry, secondary.column, false, offset_secs),
+                secondary.order,
+            ),
+            NaturalName(
+                if column == SortColumn::Name || secondary.column == SortColumn::Name {
+                    String::new()
+                } else {
+                    entry.name.to_lowercase()
+                },
+            ),
+        )
+    });
+}
+
+#[derive(Eq, PartialEq)]
+struct NaturalName(String);
+
+impl Ord for NaturalName {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        natural_name_cmp(self.0.as_bytes(), other.0.as_bytes())
+    }
+}
+
+impl PartialOrd for NaturalName {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+/// Compares ASCII digit runs by value without parsing integers or allocating.
+/// Extra leading zeros break a tie only after the remaining name matches.
+fn natural_name_cmp(left: &[u8], right: &[u8]) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+
+    let (mut li, mut ri) = (0, 0);
+    let mut zero_tie = Ordering::Equal;
+    while li < left.len() && ri < right.len() {
+        if left[li].is_ascii_digit() && right[ri].is_ascii_digit() {
+            let le = li + left[li..].iter().take_while(|b| b.is_ascii_digit()).count();
+            let re = ri
+                + right[ri..]
+                    .iter()
+                    .take_while(|b| b.is_ascii_digit())
+                    .count();
+            let ls = li + left[li..le].iter().take_while(|&&b| b == b'0').count();
+            let rs = ri + right[ri..re].iter().take_while(|&&b| b == b'0').count();
+            match (le - ls).cmp(&(re - rs)) {
+                Ordering::Equal => {}
+                order => return order,
+            }
+            match left[ls..le].cmp(&right[rs..re]) {
+                Ordering::Equal => {}
+                order => return order,
+            }
+            if zero_tie == Ordering::Equal {
+                zero_tie = (re - ri).cmp(&(le - li));
+            }
+            li = le;
+            ri = re;
+        } else {
+            match left[li].cmp(&right[ri]) {
+                Ordering::Equal => {}
+                order => return order,
+            }
+            li += 1;
+            ri += 1;
+        }
+    }
+    left.len()
+        .saturating_sub(li)
+        .cmp(&right.len().saturating_sub(ri))
+        .then(zero_tie)
 }
 
 // ----- Formatting ----------------------------------------------------------
@@ -1432,6 +1674,113 @@ mod tests {
     }
 
     #[test]
+    fn sort_name_compares_digit_runs_and_leading_zeros() {
+        let mut entries = vec![
+            make_entry("20_item_a.log", false),
+            make_entry("2_item_b.log", false),
+            make_entry("21.log", false),
+            make_entry("2.log", false),
+            make_entry("02.log", false),
+            make_entry("20.log", false),
+        ];
+        sort(
+            &mut entries,
+            SortColumn::Name,
+            SortOrder::Asc,
+            GroupMode::Mixed,
+        );
+        let names: Vec<_> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "02.log",
+                "2.log",
+                "2_item_b.log",
+                "20.log",
+                "20_item_a.log",
+                "21.log"
+            ]
+        );
+        sort(
+            &mut entries,
+            SortColumn::Name,
+            SortOrder::Desc,
+            GroupMode::Mixed,
+        );
+        let names: Vec<_> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names.first().copied(), Some("21.log"));
+        assert_eq!(names.last().copied(), Some("02.log"));
+    }
+
+    #[test]
+    fn sort_extension_uses_natural_names_within_one_type() {
+        let mut entries = vec![
+            make_entry("20_task.log", false),
+            make_entry("2_task.log", false),
+            make_entry("2_task.txt", false),
+        ];
+        sort(
+            &mut entries,
+            SortColumn::Ext,
+            SortOrder::Asc,
+            GroupMode::Mixed,
+        );
+        let names: Vec<_> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["2_task.log", "20_task.log", "2_task.txt"]);
+    }
+
+    #[test]
+    fn secondary_name_sorts_within_local_creation_day_and_keeps_missing_last() {
+        let mut entries = vec![
+            make_entry("z.txt", false),
+            make_entry("b.txt", false),
+            make_entry("a.txt", false),
+            make_entry("c.txt", false),
+        ];
+        entries[1].created_unix = Some(86_400 - 1_800);
+        entries[2].created_unix = Some(86_400 + 1_000);
+        entries[3].created_unix = Some(2 * 86_400);
+        sort_with_secondary(
+            &mut entries,
+            SortColumn::Created,
+            SortOrder::Desc,
+            GroupMode::Mixed,
+            Some(SecondarySort {
+                column: SortColumn::Name,
+                order: SortOrder::Asc,
+                group_dates_by_day: true,
+            }),
+            3_600,
+        );
+        let names: Vec<_> = entries.iter().map(|entry| entry.name.as_str()).collect();
+        assert_eq!(names, ["c.txt", "a.txt", "b.txt", "z.txt"]);
+    }
+
+    #[test]
+    fn secondary_size_breaks_extension_ties_without_reversing_folder_group() {
+        let mut entries = vec![
+            sized_entry("small.txt", 1),
+            sized_entry("large.txt", 9),
+            make_entry("folder01", true),
+            sized_entry("other.bin", 5),
+        ];
+        sort_with_secondary(
+            &mut entries,
+            SortColumn::Ext,
+            SortOrder::Asc,
+            GroupMode::FoldersFirst,
+            Some(SecondarySort {
+                column: SortColumn::Size,
+                order: SortOrder::Desc,
+                group_dates_by_day: false,
+            }),
+            0,
+        );
+        let names: Vec<_> = entries.iter().map(|entry| entry.name.as_str()).collect();
+        assert_eq!(names, ["folder01", "other.bin", "large.txt", "small.txt"]);
+    }
+
+    #[test]
     fn sort_ext_groups_by_extension_then_name() {
         let mut v = vec![
             make_entry("b.txt", false),
@@ -1699,6 +2048,7 @@ mod tests {
             path: PathBuf::from(name),
             size_bytes: if is_dir { None } else { Some(0) },
             mtime_unix: None,
+            created_unix: None,
             is_dir,
             kind: if is_dir {
                 FileKind::Folder
@@ -1717,6 +2067,7 @@ mod tests {
             path: PathBuf::from(name),
             size_bytes: Some(size),
             mtime_unix: None,
+            created_unix: None,
             is_dir: false,
             kind: FileKind::File,
             hidden: false,

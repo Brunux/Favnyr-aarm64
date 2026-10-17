@@ -10,6 +10,7 @@ publish = false   # internal crate (never published to crates.io)
 
 [dependencies]
 serde              = { workspace = true }
+serde_json         = "1"
 toml               = { workspace = true }
 tracing            = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -18,3 +19,4 @@ image              = { workspace = true }
 dirs               = { workspace = true }
 trash              = { workspace = true }
 sysinfo            = { workspace = true }
+zip                = { workspace = true }

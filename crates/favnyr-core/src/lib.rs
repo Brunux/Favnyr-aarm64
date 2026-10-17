@@ -5,6 +5,7 @@
 //! (tests, benchmarks) lives here.
 
 pub mod annotations;
+pub mod checksum;
 pub mod columns;
 pub mod config;
 pub mod eject;
@@ -20,6 +21,7 @@ pub mod openers;
 pub mod paths;
 pub mod places;
 pub mod process_lock;
+pub mod properties;
 pub mod shortcuts;
 pub mod thumbnail;
 pub mod workspace;

@@ -20,7 +20,9 @@ use std::process::{Command, Stdio};
 use anyhow::{Result, anyhow};
 use favnyr_core::fs as rfs;
 use favnyr_core::openers::{Opener, TagContext};
-use tracing::{debug, info};
+#[cfg(not(windows))]
+use favnyr_core::thumbnail::SEVEN_ZIP_PROGRAMS;
+use tracing::{debug, info, warn};
 
 #[cfg(windows)]
 const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
@@ -152,11 +154,15 @@ fn shell_execute_open(target: &OsStr, working_directory: Option<&Path>) -> Resul
 ///   convey the gallery context that `ShellExecuteW` doesn't carry.
 /// - **Other OSes**: `open` crate (xdg-open).
 #[cfg(windows)]
-pub fn open_path(path: &Path) -> Result<()> {
+pub fn open_path(path: &Path) -> Result<Option<WatchedLaunch>> {
     info!(path = %path.display(), "open with default app (ShellExecute)");
     // `lpDirectory` points to the folder containing the target so that
     // executables and scripts can resolve their relative paths.
-    shell_execute_open(path.as_os_str(), path.parent())
+    //
+    // Never a watch here: the shell performs the launch and keeps no handle
+    // on the child, so there is nothing to wait for. The return type matches
+    // the other platform rather than diverging over it.
+    shell_execute_open(path.as_os_str(), path.parent()).map(|()| None)
 }
 
 #[cfg(windows)]
@@ -344,8 +350,14 @@ fn is_desktop_launcher(path: &Path) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case("desktop"))
 }
 
+/// Opens `path` the way the desktop would, and hands back a watch when
+/// Favnyr ran a program itself.
+///
+/// Only that case can be watched: anything handed to the desktop is launched
+/// by something else, which keeps the handle. The caller waits on the watch
+/// off the interface thread, or drops it to stop caring.
 #[cfg(not(windows))]
-pub fn open_path(path: &Path) -> Result<()> {
+pub fn open_path(path: &Path) -> Result<Option<WatchedLaunch>> {
     // A launcher is acted upon, not opened. Asking the desktop to open one
     // gives back its source text in an editor: KIO only runs an entry when the
     // caller opted in, exactly as it does for a binary, so the same delegation
@@ -355,7 +367,7 @@ pub fn open_path(path: &Path) -> Result<()> {
         match crate::openwith::launch_desktop_file(path) {
             Ok(()) => {
                 info!(path = %path.display(), "launch desktop entry");
-                return Ok(());
+                return Ok(None);
             }
             // Carries the `.desktop` name but nothing to start: no `Exec`, no
             // `URL`, or unreadable. It is then just a file, and opening it the
@@ -381,10 +393,16 @@ pub fn open_path(path: &Path) -> Result<()> {
         // Its own folder, as if started from a terminal there, so a program
         // reading a file next to itself finds it whatever folder Favnyr was
         // started from.
-        return spawn_detached_in(path, Vec::new(), false, path.parent());
+        //
+        // This is the one launch Favnyr performs itself, so it is the one
+        // whose outcome it can report. A script that dies on its first line
+        // used to vanish without a word.
+        return spawn_watched_in(path, path.parent()).map(Some);
     }
     info!(path = %path.display(), "open with default app");
-    open::that_detached(path).map_err(|e| anyhow!("opening {}: {e}", path.display()))
+    open::that_detached(path)
+        .map(|()| None)
+        .map_err(|e| anyhow!("opening {}: {e}", path.display()))
 }
 
 /// Opens the **parent** folder of `path` and, if possible, **selects**
@@ -566,17 +584,25 @@ fn spawn_detached_in(
     if elevated {
         return shell_execute_runas(program, &argv);
     }
+    let mut cmd = detached_command(program, &argv, cwd);
+    cmd.stderr(Stdio::null());
+    cmd.spawn()
+        .map(|_| ())
+        .map_err(|e| anyhow!("launching {}: {e}", program.display()))
+}
+
+/// The command both spawn paths start from: no input, no output, and no
+/// startup token inherited. Only the handling of standard error differs
+/// between them, so that is the one thing left to the caller.
+fn detached_command(program: &Path, argv: &[String], cwd: Option<&Path>) -> Command {
     let mut cmd = Command::new(program);
-    cmd.args(&argv)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+    cmd.args(argv).stdin(Stdio::null()).stdout(Stdio::null());
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
     // Startup-notification tokens are valid for ONE launch: the desktop hands
     // one to Favnyr, and a child inheriting it would have its own startup
-    // credited to Favnyr's window. Unset everywhere — they do not exist on
+    // credited to Favnyr's window. Unset everywhere, they do not exist on
     // Windows, where removing them is a no-op.
     cmd.env_remove("DESKTOP_STARTUP_ID")
         .env_remove("XDG_ACTIVATION_TOKEN");
@@ -585,9 +611,139 @@ fn spawn_detached_in(
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
-    cmd.spawn()
-        .map(|_| ())
-        .map_err(|e| anyhow!("launching {}: {e}", program.display()))
+    cmd
+}
+
+/// A launch whose outcome is still being waited for.
+pub struct WatchedLaunch {
+    child: std::process::Child,
+    started: std::time::Instant,
+    program: PathBuf,
+}
+
+/// What a program said on its way out.
+pub struct EarlyFailure {
+    /// Exit status, absent when a signal ended the process.
+    pub code: Option<i32>,
+    /// The tail of its standard error, already trimmed. May be empty.
+    pub message: String,
+}
+
+/// A failure reported after this long is no longer read as an answer to the
+/// launch. A document editor closed with an error two hours later must not
+/// raise a banner out of nowhere.
+const EARLY_FAILURE_WINDOW: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// How much of the standard error is kept. The end of it, because that is
+/// where a program puts the reason it is giving up.
+const KEPT_STDERR_BYTES: usize = 2 * 1024;
+
+impl WatchedLaunch {
+    /// Blocks until the program exits, then reports a failure only if it came
+    /// quickly enough to be understood as an answer to the launch.
+    ///
+    /// Reading to the end of the pipe is what waits here, rather than polling.
+    /// It has to be read at all: a pipe nobody drains fills its kernel buffer
+    /// and **blocks the child**, so a chatty program would be frozen by the
+    /// very mechanism meant to report on it. Closing the read end instead
+    /// would be worse, since writing to a closed pipe raises SIGPIPE, whose
+    /// default action is to kill the program.
+    ///
+    /// The cost is one thread per running child, parked in a read that uses no
+    /// processor time and a fixed amount of memory.
+    pub fn wait_for_early_failure(mut self) -> Option<EarlyFailure> {
+        use std::io::Read;
+
+        let mut kept: Vec<u8> = Vec::new();
+        if let Some(mut stderr) = self.child.stderr.take() {
+            let mut chunk = [0u8; 4096];
+            loop {
+                match stderr.read(&mut chunk) {
+                    Ok(0) | Err(_) => break,
+                    Ok(read) => {
+                        kept.extend_from_slice(&chunk[..read]);
+                        // Trimmed as it grows so a program writing for hours
+                        // costs a bounded buffer and not its whole output.
+                        if kept.len() > KEPT_STDERR_BYTES {
+                            let cut = kept.len() - KEPT_STDERR_BYTES;
+                            kept.drain(..cut);
+                        }
+                    }
+                }
+            }
+        }
+
+        let status = self.child.wait().ok()?;
+        let elapsed = self.started.elapsed();
+        if status.success() {
+            debug!(program = %self.program.display(), ?elapsed, "program finished");
+            return None;
+        }
+        let message = String::from_utf8_lossy(&kept).trim().to_string();
+        if elapsed > EARLY_FAILURE_WINDOW {
+            // Worth a line at the default level even though no banner is raised.
+            info!(program = %self.program.display(), ?elapsed, code = ?status.code(),
+                reason = %one_line(&message),
+                "program failed, too late to be shown as a launch failure");
+            return None;
+        }
+        warn!(program = %self.program.display(), code = ?status.code(),
+            reason = %one_line(&message),
+            "program failed right after being launched");
+        Some(EarlyFailure {
+            code: status.code(),
+            message,
+        })
+    }
+}
+
+/// Flattens captured output into something a log file can hold.
+///
+/// A log is read and filtered one line per event. Pasting a program's whole
+/// standard error into a field breaks that: forty lines of build noise turn a
+/// single failure into forty entries for anything reading the file. The
+/// newlines become separators and the whole is capped, since the detail
+/// beyond the last few lines has never explained anything.
+fn one_line(message: &str) -> String {
+    const MAX: usize = 400;
+    let mut flat = message
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" / ");
+    if flat.len() > MAX {
+        // Cut from the front: the reason sits at the end.
+        let start = flat
+            .char_indices()
+            .nth(flat.chars().count().saturating_sub(MAX))
+            .map_or(0, |(i, _)| i);
+        flat = format!("… {}", &flat[start..]);
+    }
+    flat
+}
+
+/// Starts `program` keeping its standard error, so an immediate failure can be
+/// reported instead of vanishing.
+///
+/// Spawning happens here, on the caller's thread, so a program that cannot be
+/// started at all is an error straight away. Only the waiting is left to the
+/// caller, which must do it off the interface thread.
+///
+/// Unix only: on Windows every launch is handed to the shell, which keeps the
+/// handle, so there is never a child of ours to watch.
+#[cfg(not(windows))]
+fn spawn_watched_in(program: &Path, cwd: Option<&Path>) -> Result<WatchedLaunch> {
+    let mut cmd = detached_command(program, &[], cwd);
+    cmd.stderr(Stdio::piped());
+    let child = cmd
+        .spawn()
+        .map_err(|e| anyhow!("launching {}: {e}", program.display()))?;
+    Ok(WatchedLaunch {
+        child,
+        started: std::time::Instant::now(),
+        program: program.to_path_buf(),
+    })
 }
 
 /// Launches executable `exe` with `files` as ARGUMENTS (the "drag a file
@@ -1177,7 +1333,7 @@ pub fn optional_tools_info() -> OptionalToolsInfo {
     {
         let ffmpeg = ffmpeg_available();
         let poppler_program = resolve_program(&["pdftoppm", "pdftocairo"]);
-        let seven_zip_program = resolve_program(&["7zz", "7z", "7za"]);
+        let seven_zip_program = resolve_program(SEVEN_ZIP_PROGRAMS);
         OptionalToolsInfo {
             ffmpeg: ToolInfo {
                 available: ffmpeg,
@@ -1450,6 +1606,46 @@ mod image_activation_tests {
             b'g' as u16,
         ]);
         assert!(photos_gallery_target(std::path::Path::new(&invalid)).is_err());
+    }
+}
+
+#[cfg(test)]
+mod log_line_tests {
+    use super::one_line;
+
+    #[test]
+    fn a_multi_line_failure_becomes_one_log_entry() {
+        // Forty lines in a log field turn one failure into forty entries for
+        // whatever reads the file.
+        let flat = one_line("line 0\nline 1\n\nfatal: no such file\n");
+        assert!(!flat.contains('\n'), "{flat}");
+        assert_eq!(flat, "line 0 / line 1 / fatal: no such file");
+    }
+
+    #[test]
+    fn a_very_long_output_keeps_its_end() {
+        let message: String = (0..200).map(|i| format!("line {i} of noise\n")).collect();
+        let flat = one_line(&(message + "fatal: no such file"));
+        assert!(flat.len() <= 420, "{} characters", flat.len());
+        // The reason is at the end, so that is the part worth keeping.
+        assert!(flat.ends_with("fatal: no such file"), "{flat}");
+        assert!(flat.starts_with('…'), "{flat}");
+        assert!(!flat.contains("line 0 of noise"), "{flat}");
+    }
+
+    #[test]
+    fn a_silent_program_produces_nothing() {
+        assert_eq!(one_line(""), "");
+        assert_eq!(one_line("\n  \n"), "");
+    }
+
+    #[test]
+    fn cutting_never_splits_a_character() {
+        // A path or a message in any language must not be cut mid-codepoint,
+        // which would panic on the slice.
+        let message = "é".repeat(500);
+        let flat = one_line(&message);
+        assert!(flat.chars().count() <= 402, "{}", flat.chars().count());
     }
 }
 

@@ -27,6 +27,7 @@ use favnyr_core::{Config, WorkspaceState, logging, paths};
 
 mod actions;
 mod archives;
+mod background_work;
 mod bridge;
 mod clipboard;
 mod detached_view;
@@ -350,14 +351,19 @@ fn fit_window_axis(desired: i32, start: i32, end: i32, outer_size: i32) -> i32 {
     }
 }
 
-/// On Windows, catches Ctrl+C and Ctrl+Break from a development terminal.
-/// The first signal closes the Slint loop so the state can be persisted before
-/// the controlled termination via `finish`. The second immediately terminates the process.
+#[cfg(windows)]
+thread_local! {
+    static CONSOLE_WINDOW: std::cell::RefCell<Option<slint::Weak<MainWindow>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Routes console termination through the same guard as the window close button.
+/// A repeated signal before the event loop responds still forces termination.
 /// Without an attached console, this handler stays inactive.
 #[cfg(windows)]
-fn install_console_ctrl_handler() {
+fn install_console_ctrl_handler(window: &MainWindow) {
     use std::sync::atomic::{AtomicBool, Ordering};
     static QUITTING: AtomicBool = AtomicBool::new(false);
+    CONSOLE_WINDOW.with(|slot| *slot.borrow_mut() = Some(window.as_weak()));
 
     unsafe extern "system" fn handler(_ctrl_type: u32) -> i32 {
         if QUITTING.swap(true, Ordering::SeqCst) {
@@ -365,10 +371,14 @@ fn install_console_ctrl_handler() {
             // immediate termination.
             terminate_process_now(130);
         }
-        // The first signal requests a clean exit from the Slint loop; the
-        // main thread then persists the state before calling `finish`.
+        // Keep the event loop alive when file operations need confirmation.
         let _ = slint::invoke_from_event_loop(|| {
-            let _ = slint::quit_event_loop();
+            CONSOLE_WINDOW.with(|slot| {
+                if let Some(window) = slot.borrow().as_ref().and_then(slint::Weak::upgrade) {
+                    window.invoke_request_close();
+                }
+            });
+            QUITTING.store(false, Ordering::SeqCst);
         });
         1 // TRUE: event handled (we don't run the default behavior).
     }
@@ -558,7 +568,7 @@ fn main() -> Result<()> {
     // Ctrl+C / Ctrl+Break from the terminal → clean exit (dev). Installed
     // right before the loop (the event loop exists → `invoke_from_event_loop` OK).
     #[cfg(windows)]
-    install_console_ctrl_handler();
+    install_console_ctrl_handler(&window);
 
     info!(
         init_ms = t_start.elapsed().as_millis(),

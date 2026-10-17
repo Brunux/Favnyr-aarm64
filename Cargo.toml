@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/favnyr-core", "crates/favnyr-gui"]
 
 [workspace.package]
-version      = "0.3.5"
+version      = "0.3.6"
 edition      = "2024"
 rust-version = "1.92"
 license      = "GPL-3.0-or-later"
@@ -37,6 +37,12 @@ sysinfo            = { version = "0.36", default-features = false, features = ["
 trash              = "5"
 # Opens with the default application.
 open               = "5"
+# ZIP container reading, for formats that are archives in disguise: the 3MF
+# thumbnail lives inside one. Deliberately narrow: no compressor, and the one
+# decoder kept is `flate2`, already linked through `image`'s PNG support, so
+# this adds a container parser and almost nothing else. Reading only; archive
+# creation still goes through 7-Zip.
+zip                = { version = "9", default-features = false, features = ["deflate-flate2"] }
 # Cross-OS clipboard (text). We keep the Wayland backend but drop
 # `image-data` (unneeded: we only copy text).
 arboard            = { version = "3", default-features = false, features = ["wayland-data-control"] }

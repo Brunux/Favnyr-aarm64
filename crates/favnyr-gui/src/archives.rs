@@ -224,22 +224,7 @@ impl Staging {
 
 impl Drop for Staging {
     fn drop(&mut self) {
-        if self.0.as_os_str().is_empty() {
-            return;
-        }
-        // Cleanup normally runs on a worker. A discarded UI delivery must not
-        // freeze rendering while removing a large extracted tree.
-        let path = self.0.clone();
-        let fallback = path.clone();
-        if std::thread::Builder::new()
-            .name("archive-cleanup".into())
-            .spawn(move || {
-                let _ = std::fs::remove_dir_all(path);
-            })
-            .is_err()
-        {
-            let _ = std::fs::remove_dir_all(fallback);
-        }
+        crate::background_work::cleanup(std::mem::take(&mut self.0));
     }
 }
 

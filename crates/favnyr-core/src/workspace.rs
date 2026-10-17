@@ -64,6 +64,8 @@ pub struct TabState {
     pub sort_column: SortColumn,
     #[serde(default = "default_sort_order")]
     pub sort_order: SortOrder,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secondary_sort: Option<crate::fs::SecondarySort>,
     /// Whether content thumbnails are enabled. An absent field keeps icons.
     #[serde(default)]
     pub preview: bool,
@@ -269,6 +271,7 @@ impl WorkspaceState {
                     path: String::new(),
                     sort_column: SortColumn::Name,
                     sort_order: SortOrder::Asc,
+                    secondary_sort: None,
                     preview: false,
                     show_hidden: false,
                     group_mode: GroupMode::FoldersFirst,
@@ -570,6 +573,7 @@ mod tests {
                         path: "/home/u/Documents".into(),
                         sort_column: SortColumn::Size,
                         sort_order: SortOrder::Desc,
+                        secondary_sort: None,
                         preview: false,
                         show_hidden: false,
                         group_mode: GroupMode::FoldersFirst,
@@ -589,6 +593,7 @@ mod tests {
                             path: "/tmp".into(),
                             sort_column: SortColumn::Name,
                             sort_order: SortOrder::Asc,
+                            secondary_sort: None,
                             preview: true,
                             show_hidden: false,
                             group_mode: GroupMode::FoldersFirst,
@@ -600,6 +605,7 @@ mod tests {
                             path: "/etc".into(),
                             sort_column: SortColumn::Modified,
                             sort_order: SortOrder::Desc,
+                            secondary_sort: None,
                             preview: false,
                             show_hidden: false,
                             group_mode: GroupMode::FoldersFirst,
@@ -626,6 +632,29 @@ mod tests {
         let s = toml::to_string_pretty(&ws).unwrap();
         let back: WorkspaceState = toml::from_str(&s).unwrap();
         assert_eq!(back, ws);
+    }
+
+    #[test]
+    fn secondary_sort_is_optional_and_round_trips_without_changing_legacy_keys() {
+        let mut ws = sample();
+        let old = toml::to_string_pretty(&ws).unwrap();
+        assert!(!old.contains("secondary_sort"));
+        let restored: WorkspaceState = toml::from_str(&old).unwrap();
+        assert_eq!(restored.panels[0].tabs[0].secondary_sort, None);
+
+        ws.panels[0].tabs[0].secondary_sort = Some(crate::fs::SecondarySort {
+            column: SortColumn::Created,
+            order: SortOrder::Desc,
+            group_dates_by_day: true,
+        });
+        let written = toml::to_string_pretty(&ws).unwrap();
+        let loaded: WorkspaceState = toml::from_str(&written).unwrap();
+        assert_eq!(
+            loaded.panels[0].tabs[0].secondary_sort,
+            ws.panels[0].tabs[0].secondary_sort
+        );
+        assert!(written.contains("sort_column"));
+        assert!(written.contains("sort_order"));
     }
 
     #[test]
@@ -807,6 +836,7 @@ item_arrangement = "future"
                 path: format!("/closed/{index}"),
                 sort_column: SortColumn::Name,
                 sort_order: SortOrder::Asc,
+                secondary_sort: None,
                 preview: false,
                 show_hidden: false,
                 group_mode: GroupMode::FoldersFirst,
@@ -902,6 +932,7 @@ item_arrangement = "future"
                     path: "/x".into(),
                     sort_column: SortColumn::Name,
                     sort_order: SortOrder::Asc,
+                    secondary_sort: None,
                     preview: false,
                     show_hidden: false,
                     group_mode: GroupMode::FoldersFirst,
@@ -944,6 +975,7 @@ item_arrangement = "future"
                         path: "/y".into(),
                         sort_column: SortColumn::Name,
                         sort_order: SortOrder::Asc,
+                        secondary_sort: None,
                         preview: false,
                         show_hidden: false,
                         group_mode: GroupMode::FoldersFirst,
@@ -1088,6 +1120,7 @@ name =",
                     path: "/var".into(),
                     sort_column: SortColumn::Name,
                     sort_order: SortOrder::Asc,
+                    secondary_sort: None,
                     preview: false,
                     show_hidden: false,
                     group_mode: GroupMode::FoldersFirst,

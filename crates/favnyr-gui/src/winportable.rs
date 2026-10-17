@@ -21,10 +21,7 @@ use anyhow::{Result, anyhow};
 use tracing::{debug, warn};
 use windows::Win32::Devices::PortableDevices::{IPortableDeviceManager, PortableDeviceManager};
 use windows::Win32::Foundation::PROPERTYKEY;
-use windows::Win32::System::Com::{
-    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
-    CoTaskMemFree, CoUninitialize,
-};
+use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance, CoTaskMemFree};
 use windows::Win32::UI::Shell::{
     BHID_EnumItems, FOLDERID_ComputerFolder, IEnumShellItems, IShellItem, IShellItem2,
     KF_FLAG_DEFAULT, SHGetKnownFolderItem, SIGDN_DESKTOPABSOLUTEPARSING, SIGDN_FILESYSPATH,
@@ -185,20 +182,8 @@ pub fn open(shell_path: &str) -> Result<()> {
 }
 
 fn scan_shell_devices() -> Result<Vec<PortableDevice>> {
-    // Fresh dedicated thread: STA suits Shell extensions. We only call
-    // `CoUninitialize` if this thread actually acquired COM.
-    let com_initialized = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) }.is_ok();
-    if !com_initialized {
-        return Err(anyhow!("COM initialization failed"));
-    }
-
-    struct ComGuard;
-    impl Drop for ComGuard {
-        fn drop(&mut self) {
-            unsafe { CoUninitialize() };
-        }
-    }
-    let _com_guard = ComGuard;
+    let _com_guard =
+        crate::winutil::ComApartment::sta().ok_or_else(|| anyhow!("COM initialization failed"))?;
 
     unsafe {
         let candidates = enumerate_shell_candidates()?;

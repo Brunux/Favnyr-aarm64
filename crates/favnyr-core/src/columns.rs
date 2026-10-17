@@ -19,6 +19,7 @@ pub const KNOWN_COLUMNS: &[&str] = &[
     "path",
     "size",
     "modified",
+    "created",
     "age",
     "ext",
     "resolution",
@@ -33,7 +34,7 @@ pub fn default_visible(code: &str) -> bool {
     // current folder (already shown in the breadcrumb), so the column is
     // redundant most of the time. The user can re-enable it (right-click
     // on the header, or Settings › default columns).
-    !matches!(code, "resolution" | "depth" | "ext" | "path")
+    !matches!(code, "resolution" | "depth" | "ext" | "path" | "created")
 }
 
 /// Code of the anchor column (never hideable / movable out of 1st pos).
@@ -52,7 +53,7 @@ pub fn default_width(code: &str) -> f32 {
         "name" => 280.0,
         "path" => 220.0,
         "size" => 90.0,
-        "modified" => 150.0,
+        "modified" | "created" => 150.0,
         "ext" => 96.0,
         "age" => 80.0,
         "resolution" => 110.0,
@@ -142,11 +143,10 @@ mod tests {
         let cols = default_columns();
         assert_eq!(cols.len(), KNOWN_COLUMNS.len());
         assert_eq!(cols[0].id, "name");
-        // Standard columns visible; image metadata, extension AND path
-        // (redundant with the breadcrumb) hidden by default.
+        // Keep optional metadata and the breadcrumb's redundant path hidden.
         for c in &cols {
             match c.id.as_str() {
-                "resolution" | "depth" | "ext" | "path" => {
+                "resolution" | "depth" | "ext" | "path" | "created" => {
                     assert!(!c.visible, "{} should be hidden", c.id)
                 }
                 _ => assert!(c.visible, "{} should be visible", c.id),

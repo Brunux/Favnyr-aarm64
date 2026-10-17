@@ -16,6 +16,42 @@ use crate::workspace::ItemArrangement;
 pub const DEFAULT_WINDOW_WIDTH: u32 = 1100;
 /// Default logical height of the main window (px).
 pub const DEFAULT_WINDOW_HEIGHT: u32 = 700;
+pub const DEFAULT_THUMBNAIL_ZOOM: i32 = 2;
+pub const MIN_THUMBNAIL_ZOOM: i32 = 1;
+pub const MAX_THUMBNAIL_ZOOM: i32 = 8;
+
+fn default_thumbnail_zoom() -> i32 {
+    DEFAULT_THUMBNAIL_ZOOM
+}
+
+/// How a workspace load handles changes in the current workspace.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkspaceLoadPolicy {
+    Discard,
+    Save,
+    #[default]
+    #[serde(other)]
+    Ask,
+}
+
+impl WorkspaceLoadPolicy {
+    pub fn from_index(index: i32) -> Self {
+        match index {
+            1 => Self::Discard,
+            2 => Self::Save,
+            _ => Self::Ask,
+        }
+    }
+
+    pub fn index(self) -> i32 {
+        match self {
+            Self::Ask => 0,
+            Self::Discard => 1,
+            Self::Save => 2,
+        }
+    }
+}
 
 /// Stable identity of a reorderable sidebar section.
 ///
@@ -175,6 +211,9 @@ pub struct Config {
     /// Restored, duplicated, and transferred tabs keep their own per-tab mode.
     #[serde(default)]
     pub default_preview_mode: bool,
+    /// Size level used for new tabs and when thumbnails are explicitly enabled.
+    #[serde(default = "default_thumbnail_zoom")]
+    pub default_thumbnail_zoom: i32,
     /// Arrangement for new tabs. Missing preferences preserve the list layout.
     #[serde(default)]
     pub default_item_arrangement: ItemArrangement,
@@ -189,13 +228,21 @@ pub struct Config {
     /// the user can uncheck it.
     #[serde(default = "default_true")]
     pub tab_path_tooltip: bool,
-    /// Shows the "unsaved changes" warning dialog before loading
-    /// another workspace. `true` by default (safeguard active); an
-    /// experienced user can uncheck it to load without confirmation despite
-    /// a modified current workspace. `default = true` →
-    /// earlier configs (without the field) keep the safeguard.
+    /// Shows the full item name when hovering its caption in grid view.
     #[serde(default = "default_true")]
-    pub warn_unsaved_workspace: bool,
+    pub grid_name_tooltip: bool,
+    /// Shows the result path when hovering an item in subfolder search.
+    #[serde(default = "default_true")]
+    pub search_path_tooltip: bool,
+    /// Legacy manual-load preference. Used only when migrating older configs.
+    #[serde(default, skip_serializing, rename = "warn_unsaved_workspace")]
+    pub legacy_warn_unsaved_workspace: Option<bool>,
+    /// Policy for loading or starting a workspace from the panel.
+    #[serde(default)]
+    pub workspace_panel_save: Option<WorkspaceLoadPolicy>,
+    /// Independent policy for numbered workspace shortcuts.
+    #[serde(default)]
+    pub workspace_shortcut_save: WorkspaceLoadPolicy,
     /// In Preview mode, keeps the enlarged row height only for types
     /// capable of showing a thumbnail (images, audio covers, videos, PDF, SVG). Folders
     /// and plain-icon files stay at the normal list height.
@@ -281,10 +328,15 @@ impl Default for Config {
             view_item_spacing: MIN_VIEW_ITEM_SPACING,
             default_tab_bar_mode: 0,
             default_preview_mode: true,
+            default_thumbnail_zoom: DEFAULT_THUMBNAIL_ZOOM,
             default_item_arrangement: ItemArrangement::List,
             default_show_hidden: false,
             tab_path_tooltip: true,
-            warn_unsaved_workspace: true,
+            grid_name_tooltip: true,
+            search_path_tooltip: true,
+            legacy_warn_unsaved_workspace: None,
+            workspace_panel_save: Some(WorkspaceLoadPolicy::Ask),
+            workspace_shortcut_save: WorkspaceLoadPolicy::Ask,
             compact_icon_rows_in_preview: true,
             clock_utc: false,
             shell_ctx_menu: true,
@@ -334,6 +386,11 @@ impl Config {
     /// Normalizes only the preferences a manually edited TOML could break
     /// the invariants of. The default order is stable and allocation-free.
     pub fn sanitized(mut self) -> Self {
+        self.workspace_panel_save = Some(self.panel_save_policy());
+        self.legacy_warn_unsaved_workspace = None;
+        self.default_thumbnail_zoom = self
+            .default_thumbnail_zoom
+            .clamp(MIN_THUMBNAIL_ZOOM, MAX_THUMBNAIL_ZOOM);
         self.sidebar_section_order = SidebarSection::sanitized_order(self.sidebar_section_order);
         self.view_text_font_size = self
             .view_text_font_size
@@ -343,12 +400,97 @@ impl Config {
             .clamp(MIN_VIEW_ITEM_SPACING, MAX_VIEW_ITEM_SPACING);
         self
     }
+
+    pub fn panel_save_policy(&self) -> WorkspaceLoadPolicy {
+        self.workspace_panel_save.unwrap_or_else(|| {
+            if self.legacy_warn_unsaved_workspace == Some(false) {
+                WorkspaceLoadPolicy::Discard
+            } else {
+                WorkspaceLoadPolicy::Ask
+            }
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn tooltip_preferences_keep_existing_configs_enabled_and_restore_user_choices() {
+        let previous: Config = toml::from_str("tab_path_tooltip = false").unwrap();
+        assert!(!previous.tab_path_tooltip);
+        assert!(previous.grid_name_tooltip);
+        assert!(previous.search_path_tooltip);
+
+        let changed = Config {
+            grid_name_tooltip: false,
+            search_path_tooltip: false,
+            ..Config::default()
+        };
+        let restored: Config = toml::from_str(&toml::to_string(&changed).unwrap()).unwrap();
+        assert!(!restored.grid_name_tooltip);
+        assert!(!restored.search_path_tooltip);
+        assert!(restored.tab_path_tooltip);
+    }
+
+    #[test]
+    fn workspace_load_policies_migrate_independently_and_round_trip() {
+        for defaults in [Config::default(), toml::from_str::<Config>("").unwrap()] {
+            let defaults = defaults.sanitized();
+            assert_eq!(defaults.panel_save_policy(), WorkspaceLoadPolicy::Ask);
+            assert_eq!(defaults.workspace_shortcut_save, WorkspaceLoadPolicy::Ask);
+        }
+        let old: Config = toml::from_str("warn_unsaved_workspace = false").unwrap();
+        assert_eq!(old.workspace_shortcut_save, WorkspaceLoadPolicy::Ask);
+        assert_eq!(old.panel_save_policy(), WorkspaceLoadPolicy::Discard);
+        let migrated = old.sanitized();
+        let serialized = toml::to_string(&migrated).unwrap();
+        assert!(serialized.contains("workspace_panel_save = \"discard\""));
+        assert!(!serialized.contains("warn_unsaved_workspace"));
+        let old_enabled: Config = toml::from_str("warn_unsaved_workspace = true").unwrap();
+        assert_eq!(old_enabled.panel_save_policy(), WorkspaceLoadPolicy::Ask);
+        let explicit: Config =
+            toml::from_str("warn_unsaved_workspace = false\nworkspace_panel_save = 'save'")
+                .unwrap();
+        assert_eq!(explicit.panel_save_policy(), WorkspaceLoadPolicy::Save);
+        let unknown: Config = toml::from_str("workspace_shortcut_save = 'unknown'").unwrap();
+        assert_eq!(unknown.workspace_shortcut_save, WorkspaceLoadPolicy::Ask);
+        for policy in [
+            WorkspaceLoadPolicy::Ask,
+            WorkspaceLoadPolicy::Discard,
+            WorkspaceLoadPolicy::Save,
+        ] {
+            let config = Config {
+                workspace_panel_save: Some(policy),
+                workspace_shortcut_save: policy,
+                ..Config::default()
+            };
+            let restored: Config = toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
+            assert_eq!(restored.workspace_shortcut_save, policy);
+            assert_eq!(restored.panel_save_policy(), policy);
+            assert_eq!(WorkspaceLoadPolicy::from_index(policy.index()), policy);
+        }
+        assert_eq!(
+            WorkspaceLoadPolicy::from_index(99),
+            WorkspaceLoadPolicy::Ask
+        );
+    }
+
+    #[test]
+    fn preference_thumbnail_zoom_defaults_and_bounds() {
+        let old: Config = toml::from_str("").unwrap();
+        assert_eq!(old.default_thumbnail_zoom, DEFAULT_THUMBNAIL_ZOOM);
+        for (input, expected) in [(-10, 1), (0, 1), (5, 5), (99, 8)] {
+            let config: Config =
+                toml::from_str(&format!("default_thumbnail_zoom = {input}")).unwrap();
+            let config = config.sanitized();
+            assert_eq!(config.default_thumbnail_zoom, expected);
+            let restored: Config = toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
+            assert_eq!(restored.default_thumbnail_zoom, expected);
+        }
+    }
 
     #[test]
     fn hidden_default_is_off_when_absent_and_survives_a_round_trip() {
@@ -440,7 +582,7 @@ mod tests {
         assert_eq!(cfg.language, Lang::Fr);
         assert_eq!(cfg.theme, Theme::Dark);
         // Field absent from an earlier config → safeguard KEPT (true).
-        assert!(cfg.warn_unsaved_workspace);
+        assert_eq!(cfg.panel_save_policy(), WorkspaceLoadPolicy::Ask);
         // Same backward compatibility for compact rows in preview.
         assert!(cfg.compact_icon_rows_in_preview);
         // Earlier configurations keep the historical List default.

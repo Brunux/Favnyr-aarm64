@@ -1142,22 +1142,24 @@ checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
 
 [[package]]
 name = "favnyr-core"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "dirs",
  "image",
  "serde",
+ "serde_json",
  "sysinfo",
  "thiserror 2.0.20",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
  "trash",
+ "zip",
 ]
 
 [[package]]
 name = "favnyr-gui"
-version = "0.3.5"
+version = "0.3.6"
 dependencies = [
  "anyhow",
  "arboard",
@@ -4942,6 +4944,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+
+[[package]]
 name = "udev"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6419,6 +6427,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "zip"
+version = "9.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2d98561b612a84ae525331a7a094429ef8a5772514ed507ff6db5f54badc971"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "nix",
+ "typed-path",
 ]
 
 [[package]]

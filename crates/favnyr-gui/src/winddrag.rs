@@ -271,6 +271,10 @@ impl IDropTarget_Impl for FavnyrDropTarget_Impl {
                 screen_y: point.y,
                 action,
             });
+        } else {
+            // A modifier can make an already hovered payload unacceptable.
+            // Do not leave a stale actionable pill from the previous DragOver.
+            (self.handler)(IncomingFileDrag::Leave);
         }
         Ok(())
     }

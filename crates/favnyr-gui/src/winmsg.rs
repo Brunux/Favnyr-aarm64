@@ -52,6 +52,7 @@ mod imp {
             result: *mut usize,
         ) -> isize;
         fn SetForegroundWindow(hwnd: Hwnd) -> i32;
+        fn GetForegroundWindow() -> Hwnd;
         fn SetFocus(hwnd: Hwnd) -> Hwnd;
         fn ClientToScreen(hwnd: Hwnd, point: *mut Point) -> i32;
         fn ScreenToClient(hwnd: Hwnd, point: *mut Point) -> i32;
@@ -363,8 +364,13 @@ mod imp {
         let hwnd = SELF_HWND.load(Ordering::SeqCst);
         if hwnd != 0 {
             unsafe {
-                SetForegroundWindow(hwnd);
+                let activated = SetForegroundWindow(hwnd) != 0;
                 SetFocus(hwnd);
+                tracing::debug!(
+                    activated,
+                    foreground = GetForegroundWindow() == hwnd,
+                    "OLE drop window activation"
+                );
             }
         }
     }

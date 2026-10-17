@@ -31,14 +31,15 @@ use tracing::{debug, error, info, warn};
 
 use favnyr_core::SidebarSection;
 use favnyr_core::config::{
-    DEFAULT_VIEW_TEXT_FONT_SIZE, MAX_VIEW_ITEM_SPACING, MAX_VIEW_TEXT_FONT_SIZE,
-    MIN_VIEW_ITEM_SPACING, MIN_VIEW_TEXT_FONT_SIZE,
+    DEFAULT_THUMBNAIL_ZOOM, DEFAULT_VIEW_TEXT_FONT_SIZE, MAX_THUMBNAIL_ZOOM, MAX_VIEW_ITEM_SPACING,
+    MAX_VIEW_TEXT_FONT_SIZE, MIN_THUMBNAIL_ZOOM, MIN_VIEW_ITEM_SPACING, MIN_VIEW_TEXT_FONT_SIZE,
+    WorkspaceLoadPolicy,
 };
 use favnyr_core::favorites::{self, FlatFav};
 use favnyr_core::folder_state::FolderStateStore;
 use favnyr_core::fs as rfs;
 use favnyr_core::fs::ops::{self};
-use favnyr_core::fs::{Entry, FileKind, GroupMode, SortColumn, SortOrder};
+use favnyr_core::fs::{Entry, FileKind, GroupMode, SecondarySort, SortColumn, SortOrder};
 use favnyr_core::layout::{Layout, LayoutNode, NodePath, Rect, SplitDir};
 use favnyr_core::openers;
 use favnyr_core::shortcuts::{self, Chord};
@@ -66,6 +67,10 @@ const MIN_SPLIT_RATIO: f32 = 0.08;
 
 mod archive;
 mod item_geometry;
+mod properties;
+mod recovery;
+mod search;
+mod shutdown;
 
 use item_geometry::{GridLayout, ItemAnchor, ItemBand, ItemBands};
 
@@ -102,25 +107,7 @@ impl TransientDropGuard {
 impl Drop for TransientDropGuard {
     fn drop(&mut self) {
         let Some(path) = self.0.take() else { return };
-        // Application-path captures can retain a complete hard-linked tree.
-        // Delete it off the UI thread so finishing or cancelling a large drop
-        // never stalls rendering.
-        let cleanup_path = path.clone();
-        if std::thread::Builder::new()
-            .name("favnyr-dnd-cleanup".into())
-            .spawn(move || cleanup_transient_drop_dir(&cleanup_path))
-            .is_err()
-        {
-            cleanup_transient_drop_dir(&path);
-        }
-    }
-}
-
-fn cleanup_transient_drop_dir(path: &Path) {
-    if let Err(err) = std::fs::remove_dir_all(path)
-        && err.kind() != std::io::ErrorKind::NotFound
-    {
-        debug!(error = %err, path = %path.display(), "cleaning transient drop directory failed");
+        crate::background_work::cleanup(path);
     }
 }
 
@@ -267,6 +254,7 @@ impl NavHistory {
 struct SortState {
     column: SortColumn,
     order: SortOrder,
+    secondary: Option<SecondarySort>,
 }
 
 impl Default for SortState {
@@ -274,6 +262,7 @@ impl Default for SortState {
         Self {
             column: SortColumn::Name,
             order: SortOrder::Asc,
+            secondary: None,
         }
     }
 }
@@ -325,6 +314,7 @@ struct Tab {
 #[derive(Clone, Copy)]
 struct TabDisplayDefaults {
     preview: bool,
+    thumbnail_zoom: i32,
     arrangement: ItemArrangement,
     show_hidden: bool,
 }
@@ -333,6 +323,9 @@ impl From<&Config> for TabDisplayDefaults {
     fn from(config: &Config) -> Self {
         Self {
             preview: config.default_preview_mode,
+            thumbnail_zoom: config
+                .default_thumbnail_zoom
+                .clamp(MIN_THUMBNAIL_ZOOM, MAX_THUMBNAIL_ZOOM),
             arrangement: config.default_item_arrangement,
             show_hidden: config.default_show_hidden,
         }
@@ -345,6 +338,7 @@ impl From<bool> for TabDisplayDefaults {
         Self {
             preview,
             arrangement: ItemArrangement::List,
+            thumbnail_zoom: DEFAULT_THUMBNAIL_ZOOM,
             show_hidden: false,
         }
     }
@@ -357,7 +351,7 @@ impl Tab {
         let mut h = NavHistory::default();
         h.push(initial.clone());
         let zoom = if preview {
-            THUMB_DEFAULT_ZOOM
+            display.thumbnail_zoom
         } else {
             LIST_DEFAULT_ZOOM
         };
@@ -369,7 +363,8 @@ impl Tab {
             preview,
             zoom,
             item_arrangement: display.arrangement,
-            grid_zoom: None,
+            grid_zoom: (display.thumbnail_zoom != GRID_DEFAULT_ZOOM)
+                .then_some(display.thumbnail_zoom),
             show_hidden: display.show_hidden,
             group_mode: GroupMode::FoldersFirst,
             cursor: -1,
@@ -399,6 +394,9 @@ impl Tab {
             sort: SortState {
                 column: saved.sort_column,
                 order: saved.sort_order,
+                secondary: saved
+                    .secondary_sort
+                    .filter(|s| !s.column.same_field(saved.sort_column)),
             },
             selection_anchor: -1,
             // Keep the historical list precedence, including hand-edited
@@ -427,6 +425,7 @@ fn tab_to_state(tab: &Tab) -> TabState {
         path: tab.current_path.display().to_string(),
         sort_column: tab.sort.column,
         sort_order: tab.sort.order,
+        secondary_sort: tab.sort.secondary,
         preview: tab.preview,
         show_hidden: tab.show_hidden,
         group_mode: tab.group_mode,
@@ -589,6 +588,10 @@ struct Panel {
     /// The displayed folder is UNAVAILABLE (doesn't exist / network drive not
     /// started) → "not found" banner + automatic re-check. Session.
     unavailable: bool,
+    /// Last listing failed, including access denials which use a notice.
+    listing_failed: bool,
+    /// Throttles explicit recovery clicks without changing rendered models.
+    last_recovery: Option<Instant>,
     /// Current scroll of the tab bar along its MAIN AXIS
     /// (`content-x` in horizontal mode, `content-y` in vertical mode, ≤ 0),
     /// REPORTED by the view (`panel-tabs-scrolled`). Used for the hit-test of the
@@ -613,6 +616,7 @@ struct Panel {
     listing_gen: u64,
     /// Child to select after an asynchronous upward navigation.
     pending_select: Option<String>,
+    search: Option<search::Session>,
 }
 
 impl Panel {
@@ -665,6 +669,8 @@ impl Panel {
             columns: columns::sanitize(columns),
             hidden_count: 0,
             unavailable: false,
+            listing_failed: false,
+            last_recovery: None,
             tabs_viewport_x: 0.0,
             tab_bar_mode: tab_bar_mode.min(2),
             vbar_user_w: vbar_user_w.max(0.0),
@@ -672,6 +678,7 @@ impl Panel {
             pending_listing: false,
             listing_gen: 0,
             pending_select: None,
+            search: None,
         }
     }
 
@@ -756,6 +763,7 @@ struct AsyncListingDelivery {
     lang: Lang,
     preserved_selected: Vec<String>,
     preserved_anchor: Option<String>,
+    recover_favorites: bool,
 }
 
 /// Send events produced by the trash workers then consumed on the
@@ -898,6 +906,14 @@ impl OpRegistry {
             flag.store(true, Ordering::Relaxed);
         }
     }
+
+    fn cancel_all(&self) {
+        for handle in self.active.borrow().values() {
+            if let Some(flag) = &handle.cancel {
+                flag.store(true, Ordering::Relaxed);
+            }
+        }
+    }
 }
 
 /// Width (px) of a column by its id, or the default width.
@@ -982,10 +998,9 @@ fn reorder_column_by_delta(cols: &mut Vec<ColumnSpec>, id: &str, delta_px: f32) 
 
 /// Pushes the DEFAULT columns (config) to the Settings panel.
 fn push_settings_columns(window: &MainWindow, lang: Lang, cols: &[ColumnSpec]) {
-    let strings = i18n::strings_for(lang);
     let infos: Vec<ColumnInfo> = columns::sanitize(cols.to_vec())
         .iter()
-        .map(|c| column_info_explicit(&strings, c, 0.0))
+        .map(|c| column_info_explicit(lang, c, 0.0))
         .collect();
     window.set_settings_columns(ModelRc::new(VecModel::from(infos)));
 }
@@ -998,29 +1013,30 @@ fn push_settings_columns(window: &MainWindow, lang: Lang, cols: &[ColumnSpec]) {
 /// The header itself keeps the short form from [`column_info`]: it sits in a
 /// resizable width the user may have narrowed, and there the surrounding
 /// values say what the column holds.
-fn column_info_explicit(strings: &crate::Strings, c: &ColumnSpec, offset: f32) -> ColumnInfo {
-    let mut info = column_info(strings, c, offset);
+fn column_info_explicit(lang: Lang, c: &ColumnSpec, offset: f32) -> ColumnInfo {
+    let mut info = column_info(lang, c, offset);
     // The i18n keys keep their `settings_` prefix: the wording is the same in
     // both lists, and renaming them across five catalogues would buy nothing.
     match c.id.as_str() {
-        "resolution" => info.label = strings.settings_col_resolution.clone(),
-        "depth" => info.label = strings.settings_col_depth.clone(),
+        "resolution" => info.label = i18n::tr(lang, "settings_col_resolution").into(),
+        "depth" => info.label = i18n::tr(lang, "settings_col_depth").into(),
         _ => {}
     }
     info
 }
 
 /// Builds a `ColumnInfo` (id + i18n label + visible + offset) for the GUI.
-fn column_info(strings: &crate::Strings, c: &ColumnSpec, offset: f32) -> ColumnInfo {
+fn column_info(lang: Lang, c: &ColumnSpec, offset: f32) -> ColumnInfo {
     let label = match c.id.as_str() {
-        "name" => strings.col_name.clone(),
-        "path" => strings.col_path.clone(),
-        "size" => strings.col_size.clone(),
-        "modified" => strings.col_modified.clone(),
-        "age" => strings.col_age.clone(),
-        "ext" => strings.col_ext.clone(),
-        "resolution" => strings.col_resolution.clone(),
-        "depth" => strings.col_depth.clone(),
+        "name" => i18n::tr(lang, "col_name").into(),
+        "path" => i18n::tr(lang, "col_path").into(),
+        "size" => i18n::tr(lang, "col_size").into(),
+        "modified" => i18n::tr(lang, "col_modified").into(),
+        "created" => i18n::tr(lang, "col_created").into(),
+        "age" => i18n::tr(lang, "col_age").into(),
+        "ext" => i18n::tr(lang, "col_ext").into(),
+        "resolution" => i18n::tr(lang, "col_resolution").into(),
+        "depth" => i18n::tr(lang, "col_depth").into(),
         other => other.into(),
     };
     ColumnInfo {
@@ -1079,6 +1095,8 @@ pub struct AppState {
     /// Paste in progress (resolving name conflicts). `None` at rest.
     paste_job: Rc<RefCell<Option<PasteJob>>>,
     archive: Rc<archive::State>,
+    shutdown: Rc<shutdown::State>,
+    recovery: Rc<recovery::State>,
     /// Exact source of the rename popup. A path, not the visual row
     /// index: a watcher/re-sort can rebuild the model while the
     /// dialog is open without ever causing a different entry to be renamed.
@@ -1325,6 +1343,8 @@ impl AppState {
             folder_drag_path: Rc::new(RefCell::new(None)),
             paste_job: Rc::new(RefCell::new(None)),
             archive: Rc::new(archive::State::default()),
+            shutdown: Rc::new(shutdown::State::default()),
+            recovery: Rc::new(recovery::State::default()),
             rename_source: Rc::new(RefCell::new(None)),
             delete_pending: Rc::new(RefCell::new(Vec::new())),
             last_trashed: Rc::new(RefCell::new(None)),
@@ -1415,6 +1435,8 @@ impl AppState {
             folder_drag_path: Rc::new(RefCell::new(None)),
             paste_job: Rc::new(RefCell::new(None)),
             archive: Rc::new(archive::State::default()),
+            shutdown: Rc::new(shutdown::State::default()),
+            recovery: Rc::new(recovery::State::default()),
             rename_source: Rc::new(RefCell::new(None)),
             delete_pending: Rc::new(RefCell::new(Vec::new())),
             last_trashed: Rc::new(RefCell::new(None)),
@@ -1706,15 +1728,22 @@ fn remember_closed_panel(state: &AppState, mut panel: Panel) {
 // ---------- Callback installation ----------
 
 pub fn install(window: &MainWindow, state: AppState) {
+    shutdown::install(window, &state);
+    recovery::install(window, &state);
     archive::install(window, &state);
+    search::install(window, &state);
     // (The row model of the active panel no longer needs to be pushed as a
     // global `rows` — each panel carries its own model in
     // its PanelView via update_panels_ui.)
 
     // Initialization from config.
-    window.on_filename_caret_offset(|name: SharedString, is_dir: bool| {
-        filename_caret_offset(name.as_str(), is_dir)
-    });
+    {
+        let metrics = window.global::<crate::TextMetrics>();
+        metrics.on_byte_length(|text: SharedString| byte_offset(text.as_str().len()));
+        metrics.on_rename_caret_offset(|name: SharedString, is_dir: bool| {
+            filename_caret_offset(name.as_str(), is_dir)
+        });
+    }
     let cfg = state.snapshot_config();
     apply_language(window, cfg.language);
     // One toast row per running operation, owned by the state so that the
@@ -1733,15 +1762,17 @@ pub fn install(window: &MainWindow, state: AppState) {
     window.set_tabbar_default_pref(cfg.default_tab_bar_mode.min(2) as i32);
     // Display mode for newly created tabs and views (settings).
     window.set_default_view_mode_index(if cfg.default_preview_mode { 1 } else { 0 });
+    window.set_default_thumbnail_zoom(cfg.default_thumbnail_zoom);
     window.set_default_item_arrangement_index(i32::from(
         cfg.default_item_arrangement == ItemArrangement::Grid,
     ));
     window.set_default_show_hidden(cfg.default_show_hidden);
-    // Tab path tooltip (settings) — unchecked by default.
+    // Tooltip preferences are applied once per view, without updating row models.
     window.set_tab_tooltip_enabled(cfg.tab_path_tooltip);
-    // "Unsaved changes" guard before loading, checked by
-    // default in settings.
-    window.set_ws_warn_unsaved(cfg.warn_unsaved_workspace);
+    window.set_grid_name_tooltip_enabled(cfg.grid_name_tooltip);
+    window.set_search_path_tooltip_enabled(cfg.search_path_tooltip);
+    window.set_ws_panel_save_index(cfg.panel_save_policy().index());
+    window.set_ws_shortcut_save_index(cfg.workspace_shortcut_save.index());
     // Hybrid Previews mode: single-icon types stay compact.
     window.set_compact_preview_rows_enabled(cfg.compact_icon_rows_in_preview);
     // Timezone for the "Modified" column (settings): 0 = local time
@@ -1939,6 +1970,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 #[cfg(windows)]
                 crate::winportable::request_refresh();
                 refresh_sidebar(&w, &st);
+                recovery::request_favorites(&w, &st);
             }
         });
     }
@@ -2023,6 +2055,9 @@ pub fn install(window: &MainWindow, state: AppState) {
                             action,
                             staging,
                         } => {
+                            // Request activation while handling the user's OLE
+                            // gesture, then restore focus after the source unwinds.
+                            crate::winmsg::focus_self();
                             // Own the staging directory before deferring. If
                             // the window closes before the next UI tick, RAII
                             // still removes it instead of leaking temp data.
@@ -2040,7 +2075,9 @@ pub fn install(window: &MainWindow, state: AppState) {
                             // capture, so its first hover/click is usable.
                             let drop_state = file_state.clone();
                             let drop_weak = file_weak.clone();
+                            let delivery_lease = crate::background_work::acquire();
                             defer(move || {
+                                let _delivery_lease = delivery_lease;
                                 let Some(w) = drop_weak.upgrade() else { return };
                                 crate::winmsg::focus_self();
                                 on_external_file_drop(
@@ -2133,6 +2170,7 @@ pub fn install(window: &MainWindow, state: AppState) {
             if cur != sig.get() {
                 sig.set(cur);
                 stale = true;
+                recovery::request_favorites(&w, &st);
             }
             // One beat in eight of the 1.5 s poll, so roughly every 12 s.
             let beat = space_beat.get().wrapping_add(1);
@@ -2149,9 +2187,8 @@ pub fn install(window: &MainWindow, state: AppState) {
             }
         });
     }
-    // Re-check of unavailable tabs after a drive change.
-    // `drives_signature` avoids a potentially slow network `is_dir` as long
-    // as no mount has changed. The Slint timer stays active if needed.
+    // Retry unavailable tabs only after a drive change. The signature is local;
+    // actual listings stay on workers and never request credentials here.
     {
         let st = state.clone();
         let weak = window.as_weak();
@@ -2164,6 +2201,7 @@ pub fn install(window: &MainWindow, state: AppState) {
             }
             last_sig.set(cur);
             recheck_unavailable_panels(&w, &st);
+            recovery::request_favorites(&w, &st);
         });
     }
 
@@ -2600,17 +2638,13 @@ pub fn install(window: &MainWindow, state: AppState) {
             if added > 0 {
                 save_favorites(&st);
                 push_favorites_ui(&w, &st);
-                notice(
-                    &w,
-                    i18n::strings_for(lang).fav_toast_added.clone(),
-                    NoticeKind::FavAdded,
-                );
+                notice(&w, i18n::tr(lang, "fav_toast_added"), NoticeKind::FavAdded);
             } else {
                 // Nothing added = everything already existed → neutral info (bookmark accent),
                 // not an error.
                 notice(
                     &w,
-                    i18n::strings_for(lang).fav_toast_exists.clone(),
+                    i18n::tr(lang, "fav_toast_exists"),
                     NoticeKind::FavExists,
                 );
             }
@@ -2963,11 +2997,24 @@ pub fn install(window: &MainWindow, state: AppState) {
     // Background thread: enumerating + shell-purging a full
     // trash can take seconds — the UI thread doesn't wait.
     {
+        let st = state.clone();
         window.on_empty_trash(move || {
-            std::thread::spawn(|| match favnyr_core::fs::ops::empty_trash() {
-                Ok(()) => info!("trash emptied"),
-                Err(err) => error!(error = %err, "empty_trash failed"),
-            });
+            if shutdown::stopping(&st) {
+                return;
+            }
+            let lease = crate::background_work::acquire();
+            if let Err(error) = std::thread::Builder::new()
+                .name("empty-trash".into())
+                .spawn(move || {
+                    let _lease = lease;
+                    match favnyr_core::fs::ops::empty_trash() {
+                        Ok(()) => info!("trash emptied"),
+                        Err(err) => error!(error = %err, "empty_trash failed"),
+                    }
+                })
+            {
+                error!(%error, "cannot start empty trash worker");
+            }
         });
     }
     // Sorting is stored per panel and pushed by `update_panels_ui`.
@@ -2997,9 +3044,9 @@ pub fn install(window: &MainWindow, state: AppState) {
             push_settings_columns(&w, lang, &st.config.borrow().default_columns);
             push_shortcuts_ui(&w, &st); // localized shortcut labels
             push_recipes_ui(&w, &st); // localized recipe labels
-            // Surfaces that build localized text OUTSIDE the `Strings` struct,
+            // Surfaces that build localized text outside the `Strings` global,
             // so `apply_language` above does not reach them. Anything added
-            // later that formats with `lang` or reads `strings_for` belongs in
+            // later that formats with `lang` or reads a catalog belongs in
             // this list too — the drive gauge was missing from it and stayed in
             // the previous language until the sidebar was toggled by hand.
             refresh_sidebar(&w, &st); // capacity gauges + their hover hint
@@ -3194,7 +3241,7 @@ pub fn install(window: &MainWindow, state: AppState) {
             st.persist_config(|c| c.default_show_hidden = on);
         });
     }
-    // Tab path tooltip (settings): opt-in, persisted.
+    // Tooltip preferences are persisted independently.
     {
         let st = state.clone();
         window.on_tab_tooltip_changed(move |on: bool| {
@@ -3202,12 +3249,26 @@ pub fn install(window: &MainWindow, state: AppState) {
             st.persist_config(|c| c.tab_path_tooltip = on);
         });
     }
-    // Guard before loading another workspace (settings): persisted.
     {
         let st = state.clone();
-        window.on_ws_warn_unsaved_changed(move |on: bool| {
-            info!(on, "unsaved-workspace warning toggled");
-            st.persist_config(|c| c.warn_unsaved_workspace = on);
+        window.on_grid_name_tooltip_changed(move |on: bool| {
+            info!(on, "grid name tooltip toggled");
+            st.persist_config(|c| c.grid_name_tooltip = on);
+        });
+    }
+    {
+        let st = state.clone();
+        window.on_search_path_tooltip_changed(move |on: bool| {
+            info!(on, "search path tooltip toggled");
+            st.persist_config(|c| c.search_path_tooltip = on);
+        });
+    }
+    // Manual loading and numbered shortcuts have independent save policies.
+    {
+        let st = state.clone();
+        window.on_ws_panel_save_changed(move |index| {
+            let policy = WorkspaceLoadPolicy::from_index(index);
+            st.persist_config(|c| c.workspace_panel_save = Some(policy));
         });
     }
     // Hybrid height of Previews mode: persists then only recomputes the
@@ -3291,7 +3352,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 let lang = st.config.borrow().language;
                 notice(
                     &w,
-                    i18n::strings_for(lang).fav_toast_missing.clone(),
+                    i18n::tr(lang, "fav_toast_missing"),
                     NoticeKind::FavMissing,
                 );
             }
@@ -3314,7 +3375,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 return;
             };
             // `row.path` = parent folder path; we append the name to it.
-            let target = PathBuf::from(row.path.to_string()).join(row.name.as_str());
+            let target = row_path(&row);
             if row.is_dir {
                 load_directory(&w, &st, &target, true);
             } else if !open_shortcut_as_tab(&w, &st, &target) {
@@ -3585,6 +3646,8 @@ pub fn install(window: &MainWindow, state: AppState) {
             w.set_ctx_selection_is_file(is_file);
             // A single item (file OR folder) → "Create a shortcut" is offered.
             w.set_ctx_selection_single(sel.len() == 1);
+            let can_reveal_result = search::reveal_target(&st, &sel).is_some();
+            w.set_ctx_can_reveal_result(can_reveal_result);
             // A folder (or folder shortcut) as the primary item → "Open with" is
             // hidden (it hands a file to an application; a folder is opened by
             // navigating into it).
@@ -3621,6 +3684,7 @@ pub fn install(window: &MainWindow, state: AppState) {
             // row that can be hidden, on the very condition that renders it.
             // The two sides have to be changed together.
             let h = 350.0
+                + if can_reveal_result { 26.0 } else { 0.0 }
                 + if primary_dir { 0.0 } else { 26.0 }
                 + if primary_dir && sel.len() == 1 {
                     26.0
@@ -3829,12 +3893,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 }),
                 None => st.current_path(),
             };
-            let default_display = TabDisplayDefaults::from(&*st.config.borrow());
-            let opened = st.with_tabs_mut(|book| {
-                let a = book.open_after_active(target, default_display);
-                book.tabs[a].current_path.clone()
-            });
-            load_directory(&w, &st, &opened, false);
+            open_dir_in_new_tab(&w, &st, &target);
         });
     }
     {
@@ -3858,6 +3917,9 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_action_create_link(move || {
             let Some(w) = weak.upgrade() else { return };
+            if search::reject_ambiguous_destination(&w, &st) {
+                return;
+            }
             let Some(file) = selected_paths(&st).into_iter().next() else {
                 return;
             };
@@ -4103,7 +4165,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                     let lang = st.config.borrow().language;
                     notice(
                         &w,
-                        i18n::strings_for(lang).fav_toast_missing.clone(),
+                        i18n::tr(lang, "fav_toast_missing"),
                         NoticeKind::FavMissing,
                     );
                 }
@@ -4523,20 +4585,8 @@ pub fn install(window: &MainWindow, state: AppState) {
                 clip.paths = paths.clone();
                 clip.op = Some(ClipOp::Cut);
             }
-            // Visually marks the matching rows (by name).
-            let cur_dir = st.current_path();
-            let cut_names: std::collections::HashSet<String> = paths
-                .iter()
-                .filter_map(|p| {
-                    if p.parent() == Some(cur_dir.as_path()) {
-                        p.file_name()
-                            .and_then(|n| n.to_str().map(|s| s.to_string()))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-            apply_cut_marks(&st.active_rows_model(), &cut_names);
+            let cut_paths = paths.iter().cloned().collect();
+            apply_cut_marks(&st.active_rows_model(), &cut_paths);
             info!(count = paths.len(), "cut");
         });
     }
@@ -4549,6 +4599,9 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_action_paste(move || {
             let Some(w) = weak.upgrade() else { return };
+            if search::reject_ambiguous_destination(&w, &st) {
+                return;
+            }
             let cur = st.current_path();
             if cur.as_os_str().is_empty() {
                 return;
@@ -4794,7 +4847,7 @@ pub fn install(window: &MainWindow, state: AppState) {
             let Some(row) = rows.row_data(idx) else {
                 return;
             };
-            let source = st.current_path().join(row.name.as_str());
+            let source = row_path(&row);
             *st.rename_source.borrow_mut() = Some(source);
             w.set_rename_current_name(row.name.clone());
             w.set_rename_current_is_dir(row.is_dir);
@@ -5094,6 +5147,10 @@ pub fn install(window: &MainWindow, state: AppState) {
             let target = w.get_file_drop_target_panel().max(0) as usize;
             let row = w.get_file_drop_target_row();
             let src = w.get_file_drop_src_panel();
+            if file_drop_target_invalid(&st, src, target as i32, row) {
+                *st.pending_file_drop.borrow_mut() = None;
+                return true;
+            }
             let sources = if src < 0 {
                 std::mem::take(&mut *st.external_drop_paths.borrow_mut())
             } else {
@@ -5344,6 +5401,9 @@ pub fn install(window: &MainWindow, state: AppState) {
                 let Some(w) = weak.upgrade() else {
                     return false;
                 };
+                if search::reject_ambiguous_destination(&w, &st) {
+                    return false;
+                }
                 let name = name.trim().to_string();
                 let cur = st.current_path();
                 let lang = st.snapshot_config().language;
@@ -5650,6 +5710,9 @@ pub fn install(window: &MainWindow, state: AppState) {
         let weak = window.as_weak();
         window.on_action_restore_last_trashed(move || {
             let Some(w) = weak.upgrade() else { return };
+            if shutdown::stopping(&st) {
+                return;
+            }
             let Some(original_path) = st.last_trashed.borrow().clone() else {
                 return;
             };
@@ -5748,12 +5811,101 @@ pub fn install(window: &MainWindow, state: AppState) {
             let Some(first) = paths.first().cloned() else {
                 return;
             };
-            if let Err(err) = actions::show_native_properties(&first) {
-                error!(error = %err, path = %first.display(), "native properties failed");
-                let lang = st.snapshot_config().language;
+            let lang = st.snapshot_config().language;
+            // The desktop's own dialog first: it knows the session, its themes
+            // and whatever the user already configured there. The internal
+            // panel answers for a session with no file manager to ask, which
+            // is the reason it exists.
+            match actions::show_native_properties(&first) {
+                Ok(()) => return,
+                Err(err) => {
+                    debug!(error = %err, path = %first.display(),
+                        "no native properties dialog, falling back to the panel");
+                }
+            }
+            let ext = first
+                .extension()
+                .map(|e| e.to_string_lossy().to_ascii_lowercase())
+                .unwrap_or_default();
+            let icon = self_icon(&first, &ext, true);
+            if !properties::open(&w, &first, lang, mtime_offset(), icon) {
+                error!(path = %first.display(), "neither dialog could describe the item");
                 notice(&w, i18n::tr(lang, "prop_native_failed"), NoticeKind::Error);
             }
         });
+        {
+            let weak = window.as_weak();
+            window.on_prop_closed(move || {
+                let Some(w) = weak.upgrade() else { return };
+                properties::close(&w);
+            });
+        }
+        {
+            let weak = window.as_weak();
+            window.on_prop_hash_start(move || {
+                let Some(w) = weak.upgrade() else { return };
+                let path = std::path::PathBuf::from(w.get_prop_path().as_str());
+                properties::start_hashing(&w, &path);
+            });
+        }
+        {
+            let weak = window.as_weak();
+            window.on_prop_hash_cancel(move || {
+                let Some(w) = weak.upgrade() else { return };
+                properties::cancel_hashing();
+                w.set_prop_hashing(false);
+            });
+        }
+        {
+            let st = state.clone();
+            let weak = window.as_weak();
+            window.on_prop_expected_changed(move |typed: slint::SharedString| {
+                let Some(w) = weak.upgrade() else { return };
+                let lang = st.snapshot_config().language;
+                properties::compare_expected(&w, typed.as_str(), lang);
+            });
+        }
+        // Permission changes. Unix only, which is also where the tab exists.
+        #[cfg(unix)]
+        {
+            let st = state.clone();
+            let weak = window.as_weak();
+            window.on_prop_access_changed(move |class: i32, index: i32| {
+                let Some(w) = weak.upgrade() else { return };
+                let path = std::path::PathBuf::from(w.get_prop_path().as_str());
+                let lang = st.snapshot_config().language;
+                if let Err(reason) = properties::apply_access(
+                    &w,
+                    &path,
+                    properties::access_class(class),
+                    index,
+                    lang,
+                ) {
+                    // The tab was repainted from disk before this point only
+                    // on success, so what is shown still matches the file.
+                    warn!(error = %reason, path = %path.display(), "permission change refused");
+                    let msg = i18n::tr(lang, "prop_perm_failed").replace("{reason}", &reason);
+                    notice(&w, msg, NoticeKind::Error);
+                    properties::refresh_after_failure(&w, &path, lang);
+                }
+            });
+        }
+        #[cfg(unix)]
+        {
+            let st = state.clone();
+            let weak = window.as_weak();
+            window.on_prop_executable_changed(move |executable: bool| {
+                let Some(w) = weak.upgrade() else { return };
+                let path = std::path::PathBuf::from(w.get_prop_path().as_str());
+                let lang = st.snapshot_config().language;
+                if let Err(reason) = properties::apply_executable(&w, &path, executable, lang) {
+                    warn!(error = %reason, path = %path.display(), "execute flag change refused");
+                    let msg = i18n::tr(lang, "prop_perm_failed").replace("{reason}", &reason);
+                    notice(&w, msg, NoticeKind::Error);
+                    properties::refresh_after_failure(&w, &path, lang);
+                }
+            });
+        }
     }
 
     // ----- Sort by clicking a header -----
@@ -5775,8 +5927,29 @@ pub fn install(window: &MainWindow, state: AppState) {
                 if s.column == new_col {
                     s.order = s.order.flip();
                 } else {
+                    let was_date = matches!(
+                        s.column,
+                        SortColumn::Modified | SortColumn::Created | SortColumn::Age
+                    );
                     s.column = new_col;
                     s.order = SortOrder::Asc;
+                    if let Some(secondary) = &mut s.secondary {
+                        if secondary.column.same_field(new_col) {
+                            secondary.column = if new_col == SortColumn::Name {
+                                SortColumn::Modified
+                            } else {
+                                SortColumn::Name
+                            };
+                        }
+                        if !was_date
+                            && matches!(
+                                new_col,
+                                SortColumn::Modified | SortColumn::Created | SortColumn::Age
+                            )
+                        {
+                            secondary.group_dates_by_day = true;
+                        }
+                    }
                 }
                 // sort-column / sort-asc will be pushed via update_panels_ui
                 // in the refresh_listing that follows (see below).
@@ -5785,6 +5958,77 @@ pub fn install(window: &MainWindow, state: AppState) {
             let cur = st.current_path();
             if !cur.as_os_str().is_empty() {
                 refresh_listing(&w, &st, &cur);
+            }
+            st.persist_workspace();
+        });
+    }
+
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_secondary_sort_action(move |action: SharedString| {
+            let Some(w) = weak.upgrade() else { return };
+            if st.active_manual_order() {
+                return;
+            }
+            let changed = st.with_tabs_mut(|book| {
+                let sort = &mut book.tabs[book.active].sort;
+                match action.as_str() {
+                    "enable" if sort.secondary.is_some() => false,
+                    "toggle" | "enable" => {
+                        sort.secondary = if sort.secondary.is_some() {
+                            None
+                        } else {
+                            Some(SecondarySort {
+                                column: if sort.column == SortColumn::Name {
+                                    SortColumn::Modified
+                                } else {
+                                    SortColumn::Name
+                                },
+                                order: SortOrder::Asc,
+                                group_dates_by_day: true,
+                            })
+                        };
+                        true
+                    }
+                    "reverse" => {
+                        if let Some(second) = &mut sort.secondary {
+                            second.order = second.order.flip();
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    "day" => {
+                        if let Some(second) = &mut sort.secondary {
+                            second.group_dates_by_day = !second.group_dates_by_day;
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    code => {
+                        let Some(column) = SortColumn::from_code(code) else {
+                            return false;
+                        };
+                        if column.same_field(sort.column) {
+                            return false;
+                        }
+                        if let Some(second) = &mut sort.secondary {
+                            second.column = column;
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                }
+            });
+            if changed {
+                let path = st.current_path();
+                if !path.as_os_str().is_empty() {
+                    refresh_listing(&w, &st, &path);
+                }
+                st.persist_workspace();
             }
         });
     }
@@ -6129,7 +6373,18 @@ pub fn install(window: &MainWindow, state: AppState) {
                 // The type-ahead filter is specific to the active view → reset.
                 st.filter.borrow_mut().clear();
                 w.set_active_filter(SharedString::new());
-                switch_active_panel(&w, &st);
+                let failed = st.panels.borrow()[idx].listing_failed;
+                if failed {
+                    // The previous view's watcher must not refresh this view
+                    // while its pending recovery or retry cooldown is retained.
+                    st.watcher_gen.fetch_add(1, Ordering::SeqCst);
+                    update_panels_ui(&w, &st);
+                    recovery::retry_view(&w, &st, idx, true);
+                } else {
+                    switch_active_panel(&w, &st);
+                }
+            } else if idx == *st.active_panel.borrow() {
+                recovery::retry_view(&w, &st, idx, true);
             }
         });
     }
@@ -6280,14 +6535,13 @@ pub fn install(window: &MainWindow, state: AppState) {
                 let Some(row_index) = usize::try_from(row_idx).ok() else {
                     return;
                 };
-                let dir = &panel.tabs.tabs[panel.tabs.active].current_path;
                 let model = &panel.rows_model;
                 let Some(mut row) = model.row_data(row_index) else {
                     return;
                 };
                 // A watcher/re-sort can recycle the index while reading:
                 // the full path remains authoritative before any mutation.
-                if row.resolution.is_empty() && dir.join(row.name.as_str()) == target {
+                if row.resolution.is_empty() && row_path(&row) == target {
                     row.resolution = resolution.clone();
                     row.depth = depth.clone();
                     model.set_row_data(row_index, row);
@@ -6320,7 +6574,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                 tab.item_arrangement = arrangement;
                 if !grid && tab.preview != (tab.zoom >= THUMB_ZOOM) {
                     tab.zoom = if tab.preview {
-                        THUMB_DEFAULT_ZOOM
+                        st.config.borrow().default_thumbnail_zoom
                     } else {
                         LIST_DEFAULT_ZOOM
                     };
@@ -6340,18 +6594,20 @@ pub fn install(window: &MainWindow, state: AppState) {
             request_imgmeta(&st);
         });
     }
-    // Toggle content previews independently of the grid's size.
+    // Enabling previews applies the configured size. Turning them off keeps
+    // the grid size, while the list returns to its compact icon rows.
     {
         let st = state.clone();
         let weak = window.as_weak();
         window.on_toggle_preview_mode(move |idx: i32| {
             let Some(w) = weak.upgrade() else { return };
             let idx = idx as usize;
-            let (compact, item_spacing) = {
+            let (compact, item_spacing, default_zoom) = {
                 let config = st.config.borrow();
                 (
                     config.compact_icon_rows_in_preview,
                     config.view_item_spacing,
+                    config.default_thumbnail_zoom,
                 )
             };
             let preview_now = {
@@ -6366,10 +6622,12 @@ pub fn install(window: &MainWindow, state: AppState) {
                     // The button toggles between the list/thumbnail default levels.
                     if t.item_arrangement == ItemArrangement::List {
                         t.zoom = if t.preview {
-                            THUMB_DEFAULT_ZOOM
+                            default_zoom
                         } else {
                             LIST_DEFAULT_ZOOM
                         };
+                    } else if t.preview {
+                        t.grid_zoom = Some(default_zoom);
                     }
                     (t.preview, t.zoom)
                 };
@@ -6382,6 +6640,37 @@ pub fn install(window: &MainWindow, state: AppState) {
             // when we warn (once) if `ffmpeg` is missing for video (Linux).
             if preview_now {
                 maybe_warn_ffmpeg_missing(&w, &st);
+            }
+        });
+    }
+    // Feedback reads the final level after the synchronous zoom callback.
+    {
+        let st = state.clone();
+        window.on_zoom_label(move |idx| {
+            let panels = st.panels.borrow();
+            let Some(panel) = usize::try_from(idx).ok().and_then(|idx| panels.get(idx)) else {
+                return SharedString::default();
+            };
+            let tab = &panel.tabs.tabs[panel.tabs.active];
+            let level = if tab.item_arrangement == ItemArrangement::Grid {
+                tab.grid_zoom.unwrap_or(GRID_DEFAULT_ZOOM)
+            } else {
+                tab.zoom
+            };
+            i18n::tr(st.config.borrow().language, "thumbnail_zoom_feedback")
+                .replace("{level}", &level.to_string())
+                .replace("{max}", &MAX_ZOOM.to_string())
+                .into()
+        });
+    }
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_default_thumbnail_zoom_changed(move |zoom| {
+            let zoom = zoom.clamp(MIN_THUMBNAIL_ZOOM, MAX_THUMBNAIL_ZOOM);
+            st.persist_config(|config| config.default_thumbnail_zoom = zoom);
+            if let Some(w) = weak.upgrade() {
+                w.set_default_thumbnail_zoom(zoom);
             }
         });
     }
@@ -6551,17 +6840,13 @@ pub fn install(window: &MainWindow, state: AppState) {
                 if !tab.preview {
                     continue;
                 }
-                let dir = tab.current_path.clone();
                 let model = &panel.rows_model;
                 let Some(mut row) = model.row_data(location.row) else {
                     continue;
                 };
                 // The index may have been recycled by a watcher: the path remains
                 // authoritative. A row outside the window keeps only the LRU.
-                if row.rendered
-                    && row.thumbnail.size().width == 0
-                    && dir.join(row.name.as_str()) == target
-                {
+                if row.rendered && row.thumbnail.size().width == 0 && row_path(&row) == target {
                     row.thumbnail = img.clone();
                     model.set_row_data(location.row, row);
                 }
@@ -6609,12 +6894,11 @@ pub fn install(window: &MainWindow, state: AppState) {
                 let Some(row_index) = usize::try_from(row_idx).ok() else {
                     return;
                 };
-                let dir = &panel.tabs.tabs[panel.tabs.active].current_path;
                 let model = &panel.rows_model;
                 let Some(mut row) = model.row_data(row_index) else {
                     return;
                 };
-                if row.is_dir && dir.join(row.name.as_str()) == target {
+                if row.is_dir && row_path(&row) == target {
                     if let Some(m) = m {
                         apply_rmtime_to_row(&mut row, m, now, lang);
                     }
@@ -6788,13 +7072,13 @@ pub fn install(window: &MainWindow, state: AppState) {
                         w.set_drag_target_zone(0);
                         w.set_drag_target_gap(-1);
                         w.set_drag_target_gap_panel(-1);
-                        match transfer_tab_to(&st, source_panel, from, target, at) {
+                        match transfer_tab_to(&w, &st, source_panel, from, target, at) {
                             Transfer::Moved => {
                                 refresh_all_panels(&w, &st);
                                 return;
                             }
                             // Instance emptied → in the process of closing: don't touch anything.
-                            Transfer::Emptied => return,
+                            Transfer::Emptied | Transfer::Blocked => return,
                             // Target frozen/gone → tear off if outside the window, otherwise abandon.
                             Transfer::Failed => {
                                 if !outside {
@@ -7137,26 +7421,12 @@ pub fn install(window: &MainWindow, state: AppState) {
                         st.remember_workspace_saved();
                         st.persist_workspace();
                         update_window_title(&w, &st);
-                        w.set_ws_toast(w.get_strings().ws_toast_saved);
+                        w.set_ws_toast(w.global::<crate::Strings>().get_ws_toast_saved());
                         w.set_ws_name_taken(false);
                     }
                     Err(err) => error!(error = %err, "save named workspace failed"),
                 }
                 refresh_workspaces_ui(&w, &st);
-            });
-        });
-    }
-    {
-        let st = state.clone();
-        let weak = window.as_weak();
-        window.on_ws_load(move |id: SharedString| {
-            let st = st.clone();
-            let weak = weak.clone();
-            let id = id.to_string();
-            defer(move || {
-                if let Some(w) = weak.upgrade() {
-                    load_named_into(&w, &st, &id);
-                }
             });
         });
     }
@@ -7180,7 +7450,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                         // of sight, and a shortcut that silently stopped working
                         // is the kind of thing found much later.
                         if previous.is_some() {
-                            w.set_ws_toast(w.get_strings().ws_toast_slot_moved);
+                            w.set_ws_toast(w.global::<crate::Strings>().get_ws_toast_slot_moved());
                         }
                     }
                     Err(err) => {
@@ -7190,11 +7460,7 @@ pub fn install(window: &MainWindow, state: AppState) {
             });
         });
     }
-    // A keyboard slot loads its workspace straight away. The current one is
-    // saved on the way when it is a named workspace with changes, deliberately
-    // without asking: the shortcut exists to switch in one keystroke, and a
-    // dialog in the middle would defeat it. Nothing is lost either way, since
-    // what the dialog offers is exactly what happens here.
+    // Keyboard slots have their own save policy, independent of manual loading.
     {
         let st = state.clone();
         let weak = window.as_weak();
@@ -7210,32 +7476,21 @@ pub fn install(window: &MainWindow, state: AppState) {
             let weak = weak.clone();
             defer(move || {
                 let Some(w) = weak.upgrade() else { return };
+                if w.get_ws_dirty_warn_open() {
+                    return;
+                }
                 let dir = paths::workspaces_dir();
                 let Some(target) = workspace::workspace_with_slot(&dir, slot) else {
                     // The slot answers to nobody. Staying silent is the point:
                     // a stray digit must not interrupt with a message.
                     return;
                 };
-                // Already there: save the pending changes and stop, rather than
-                // reload the same layout and lose scroll positions on the way.
-                let already_current = current_workspace_id(&st).as_deref() == Some(target.as_str());
-                if let Some((current_id, name)) = dirty_current_workspace(&st)
-                    && let Err(err) = overwrite_named_from_live(&st, &current_id)
-                {
-                    // Saving failed, so switching now would drop the changes
-                    // the user believes are being kept. The move is abandoned
-                    // and said out loud.
-                    error!(error = %err, id = %current_id, "saving before a slot switch failed");
-                    let msg = w
-                        .get_strings()
-                        .ws_notice_save_failed
-                        .replace("{name}", &name);
-                    notice(&w, msg, NoticeKind::Error);
+                // Pressing the current slot is a no-op, including for saving.
+                if current_workspace_id(&st).as_deref() == Some(target.as_str()) {
                     return;
                 }
-                if already_current {
-                    update_window_title(&w, &st);
-                    refresh_workspaces_ui(&w, &st);
+                let policy = st.config.borrow().workspace_shortcut_save;
+                if !prepare_workspace_load(&w, &st, policy, Some(&target), true) {
                     return;
                 }
                 load_named_into(&w, &st, &target);
@@ -7243,9 +7498,7 @@ pub fn install(window: &MainWindow, state: AppState) {
             });
         });
     }
-    // Safeguard: Load goes through here. Clean/ad-hoc current → loads
-    // directly; modified current → opens the warning dialog, UNLESS
-    // the user has unchecked the safeguard in the settings.
+    // Panel loading follows the independent manual-load policy.
     {
         let st = state.clone();
         let weak = window.as_weak();
@@ -7255,45 +7508,49 @@ pub fn install(window: &MainWindow, state: AppState) {
             let target_id = target_id.to_string();
             defer(move || {
                 let Some(w) = weak.upgrade() else { return };
-                // Safeguard disabled (settings) → direct load, as if
-                // the current workspace were clean.
-                let dirty = if w.get_ws_warn_unsaved() {
-                    dirty_current_workspace(&st)
-                } else {
-                    None
-                };
-                match dirty {
-                    Some((_cur_id, cur_name)) => {
-                        let target_name =
-                            workspace::list_named_workspaces(&paths::workspaces_dir())
-                                .into_iter()
-                                .find(|m| m.id == target_id)
-                                .map(|m| m.name)
-                                .unwrap_or_default();
-                        let s = w.get_strings();
-                        w.set_ws_dirty_title_text(
-                            s.ws_dirty_title.replace("{name}", &cur_name).into(),
-                        );
-                        w.set_ws_dirty_body_text(
-                            s.ws_dirty_body
-                                .replace("{name}", &cur_name)
-                                .replace("{target}", &target_name)
-                                .into(),
-                        );
-                        w.set_ws_dirty_target_id(target_id.into());
-                        w.set_ws_dirty_reset(false); // pending action = load `target_id`
-                        w.set_ws_dirty_warn_open(true);
-                    }
-                    None => {
-                        load_named_into(&w, &st, &target_id);
-                        w.set_workspaces_open(false);
-                    }
+                let policy = st.config.borrow().panel_save_policy();
+                if prepare_workspace_load(&w, &st, policy, Some(&target_id), false) {
+                    load_named_into(&w, &st, &target_id);
+                    w.set_workspaces_open(false);
                 }
             });
         });
     }
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_ws_shortcut_save_changed(move |index| {
+            let policy = WorkspaceLoadPolicy::from_index(index);
+            st.persist_config(|config| config.workspace_shortcut_save = policy);
+            if let Some(w) = weak.upgrade() {
+                w.set_ws_shortcut_save_index(policy.index());
+            }
+        });
+    }
+    {
+        let st = state.clone();
+        let weak = window.as_weak();
+        window.on_ws_discard_and_load(move || {
+            let st = st.clone();
+            let weak = weak.clone();
+            defer(move || {
+                let Some(w) = weak.upgrade() else { return };
+                if !w.get_ws_dirty_warn_open() {
+                    return;
+                }
+                remember_workspace_load_choice(&w, &st, WorkspaceLoadPolicy::Discard);
+                if w.get_ws_dirty_reset() {
+                    reset_into(&w, &st);
+                } else {
+                    load_named_into(&w, &st, w.get_ws_dirty_target_id().as_str());
+                }
+                w.set_ws_dirty_warn_open(false);
+                w.set_workspaces_open(false);
+            });
+        });
+    }
     // "Save and…": overwrites the current workspace with the
-    // live state, THEN executes the pending action — load `ws-dirty-target-id`, or
+    // live state, then executes the pending action: load `ws-dirty-target-id`, or
     // start over blank if `ws-dirty-reset`.
     {
         let st = state.clone();
@@ -7303,12 +7560,13 @@ pub fn install(window: &MainWindow, state: AppState) {
             let weak = weak.clone();
             defer(move || {
                 let Some(w) = weak.upgrade() else { return };
-                if let Some((cur_id, _)) = dirty_current_workspace(&st) {
-                    match overwrite_named_from_live(&st, &cur_id) {
-                        Ok(()) => info!(id = %cur_id, "workspace saved before switching"),
-                        Err(err) => error!(error = %err, "save-and-switch: overwrite failed"),
-                    }
+                if !w.get_ws_dirty_warn_open() {
+                    return;
                 }
+                if !save_before_workspace_switch(&w, &st) {
+                    return;
+                }
+                remember_workspace_load_choice(&w, &st, WorkspaceLoadPolicy::Save);
                 if w.get_ws_dirty_reset() {
                     reset_into(&w, &st);
                 } else {
@@ -7333,7 +7591,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                     Ok(()) => {
                         info!(id = %id, "workspace overwritten");
                         update_window_title(&w, &st);
-                        w.set_ws_toast(w.get_strings().ws_toast_updated);
+                        w.set_ws_toast(w.global::<crate::Strings>().get_ws_toast_updated());
                         refresh_workspaces_ui(&w, &st); // counters up to date
                     }
                     Err(err) => error!(error = %err, id = %id, "overwrite workspace failed"),
@@ -7361,8 +7619,8 @@ pub fn install(window: &MainWindow, state: AppState) {
                 };
                 let Some(id) = current_workspace_id(&st) else {
                     let msg = w
-                        .get_strings()
-                        .ws_notice_save_failed
+                        .global::<crate::Strings>()
+                        .get_ws_notice_save_failed()
                         .replace("{name}", &name);
                     notice(&w, msg, NoticeKind::Error);
                     w.set_workspaces_open(true);
@@ -7377,14 +7635,17 @@ pub fn install(window: &MainWindow, state: AppState) {
                         // this the dot would sit there contradicting the notice
                         // that just confirmed the save.
                         refresh_workspaces_ui(&w, &st);
-                        let msg = w.get_strings().ws_notice_saved.replace("{name}", &name);
+                        let msg = w
+                            .global::<crate::Strings>()
+                            .get_ws_notice_saved()
+                            .replace("{name}", &name);
                         notice_for(&w, msg, NoticeKind::Success, 2_000);
                     }
                     Err(err) => {
                         error!(error = %err, id = %id, "workspace shortcut save failed");
                         let msg = w
-                            .get_strings()
-                            .ws_notice_save_failed
+                            .global::<crate::Strings>()
+                            .get_ws_notice_save_failed()
                             .replace("{name}", &name);
                         notice(&w, msg, NoticeKind::Error);
                     }
@@ -7411,7 +7672,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                             st.persist_workspace();
                             update_window_title(&w, &st);
                         }
-                        w.set_ws_toast(w.get_strings().ws_toast_deleted);
+                        w.set_ws_toast(w.global::<crate::Strings>().get_ws_toast_deleted());
                     }
                     Err(err) => error!(error = %err, id = %id, "delete workspace failed"),
                 }
@@ -7441,7 +7702,7 @@ pub fn install(window: &MainWindow, state: AppState) {
                             st.persist_workspace();
                             update_window_title(&w, &st);
                         }
-                        w.set_ws_toast(w.get_strings().ws_toast_renamed);
+                        w.set_ws_toast(w.global::<crate::Strings>().get_ws_toast_renamed());
                     }
                     Err(err) => error!(error = %err, id = %id, "rename workspace failed"),
                 }
@@ -7450,24 +7711,7 @@ pub fn install(window: &MainWindow, state: AppState) {
         });
     }
     // Resets the current layout to the blank state (1 panel, $HOME).
-    // DIRECT path (no safeguard): used by the "load without
-    // saving" dialog when the target is "new workspace".
-    {
-        let st = state.clone();
-        let weak = window.as_weak();
-        window.on_ws_reset(move || {
-            let st = st.clone();
-            let weak = weak.clone();
-            defer(move || {
-                if let Some(w) = weak.upgrade() {
-                    reset_into(&w, &st);
-                }
-            });
-        });
-    }
-    // "Start a new workspace" from the menu: goes through the safeguard
-    //. Clean/ad-hoc current or safeguard disabled → direct reset + closes
-    // the overlay; modified current → dialog (target = "New workspace").
+    // Starting a workspace follows the panel policy used for named loads.
     {
         let st = state.clone();
         let weak = window.as_weak();
@@ -7476,31 +7720,10 @@ pub fn install(window: &MainWindow, state: AppState) {
             let weak = weak.clone();
             defer(move || {
                 let Some(w) = weak.upgrade() else { return };
-                let dirty = if w.get_ws_warn_unsaved() {
-                    dirty_current_workspace(&st)
-                } else {
-                    None
-                };
-                match dirty {
-                    Some((_cur_id, cur_name)) => {
-                        let s = w.get_strings();
-                        let target_name = s.ws_new_name;
-                        w.set_ws_dirty_title_text(
-                            s.ws_dirty_title.replace("{name}", &cur_name).into(),
-                        );
-                        w.set_ws_dirty_body_text(
-                            s.ws_dirty_body
-                                .replace("{name}", &cur_name)
-                                .replace("{target}", &target_name)
-                                .into(),
-                        );
-                        w.set_ws_dirty_reset(true); // the pending action is a reset
-                        w.set_ws_dirty_warn_open(true);
-                    }
-                    None => {
-                        reset_into(&w, &st);
-                        w.set_workspaces_open(false);
-                    }
+                let policy = st.config.borrow().panel_save_policy();
+                if prepare_workspace_load(&w, &st, policy, None, false) {
+                    reset_into(&w, &st);
+                    w.set_workspaces_open(false);
                 }
             });
         });
@@ -7581,8 +7804,7 @@ fn overwrite_named_from_live(state: &AppState, id: &str) -> favnyr_core::Result<
 }
 
 /// Loads the named workspace `id` (replaces the layout, repopulates, refreshes,
-/// persists, updates the title). Shared by `ws-load`, `ws-load-guarded`, and
-/// `ws-save-and-load`.
+/// persists, updates the title). All workspace loading paths converge here.
 fn load_named_into(window: &MainWindow, state: &AppState, id: &str) {
     match workspace::load_named_workspace(&paths::workspaces_dir(), id) {
         Ok((name, ws)) => {
@@ -7600,9 +7822,108 @@ fn load_named_into(window: &MainWindow, state: &AppState, id: &str) {
     }
 }
 
+/// Returns whether the requested load can proceed immediately.
+fn prepare_workspace_load(
+    window: &MainWindow,
+    state: &AppState,
+    policy: WorkspaceLoadPolicy,
+    target: Option<&str>,
+    shortcut: bool,
+) -> bool {
+    let Some((_, current)) = dirty_current_workspace(state) else {
+        return true;
+    };
+    match policy {
+        WorkspaceLoadPolicy::Ask => {
+            open_workspace_load_warning(window, target, &current, shortcut);
+            false
+        }
+        WorkspaceLoadPolicy::Save => save_before_workspace_switch(window, state),
+        WorkspaceLoadPolicy::Discard => true,
+    }
+}
+
+/// Shared confirmation for panel loading and numbered shortcuts.
+fn open_workspace_load_warning(
+    window: &MainWindow,
+    target: Option<&str>,
+    current: &str,
+    shortcut: bool,
+) {
+    let strings = window.global::<crate::Strings>();
+    window.set_ws_dirty_title_text(
+        strings
+            .get_ws_dirty_title()
+            .replace("{name}", current)
+            .into(),
+    );
+    let body = if let Some(target) = target {
+        let target_name = workspace::list_named_workspaces(&paths::workspaces_dir())
+            .into_iter()
+            .find(|meta| meta.id == target)
+            .map(|meta| meta.name)
+            .unwrap_or_default();
+        strings
+            .get_ws_dirty_body()
+            .replace("{name}", current)
+            .replace("{target}", &target_name)
+    } else {
+        strings.get_ws_dirty_body_new().replace("{name}", current)
+    };
+    window.set_ws_dirty_body_text(body.into());
+    window.set_ws_dirty_target_id(target.unwrap_or_default().into());
+    window.set_ws_dirty_reset(target.is_none());
+    window.set_ws_dirty_shortcut(shortcut);
+    window.set_ws_dirty_remember(false);
+    window.set_ws_dirty_warn_open(true);
+}
+
+fn remember_workspace_load_choice(
+    window: &MainWindow,
+    state: &AppState,
+    policy: WorkspaceLoadPolicy,
+) {
+    if !window.get_ws_dirty_remember() {
+        return;
+    }
+    if window.get_ws_dirty_shortcut() {
+        state.persist_config(|config| config.workspace_shortcut_save = policy);
+        window.set_ws_shortcut_save_index(policy.index());
+    } else {
+        state.persist_config(|config| config.workspace_panel_save = Some(policy));
+        window.set_ws_panel_save_index(policy.index());
+    }
+}
+
+/// A failed save must leave both the current workspace and its confirmation intact.
+fn save_before_workspace_switch(window: &MainWindow, state: &AppState) -> bool {
+    let Some((id, name)) = dirty_current_workspace(state) else {
+        return true;
+    };
+    match overwrite_named_from_live(state, &id) {
+        Ok(()) => {
+            info!(id, "workspace saved before switching");
+            let message = window
+                .global::<crate::Strings>()
+                .get_ws_notice_saved()
+                .replace("{name}", &name);
+            notice_for(window, message, NoticeKind::Success, 2_000);
+            true
+        }
+        Err(err) => {
+            error!(error = %err, id, "saving before workspace switch failed");
+            let message = window
+                .global::<crate::Strings>()
+                .get_ws_notice_save_failed()
+                .replace("{name}", &name);
+            notice(window, message, NoticeKind::Error);
+            false
+        }
+    }
+}
+
 /// Starts over with a BLANK workspace (1 panel, `$HOME`, no longer attached to any name).
-/// Shared by `ws-reset`, `ws-reset-guarded`, and the "reset" branch of
-/// `ws-save-and-load`.
+/// Shared by guarded reset and the confirmation dialog's reset action.
 fn reset_into(window: &MainWindow, state: &AppState) {
     state.reset_to_blank();
     push_sidebar_sections_ui(window, state);
@@ -7631,6 +7952,7 @@ type TabSig = (
     String,
     SortColumn,
     SortOrder,
+    Option<SecondarySort>,
     bool,
     bool,
     GroupMode,
@@ -7652,6 +7974,7 @@ fn workspace_signature(ws: &WorkspaceState) -> WorkspaceSig {
                         t.path.clone(),
                         t.sort_column,
                         t.sort_order,
+                        t.secondary_sort,
                         t.preview,
                         t.show_hidden,
                         t.group_mode,
@@ -8183,6 +8506,9 @@ enum EjectOp {
 /// second time from the device string alone would silently lose the Windows
 /// answer, leaving the menu and the toast contradicting each other.
 fn spawn_eject(window: &MainWindow, state: &AppState, device: String, op: EjectOp, hotplug: bool) {
+    if shutdown::stopping(state) {
+        return;
+    }
     // First invalidate any watcher installation still in flight — otherwise
     // it could resurrect a handle on the volume being ejected.
     state.watcher_gen.fetch_add(1, Ordering::SeqCst);
@@ -8191,22 +8517,24 @@ fn spawn_eject(window: &MainWindow, state: &AppState, device: String, op: EjectO
     }
     let weak = window.as_weak();
     let lang = state.snapshot_config().language;
+    let lease = crate::background_work::acquire();
     std::thread::spawn(move || {
+        let _lease = lease;
         let res = match op {
             EjectOp::SafeRemove => favnyr_core::eject::safe_remove(&device, hotplug),
             EjectOp::Disconnect => favnyr_core::eject::disconnect(&device),
         };
         let _ = slint::invoke_from_event_loop(move || {
             let Some(w) = weak.upgrade() else { return };
-            let s = w.get_strings();
+            let strings = w.global::<crate::Strings>();
             match res {
                 Ok(()) => {
                     show_notice_ok(
                         &w,
                         match op {
-                            EjectOp::SafeRemove if hotplug => s.net_ejected,
-                            EjectOp::SafeRemove => s.net_released,
-                            EjectOp::Disconnect => s.net_disconnected,
+                            EjectOp::SafeRemove if hotplug => strings.get_net_ejected(),
+                            EjectOp::SafeRemove => strings.get_net_released(),
+                            EjectOp::Disconnect => strings.get_net_disconnected(),
                         },
                     );
                     // This runs back on the UI thread but outside any state
@@ -8218,7 +8546,7 @@ fn spawn_eject(window: &MainWindow, state: &AppState, device: String, op: EjectO
                 }
                 Err(err) => {
                     let reason = i18n::eject_error_message(lang, &err);
-                    show_notice(&w, format!("{}: {reason}", s.net_eject_failed));
+                    show_notice(&w, format!("{}: {reason}", strings.get_net_eject_failed()));
                 }
             }
             w.invoke_refresh(); // re-lists the active panel + re-arms the watcher
@@ -8774,6 +9102,9 @@ fn manual_order_insertion_for_panel(
     let (directory, names) = {
         let panels = state.panels.borrow();
         let panel = panels.get(panel_index)?;
+        if panel.search.is_some() {
+            return None;
+        }
         let tab = panel.tabs.tabs.get(panel.tabs.active)?;
         (
             tab.current_path.clone(),
@@ -8959,36 +9290,29 @@ fn regroup_colored_folder_panels(state: &AppState) -> bool {
         }
 
         let mut rows: Vec<FileRow> = panel.rows_model.iter().collect();
-        let previous_order: Vec<String> = rows
-            .iter()
-            .map(|row| row.name.as_str().to_owned())
-            .collect();
-        let anchor_name = usize::try_from(tab.selection_anchor)
+        let previous_order: Vec<PathBuf> = rows.iter().map(row_path).collect();
+        let anchor_path = usize::try_from(tab.selection_anchor)
             .ok()
             .and_then(|index| previous_order.get(index))
             .cloned();
-        let cursor_name = usize::try_from(tab.cursor)
+        let cursor_path = usize::try_from(tab.cursor)
             .ok()
             .and_then(|index| previous_order.get(index))
             .cloned();
 
         group_colored_folder_rows(&mut rows);
-        if rows
-            .iter()
-            .map(|row| row.name.as_str())
-            .eq(previous_order.iter().map(String::as_str))
-        {
+        if rows.iter().map(row_path).eq(previous_order.iter().cloned()) {
             continue;
         }
 
         let tab = &mut panel.tabs.tabs[active];
-        tab.selection_anchor = anchor_name
+        tab.selection_anchor = anchor_path
             .as_deref()
-            .and_then(|name| rows.iter().position(|row| row.name == name))
+            .and_then(|path| rows.iter().position(|row| row_path(row) == path))
             .map_or(-1, |index| index as i32);
-        tab.cursor = cursor_name
+        tab.cursor = cursor_path
             .as_deref()
-            .and_then(|name| rows.iter().position(|row| row.name == name))
+            .and_then(|path| rows.iter().position(|row| row_path(row) == path))
             .map_or(-1, |index| index as i32);
         layout_rows(&mut rows, tab.zoom, compact_icon_rows, item_spacing);
         panel.replace_rows(rows);
@@ -9006,7 +9330,7 @@ fn refresh_annotation_models(
         for (index, mut row) in panel.rows.iter().enumerate() {
             // Each row retains its displayed parent, including during an
             // asynchronous navigation whose new listing has not arrived yet.
-            let path = Path::new(row.path.as_str()).join(row.name.as_str());
+            let path = row_path(&row);
             let slot = i32::from(annotations.color_of(&path));
             let note = annotations.note_of(&path);
             if row.folder_slot != slot || row.comment != note {
@@ -9520,11 +9844,10 @@ fn first_file_in_active_panel(state: &AppState) -> Option<PathBuf> {
     let active = *state.active_panel.borrow();
     let panels = state.panels.borrow();
     let p = panels.get(active)?;
-    let dir = p.tabs.tabs[p.tabs.active].current_path.clone();
     (0..p.rows_model.row_count())
         .filter_map(|i| p.rows_model.row_data(i))
         .find(|r| !r.is_dir)
-        .map(|r| dir.join(r.name.as_str()))
+        .map(|r| row_path(&r))
 }
 
 /// LAZY probe of the shell menu — called when the "Detected Windows
@@ -9756,17 +10079,6 @@ impl Recipe {
     }
 }
 
-/// 7-Zip candidates. The installer registers a shell extension but adds
-/// nothing to PATH on Windows, hence the absolute paths alongside the bare
-/// names used on Linux (`7zz` is the upstream build, `7z`/`7za` come p7zip).
-const SEVEN_ZIP: &[&str] = &[
-    "7z",
-    "7zz",
-    "7za",
-    r"C:\Program Files\7-Zip\7z.exe",
-    r"C:\Program Files (x86)\7-Zip\7z.exe",
-];
-
 /// Ready-made commands.
 ///
 /// Archiving and sharing are the two jobs the custom-command system gets asked
@@ -9785,7 +10097,7 @@ const RECIPES: &[Recipe] = &[
     Recipe {
         tool: "7z",
         label_key: "archive_compress_to",
-        programs: SEVEN_ZIP,
+        programs: thumbnail::SEVEN_ZIP_PROGRAMS,
         args: "a {dir}/{setname}.zip {files}",
         ctx_exts: &[openers::CTX_EXT_ALL],
         ctx: openers::CTX_FILE | openers::CTX_DIR,
@@ -9796,7 +10108,7 @@ const RECIPES: &[Recipe] = &[
     Recipe {
         tool: "7z",
         label_key: "ow_recipe_extract_here",
-        programs: SEVEN_ZIP,
+        programs: thumbnail::SEVEN_ZIP_PROGRAMS,
         args: "x -o{dir} {file}",
         ctx_exts: rfs::ARCHIVE_EXTENSIONS,
         ctx: openers::CTX_FILE,
@@ -9808,7 +10120,7 @@ const RECIPES: &[Recipe] = &[
     Recipe {
         tool: "7z",
         label_key: "ow_recipe_extract_folder",
-        programs: SEVEN_ZIP,
+        programs: thumbnail::SEVEN_ZIP_PROGRAMS,
         args: "x -o{dir}/{stem} {file}",
         ctx_exts: rfs::ARCHIVE_EXTENSIONS,
         ctx: openers::CTX_FILE,
@@ -10141,10 +10453,7 @@ fn create_link_entry(
     }
 }
 
-/// Opens `dir` in a NEW tab of the active view (same mechanics as
-/// `on_action_open_new_tab`). Used for folder `.lnk` shortcuts.
-// Only used by the `.lnk` path (see `open_shortcut_as_tab`, Windows).
-#[cfg(windows)]
+/// Opens a directory after the active tab using the configured display defaults.
 fn open_dir_in_new_tab(window: &MainWindow, state: &AppState, dir: &Path) {
     let default_display = TabDisplayDefaults::from(&*state.config.borrow());
     let opened = state.with_tabs_mut(|book| {
@@ -10310,8 +10619,145 @@ fn open_one_file_default(window: &MainWindow, state: &AppState, path: &PathBuf) 
             }
         }
     }
-    if let Err(err) = actions::open_path(path) {
-        error!(error = %err, path = %path.display(), "open file failed");
+    match actions::open_path(path) {
+        Err(err) => error!(error = %err, path = %path.display(), "open file failed"),
+        // A program Favnyr started itself: its outcome is worth waiting for.
+        // Anything the desktop launched returns nothing to watch.
+        Ok(Some(watch)) => watch_launch(window, state, path, watch),
+        Ok(None) => {}
+    }
+}
+
+/// Waits for a program to finish and raises a banner only if it failed almost
+/// at once.
+///
+/// The wait is a blocking read on the program's standard error, so it runs on
+/// its own thread. That thread is parked in a system call for as long as the
+/// program lives, which costs no processor time: it is also what keeps a
+/// chatty program from being frozen by a pipe nobody empties.
+///
+/// A failure arriving later than the watch window is written to the log and
+/// nowhere else. An editor closed with an error two hours after being started
+/// has nothing to do with the double-click that opened it, and a banner then
+/// would be noise.
+fn watch_launch(window: &MainWindow, state: &AppState, path: &Path, watch: actions::WatchedLaunch) {
+    let lang = state.snapshot_config().language;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string());
+    let weak = window.as_weak();
+
+    std::thread::spawn(move || {
+        let Some(failure) = watch.wait_for_early_failure() else {
+            return;
+        };
+        let message = launch_failure_message(lang, &name, &failure);
+        let _ = slint::invoke_from_event_loop(move || {
+            if let Some(w) = weak.upgrade() {
+                notice(&w, message, NoticeKind::Error);
+            }
+        });
+    });
+}
+
+#[cfg(test)]
+mod launch_failure_tests {
+    use super::launch_failure_message;
+    use crate::actions::EarlyFailure;
+    use favnyr_core::i18n::Lang;
+
+    #[test]
+    fn what_the_program_printed_is_what_the_banner_says() {
+        let failure = EarlyFailure {
+            code: Some(1),
+            message: "run with sudo".into(),
+        };
+        let shown = launch_failure_message(Lang::En, "my_script.sh", &failure);
+        assert!(shown.contains("my_script.sh"), "{shown}");
+        assert!(shown.contains("run with sudo"), "{shown}");
+        // The reason replaces the code, which on its own teaches nothing.
+        assert!(!shown.contains('1'), "{shown}");
+    }
+
+    #[test]
+    fn a_silent_program_still_reports_its_code() {
+        let failure = EarlyFailure {
+            code: Some(127),
+            message: String::new(),
+        };
+        let shown = launch_failure_message(Lang::En, "my_script.sh", &failure);
+        assert!(shown.contains("127"), "{shown}");
+    }
+
+    #[test]
+    fn a_program_ended_by_a_signal_reports_neither() {
+        let failure = EarlyFailure {
+            code: None,
+            message: String::new(),
+        };
+        let shown = launch_failure_message(Lang::En, "my_script.sh", &failure);
+        assert!(shown.contains("my_script.sh"), "{shown}");
+    }
+
+    #[test]
+    fn a_verbose_program_is_cut_to_its_last_lines() {
+        // The reason sits at the end, and a banner cannot hold a build log.
+        let mut message = String::new();
+        for i in 0..40 {
+            message.push_str(&format!("line {i}\n"));
+        }
+        message.push_str("fatal: no such file");
+        let failure = EarlyFailure {
+            code: Some(2),
+            message,
+        };
+        let shown = launch_failure_message(Lang::En, "my_script.sh", &failure);
+        assert!(shown.contains("fatal: no such file"), "{shown}");
+        assert!(!shown.contains("line 0"), "{shown}");
+        assert!(shown.len() < 200, "banner too long: {shown}");
+    }
+
+    #[test]
+    fn the_three_sentences_are_translated() {
+        for key in [
+            "run_failed_with_message",
+            "run_failed_code",
+            "run_failed_unknown",
+        ] {
+            assert_ne!(crate::i18n::tr(Lang::En, key), key, "{key}");
+        }
+    }
+}
+
+/// The sentence shown for a failed launch.
+///
+/// What the program printed comes first when there is any: it is the reason,
+/// and the exit code alone rarely helps. Without it the code is still worth
+/// saying, and a program killed by a signal reports neither.
+fn launch_failure_message(lang: Lang, name: &str, failure: &actions::EarlyFailure) -> String {
+    if !failure.message.is_empty() {
+        // A program can be verbose on its way out; the banner takes the last
+        // lines, which is where the reason sits.
+        let reason: String = failure
+            .message
+            .lines()
+            .rev()
+            .take(3)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join(" ");
+        return i18n::tr(lang, "run_failed_with_message")
+            .replace("{name}", name)
+            .replace("{reason}", reason.trim());
+    }
+    match failure.code {
+        Some(code) => i18n::tr(lang, "run_failed_code")
+            .replace("{name}", name)
+            .replace("{code}", &code.to_string()),
+        None => i18n::tr(lang, "run_failed_unknown").replace("{name}", name),
     }
 }
 
@@ -10419,8 +10865,8 @@ fn push_favorites_ui(window: &MainWindow, state: &AppState) {
     window.set_fav_can_collapse(fav.any_expanded());
 
     // Popup dropdown: "Root" + all indented containers.
-    let s = i18n::strings_for(state.config.borrow().language);
-    let mut labels: Vec<SharedString> = vec![s.fav_popup_root.clone()];
+    let mut labels: Vec<SharedString> =
+        vec![i18n::tr(state.config.borrow().language, "fav_popup_root").into()];
     let mut ids: Vec<String> = vec![String::new()];
     for (id, name, depth) in fav.containers() {
         let indent = "   ".repeat(depth.max(0) as usize);
@@ -10441,7 +10887,7 @@ fn resolve_fav_dir(window: &MainWindow, p: &Path, lang: Lang) -> Option<PathBuf>
     }
     notice(
         window,
-        i18n::strings_for(lang).fav_toast_missing.clone(),
+        i18n::tr(lang, "fav_toast_missing"),
         NoticeKind::FavMissing,
     );
     None
@@ -10559,9 +11005,7 @@ fn fav_action(window: &MainWindow, state: &AppState, id: &str) -> Option<FavActi
     if action.is_none() {
         notice(
             window,
-            i18n::strings_for(state.config.borrow().language)
-                .fav_toast_missing
-                .clone(),
+            i18n::tr(state.config.borrow().language, "fav_toast_missing"),
             NoticeKind::FavMissing,
         );
     }
@@ -10665,7 +11109,7 @@ fn add_paths_to_favorite(
         push_favorites_ui(window, state);
         notice(
             window,
-            i18n::strings_for(lang).fav_toast_added.clone(),
+            i18n::tr(lang, "fav_toast_added"),
             NoticeKind::FavAdded,
         );
     } else {
@@ -10673,7 +11117,7 @@ fn add_paths_to_favorite(
         // hover) → neutral info, not an error.
         notice(
             window,
-            i18n::strings_for(lang).fav_toast_exists.clone(),
+            i18n::tr(lang, "fav_toast_exists"),
             NoticeKind::FavExists,
         );
     }
@@ -10849,7 +11293,14 @@ fn initial_populate_async(window: &MainWindow, state: &AppState) {
         for (idx, path, show_hidden, sort, group, manual_order) in jobs {
             let res = match rfs::list_dir_counted(&path, show_hidden || manual_order) {
                 Ok((mut entries, hidden)) => {
-                    rfs::sort(&mut entries, sort.column, sort.order, group);
+                    rfs::sort_with_secondary(
+                        &mut entries,
+                        sort.column,
+                        sort.order,
+                        group,
+                        sort.secondary,
+                        mtime_offset(),
+                    );
                     Ok((entries, hidden))
                 }
                 Err(err) => {
@@ -10908,6 +11359,7 @@ fn apply_initial_listing(
         let group_mode = tab.group_mode;
         let show_hidden = tab.show_hidden;
         p.pending_initial = false;
+        p.listing_failed = res.is_err();
         match res {
             Ok((mut entries, hidden_count)) => {
                 if manual_order {
@@ -10933,6 +11385,7 @@ fn apply_initial_listing(
                 p.replace_rows(rows);
                 p.hidden_count = hidden_count;
                 p.unavailable = false;
+                p.last_recovery = None;
             }
             Err(denied) => {
                 p.replace_rows(Vec::new());
@@ -10971,9 +11424,21 @@ fn refresh_all_panels(window: &MainWindow, state: &AppState) {
         .map(|panel| panel.tabs.tabs[panel.tabs.active].current_path.clone())
         .collect();
 
+    let searching: Vec<usize> = state
+        .panels
+        .borrow()
+        .iter()
+        .enumerate()
+        .filter_map(|(i, p)| p.search.is_some().then_some(i))
+        .collect();
+    let searching: HashSet<usize> = searching
+        .into_iter()
+        .filter(|&index| search::restart(window, state, index))
+        .collect();
     // First re-read the local panels without publishing the UI between each one.
     for (index, path) in paths.iter().enumerate() {
         if index != active_idx
+            && !searching.contains(&index)
             && !favnyr_core::places::is_network_path(path)
             && !rfs::is_unc_path(path)
         {
@@ -10985,13 +11450,21 @@ fn refresh_all_panels(window: &MainWindow, state: &AppState) {
     // their "in progress" state but performs no I/O on the UI thread.
     for (index, path) in paths.iter().enumerate() {
         if index != active_idx
+            && !searching.contains(&index)
             && (favnyr_core::places::is_network_path(path) || rfs::is_unc_path(path))
         {
-            request_async_panel_listing(window, state, index, path, String::new());
+            request_async_panel_listing(window, state, index, path, String::new(), false);
         }
     }
 
     let active = paths.get(active_idx).cloned().unwrap_or_default();
+    if searching.contains(&active_idx) {
+        update_panels_ui(window, state);
+        request_thumbnails(state);
+        request_folder_stats(state);
+        request_imgmeta(state);
+        return;
+    }
     if active.as_os_str().is_empty() {
         update_panels_ui(window, state);
         request_thumbnails(state);
@@ -11028,9 +11501,13 @@ fn relist_panel(state: &AppState, i: usize) {
     let Some(panel) = panels.get_mut(i) else {
         return;
     };
+    if panel.search.is_some() {
+        return;
+    }
     panel.pending_initial = false; // fresher than the initial population
     panel.pending_listing = false;
     panel.pending_select = None;
+    panel.listing_failed = false;
     let path = panel.tabs.tabs[panel.tabs.active].current_path.clone();
     let sort = panel.tabs.tabs[panel.tabs.active].sort;
     let show_hidden = panel.tabs.tabs[panel.tabs.active].show_hidden;
@@ -11065,7 +11542,14 @@ fn relist_panel(state: &AppState, i: usize) {
     };
     match rfs::list_dir_counted(&path, show_hidden || manual_order) {
         Ok((mut entries, hidden_count)) => {
-            rfs::sort(&mut entries, sort.column, sort.order, group_mode);
+            rfs::sort_with_secondary(
+                &mut entries,
+                sort.column,
+                sort.order,
+                group_mode,
+                sort.secondary,
+                mtime_offset(),
+            );
             if manual_order {
                 apply_manual_order(state, &path, &mut entries, show_hidden);
             } else {
@@ -11118,6 +11602,7 @@ fn relist_panel(state: &AppState, i: usize) {
             panel.tabs.tabs[active].cursor = anchor;
             panel.hidden_count = hidden_count;
             panel.unavailable = false;
+            panel.last_recovery = None;
             panel.displayed_path = path;
         }
         Err(err) => {
@@ -11133,42 +11618,26 @@ fn relist_panel(state: &AppState, i: usize) {
             panel.tabs.tabs[active].cursor = -1;
             panel.hidden_count = 0;
             panel.unavailable = !denied;
+            panel.listing_failed = true;
             panel.displayed_path = path;
         }
     }
 }
 
-/// Re-checks "unavailable" panels (network/missing folder): those whose
-/// path has BECOME accessible again are re-listed and the banner disappears.
-/// Called from the Slint poll, gated by a drive change (non-blocking:
-/// `is_dir` is only tested if a mount changed, see `on_recheck_unavailable`).
+/// Retry unavailable paths after a mount change, without probing the network
+/// or showing credentials dialogs on the UI thread.
 fn recheck_unavailable_panels(window: &MainWindow, state: &AppState) {
-    let recovered: Vec<usize> = {
+    let unavailable: Vec<usize> = {
         let panels = state.panels.borrow();
         panels
             .iter()
             .enumerate()
             .filter(|(_, p)| p.unavailable)
-            .filter(|(_, p)| p.tabs.tabs[p.tabs.active].current_path.is_dir())
             .map(|(i, _)| i)
             .collect()
     };
-    if recovered.is_empty() {
-        return;
-    }
-    for &i in &recovered {
-        relist_panel(state, i);
-    }
-    update_panels_ui(window, state);
-    // A recovered panel stays visible even if it doesn't have focus.
-    request_thumbnails(state);
-    // The active panel has recovered → re-arms its watcher and its other work.
-    let active = *state.active_panel.borrow();
-    if recovered.contains(&active) {
-        let path = state.with_tabs(|book| book.tabs[book.active].current_path.clone());
-        install_watcher(state, window, &path);
-        request_folder_stats(state);
-        request_imgmeta(state);
+    for index in unavailable {
+        recovery::retry_view(window, state, index, false);
     }
 }
 
@@ -11177,6 +11646,18 @@ fn recheck_unavailable_panels(window: &MainWindow, state: &AppState) {
 /// via update_panels_ui which pushes the updated PanelViews).
 fn switch_active_panel(window: &MainWindow, state: &AppState) {
     let path = state.with_tabs(|book| book.tabs[book.active].current_path.clone());
+    let query = state.panels.borrow()[*state.active_panel.borrow()]
+        .search
+        .as_ref()
+        .filter(|session| session.root == path)
+        .map(|session| session.query.clone());
+    if let Some(query) = query {
+        // A watcher belonging to the previously active folder must not restart
+        // this view's search when that other folder changes.
+        state.watcher_gen.fetch_add(1, Ordering::SeqCst);
+        *state.filter.borrow_mut() = query.clone();
+        window.set_active_filter(query.into());
+    }
     refresh_listing(window, state, &path);
 }
 
@@ -11247,6 +11728,9 @@ fn install_nav_callback(window: &MainWindow, state: &AppState, action: NavAction
                 }
                 st.rmtime_cache.borrow_mut().clear();
                 st.size_cache.borrow_mut().clear();
+                if search::restart(&w, &st, *st.active_panel.borrow()) {
+                    return;
+                }
                 let cur = st.current_path();
                 if !cur.as_os_str().is_empty() {
                     refresh_listing(&w, &st, &cur);
@@ -11266,6 +11750,7 @@ fn install_nav_callback(window: &MainWindow, state: &AppState, action: NavAction
 // ---------- Navigation and listing ----------
 
 fn load_directory(window: &MainWindow, state: &AppState, target: &Path, push_history: bool) {
+    search::clear(state, *state.active_panel.borrow());
     // Any navigation resets the active view's "type-ahead" filter.
     state.filter.borrow_mut().clear();
     window.set_active_filter(SharedString::new());
@@ -11424,7 +11909,7 @@ fn serialize_tab(tab: &Tab, drop: (i32, i32)) -> String {
         // directions stay compatible between instances of different versions:
         // an older receiver ignores fields it does not know, while a newer
         // receiver falls back when one is absent.
-        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
         tab.current_path.display(),
         tab.sort.column.code(),
         u8::from(matches!(tab.sort.order, SortOrder::Asc)),
@@ -11438,6 +11923,16 @@ fn serialize_tab(tab: &Tab, drop: (i32, i32)) -> String {
         tab.grid_zoom
             .map(|zoom| zoom.to_string())
             .unwrap_or_default(),
+        tab.sort
+            .secondary
+            .map(|s| s.column.code())
+            .unwrap_or_default(),
+        u8::from(
+            tab.sort
+                .secondary
+                .is_none_or(|s| matches!(s.order, SortOrder::Asc))
+        ),
+        u8::from(tab.sort.secondary.is_some_and(|s| s.group_dates_by_day)),
     )
 }
 
@@ -11460,6 +11955,18 @@ fn deserialize_tab(payload: &str) -> Option<(Tab, Option<(i32, i32)>)> {
             path: p[0].into(),
             sort_column: column,
             sort_order: order,
+            secondary_sort: p
+                .get(11)
+                .and_then(|s| SortColumn::from_code(s))
+                .map(|column| SecondarySort {
+                    column,
+                    order: if p.get(12) == Some(&"0") {
+                        SortOrder::Desc
+                    } else {
+                        SortOrder::Asc
+                    },
+                    group_dates_by_day: p.get(13) == Some(&"1"),
+                }),
             preview: p[3] == "1",
             zoom: p.get(8).and_then(|z| z.parse().ok()),
             show_hidden: p[4] == "1",
@@ -11520,12 +12027,15 @@ enum Transfer {
     Emptied,
     /// Failed (invalid target) → the caller falls back to tear-off.
     Failed,
+    /// The last tab must remain available while file work is protected.
+    Blocked,
 }
 
 /// Transfers the `from` tab of panel `src` to the Favnyr instance `target_hwnd`
 /// (window under the cursor), then removes it from here. If the instance empties out,
 /// it quits (without overwriting the shared workspace).
 fn transfer_tab_to(
+    window: &MainWindow,
     state: &AppState,
     src: usize,
     from: usize,
@@ -11537,6 +12047,11 @@ fn transfer_tab_to(
         if src >= panels.len() || from >= panels[src].tabs.tabs.len() {
             return Transfer::Failed;
         }
+        if panels.len() == 1 && panels[src].tabs.tabs.len() == 1 && shutdown::pending(state) {
+            std::mem::drop(panels);
+            shutdown::request(window, state);
+            return Transfer::Blocked;
+        }
         serialize_tab(&panels[src].tabs.tabs[from], drop)
     };
     if !crate::winmsg::send(target_hwnd, &payload) {
@@ -11544,7 +12059,8 @@ fn transfer_tab_to(
     }
     if remove_tab_pruning(state, src, from) {
         SUPPRESS_WORKSPACE_PERSIST.store(true, std::sync::atomic::Ordering::SeqCst);
-        let _ = slint::quit_event_loop();
+        // Recheck after the native send, which may dispatch nested messages.
+        window.invoke_request_close();
         Transfer::Emptied
     } else {
         // The target now owns the tab: persist the source immediately so
@@ -11705,6 +12221,67 @@ fn set_external_file_hover(
     window.set_file_drag_abs_x(wx);
     window.set_file_drag_abs_y(wy);
     window.set_file_drag_active(true);
+    let (panel, row) = external_file_target_at(window, wx, wy);
+    let item = usize::try_from(panel)
+        .ok()
+        .and_then(|panel| window.get_panels().row_data(panel))
+        .and_then(|view| {
+            usize::try_from(row)
+                .ok()
+                .and_then(|row| view.rows.row_data(row))
+        });
+    window.set_file_drag_target_panel(panel);
+    window.set_file_drag_target_row(row);
+    window.set_file_drag_target_folder(item.as_ref().is_some_and(|item| item.is_dir));
+    window.set_file_drag_target_exec(
+        item.as_ref()
+            .is_some_and(|item| !item.is_dir && item.drop_runnable),
+    );
+    // OLE enters outside Slint's input dispatch. Explicitly wake the renderer
+    // even when the target window was idle or inactive before the drag.
+    window.window().request_redraw();
+}
+
+/// Pull the final hit from geometry, not from deferred hover notifications.
+#[cfg(windows)]
+fn external_file_target_at(window: &MainWindow, x: f32, y: f32) -> (i32, i32) {
+    for panel in 0..window.get_panels().row_count() {
+        let Some(area) = window.get_file_drop_areas().row_data(panel) else {
+            continue;
+        };
+        if !file_drop_area_contains(&area, x, y) {
+            continue;
+        }
+        let content_x = x - area.content_left;
+        let row = if content_x >= area.content_start && content_x <= area.content_right {
+            window.invoke_panel_item_at_content_point(
+                panel as i32,
+                content_x,
+                y - area.top + area.scroll_top,
+                area.grid,
+            )
+        } else {
+            -1
+        };
+        let rejected = window.get_panels().row_data(panel).is_some_and(|view| {
+            view.search_recursive
+                && usize::try_from(row)
+                    .ok()
+                    .and_then(|i| view.rows.row_data(i))
+                    .is_none_or(|item| !item.is_dir && !item.drop_runnable)
+        });
+        return if rejected {
+            (-1, -1)
+        } else {
+            (panel as i32, row)
+        };
+    }
+    (-1, -1)
+}
+
+#[cfg(any(windows, test))]
+fn file_drop_area_contains(area: &crate::FileDropArea, x: f32, y: f32) -> bool {
+    x >= area.left && x < area.left + area.width && y >= area.top && y < area.top + area.height
 }
 
 #[cfg(windows)]
@@ -11734,13 +12311,14 @@ fn on_external_file_drop(
     action: crate::file_drag::DropAction,
     staging: Option<IncomingDropStaging>,
 ) {
-    if paths.is_empty() {
+    if paths.is_empty() || window.get_exit_warning_open() {
         clear_external_file_hover(window);
         return;
     }
     set_external_file_hover(window, screen_x, screen_y, action);
     let target_panel = window.get_file_drag_target_panel();
     if target_panel < 0 {
+        debug!(screen_x, screen_y, "OLE drop outside a file viewport");
         clear_external_file_hover(window);
         return;
     }
@@ -11761,6 +12339,10 @@ fn on_external_file_drop(
         // virtual attachments and temporary application paths are copy-only.
         let dest = match &target_info {
             Some((path, true)) => path.clone(),
+            _ if state.panels.borrow()[target].search.is_some() => {
+                clear_external_file_hover(window);
+                return;
+            }
             _ => panel_dir(state, target),
         };
         clear_external_file_hover(window);
@@ -11793,6 +12375,7 @@ fn on_external_file_drop(
     } else if action != crate::file_drag::DropAction::Choose {
         window.invoke_file_drop_action(action as i32);
     } else {
+        window.invoke_prepare_external_file_menu();
         window.set_file_drop_menu_x(wx);
         window.set_file_drop_menu_y(wy);
         window.set_file_drop_menu_open(true);
@@ -12241,17 +12824,25 @@ fn rename_name_status(source: &Path, name: &str) -> RenameNameStatus {
 /// and purely numeric suffixes therefore remain whole names. A
 /// folder is never split, even if its name contains a period.
 fn filename_caret_offset(name: &str, is_dir: bool) -> i32 {
-    let offset = if is_dir {
+    if is_dir {
+        return byte_offset(name.len());
+    }
+    let (stem, extension) = ops::split_name(name);
+    byte_offset(if extension.is_empty() {
         name.len()
     } else {
-        let (stem, extension) = ops::split_name(name);
-        if extension.is_empty() {
-            name.len()
-        } else {
-            stem.len()
-        }
-    };
-    offset.min(i32::MAX as usize) as i32
+        stem.len()
+    })
+}
+
+/// A byte length as a caret offset.
+///
+/// Slint counts selection offsets in bytes, not in characters, so every
+/// offset handed to it is a `str::len` and goes through here. The clamp is
+/// the only reason this is a function: a path long enough to overflow an
+/// `i32` would otherwise wrap into a negative offset.
+fn byte_offset(len: usize) -> i32 {
+    len.min(i32::MAX as usize) as i32
 }
 
 /// Advances the `PasteJob`: opens the popup for the next conflict, or
@@ -12391,6 +12982,9 @@ fn begin_paste_with_cleanup(
     transient_cleanup: Option<TransientDropGuard>,
     manual_insertion: Option<ManualOrderInsertion>,
 ) {
+    if shutdown::stopping(state) {
+        return;
+    }
     if dst_dir.as_os_str().is_empty() || sources.is_empty() {
         return;
     }
@@ -12718,6 +13312,9 @@ fn start_heavy_op(
     transient_cleanup: Option<TransientDropGuard>,
     manual_insertion: Option<ManualOrderInsertion>,
 ) {
+    if shutdown::stopping(state) {
+        return;
+    }
     // Destinations are claimed for the whole run: a paste started meanwhile
     // must see these names as taken even though nothing exists on disk yet.
     // Deletions write nowhere, so they claim nothing.
@@ -12753,23 +13350,21 @@ fn start_heavy_op(
         completed_targets: completed_targets.clone(),
     });
 
-    let s = i18n::strings_for(lang);
     let running = match work {
-        Heavy::Copy(_) => s.op_copying,
-        Heavy::Move(_) => s.op_moving,
-        Heavy::Trash(_) => s.op_deleting,
-        Heavy::PermanentDelete(_) => s.op_deleting_permanently,
+        Heavy::Copy(_) => i18n::tr(lang, "op_copying"),
+        Heavy::Move(_) => i18n::tr(lang, "op_moving"),
+        Heavy::Trash(_) => i18n::tr(lang, "op_deleting"),
+        Heavy::PermanentDelete(_) => i18n::tr(lang, "op_deleting_permanently"),
         #[cfg(windows)]
-        Heavy::NativeMoveCleanup(_) => s.op_moving,
-    }
-    .to_string();
+        Heavy::NativeMoveCleanup(_) => i18n::tr(lang, "op_moving"),
+    };
     let labels = OpLabels {
         running,
-        scanning: s.op_scanning.to_string(),
-        done: s.op_done.to_string(),
-        cancelled: s.op_cancelled.to_string(),
-        errors: s.op_errors.to_string(),
-        items: s.op_items.to_string(),
+        scanning: i18n::tr(lang, "op_scanning"),
+        done: i18n::tr(lang, "op_done"),
+        cancelled: i18n::tr(lang, "op_cancelled"),
+        errors: i18n::tr(lang, "op_errors"),
+        items: i18n::tr(lang, "op_items"),
     };
 
     // No row until the deferred appearance threshold (400 ms) — `push_op`
@@ -13259,10 +13854,13 @@ fn listing_denied(r: &Result<(Vec<Entry>, usize), favnyr_core::Error>) -> bool {
 /// proven synchronous path, limiting the behavior change to the only
 /// I/O likely to block for a long time (SMB, mapped drive, UNC).
 fn refresh_listing(window: &MainWindow, state: &AppState, path: &Path) {
+    if search::refresh(window, state, path) {
+        return;
+    }
     if favnyr_core::places::is_network_path(path) || rfs::is_unc_path(path) {
         let panel_idx = *state.active_panel.borrow();
         let name_filter = state.filter.borrow().clone();
-        request_async_panel_listing(window, state, panel_idx, path, name_filter);
+        request_async_panel_listing(window, state, panel_idx, path, name_filter, true);
     } else {
         refresh_listing_sync(window, state, path);
     }
@@ -13274,6 +13872,7 @@ fn request_async_panel_listing(
     panel_idx: usize,
     path: &Path,
     name_filter: String,
+    authenticate: bool,
 ) {
     let path = path.to_path_buf();
     let lang = state.snapshot_config().language;
@@ -13289,6 +13888,7 @@ fn request_async_panel_listing(
         ext_text,
         preserved_selected,
         preserved_anchor,
+        recover_favorites,
     ) = {
         let mut panels = state.panels.borrow_mut();
         let Some(panel) = panels.get_mut(panel_idx) else {
@@ -13325,6 +13925,7 @@ fn request_async_panel_listing(
             tab.ext_filter.clone(),
             selected,
             anchor,
+            !same_dir || panel.listing_failed,
         )
     };
 
@@ -13343,6 +13944,7 @@ fn request_async_panel_listing(
         let active = panel.tabs.active;
         panel.tabs.tabs[active].current_path = path.clone();
         if !same_dir {
+            panel.last_recovery = None;
             panel.reset_rows_viewport();
             panel.replace_rows(Vec::new());
             panel.hidden_count = 0;
@@ -13360,7 +13962,8 @@ fn request_async_panel_listing(
     let weak = window.as_weak();
     std::thread::spawn(move || {
         let mut listing = rfs::list_dir_counted(&path, show_hidden || manual_order);
-        if listing_denied(&listing)
+        if authenticate
+            && listing_denied(&listing)
             && rfs::is_unc_path(&path)
             && favnyr_core::places::net_connect_prompt(&net_connect_target(&path))
         {
@@ -13368,7 +13971,14 @@ fn request_async_panel_listing(
         }
         let result = match listing {
             Ok((mut entries, hidden)) => {
-                rfs::sort(&mut entries, sort.column, sort.order, group);
+                rfs::sort_with_secondary(
+                    &mut entries,
+                    sort.column,
+                    sort.order,
+                    group,
+                    sort.secondary,
+                    mtime_offset(),
+                );
                 if !manual_order {
                     apply_name_filter(&mut entries, &name_filter);
                     apply_ext_filter(&mut entries, ext_on, &ext_text);
@@ -13393,6 +14003,7 @@ fn request_async_panel_listing(
             lang,
             preserved_selected,
             preserved_anchor,
+            recover_favorites,
         };
         let queued = queue
             .lock()
@@ -13409,6 +14020,7 @@ fn request_async_panel_listing(
 }
 
 fn apply_async_listing(window: &MainWindow, state: &AppState, delivery: AsyncListingDelivery) {
+    let succeeded = delivery.result.is_ok();
     let is_active = delivery.panel == *state.active_panel.borrow();
     let (compact_icon_rows, item_spacing) = {
         let config = state.config.borrow();
@@ -13433,6 +14045,10 @@ fn apply_async_listing(window: &MainWindow, state: &AppState, delivery: AsyncLis
         let group_mode = panel.tabs.tabs[active].group_mode;
         let show_hidden = panel.tabs.tabs[active].show_hidden;
         panel.pending_listing = false;
+        panel.listing_failed = !succeeded;
+        if succeeded {
+            panel.last_recovery = None;
+        }
         let pending_select = panel.pending_select.take();
         let pending_focus = pending_select.clone();
         match delivery.result {
@@ -13516,6 +14132,9 @@ fn apply_async_listing(window: &MainWindow, state: &AppState, delivery: AsyncLis
     };
     if denied_notice {
         show_notice(window, i18n::access_denied(delivery.lang));
+    }
+    if succeeded && delivery.recover_favorites {
+        recovery::request_favorites(window, state);
     }
     update_panels_ui(window, state);
     if let Some(name) = pending_focus {
@@ -13627,6 +14246,7 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
                 panels[active_idx].displayed_path = path.to_path_buf();
                 panels[active_idx].hidden_count = 0;
                 panels[active_idx].unavailable = unavailable;
+                panels[active_idx].listing_failed = true;
             }
             install_watcher(state, window, path);
             update_panels_ui(window, state);
@@ -13643,11 +14263,13 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
     let grid =
         state.with_tabs(|book| book.tabs[book.active].item_arrangement == ItemArrangement::Grid);
     let zoom = state.with_tabs(|book| book.tabs[book.active].zoom);
-    rfs::sort(
+    rfs::sort_with_secondary(
         &mut entries,
         sort_state.column,
         sort_state.order,
         group_mode,
+        sort_state.secondary,
+        mtime_offset(),
     );
     if manual_order {
         apply_manual_order(state, path, &mut entries, show_hidden);
@@ -13733,6 +14355,8 @@ fn refresh_listing_sync(window: &MainWindow, state: &AppState, path: &Path) {
         panels[active_idx].displayed_path = path.to_path_buf();
         panels[active_idx].hidden_count = hidden_count;
         panels[active_idx].unavailable = false; // listing OK → available again
+        panels[active_idx].listing_failed = false;
+        panels[active_idx].last_recovery = None;
     }
 
     install_watcher(state, window, path);
@@ -13992,8 +14616,7 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
     let folder_state = folder_state_now(state);
     let panels = state.panels.borrow();
     let lang = state.config.borrow().language;
-    let strings = i18n::strings_for(lang);
-    let prefix = strings.panel_prefix.to_string();
+    let prefix = i18n::tr(lang, "panel_prefix");
     let geom = current_geom(state);
     let rects = panel_rects(&geom, panels.len());
     // View footers DECOUPLED from `PanelView`: accumulated separately and pushed into
@@ -14013,7 +14636,9 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
             let hidden = if tab.show_hidden { 0 } else { p.hidden_count };
             // Initial listing still in flight (async startup):
             // "…" rather than a misleading "Empty folder".
-            let footer: SharedString = if p.pending_initial || p.pending_listing {
+            let footer: SharedString = if p.search.is_some() {
+                search::footer(p, lang, selected).into()
+            } else if p.pending_initial || p.pending_listing {
                 "…".into()
             } else {
                 i18n::footer_text(lang, total, selected, hidden).into()
@@ -14071,6 +14696,12 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
                 can_go_forward: tab.history.can_forward(),
                 sort_column: tab.sort.column.code().into(),
                 sort_asc: matches!(tab.sort.order, SortOrder::Asc),
+                secondary_sort_column: tab.sort.secondary.map_or("", |s| s.column.code()).into(),
+                secondary_sort_asc: tab
+                    .sort
+                    .secondary
+                    .is_none_or(|s| matches!(s.order, SortOrder::Asc)),
+                group_dates_by_day: tab.sort.secondary.is_some_and(|s| s.group_dates_by_day),
                 active_tab_idx: p.tabs.active as i32,
                 title: format!("{prefix}{}{}{leaf}", i + 1, i18n::tr(lang, "separator_dot")).into(),
                 crumbs: ModelRc::new(VecModel::from(breadcrumbs(&tab.current_path))),
@@ -14078,6 +14709,7 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
                 col_path_w: col_width(&p.columns, "path"),
                 col_size_w: col_width(&p.columns, "size"),
                 col_modified_w: col_width(&p.columns, "modified"),
+                col_created_w: col_width(&p.columns, "created"),
                 col_ext_w: col_width(&p.columns, "ext"),
                 col_resolution_w: col_width(&p.columns, "resolution"),
                 col_depth_w: col_width(&p.columns, "depth"),
@@ -14092,7 +14724,7 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
                     let mut off = 0.0_f32;
                     let mut v = Vec::new();
                     for c in p.columns.iter().filter(|c| c.visible) {
-                        v.push(column_info(&strings, c, off));
+                        v.push(column_info(lang, c, off));
                         off += col_width(&p.columns, &c.id) + COL_GAP;
                     }
                     v
@@ -14104,7 +14736,7 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
                 columns_menu: ModelRc::new(VecModel::from(
                     p.columns
                         .iter()
-                        .map(|c| column_info_explicit(&strings, c, 0.0))
+                        .map(|c| column_info_explicit(lang, c, 0.0))
                         .collect::<Vec<_>>(),
                 )),
                 preview_mode: tab.preview,
@@ -14119,6 +14751,8 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
                 unavailable: p.unavailable, // folder unreachable → banner
                 ext_filter_on: tab.ext_filter_on && !folder_state.is_manual(&tab.current_path),
                 ext_filter: tab.ext_filter.as_str().into(),
+                search_recursive: p.search.is_some(),
+                search_query: p.search.as_ref().map_or("", |s| s.query.as_str()).into(),
                 tab_bar_mode: p.tab_bar_mode as i32, // 0 top · 1 left · 2 right
                 vbar_user_w: p.vbar_user_w,          // handle width, 0 = auto
             };
@@ -14149,6 +14783,12 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
     // instant it becomes active. The model is only replaced for a
     // STRUCTURAL change (split/close → the number of panels changes).
     let existing = window.get_panels();
+    #[cfg(windows)]
+    if window.get_file_drop_areas().row_count() != views.len() {
+        window.set_file_drop_areas(ModelRc::new(VecModel::from(vec![
+            crate::FileDropArea::default(); views.len()
+        ])));
+    }
     if existing.row_count() == views.len() {
         for (i, v) in views.into_iter().enumerate() {
             existing.set_row_data(i, v);
@@ -14204,7 +14844,7 @@ fn update_panels_ui(window: &MainWindow, state: &AppState) {
 /// The workspace name comes first so it survives taskbar label
 /// truncation (from the end).
 fn update_window_title(window: &MainWindow, state: &AppState) {
-    let brand = i18n::strings_for(state.config.borrow().language).app_title;
+    let brand = i18n::tr(state.config.borrow().language, "app_title");
     let current = state.current_workspace.borrow().clone();
     let title = match current.as_deref() {
         Some(name) if !name.trim().is_empty() => {
@@ -14215,7 +14855,7 @@ fn update_window_title(window: &MainWindow, state: &AppState) {
             };
             format!("{name} — {brand}{marker}")
         }
-        _ => brand.to_string(),
+        _ => brand,
     };
     window.set_window_title(title.into());
 }
@@ -14382,6 +15022,16 @@ fn push_menu_shortcuts(window: &MainWindow, state: &AppState) {
     let lang = state.snapshot_config().language;
     let km = state.keymap.borrow();
     let d = |id: &str| SharedString::from(chord_display(lang, km.chord_of(id)));
+    let panel_key = chord_display(lang, km.chord_of("open-workspaces"));
+    let panel_title = i18n::tr(lang, "settings_ws_panel_label");
+    window.set_ws_panel_settings_title(if panel_key.is_empty() {
+        panel_title.into()
+    } else {
+        format!("{panel_title} ({panel_key})").into()
+    });
+    let shortcut_title = i18n::tr(lang, "settings_ws_shortcut_label");
+    let shortcut_keys = workspace_slot_shortcuts_label(lang, &km);
+    window.set_ws_shortcut_settings_title(format!("{shortcut_title} ({shortcut_keys})").into());
     window.set_menu_shortcuts(MenuShortcuts {
         open: d("open"),
         terminal: d("terminal"),
@@ -14400,6 +15050,23 @@ fn push_menu_shortcuts(window: &MainWindow, state: &AppState) {
         open_settings: d("open-settings"),
         open_workspaces: d("open-workspaces"),
     });
+}
+
+fn workspace_slot_shortcuts_label(lang: Lang, km: &shortcuts::Keymap) -> String {
+    let none = i18n::tr(lang, "ws_slot_none");
+    let display = |slot| {
+        let chord = chord_display(lang, km.chord_of(&format!("load-workspace-{slot}")));
+        if chord.is_empty() {
+            none.clone()
+        } else {
+            chord
+        }
+    };
+    let first = display(1);
+    let second = display(2);
+    i18n::tr(lang, "settings_ws_shortcut_preview")
+        .replace("{first}", &first)
+        .replace("{second}", &second)
 }
 
 /// Applies an override (or removes it if it equals the default) + rebuilds the map.
@@ -14441,7 +15108,15 @@ fn push_active_footer(window: &MainWindow, state: &AppState, selected: i32) {
             None => return,
         }
     };
-    let footer = i18n::footer_text(lang, total, selected.max(0) as usize, hidden);
+    let footer = {
+        let panels = state.panels.borrow();
+        let panel = &panels[idx];
+        if panel.search.is_some() {
+            search::footer(panel, lang, selected.max(0) as usize)
+        } else {
+            i18n::footer_text(lang, total, selected.max(0) as usize, hidden)
+        }
+    };
     // We write ONLY into the parallel view-footers model: NEVER
     // touch the `panels` model here. Rewriting a `PanelView` (even just for the
     // label) would invalidate the Repeater's `rendered-rows` model property and,
@@ -14948,13 +15623,12 @@ fn active_thumbnail_paths(state: &AppState) -> Vec<PathBuf> {
     let Some(panel) = panels.get(active) else {
         return Vec::new();
     };
-    let dir = &panel.tabs.tabs[panel.tabs.active].current_path;
     (0..panel.rows_model.row_count())
         .filter_map(|index| panel.rows_model.row_data(index))
         // `.lnk` rows can preview an image/audio/video/PDF target even though the
         // shortcut itself is not classified as preview-capable.
         .filter(|row| row.preview_capable || row.ext.eq_ignore_ascii_case("lnk"))
-        .map(|row| dir.join(row.name.as_str()))
+        .map(|row| row_path(&row))
         .collect()
 }
 
@@ -14968,7 +15642,8 @@ fn image_from_thumb(t: &Thumbnail) -> Image {
 /// Selects the thumbnail source based on the platform and type. On
 /// **Windows**, audio/video/PDF fallbacks go through native APIs
 /// (`winthumb`): OS providers → standalone (no ffmpeg/poppler) and
-/// **no console window**. Images remain decoded in Rust (`image`).
+/// **no console window**. Images remain decoded in Rust (`image`), while model
+/// previews use embedded images, optional 7-Zip decompression, or CPU mesh rendering.
 /// On **Linux**, everything goes through `thumbnail::generate` (images and
 /// MP3/FLAC covers are in-process; video/PDF use their best-effort CLIs).
 fn generate_thumb(path: &Path, kind: FileKind, max_px: u32) -> Option<Thumbnail> {
@@ -14998,6 +15673,10 @@ fn generate_thumb(path: &Path, kind: FileKind, max_px: u32) -> Option<Thumbnail>
             // Image: Rust decoding first (common formats plus bounded embedded
             // PSD/Affinity previews); on failure, fall back to the shell API.
             FileKind::Image => {
+                return thumbnail::generate(path, kind, max_px)
+                    .or_else(|| crate::winthumb::shell_thumbnail(path, max_px));
+            }
+            FileKind::File => {
                 return thumbnail::generate(path, kind, max_px)
                     .or_else(|| crate::winthumb::shell_thumbnail(path, max_px));
             }
@@ -15082,7 +15761,7 @@ fn spawn_thumb_worker(scheduler: Arc<ThumbScheduler>, weak: slint::Weak<MainWind
 }
 
 /// For each panel in preview mode: applies the cached thumbnails to
-/// image/audio-cover/video/PDF/SVG rows, then atomically replaces the request for the
+/// image/audio-cover/video/PDF/SVG/model rows, then atomically replaces the request for the
 /// missing ones. To be called after a (re)population of fresh rows.
 fn thumbnail_kind_for_row(kind: i32, ext: &str) -> Option<(FileKind, bool)> {
     let svg = kind == 6 && ext.eq_ignore_ascii_case("svg");
@@ -15091,6 +15770,7 @@ fn thumbnail_kind_for_row(kind: i32, ext: &str) -> Option<(FileKind, bool)> {
         6 => FileKind::Image,
         7 => FileKind::Video,
         5 if ext.eq_ignore_ascii_case("pdf") => FileKind::Document,
+        1 if thumbnail::is_model_preview_extension(ext) => FileKind::File,
         _ => return None,
     };
     Some((file_kind, svg))
@@ -15129,12 +15809,16 @@ fn request_thumbnails(state: &AppState) {
         if !tab.preview {
             continue;
         }
-        let dir = tab.current_path.clone();
         let model = &panel.rows_model;
         for i in 0..model.row_count() {
             let Some(mut row) = model.row_data(i) else {
                 continue;
             };
+            // Search can return thousands of entries from a large tree. Decode
+            // only its render window; viewport changes request newly seen rows.
+            if panel.search.is_some() && !row.rendered {
+                continue;
+            }
             if row.thumbnail.size().width > 0 {
                 if row.rendered {
                     continue; // texture already attached to a visible row
@@ -15145,7 +15829,7 @@ fn request_thumbnails(state: &AppState) {
                 row.thumbnail = Image::default();
                 model.set_row_data(i, row.clone());
             }
-            let full = dir.join(row.name.as_str());
+            let full = row_path(&row);
             let key = full.to_string_lossy().to_string();
 
             // Shared source of truth with the row geometry: only these
@@ -15202,7 +15886,7 @@ fn update_panel_render_window(
 ) -> (i32, i32) {
     let top = top.max(0.0);
     let height = height.max(0.0);
-    let Some((model, dir, preview, old_first, old_end, new_first, new_end, visible)) =
+    let Some((model, preview, old_first, old_end, new_first, new_end, visible)) =
         state.panels.try_borrow().ok().and_then(|panels| {
             let panel = panels.get(panel_idx)?;
             panel.viewport_top.set(top);
@@ -15224,7 +15908,6 @@ fn update_panel_render_window(
             let old_end = panel.rendered_end.replace(new_end);
             Some((
                 panel.rows_model.clone(),
-                panel.tabs.tabs[panel.tabs.active].current_path.clone(),
                 panel.tabs.tabs[panel.tabs.active].preview,
                 old_first,
                 old_end,
@@ -15276,7 +15959,7 @@ fn update_panel_render_window(
                 row_changed = true;
             }
         } else if preview && row.preview_capable && row.thumbnail.size().width == 0 {
-            let full = dir.join(row.name.as_str());
+            let full = row_path(&row);
             let key = full.to_string_lossy().to_string();
             if let Some(img) = state.thumb_cache.borrow_mut().get(&key) {
                 row.thumbnail = img;
@@ -15395,6 +16078,9 @@ fn request_folder_stats(state: &AppState) {
     let panels = state.panels.borrow();
     for (panel_idx, panel) in panels.iter().enumerate() {
         let dir = panel.tabs.tabs[panel.tabs.active].current_path.clone();
+        if panel.search.is_some() {
+            continue;
+        }
         // NETWORK folder: a recursive walk through the share would burst a stat
         // per subfolder — Explorer doesn't either. Keep folders' own mtime and
         // no recursive size.
@@ -15409,7 +16095,7 @@ fn request_folder_stats(state: &AppState) {
             if !row.is_dir {
                 continue; // only folders have recursive stats
             }
-            let full = dir.join(row.name.as_str());
+            let full = row_path(&row);
             let key = full.to_string_lossy().to_string();
             let m_cached = (mtime_depth > 0)
                 .then(|| state.rmtime_cache.borrow().get(&key).copied())
@@ -15550,7 +16236,6 @@ fn request_imgmeta(state: &AppState) {
         if !panel_shows_imgmeta(panel) {
             continue;
         }
-        let dir = panel.tabs.tabs[panel.tabs.active].current_path.clone();
         let model = &panel.rows_model;
         for i in 0..model.row_count() {
             let Some(mut row) = model.row_data(i) else {
@@ -15559,7 +16244,7 @@ fn request_imgmeta(state: &AppState) {
             if row.kind != 6 || !row.resolution.is_empty() {
                 continue; // images only, and not already filled in
             }
-            let full = dir.join(row.name.as_str());
+            let full = row_path(&row);
             let key = full.to_string_lossy().to_string();
             let cached = state.imgmeta_cache.borrow().get(&key).cloned();
             // The cache is only valid if the mtime STILL matches the file
@@ -15592,9 +16277,9 @@ fn request_imgmeta(state: &AppState) {
 // thumbnail" (+1) list levels, which added nothing and were confusing.
 const THUMB_ZOOM: i32 = 1; // 1st notch above the list = thumbnails
 const MIN_ZOOM: i32 = 0; // floor = list mode (no zooming out below)
-const MAX_ZOOM: i32 = 8; // 220px ≤ MAX_PX (256) → sharp thumbnails
+const MAX_ZOOM: i32 = MAX_THUMBNAIL_ZOOM; // 220px ≤ MAX_PX (256) → sharp thumbnails
 const LIST_DEFAULT_ZOOM: i32 = 0; // → 28px (list; coincides with the floor)
-const THUMB_DEFAULT_ZOOM: i32 = 2; // → 76px ("Previews" button's default)
+const THUMB_DEFAULT_ZOOM: i32 = DEFAULT_THUMBNAIL_ZOOM;
 const MIN_GRID_ZOOM: i32 = 0;
 const MAX_GRID_ZOOM: i32 = 8;
 const GRID_DEFAULT_ZOOM: i32 = 2;
@@ -16319,6 +17004,12 @@ struct RowContext<'a> {
 }
 
 fn entry_to_row(e: &Entry, parent_display: &str, ctx: &RowContext) -> FileRow {
+    let actual_parent = e
+        .path
+        .parent()
+        .filter(|path| *path != Path::new(parent_display))
+        .map(|path| path.display().to_string());
+    let parent_display = actual_parent.as_deref().unwrap_or(parent_display);
     let RowContext {
         lang,
         now_unix,
@@ -16338,6 +17029,10 @@ fn entry_to_row(e: &Entry, parent_display: &str, ctx: &RowContext) -> FileRow {
     let modified = e
         .mtime_unix
         .map(|m| rfs::format_mtime(m, mtime_offset()))
+        .unwrap_or_else(|| "—".to_string());
+    let created = e
+        .created_unix
+        .map(|value| rfs::format_mtime(value, mtime_offset()))
         .unwrap_or_else(|| "—".to_string());
     // "age" column: compact text + warm-to-cold color bucket.
     let (age, age_bucket) = match e.mtime_unix {
@@ -16391,6 +17086,7 @@ fn entry_to_row(e: &Entry, parent_display: &str, ctx: &RowContext) -> FileRow {
         path: parent_display.to_string().into(),
         size: size.into(),
         modified: modified.into(),
+        created: created.into(),
         is_dir: e.is_dir,
         is_symlink: e.is_symlink,
         // Only consulted for folders, so a stray slot on a file costs nothing.
@@ -16631,8 +17327,9 @@ fn count_selected<M: slint::Model<Data = FileRow>>(model: &M) -> i32 {
 /// "reveal this entry" cases.)
 fn focus_entry_by_name(window: &MainWindow, state: &AppState, name: &str) {
     let model = state.active_rows_model();
-    let idx = (0..model.row_count())
-        .find(|&i| model.row_data(i).is_some_and(|r| r.name.as_str() == name));
+    let target = state.current_path().join(name);
+    let idx =
+        (0..model.row_count()).find(|&i| model.row_data(i).is_some_and(|r| row_path(&r) == target));
     let Some(idx) = idx.map(|i| i as i32) else {
         return;
     };
@@ -16747,14 +17444,18 @@ fn name_contains_filter(name: &str, needle: &str) -> bool {
 
 // Helpers ----------
 
+/// Rows carry their own parent directory, including results from descendants.
+fn row_path(row: &FileRow) -> PathBuf {
+    Path::new(row.path.as_str()).join(row.name.as_str())
+}
+
 /// Absolute paths of the active panel's selected rows.
 fn selected_paths(state: &AppState) -> Vec<PathBuf> {
     let rows = state.active_rows_model();
-    let cur_dir = state.current_path();
     (0..rows.row_count())
         .filter_map(|i| rows.row_data(i))
         .filter(|r| r.selected)
-        .map(|r| cur_dir.join(r.name.as_str()))
+        .map(|r| row_path(&r))
         .collect()
 }
 
@@ -16777,11 +17478,7 @@ fn panel_folder_at_row(state: &AppState, panel: usize, row: usize) -> Option<Pat
     if !r.is_dir {
         return None;
     }
-    Some(
-        p.tabs.tabs[p.tabs.active]
-            .current_path
-            .join(r.name.as_str()),
-    )
+    Some(row_path(&r))
 }
 
 /// Path of row `row` (file OR folder) of panel `panel`.
@@ -16789,11 +17486,7 @@ fn panel_path_at_row(state: &AppState, panel: usize, row: usize) -> Option<PathB
     let panels = state.panels.borrow();
     let p = panels.get(panel)?;
     let r = p.rows_model.row_data(row)?;
-    Some(
-        p.tabs.tabs[p.tabs.active]
-            .current_path
-            .join(r.name.as_str()),
-    )
+    Some(row_path(&r))
 }
 
 /// Paths selected in a GIVEN panel (not necessarily the active one) — used
@@ -16803,11 +17496,10 @@ fn panel_selected_paths(state: &AppState, panel: usize) -> Vec<PathBuf> {
     let Some(p) = panels.get(panel) else {
         return Vec::new();
     };
-    let dir = p.tabs.tabs[p.tabs.active].current_path.clone();
     (0..p.rows_model.row_count())
         .filter_map(|i| p.rows_model.row_data(i))
         .filter(|r| r.selected)
-        .map(|r| dir.join(r.name.as_str()))
+        .map(|r| row_path(&r))
         .collect()
 }
 
@@ -16946,6 +17638,9 @@ fn perform_manual_reorder(
         let Some(panel) = panels.get(panel_index) else {
             return false;
         };
+        if panel.search.is_some() {
+            return false;
+        }
         panel.tabs.tabs[panel.tabs.active].current_path.clone()
     };
     if !folder_state_now(state).is_manual(&directory) {
@@ -17040,6 +17735,25 @@ fn paths_conflict_with_drop_target(
 
 /// Lightweight validation called only when the hovered row changes.
 fn file_drop_target_invalid(state: &AppState, src_panel: i32, target_panel: i32, row: i32) -> bool {
+    if let Ok(target) = usize::try_from(target_panel)
+        && state
+            .panels
+            .borrow()
+            .get(target)
+            .is_some_and(|p| p.search.is_some())
+        && usize::try_from(row)
+            .ok()
+            .and_then(|i| {
+                state
+                    .panels
+                    .borrow()
+                    .get(target)
+                    .and_then(|p| p.rows_model.row_data(i))
+            })
+            .is_none_or(|r| !r.is_dir && !r.drop_runnable)
+    {
+        return true;
+    }
     if src_panel < 0 || target_panel < 0 {
         return false; // external drag: paths validated on the native drop
     }
@@ -17076,12 +17790,12 @@ fn file_drop_target_invalid(state: &AppState, src_panel: i32, target_panel: i32,
     paths_conflict_with_drop_target(&sources, &target_path, target_is_dir)
 }
 
-/// Sets the `cut = true` flag on rows whose name is in `names`.
-fn apply_cut_marks<M: Model<Data = FileRow>>(model: &M, names: &std::collections::HashSet<String>) {
+/// Marks exact paths, including homonymous results from different folders.
+fn apply_cut_marks<M: Model<Data = FileRow>>(model: &M, paths: &HashSet<PathBuf>) {
     let n = model.row_count();
     for i in 0..n {
         if let Some(mut row) = model.row_data(i) {
-            let should = names.contains(row.name.as_str());
+            let should = paths.contains(&row_path(&row));
             if row.cut != should {
                 row.cut = should;
                 model.set_row_data(i, row);
@@ -17106,7 +17820,17 @@ fn clear_cut_marks<M: Model<Data = FileRow>>(model: &M) {
 // ---------- i18n helpers ----------
 
 fn apply_language(window: &MainWindow, lang: Lang) {
-    window.set_strings(i18n::strings_for(lang));
+    i18n::apply_strings(window, lang);
+    // Use Windows' Simplified Chinese UI font directly instead of relying on
+    // a fallback chosen for the system locale. No font data is bundled.
+    window.set_interface_font_family(
+        if cfg!(windows) && lang == Lang::Zh {
+            "Microsoft YaHei UI"
+        } else {
+            ""
+        }
+        .into(),
+    );
 
     let lang_labels: Vec<SharedString> = i18n::language_labels();
     let lang_idx = Lang::all().iter().position(|l| *l == lang).unwrap_or(0) as i32;
@@ -17485,6 +18209,9 @@ fn install_watcher(state: &AppState, window: &MainWindow, path: &Path) {
         let result: notify::Result<RecommendedWatcher> = RecommendedWatcher::new(
             move |res: notify::Result<Event>| match res {
                 Ok(ev) => {
+                    if event_gen_ref.load(Ordering::SeqCst) != r#gen {
+                        return;
+                    }
                     if matches!(
                         ev.kind,
                         EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_)
@@ -17625,6 +18352,78 @@ pub fn persist_window_size(window: &MainWindow, state: &AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workspace_shortcut_settings_show_effective_bindings() {
+        let defaults = shortcuts::Keymap::build(&Default::default());
+        assert_eq!(
+            workspace_slot_shortcuts_label(Lang::En, &defaults),
+            "Ctrl+1, Ctrl+2..."
+        );
+        let overrides = [
+            ("load-workspace-1".to_string(), "Alt+J".to_string()),
+            ("load-workspace-2".to_string(), "Alt+K".to_string()),
+            ("load-workspace-4".to_string(), String::new()),
+        ]
+        .into_iter()
+        .collect();
+        let custom = shortcuts::Keymap::build(&overrides);
+        assert_eq!(
+            workspace_slot_shortcuts_label(Lang::En, &custom),
+            "Alt+J, Alt+K..."
+        );
+        let cleared = (1..=workspace::MAX_WORKSPACE_SLOT)
+            .map(|slot| (format!("load-workspace-{slot}"), String::new()))
+            .collect();
+        let empty = shortcuts::Keymap::build(&cleared);
+        assert_eq!(
+            workspace_slot_shortcuts_label(Lang::En, &empty),
+            "No shortcut, No shortcut..."
+        );
+    }
+
+    #[test]
+    fn preference_thumbnail_zoom_preserves_restored_sizes() {
+        let config = Config {
+            default_thumbnail_zoom: 6,
+            ..Config::default()
+        };
+        let tab = Tab::new(PathBuf::from("folder01"), TabDisplayDefaults::from(&config));
+        assert_eq!(tab.zoom, 6);
+        assert_eq!(tab.grid_zoom, Some(6));
+        let mut saved = tab_to_state(&tab);
+        saved.zoom = Some(3);
+        saved.grid_zoom = Some(4);
+        let restored = Tab::restored(PathBuf::from("folder01"), &saved);
+        assert_eq!(restored.zoom, 3);
+        assert_eq!(restored.grid_zoom, Some(4));
+        saved.zoom = None;
+        saved.grid_zoom = None;
+        let legacy = Tab::restored(PathBuf::from("folder01"), &saved);
+        assert_eq!(legacy.zoom, THUMB_DEFAULT_ZOOM);
+        assert_eq!(legacy.grid_zoom, None);
+    }
+
+    #[test]
+    fn preference_file_drop_rejects_headers_footer_and_scrollbar() {
+        let area = crate::FileDropArea {
+            left: 100.0,
+            top: 80.0,
+            width: 200.0,
+            height: 300.0,
+            ..Default::default()
+        };
+        assert!(file_drop_area_contains(&area, 100.0, 80.0));
+        assert!(file_drop_area_contains(&area, 299.0, 379.0));
+        for (x, y) in [(100.0, 79.0), (100.0, 380.0), (300.0, 90.0), (99.0, 90.0)] {
+            assert!(!file_drop_area_contains(&area, x, y));
+        }
+        assert!(!file_drop_area_contains(
+            &crate::FileDropArea::default(),
+            0.0,
+            0.0
+        ));
+    }
 
     #[test]
     fn hidden_default_applies_to_new_tabs_without_overriding_restored_tabs() {
@@ -18472,6 +19271,25 @@ mod tests {
     }
 
     #[test]
+    fn cancelling_all_operations_keeps_them_registered_until_completion() {
+        let ops = OpRegistry::default();
+        let first_flag = Arc::new(AtomicBool::new(false));
+        let second_flag = Arc::new(AtomicBool::new(false));
+        let first = ops.register(op_handle(Some(first_flag.clone())));
+        let second = ops.register(op_handle(Some(second_flag.clone())));
+        let uninterruptible = ops.register(op_handle(None));
+        ops.cancel_all();
+        assert!(first_flag.load(Ordering::Relaxed));
+        assert!(second_flag.load(Ordering::Relaxed));
+        assert!(ops.in_flight());
+        ops.finish(first);
+        ops.finish(second);
+        assert!(ops.in_flight());
+        ops.finish(uninterruptible);
+        assert!(!ops.in_flight());
+    }
+
+    #[test]
     #[cfg(windows)]
     fn image_gallery_is_windows_only_and_image_only() {
         assert!(should_try_image_gallery("jpg"));
@@ -19191,6 +20009,7 @@ mod tests {
             let mut rows: Vec<FileRow> = (0..100)
                 .map(|index| FileRow {
                     name: format!("image-{index:03}.png").into(),
+                    path: gallery.to_string_lossy().into_owned().into(),
                     ext: "png".into(),
                     kind: FileKind::Image.as_i32(),
                     preview_capable: true,
@@ -19255,6 +20074,7 @@ mod tests {
             let mut rows: Vec<FileRow> = (0..40)
                 .map(|index| FileRow {
                     name: format!("cached-{index:02}.png").into(),
+                    path: gallery.to_string_lossy().into_owned().into(),
                     ext: "png".into(),
                     kind: FileKind::Image.as_i32(),
                     preview_capable: true,
@@ -19433,6 +20253,29 @@ mod tests {
             thumbnail_kind_for_row(FileKind::Audio.as_i32(), "FLAC"),
             Some((FileKind::Audio, false))
         );
+        for extension in [
+            "3mf", "BLEND", "blend1", "blend2", "BLEND12", "stl", "STL", "obj", "OBJ", "glb",
+            "GLTF",
+        ] {
+            assert_eq!(
+                thumbnail_kind_for_row(FileKind::File.as_i32(), extension),
+                Some((FileKind::File, false))
+            );
+        }
+        for extension in [
+            "step",
+            "blender",
+            "blend1bak",
+            "blend-1",
+            "blend\u{0661}",
+            "",
+            "blen",
+        ] {
+            assert!(
+                thumbnail_kind_for_row(FileKind::File.as_i32(), extension).is_none(),
+                "{extension}"
+            );
+        }
         assert!(thumbnail_kind_for_row(FileKind::Document.as_i32(), "docx").is_none());
 
         assert_eq!(effective_row_height(true, THUMB_DEFAULT_ZOOM, true), 76.0);
@@ -20331,7 +21174,7 @@ mod tests {
             let payload = serialize_tab(&original, (-200, 400));
             let fields: Vec<_> = payload.split('\t').collect();
             assert_eq!(&fields[6..9], &["-200", "400", "5"]);
-            assert_eq!(&fields[9..], &["grid", "3"]);
+            assert_eq!(&fields[9..], &["grid", "3", "", "1", "0"]);
             let (restored, drop) = deserialize_tab(&payload).unwrap();
             assert_eq!(drop, Some((-200, 400)));
             assert_eq!(tab_to_state(&restored), saved);
@@ -20343,6 +21186,24 @@ mod tests {
             deserialize_tab("folder01\tname\t1\t0\t0\tfolders\t0\t0\t0\tfuture\tbad").unwrap();
         assert_eq!(fallback.item_arrangement, ItemArrangement::List);
         assert_eq!(fallback.grid_zoom, None);
+    }
+
+    #[test]
+    fn secondary_sort_survives_tab_transfer_and_marks_the_workspace_modified() {
+        let mut saved = tab("folder01");
+        saved.zoom = Some(LIST_DEFAULT_ZOOM);
+        saved.secondary_sort = Some(SecondarySort {
+            column: SortColumn::Created,
+            order: SortOrder::Desc,
+            group_dates_by_day: true,
+        });
+        let original = tab_from_state(saved.clone());
+        let (restored, _) = deserialize_tab(&serialize_tab(&original, (0, 0))).unwrap();
+        assert_eq!(tab_to_state(&restored), saved);
+
+        let initial = ws(vec![panel(vec![tab("folder01")])]);
+        let changed = ws(vec![panel(vec![saved])]);
+        assert!(workspaces_differ(&initial, &changed));
     }
 
     #[test]
@@ -20380,6 +21241,7 @@ mod tests {
             path: path.into(),
             sort_column: SortColumn::Name,
             sort_order: SortOrder::Asc,
+            secondary_sort: None,
             preview: false,
             show_hidden: false,
             group_mode: GroupMode::FoldersFirst,

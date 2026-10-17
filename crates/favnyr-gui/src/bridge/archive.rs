@@ -15,12 +15,69 @@ pub(super) struct State {
     deliveries: Arc<std::sync::Mutex<VecDeque<Delivery>>>,
 }
 
+pub(super) fn pending(state: &AppState) -> bool {
+    state.archive.pending()
+}
+
+impl State {
+    fn pending(&self) -> bool {
+        self.running.get()
+            || self.ready.borrow().is_some()
+            || self.prompt.borrow().is_some()
+            || !self.queued.borrow().is_empty()
+            || !self
+                .deliveries
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .is_empty()
+    }
+
+    fn discard_pending(&self) -> Vec<i32> {
+        self.queued.borrow_mut().clear();
+        self.prompt.borrow_mut().take();
+        let mut finished = Vec::new();
+        if let Some((id, output)) = self.ready.borrow_mut().take() {
+            drop(output);
+            finished.push(id);
+        }
+        let deliveries: Vec<_> = self
+            .deliveries
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .drain(..)
+            .collect();
+        for (id, _, outcome, _) in deliveries {
+            drop(outcome);
+            self.running.set(false);
+            finished.push(id);
+        }
+        finished
+    }
+}
+
+/// Drain completed work even with the close confirmation covering the window.
+/// Running workers retain their registry entry until their result arrives.
+pub(super) fn cancel_for_shutdown(window: &MainWindow, state: &AppState) {
+    let archive = &state.archive;
+    window.set_archive_open(false);
+    window.set_archive_password(SharedString::new());
+    window.set_archive_confirm_password(SharedString::new());
+    for id in archive.discard_pending() {
+        window.invoke_op_dismiss(id);
+        window.invoke_op_finished(id);
+    }
+    window.set_archive_work_pending(pending(state));
+}
+
 pub(super) fn run_opener(
     window: &MainWindow,
     state: &AppState,
     opener: &openers::Opener,
     paths: &[PathBuf],
 ) -> anyhow::Result<()> {
+    if shutdown::stopping(state) {
+        return Ok(());
+    }
     let Some(action) = archives::action(opener) else {
         return actions::run_opener(opener, paths);
     };
@@ -172,6 +229,9 @@ fn show_prompt(window: &MainWindow, state: &AppState, job: Job, wrong: bool) {
 }
 
 fn start(window: &MainWindow, state: &AppState, job: Job, password: String) {
+    if shutdown::stopping(state) {
+        return;
+    }
     let cancel = Arc::new(AtomicBool::new(false));
     let id = state.ops.register(OpHandle {
         cancel: Some(cancel.clone()),
@@ -238,6 +298,10 @@ fn start(window: &MainWindow, state: &AppState, job: Job, password: String) {
 }
 
 fn poll(window: &MainWindow, state: &AppState) {
+    if shutdown::stopping(state) {
+        cancel_for_shutdown(window, state);
+        return;
+    }
     let archive = &state.archive;
     // Defer dialogs and publication until the current modal/conflict completes.
     // Keeping the result owned also keeps its staging directory alive.
@@ -337,10 +401,56 @@ fn poll(window: &MainWindow, state: &AppState) {
             }
         }
     }
-    window.set_archive_work_pending(
-        archive.running.get()
-            || archive.ready.borrow().is_some()
-            || archive.prompt.borrow().is_some()
-            || !archive.queued.borrow().is_empty(),
-    );
+    window.set_archive_work_pending(pending(state));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn job() -> Job {
+        Job {
+            program: PathBuf::from("archive-tool"),
+            inputs: vec![PathBuf::from("my_file.zip")],
+            kind: Kind::Extract { folder: false },
+        }
+    }
+
+    #[test]
+    fn shutdown_discards_prompts_but_waits_for_worker_delivery() {
+        let state = State::default();
+        state.queued.borrow_mut().push_back(job());
+        *state.prompt.borrow_mut() = Some(job());
+        state.running.set(true);
+        assert!(state.pending());
+        assert!(state.discard_pending().is_empty());
+        assert!(state.queued.borrow().is_empty());
+        assert!(state.prompt.borrow().is_none());
+        assert!(state.pending());
+        state
+            .deliveries
+            .lock()
+            .unwrap()
+            .push_back((7, job(), Outcome::PasswordRequired, false));
+        assert_eq!(state.discard_pending(), vec![7]);
+        assert!(!state.pending());
+        assert!(state.prompt.borrow().is_none());
+        assert!(state.discard_pending().is_empty());
+    }
+
+    #[test]
+    fn shutdown_discards_ready_output_without_publishing_it() {
+        let state = State::default();
+        *state.ready.borrow_mut() = Some((
+            3,
+            Output {
+                staging: archives::Staging(PathBuf::new()),
+                sources: vec![PathBuf::from("my_file.txt")],
+                destination: PathBuf::from("folder01"),
+            },
+        ));
+        assert!(state.pending());
+        assert_eq!(state.discard_pending(), vec![3]);
+        assert!(!state.pending());
+    }
 }
