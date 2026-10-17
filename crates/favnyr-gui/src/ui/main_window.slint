@@ -2119,6 +2119,11 @@ component FileItemView inherits Rectangle {
 // `TextInput` calls this `key-pressed` callback BEFORE its own handling: we
 // therefore cover both encodings, once and for all, for every
 // field (this component is used in place of `LineEdit`).
+/// Adapter for platform-independent shortcut normalization in text input fields.
+export global KeyAdapter {
+    callback normalize-key(string) -> string;
+}
+
 component EditTextInput inherits TextInput {
     /// Applies Ctrl+A/C/X/V and returns `true` if the key was consumed.
     /// Public: fields that already have their own `key-pressed` (Escape…)
@@ -2126,20 +2131,21 @@ component EditTextInput inherits TextInput {
     public function edit-shortcut(ev: KeyEvent) -> bool {
         if (ev.modifiers.control && !ev.modifiers.alt && !ev.modifiers.meta
                 && !ev.modifiers.shift) {
-            if (ev.text == "a" || ev.text == "A" || ev.text == "\u{1}") {
+            let k = KeyAdapter.normalize-key(ev.text);
+            if (k == "A" || ev.text == "\u{1}") {
                 self.select-all();
                 return true;
             }
-            if (ev.text == "c" || ev.text == "C" || ev.text == "\u{3}") {
+            if (k == "C" || ev.text == "\u{3}") {
                 self.copy();
                 return true;
             }
             // Cut/paste make no sense on a read-only field.
-            if (!self.read-only && (ev.text == "x" || ev.text == "X" || ev.text == "\u{18}")) {
+            if (!self.read-only && (k == "X" || ev.text == "\u{18}")) {
                 self.cut();
                 return true;
             }
-            if (!self.read-only && (ev.text == "v" || ev.text == "V" || ev.text == "\u{16}")) {
+            if (!self.read-only && (k == "V" || ev.text == "\u{16}")) {
                 self.paste();
                 return true;
             }
@@ -2157,19 +2163,20 @@ component EditLineEdit inherits LineEdit {
         if (ev.modifiers.control && !ev.modifiers.alt && !ev.modifiers.meta) {
             // Shift+Ctrl+letter is left to the rest of the application.
             if (!ev.modifiers.shift) {
-                if (ev.text == "a" || ev.text == "A" || ev.text == "\u{1}") {
+                let k = KeyAdapter.normalize-key(ev.text);
+                if (k == "A" || ev.text == "\u{1}") {
                     self.select-all();
                     return accept;
                 }
-                if (ev.text == "c" || ev.text == "C" || ev.text == "\u{3}") {
+                if (k == "C" || ev.text == "\u{3}") {
                     self.copy();
                     return accept;
                 }
-                if (ev.text == "x" || ev.text == "X" || ev.text == "\u{18}") {
+                if (k == "X" || ev.text == "\u{18}") {
                     self.cut();
                     return accept;
                 }
-                if (ev.text == "v" || ev.text == "V" || ev.text == "\u{16}") {
+                if (k == "V" || ev.text == "\u{16}") {
                     self.paste();
                     return accept;
                 }

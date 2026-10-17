@@ -405,6 +405,18 @@ impl Chord {
     }
 }
 
+/// Translates an ASCII letter or Cyrillic character into its canonical uppercase Latin key ('A'..='Z').
+///
+/// Fully cross-platform, deterministic, and safe (no OS FFI calls).
+/// Covers standard QWERTY Cyrillic keyboard layouts (Russian, Ukrainian `і`, etc.).
+/// Returns `None` if the character does not correspond to an A..Z physical key.
+pub fn normalize_char(ch: char) -> Option<char> {
+    if ch.is_ascii_alphabetic() {
+        return Some(ch.to_ascii_uppercase());
+    }
+    cyrillic_fallback(ch)
+}
+
 /// Normalizes a key name to its canonical form. Single letter → uppercase;
 /// special names are case-insensitive; unknown → returned as-is (robustness).
 fn normalize_key(k: &str) -> Option<String> {
@@ -414,8 +426,8 @@ fn normalize_key(k: &str) -> Option<String> {
     }
     if k.chars().count() == 1 {
         let c = k.chars().next().unwrap();
-        if c.is_ascii_alphabetic() {
-            return Some(c.to_ascii_uppercase().to_string());
+        if let Some(canon) = normalize_char(c) {
+            return Some(canon.to_string());
         }
         return Some(k.to_string()); // digit / literal punctuation
     }
@@ -447,6 +459,40 @@ fn normalize_key(k: &str) -> Option<String> {
         _ => return Some(k.to_string()),
     };
     Some(canon.to_string())
+}
+
+/// Standard Cyrillic QWERTY layout mapping for Windows, Linux, and macOS.
+fn cyrillic_fallback(ch: char) -> Option<char> {
+    match ch {
+        'й' | 'Й' => Some('Q'),
+        'ц' | 'Ц' => Some('W'),
+        'у' | 'У' => Some('E'),
+        'к' | 'К' => Some('R'),
+        'е' | 'Е' => Some('T'),
+        'н' | 'Н' => Some('Y'),
+        'г' | 'Г' => Some('U'),
+        'ш' | 'Ш' => Some('I'),
+        'щ' | 'Щ' => Some('O'),
+        'з' | 'З' => Some('P'),
+        'ф' | 'Ф' => Some('A'),
+        'ы' | 'Ы' => Some('S'),
+        'в' | 'В' => Some('D'),
+        'а' | 'А' => Some('F'),
+        'п' | 'П' => Some('G'),
+        'р' | 'Р' => Some('H'),
+        'о' | 'О' => Some('J'),
+        'л' | 'Л' => Some('K'),
+        'д' | 'Д' => Some('L'),
+        'я' | 'Я' => Some('Z'),
+        'ч' | 'Ч' => Some('X'),
+        'с' | 'С' => Some('C'),
+        'м' | 'М' => Some('V'),
+        'и' | 'И' => Some('B'),
+        'т' | 'Т' => Some('N'),
+        'ь' | 'Ь' => Some('M'),
+        'і' | 'І' => Some('S'),
+        _ => None,
+    }
 }
 
 /// Effective map: action_id → serialized chord (override, else default; `""`
@@ -711,5 +757,73 @@ mod tests {
         assert_eq!(km.conflict("cut", "Ctrl+Insert"), None);
         // An action's own chord isn't a conflict with itself.
         assert_eq!(km.conflict("copy", "Ctrl+C"), None);
+    }
+
+    #[test]
+    fn cyrillic_letters_normalize_to_latin() {
+        assert_eq!(normalize_char('с'), Some('C'));
+        assert_eq!(normalize_char('С'), Some('C'));
+        assert_eq!(normalize_char('д'), Some('L'));
+        assert_eq!(normalize_char('Д'), Some('L'));
+        assert_eq!(normalize_char('т'), Some('N'));
+        assert_eq!(normalize_char('Т'), Some('N'));
+        assert_eq!(normalize_char('ф'), Some('A'));
+        assert_eq!(normalize_char('ч'), Some('X'));
+        assert_eq!(normalize_char('м'), Some('V'));
+        assert_eq!(normalize_char('я'), Some('Z'));
+        assert_eq!(normalize_char('и'), Some('B'));
+        assert_eq!(normalize_char('і'), Some('S'));
+    }
+
+    #[test]
+    fn cyrillic_shortcuts_resolve_in_keymap_and_parse() {
+        let km = Keymap::build(&BTreeMap::new());
+
+        // Ctrl+C (ru 'с') -> copy
+        let ev_c = Chord::from_event("с", true, false, false).unwrap();
+        assert_eq!(ev_c.serialize(), "Ctrl+C");
+        assert_eq!(km.action_for(&ev_c), Some("copy"));
+
+        // Ctrl+L (ru 'д') -> focus-address
+        let ev_l = Chord::from_event("д", true, false, false).unwrap();
+        assert_eq!(ev_l.serialize(), "Ctrl+L");
+        assert_eq!(km.action_for(&ev_l), Some("focus-address"));
+
+        // Ctrl+Shift+N (ru 'т' / 'Т') -> new-folder
+        let ev_shift_n = Chord::from_event("Т", true, false, true).unwrap();
+        assert_eq!(ev_shift_n.serialize(), "Ctrl+Shift+N");
+        assert_eq!(km.action_for(&ev_shift_n), Some("new-folder"));
+
+        // Ctrl+Alt+N (ru 'т') -> new-file
+        let ev_alt_n = Chord::from_event("т", true, true, false).unwrap();
+        assert_eq!(ev_alt_n.serialize(), "Ctrl+Alt+N");
+        assert_eq!(km.action_for(&ev_alt_n), Some("new-file"));
+
+        // Parse round-trip from settings recorder
+        assert_eq!(Chord::parse("Ctrl+с").unwrap().serialize(), "Ctrl+C");
+        assert_eq!(
+            Chord::parse("Ctrl+Shift+Т").unwrap().serialize(),
+            "Ctrl+Shift+N"
+        );
+        assert_eq!(
+            Chord::parse("Ctrl+Alt+т").unwrap().serialize(),
+            "Ctrl+Alt+N"
+        );
+
+        // Cyrillic punctuation keys (б, ю, ж) are NOT falsely converted to letters
+        assert_eq!(Chord::parse("Ctrl+б").unwrap().serialize(), "Ctrl+б");
+    }
+
+    #[test]
+    fn non_cyrillic_non_ascii_characters_not_falsely_converted() {
+        // German umlauts should not be converted to A..Z
+        assert_eq!(normalize_char('ä'), None);
+        assert_eq!(normalize_char('ö'), None);
+        assert_eq!(normalize_char('ü'), None);
+        assert_eq!(normalize_char('ß'), None);
+
+        // Digits remain unchanged
+        assert_eq!(Chord::parse("Ctrl+1").unwrap().serialize(), "Ctrl+1");
+        assert_eq!(Chord::parse("Ctrl+9").unwrap().serialize(), "Ctrl+9");
     }
 }
