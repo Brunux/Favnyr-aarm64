@@ -137,6 +137,13 @@ uncommitted changes, since those do not travel into the image.
 
 ### Host toolchain
 
+- `scripts/00-deps.sh` installs the same tool set from either package manager, because the
+  reference machine runs this port (Debian) as well as having built it from Alpine: `apk` is used
+  when present, `apt-get` otherwise. The Debian names differ in a few places (`rust-bindgen` ->
+  `bindgen`, `elfutils-dev` -> `libelf-dev`, `pahole` -> `dwarves`, `vboot-utils` ->
+  `cgpt` + `vboot-kernel-utils`, `dtc` -> `device-tree-compiler`, `gptfdisk` -> `gdisk`,
+  `musl-dev` -> glibc via `build-essential`). On Debian the kernel's rust needs (`rustc`,
+  `rust-src`, `bindgen`, `libclang-dev`) and BTF (`dwarves`) are part of that list too.
 - The kernel build also needs the **`openssl`** binary (module signing) and **`findutils`** (the
   kernel's initramfs scripts use `find -printf`, which BusyBox find lacks).
 
@@ -458,7 +465,7 @@ All scripts live in `scripts/` and read shared config from `scripts/lib.sh`.
 Large artifacts go to `$HOME/.cache/debian-aarch64` (`WORK_DIR`, `SRC_DIR`).
 
 ```sh
-scripts/00-deps.sh          # install host build deps (apk), re-execs via sudo
+scripts/00-deps.sh          # install host build deps (apk or apt), re-execs via sudo
 scripts/build-kernel.sh     # mainline 7.2.7 + patches + config  -> $WORK_DIR/kernel-stage
 scripts/build-rootfs.sh     # debootstrap Debian forky rootfs    -> $WORK_DIR/rootfs
 scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initramfs
