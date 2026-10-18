@@ -368,6 +368,46 @@ uncommitted changes, since those do not travel into the image.
   *host's* kernel partition from the host's `kern_guid`. Both sides are now read before refusing, so a
   system where `/proc` hides PID 1 is not mistaken for a chroot.
 
+### pmbootstrap parity (the install method that is known to boot here)
+
+`scripts/lib-cgpt.sh` reproduces pmbootstrap's ChromeOS install path part by part, because that
+method is the one proven on this Chromebook. Read the upstream before changing it:
+`pmb/install/partition.py` (`partition_cgpt`, `sanity_check_boot_size`), `pmb/install/format.py`
+(`format_partition_with_filesystem`, `format_and_mount_*`), `pmb/install/_install.py`
+(`create_fstab`, `copy_files_from_chroot`, `write_cgpt_kpart`, `partprobe`), `pmb/install/blockdevice.py`
+(`mount_disk`) and `boot-deploy-functions.sh` (`create_depthcharge_kernel_image`,
+`flash_updated_depthcharge_kernel`, `is_in_chroot`, `check_image_size`). Verified on a loop device:
+the resulting geometry is identical (`p1 8192+262144`, `p2 270336+1048576`, `p3 1318912+rest-33`,
+PMBR present, kernel/efi/data types, `pmOS_*` labels, `-S 1 -T 5 -P 10`).
+
+- The **root partition size is `dev_size - root_start - 33`**, not `- 2048`: those 33 sectors are
+  the secondary GPT (32) plus its header, and pmbootstrap sizes the partition so the backup table
+  survives. `partprobe` runs after the `cgpt add`s, as in `install_system_image()`.
+- **`mkfs.ext2 -F -q -L pmOS_boot` and `mkfs.ext4 -F -q -L pmOS_root`**, the lines
+  `format_partition_with_filesystem()` builds for this device (its schema default for
+  `boot_filesystem` is ext2, so `BOOT_FS=ext2` is compliance, not a quirk).
+- **`/etc/fstab` options are pmbootstrap's**: `defaults` for the root and `nodev,nosuid,noexec` for
+  `/boot` — which is also how the running Nura mounts its `/boot`. Do not "improve" them without a
+  reason; the `pmos_rootfsopts`-equivalent a pmOS user would see comes from that column.
+- **`disk_release` refuses when a partition of the target is mounted**, like `mount_disk()`, rather
+  than unmounting it silently. Active swap is turned off (pmbootstrap does not check it, but `mkfs`
+  on a live swap partition fails) and no `wipefs` is done: parted writes both GPT tables and
+  `mkfs -F` overwrites signatures anyway.
+- **`mountpoint -q <device>` does not test whether a device is mounted** — it answers whether that
+  *path* is a mount point, which a device node never is. It answered "no" for a mounted partition, so
+  the old release step never unmounted anything and the new refusal would never have fired. Test with
+  `findmnt -rn -S <device>` (or `/proc/mounts`), never with `mountpoint`, when the argument is a
+  device; `mountpoint -q <directory>` (as in `disk_layout_umount`) is fine.
+
+Intentional deviations, all of them at the line that makes them: the GPT areas are zeroed before
+`parted` (pmbootstrap leaves it to parted; it costs nothing and makes `cgpt create` immune to a stale
+header), `mkfs` does not get `-i 8192` (that is for pmbootstrap's image builds; our images are 4 GiB
+with ~90k files), the fstab pass column is `0 1`/`0 2` instead of `0 0` (systemd-fsck orders them),
+the kernel command line carries `root=UUID=... rootwait rw` instead of pmOS's `pmos_root_uuid=...`
+(Debian resolves its root from `root=`), and `install-emmc.sh` copies `/home` with the rest of the
+running system instead of seeding it from `/etc/skel`, because the point of that script is to clone
+the card that has already been tested.
+
 ### depthcharge FIT
 
 - Build with `deviceinfo_depthcharge_board="mt8192"` (not `asurada`: the hayato DTB has no
