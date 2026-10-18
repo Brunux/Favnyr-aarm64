@@ -180,6 +180,20 @@ uncommitted changes, since those do not travel into the image.
   `/etc/greetd/config.toml`. With the upstream name the service dies with
   `configured default session user 'greetd' not found` and the machine silently falls back to a
   console login on tty1.
+- **SSH host keys**: Debian's `sshd-keygen.service` is gated on `ConditionFirstBoot=yes`, i.e. it
+  generates keys only when `/etc/machine-id` was *empty at boot*. Every system here is a *copy* of
+  an image (`write-sd.sh`, `install-emmc.sh`), and the copy is written from a tree that already
+  generated its id, so the condition is never true again, `ssh-keygen` never runs and
+  `ssh.service` dies on every boot with `sshd: no hostkeys available -- exiting.` (hit on both the
+  card and the eMMC install; the card kept failing for as long as it had been booted).
+  `rootfs-setup.sh` therefore drops in
+  `/etc/systemd/system/sshd-keygen.service.d/90-run-when-keys-are-missing.conf`, which resets the
+  inherited condition list (`ConditionFirstBoot=`) and requires the ed25519 host key to be
+  **absent** instead: the unit generates whatever key type is missing on the first boot that lacks
+  them and is a single `stat` from then on. `build-rootfs.sh` ships `/etc/machine-id` empty and no
+  host keys, and `install-emmc.sh` blanks the id and the keys of the copy, so each card and each
+  install gets its own identity instead of sharing one journal, one DHCP identity and one SSH
+  host key (`lib-dist.sh` makes the same choice for published artifacts).
 - `nmtui` lives in the separate **`network-manager-tui`** package (no longer part of
   `network-manager`).
 - `wireless-regdb` provides `regulatory.db`; without it cfg80211 logs
@@ -431,7 +445,12 @@ the card that has already been tested.
   `kernel-cmdline.conf`:
   `KERNEL_CMDLINE_OVERRIDE="console=tty0 ignore_loglevel loglevel=7" scripts/make-kpart.sh`
   and write the resulting kpart to the kernel partition (or `scripts/install-kpart.sh` on the
-  running system). Expect the `sbs-8-000b` gauge spam on screen while verbose.
+  running system). Expect the `sbs-8-000b` gauge spam on screen while verbose. Never append a
+  bare `debug`: initramfs-tools then redirects its own script output to
+  `/run/initramfs/initramfs.debug` (a file *inside* the initramfs) instead of the console, so the
+  messages that identify a boot failure (`run-init: ...`, `Target filesystem doesn't have ...`,
+  `ALERT! ...`) never reach the screen. `fbcon` is built into this kernel, which is what makes
+  `console=tty0` useful here.
 
 ## Commands
 
@@ -510,7 +529,17 @@ timezone that is not under `/usr/share/zoneinfo`, is reported and replaced by th
 internal eMMC from `write-sd.sh` or the running root from either. Both build the same three
 partitions (see `scripts/lib-cgpt.sh`) and both write a signed kpart into p1;
 `install-emmc.sh` copies the **running** system (rsync) instead of `$ROOTFS`, which is why it
-needs the card to be a system worth cloning.
+needs the card to be a system worth cloning. That copy excludes the *contents* of `/proc`,
+`/sys`, `/dev`, `/run`, `/mnt`, `/media`, `/tmp`, `/var/cache` and `/var/log/journal` — but
+`rsync` also drops the excluded directories themselves, and a root filesystem needs them: they
+are mount points, and the initramfs's `run-init` moves its own `devtmpfs` `/dev` (plus `/proc`
+and `/sys`) into them before handing over to systemd. A copy without them boots the kernel,
+mounts the root filesystem read-write and then stops at `run-init: opening console: No such file
+or directory` / `Target filesystem doesn't have requested /sbin/init` / `No init found. Try
+passing init= bootarg.`; with `quiet` on the command line that is a black screen, and since the
+kpart and its payload are byte-identical to the card's it reads as a firmware or kernel problem.
+The script now recreates `dev:755 proc:555 sys:555 run:755 mnt:755 media:755` after the copy and
+refuses to write p1 unless `/dev` exists and `/sbin/init` resolves.
 
 `install-kpart.sh` is the third one: it does not partition anything, it only rewrites the kernel
 partition the running system was booted from (resolved from `kern_guid` in `/proc/cmdline`), so
@@ -535,7 +564,15 @@ exits non-zero when something FAILs.
 1. `crossystem dev_boot_usb=1 dev_boot_signed_only=0` (from ChromeOS developer mode; already set
    on this machine).
 2. `scripts/write-sd.sh /dev/mmcblk1`
-3. Insert the card, power on, press **Ctrl+U** at the developer screen.
+3. Insert the card, power on and pick **external disk** in the firmware menu.
+
+### The firmware menu (this machine)
+
+In developer mode the stock firmware on this Chromebook does not wait for the Ctrl+D / Ctrl+U
+screens the older documentation describes: it presents a **menu** on its own. Its entries were
+verified on hardware: **internal disk = the eMMC, external disk = the microSD**. That is the
+mechanism to boot the eMMC after `install-emmc.sh`; the microSD stays the rescue system (the card
+is untouched by an eMMC install, so it can always be selected again).
 
 Default credentials of the built image: user `brunux` / password `debian`, passwordless sudo.
 
