@@ -7,8 +7,9 @@ First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada
 
 - **Status:** boots from microSD on the Hayato with the Nura-ported sway session (display,
   input, storage, Wi-Fi, Bluetooth, audio, suspend, greeter), and the hardware report of the
-  booted image comes back clean (kept in [`reports/`](reports/)). The eMMC install is the next
-  milestone.
+  booted image comes back clean (kept in [`reports/`](reports/)). The eMMC install works and is
+  validated on hardware, and the running installation can be backed up and restored
+  (`scripts/backup-system.sh`, `scripts/restore-system.sh`).
 - **Release:** [`v0.1.0`](docs/releases/v0.1.0.md) — the precompiled image validated on hardware
   (see [Download and flash](#download-and-flash-a-precompiled-image)).
 - **Plan:** [`docs/plan.md`](docs/plan.md)
@@ -45,8 +46,9 @@ xz -dc google-asurada.img.xz | sudo dd of=/dev/mmcblk1 bs=4M conv=fsync
 ```
 
 On the Chromebook: developer mode, `crossystem dev_boot_usb=1 dev_boot_signed_only=0`, insert the
-card and press **Ctrl+U**. It comes up silently to a greetd prompt — user `brunux`, password
-`debian`, passwordless sudo. **Change the password** (`passwd`) before using it for anything real.
+card and pick **external disk** in the firmware menu. It comes up silently to a greetd prompt —
+user `brunux`, password `debian`, passwordless sudo. **Change the password** (`passwd`) before using
+it for anything real.
 
 The image is 4 GiB, so a larger card keeps the space after `p3` unused. To use the whole card,
 write the tarball instead: `write-sd.sh` sizes `p3` to the device it is given.
@@ -165,7 +167,8 @@ DEVICE=google-asurada scripts/write-sd.sh /dev/mmcblk1
 ```
 
 Then boot the card: on ChromeOS firmware enter developer mode, ensure external boot is allowed
-(`crossystem dev_boot_usb=1 dev_boot_signed_only=0`), insert the card and press **Ctrl+U**.
+(`crossystem dev_boot_usb=1 dev_boot_signed_only=0`), insert the card and pick **external disk** in
+the firmware menu.
 
 Default credentials of the built image: user `brunux` / password `debian`, passwordless sudo.
 
@@ -222,8 +225,8 @@ Typical loop:
 
 1. The maintainer states a goal; the agent inspects the machine and the upstream sources.
 2. The agent writes/changes scripts, builds, and reports results and blockers.
-3. The maintainer runs anything that needs a physical action (plugging a card, pressing Ctrl+U,
-   reading the screen) and feeds back logs.
+3. The maintainer runs anything that needs a physical action (plugging a card, selecting the boot
+   disk in the firmware menu, reading the screen) and feeds back logs.
 4. Failures are fixed in the scripts and re-tested; findings go into `docs/` and `AGENTS.md`.
 
 ### Working with the agent
@@ -309,7 +312,8 @@ full pipeline.
 DEVICE=<codename> scripts/write-sd.sh /dev/sdX     # or /dev/mmcblk1
 ```
 
-Boot the device from the card (ChromeOS: Ctrl+U; other bootloaders: their external-boot path).
+Boot the device from the card (ChromeOS: pick **external disk** in the firmware menu; other
+bootloaders: their external-boot path).
 Verify, in order: the kernel command line and DTBs (`cat /proc/cmdline`, `ls /proc/device-tree`),
 **display**, **input** (keyboard/touch), **storage**, **network**, **audio**, suspend/resume.
 Capture `dmesg` for anything that fails and fix it in the device/kernel directories.
@@ -356,8 +360,11 @@ scripts/install-kpart.sh         # rewrite the kernel partition it booted from (
       the two WARNs of the first report explained in [`reports/`](reports/).
 - [x] Rebuild from a clean rootfs, so the card and the release come from a committed tree.
 - [x] Build a distributable `.img.xz` (`scripts/make-image.sh`, `scripts/make-release.sh`).
+- [x] Install to eMMC with `install-emmc.sh`, following pmbootstrap's ChromeOS method, and boot
+      the installed system from the firmware's internal-disk entry.
+- [x] Back the running installation up and restore it (`scripts/backup-system.sh`,
+      `scripts/restore-system.sh`).
 - [ ] Byte-reproducible artifacts: `SOURCE_DATE_EPOCH` for the FIT, stable filesystem UUIDs.
-- [ ] Install to eMMC with `install-emmc.sh`.
 - [ ] CI/CD: kernel build, rootfs build and image assembly, plus a portability check across
       `devices/`. The device-driven layout and the "no block device" `build.sh` are already
       shaped for that.
