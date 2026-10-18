@@ -1,5 +1,6 @@
 #!/bin/bash
-# Partition and populate a microSD/USB device so it boots via depthcharge (Ctrl+U).
+# Partition and populate a microSD/USB device so it boots via depthcharge (pick
+# the external disk in the firmware's developer-mode menu).
 #
 # The layout is Nura's (see scripts/lib-cgpt.sh):
 #   p1  kernel  128 MiB  signed FIT kpart
@@ -53,5 +54,5 @@ dd if="$KPART" of="$KPART_PART" bs=1M conv=fsync
 sync
 disk_layout_umount "$MNT"
 
-log "Done. Remove $BLOCK and boot with Ctrl+U."
+log "Done. Remove $BLOCK, insert it and pick the external disk in the firmware menu."
 cgpt show "$BLOCK" || true

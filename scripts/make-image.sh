@@ -12,8 +12,8 @@
 #
 #   xz -dc nureb-<device>.img.xz | sudo dd of=/dev/mmcblk1 bs=4M conv=fsync
 #
-# and the card boots with Ctrl+U. Two things differ from write-sd.sh, and both
-# are about the file being *published*:
+# and the card boots from the firmware's external-disk entry. Two things differ
+# from write-sd.sh, and both are about the file being *published*:
 #
 #   * the size is fixed by argument instead of taken from a device, so the same
 #     build can be written to any card that is at least this big;

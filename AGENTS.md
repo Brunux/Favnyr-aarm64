@@ -48,8 +48,8 @@ yet present in `scripts/` as not implemented.
 - Partitioning uses **`cgpt`** (ChromeOS GPT). The 128 MB kernel partition is required.
 - **Never flash the SPI firmware.** Only touch GPT partitions. Write-protect is disabled on this
   device, so a firmware write could brick it.
-- Boot from microSD/USB requires `crossystem dev_boot_usb=1 dev_boot_signed_only=0` and **Ctrl+U**
-  at the developer-mode screen.
+- Boot from microSD/USB requires `crossystem dev_boot_usb=1 dev_boot_signed_only=0`; the firmware
+  then boots the external disk when it is picked in the developer-mode menu (see below).
 
 Nura's proven disk layout (reuse it, and this repository reproduces it): `p1 pmOS_kernel` 128 MB
 (kpart), `p2 pmOS_boot` 512 MB (ext2, where `/boot` lives), `p3 pmOS_root` root. It is created in
