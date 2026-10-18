@@ -10,8 +10,8 @@ First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada
   booted image comes back clean (kept in [`reports/`](reports/)). The eMMC install works and is
   validated on hardware, and the running installation can be backed up and restored
   (`scripts/backup-system.sh`, `scripts/restore-system.sh`).
-- **Release:** [`v0.1.0`](docs/releases/v0.1.0.md) — the precompiled image validated on hardware
-  (see [Download and flash](#download-and-flash-a-precompiled-image)).
+- **Release:** [`v0.1.1`](docs/releases/v0.1.1.md) — the precompiled image, with the eMMC install
+  validated on hardware (see [Download and flash](#download-and-flash-a-precompiled-image)).
 - **Plan:** [`docs/plan.md`](docs/plan.md)
 - **Recon of the reference machine:** [`docs/recon.md`](docs/recon.md)
 - **Agent/build instructions:** [`AGENTS.md`](AGENTS.md)
@@ -30,8 +30,7 @@ Alacritty with the solarized theme.*
 
 ## Download and flash a precompiled image
 
-The [`v0.1.0`](docs/releases/v0.1.0.md) release publishes the image that was validated on the
-reference Hayato:
+The [`v0.1.1`](docs/releases/v0.1.1.md) release publishes the image built from this repository:
 
 | asset | what it is |
 |---|---|
