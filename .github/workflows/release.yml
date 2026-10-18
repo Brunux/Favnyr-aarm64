@@ -162,3 +162,55 @@ jobs:
             --generate-notes \
             dist/favnyr-linux-x86_64.tar.gz \
             dist/favnyr-windows-x86_64.exe
+
+  # Prints the two values the Nix recipe needs for this release, and stops
+  # there. Editing `packaging/nix/package.nix` is two lines of typing : what is
+  # tedious is obtaining the hash, because it means downloading the published
+  # archive and running a command. So this does that part, which keeps the rule 
+  # the whole repository follows: no workflow ever writes to the repository.
+  #
+  # It runs after the release exists and touches neither the assets nor the
+  # release, so a failure here leaves the publication intact and only turns
+  # this one badge red. `continue-on-error` would repaint the badge green and
+  # throw away the signal, so it is not used.
+  nix-bump:
+    name: Nix recipe values
+    needs: [publish]
+    runs-on: ubuntu-latest
+    # An artifact from this same run travels on the runner's own token, not
+    # on this one, as the publish job above already demonstrates. So nothing
+    # has to be granted here, and declaring one permission sets every other
+    # one to none.
+    permissions:
+      contents: read
+    steps:
+      # The same bytes the release carries, taken from the artifact the Linux
+      # job produced rather than downloaded back from the release.
+      - uses: actions/download-artifact@v4
+        with:
+          name: favnyr-linux-x86_64
+          path: dist
+
+      # The hash `fetchurl` expects is the archive's SHA-256 encoded in Base64
+      # behind a prefix naming the algorithm. Nothing about it is specific to
+      # Nix, which is why installing Nix here is unnecessary.
+      - name: Values for the Nix recipe
+        run: |
+          hash="sha256-$(openssl dgst -binary -sha256 \
+            dist/favnyr-linux-x86_64.tar.gz | openssl base64 -A)"
+          case "$GITHUB_REF" in
+            refs/tags/v*) version="${GITHUB_REF_NAME#v}" ;;
+            *) version="no version tag on this run" ;;
+          esac
+          {
+            echo "## Nix recipe"
+            echo ""
+            echo "Copy both values into \`packaging/nix/package.nix\`, commit,"
+            echo "then run the Nix workflow unticked on \`main\` to prove the"
+            echo "recipe builds against the archive just published."
+            echo ""
+            echo '```nix'
+            echo "  version = \"$version\";"
+            echo "  hash = \"$hash\";"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
