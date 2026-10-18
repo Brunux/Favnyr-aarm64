@@ -681,6 +681,11 @@ export global Strings {
 
     // Keyboard shortcuts
     in-out property <string> settings-shortcuts-section;
+    in-out property <string> settings-letter-layout;       // the list's label
+    in-out property <string> settings-letter-layout-tip;   // its hover text
+    in-out property <string> settings-letter-layout-off;   // its first entry
+    in-out property <string> settings-keyboard-russian-standard;
+    in-out property <string> settings-keyboard-ukrainian-standard;
     in-out property <string> shortcut-search-placeholder;
     in-out property <string> shortcut-reset-all;
     in-out property <string> shortcut-reset-all-confirm;
@@ -2119,7 +2124,7 @@ component FileItemView inherits Rectangle {
 // `TextInput` calls this `key-pressed` callback BEFORE its own handling: we
 // therefore cover both encodings, once and for all, for every
 // field (this component is used in place of `LineEdit`).
-/// Adapter for platform-independent shortcut normalization in text input fields.
+/// Resolves editing keys with the configured fallback, without changing typed text.
 export global KeyAdapter {
     callback normalize-key(string) -> string;
 }
@@ -9263,7 +9268,7 @@ export component MainWindow inherits Window {
     /// Resolves a key combination → action id (or "" if none) using the
     /// effective shortcut map (defaults + overrides). `keyname` is already
     /// normalized by `chord-key-name`.
-    callback match-action(string, bool, bool, bool) -> string;
+    callback match-action(string, bool, bool, bool, bool) -> string;
     /// Emitted by the bridge when a thumbnail is ready (full path, generation, image).
     callback thumb-ready(string, int, image);
     /// Exact viewport of a panel: drives virtualization and prioritization.
@@ -9467,6 +9472,9 @@ export component MainWindow inherits Window {
     // Action groups (pushed by the bridge when settings open and
     // after each modification / search).
     in property <[ShortcutGroup]> shortcut-groups;
+    /// Selected entry of the letter-shortcut layout list.
+    in-out property <int> letter-layout-index: 0;
+    callback letter-layout-changed(int);
     // EFFECTIVE shortcuts displayed in context menus, pushed by
     // the bridge (dynamic: follow user rebinds).
     in property <MenuShortcuts> menu-shortcuts;
@@ -11195,7 +11203,7 @@ export component MainWindow inherits Window {
                     || (root.workspaces-open && !root.ws-dirty-warn-open)) {
                 let id: string = root.match-action(
                     root.chord-key-name(event.text),
-                    event.modifiers.control, event.modifiers.alt, chord-shift);
+                    event.modifiers.control, event.modifiers.alt, chord-shift, event.modifiers.meta);
                 if (id != "" && (!root.any-overlay-open || id == "save-workspace")) {
                     root.perform-action(id);
                     return accept;
@@ -15209,9 +15217,11 @@ export component MainWindow inherits Window {
                 if root.settings-tab == 1 : ScrollView {
                     vertical-stretch: 1;
                     VerticalLayout {
+                        alignment: start;
                         padding: 20px;
                         spacing: 18px;
                         sc-box := VerticalLayout {
+                            alignment: start;
                             spacing: 10px;
                             property <bool> reset-all-armed: false;
 
@@ -15254,6 +15264,68 @@ export component MainWindow inherits Window {
                                                 sc-box.reset-all-armed = false;
                                             } else {
                                                 sc-box.reset-all-armed = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Compatibility preferences remain visible above filtered action groups.
+                            Rectangle {
+                                vertical-stretch: 0;
+                                background: Theme.alternate-background.with-alpha(0.5);
+                                border-radius: 8px;
+                                border-width: 1px;
+                                border-color: Theme.border;
+                                VerticalLayout {
+                                    padding: 12px;
+                                    spacing: 10px;
+                                    // One choice, not a switch: the same
+                                    // Cyrillic letter sits on a different key
+                                    // depending on the arrangement, so the
+                                    // layout has to be named rather than merely
+                                    // turned on. Hovering the label says why.
+                                    HorizontalLayout {
+                                        spacing: 12px;
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            Text {
+                                                x: 0;
+                                                width: parent.width;
+                                                height: parent.height;
+                                                text: Strings.settings-letter-layout;
+                                                font-size: 12px;
+                                                color: Theme.foreground;
+                                                vertical-alignment: center;
+                                                wrap: word-wrap;
+                                            }
+                                            // Declared after the text so it
+                                            // receives the hover; it draws
+                                            // nothing and steals no click.
+                                            layout-tip := TouchArea {
+                                                mouse-cursor: default;
+                                                changed has-hover => {
+                                                    if (self.has-hover) {
+                                                        Tip.text = Strings.settings-letter-layout-tip;
+                                                        Tip.x = self.absolute-position.x;
+                                                        Tip.y = self.absolute-position.y + self.height + 4px;
+                                                    } else if (Tip.text == Strings.settings-letter-layout-tip) {
+                                                        Tip.text = "";
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        letter-layout := ComboBox {
+                                            width: 210px;
+                                            vertical-stretch: 0;
+                                            model: [
+                                                Strings.settings-letter-layout-off,
+                                                Strings.settings-keyboard-russian-standard,
+                                                Strings.settings-keyboard-ukrainian-standard,
+                                            ];
+                                            current-index <=> root.letter-layout-index;
+                                            selected(_) => {
+                                                root.letter-layout-changed(letter-layout.current-index);
                                             }
                                         }
                                     }
@@ -17635,14 +17707,16 @@ export component MainWindow inherits Window {
                     width: 15px;
                     height: 15px;
                     y: (parent.height - self.height) / 2;
-                    // 0 lock · 1 open lock · 2 check · 3 bookmark.
+                    // 0 lock · 1 open lock · 2 check · 3 bookmark · 4 gear.
                     source: root.notice-icon == 1
                         ? @image-url("../../assets/icons/unlock.svg")
                         : (root.notice-icon == 2
                             ? @image-url("../../assets/icons/check.svg")
                             : (root.notice-icon == 3
                                 ? @image-url("../../assets/icons/bookmark.svg")
-                                : @image-url("../../assets/icons/lock.svg")));
+                                : (root.notice-icon == 4
+                                    ? @image-url("../../assets/icons/gear.svg")
+                                    : @image-url("../../assets/icons/lock.svg"))));
                     colorize: notice-box.tone-color;
                 }
                 Text {

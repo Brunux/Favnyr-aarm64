@@ -367,6 +367,11 @@ fn apply_catalog(window: &MainWindow, c: &HashMap<String, String>) {
     strings.set_settings_cache_path(g("settings_cache_path"));
     strings.set_settings_open(g("settings_open"));
     strings.set_settings_shortcuts_section(g("settings_shortcuts_section"));
+    strings.set_settings_letter_layout(g("settings_letter_layout"));
+    strings.set_settings_letter_layout_tip(g("settings_letter_layout_tip"));
+    strings.set_settings_letter_layout_off(g("settings_letter_layout_off"));
+    strings.set_settings_keyboard_russian_standard(g("settings_keyboard_russian_standard"));
+    strings.set_settings_keyboard_ukrainian_standard(g("settings_keyboard_ukrainian_standard"));
     strings.set_shortcut_search_placeholder(g("shortcut_search_placeholder"));
     strings.set_shortcut_reset_all(g("shortcut_reset_all"));
     strings.set_shortcut_reset_all_confirm(g("shortcut_reset_all_confirm"));
@@ -963,6 +968,11 @@ mod tests {
                 "ws_dirty_save_new",
                 "settings_thumbnail_zoom_label",
                 "settings_thumbnail_zoom_hint",
+                "settings_letter_layout",
+                "settings_letter_layout_tip",
+                "settings_letter_layout_off",
+                "settings_keyboard_ukrainian_standard",
+                "settings_keyboard_russian_standard",
                 "thumbnail_zoom_feedback",
             ] {
                 assert!(
@@ -1091,6 +1101,8 @@ mod tests {
                 slint::platform::set_platform(Box::new(TestPlatform)).unwrap();
                 let first = MainWindow::new().unwrap();
                 let second = MainWindow::new().unwrap();
+                // No layout assumed until the user names one.
+                assert_eq!(first.get_letter_layout_index(), 0);
                 let mut english = HashMap::new();
                 overlay(EMBED_EN, &mut english);
                 apply_catalog(&second, &english);
@@ -1105,6 +1117,14 @@ mod tests {
                         (strings.get_settings_language(), "settings_language"),
                         (strings.get_archive_create(), "archive_create"),
                         (strings.get_exit_stay(), "exit_stay"),
+                        (strings.get_settings_letter_layout(), "settings_letter_layout"),
+                        (strings.get_settings_letter_layout_tip(), "settings_letter_layout_tip"),
+                        (strings.get_settings_letter_layout_off(), "settings_letter_layout_off"),
+                        (
+                            strings.get_settings_keyboard_ukrainian_standard(),
+                            "settings_keyboard_ukrainian_standard",
+                        ),
+                        (strings.get_settings_keyboard_russian_standard(), "settings_keyboard_russian_standard"),
                     ] {
                         assert_eq!(actual.as_str(), translated[key], "{lang:?}/{key}");
                     }

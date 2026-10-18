@@ -2868,7 +2868,16 @@ pub fn install(window: &MainWindow, state: AppState) {
             }
         });
     }
-    // configurable shortcuts (settings) — list + rebind/reset/search.
+    // Keyboard compatibility is live and does not rebuild or rewrite bindings.
+    window.set_letter_layout_index(cfg.letter_layout().index());
+    {
+        let st = state.clone();
+        window.on_letter_layout_changed(move |index| {
+            let layout = favnyr_core::shortcuts::LetterLayout::from_index(index);
+            st.persist_config(|c| c.letter_shortcut_layout = layout.id().to_string());
+        });
+    }
+    // Configurable shortcuts: list, rebind, reset and search.
     push_shortcuts_ui(window, &state);
     {
         let st = state.clone();
@@ -3514,32 +3523,47 @@ pub fn install(window: &MainWindow, state: AppState) {
     // on every keystroke by the Slint `key-scope`; returns "" if no action matches.
     {
         let st = state.clone();
+        let weak = window.as_weak();
         window.on_match_action(
-            move |keyname: SharedString, ctrl: bool, alt: bool, shift: bool| -> SharedString {
-                match Chord::from_event(&keyname, ctrl, alt, shift) {
-                    Some(chord) => st
-                        .keymap
-                        .borrow()
-                        .action_for(&chord)
-                        .map(SharedString::from)
-                        .unwrap_or_default(),
-                    None => SharedString::new(),
+            move |keyname: SharedString,
+                  ctrl: bool,
+                  alt: bool,
+                  shift: bool,
+                  meta: bool|
+                  -> SharedString {
+                let Some(chord) = Chord::from_event(&keyname, ctrl, alt, shift) else {
+                    return SharedString::new();
+                };
+                // A Meta chord is the desktop's, never ours to reinterpret
+                // through a layout assumption.
+                let layout = if meta {
+                    favnyr_core::shortcuts::LetterLayout::Off
+                } else {
+                    st.config.borrow().letter_layout()
+                };
+                let action = st.keymap.borrow().action_for_with_fallback(&chord, layout);
+                if action.is_none() && !meta && st.keymap.borrow().asks_for_a_layout(&chord, layout)
+                {
+                    offer_a_letter_layout(&weak, &st);
                 }
+                action.map(SharedString::from).unwrap_or_default()
             },
         );
     }
-    // Cross-platform key normalization for text input widgets (EditTextInput / EditLineEdit).
-    window
-        .global::<KeyAdapter>()
-        .on_normalize_key(move |text: SharedString| -> SharedString {
-            if text.chars().count() == 1 {
-                let ch = text.chars().next().unwrap();
-                if let Some(canon) = shortcuts::normalize_char(ch) {
-                    return SharedString::from(canon.to_string());
-                }
-            }
-            text
-        });
+    // Both text input components share the same opt-in fallback and exact-key priority.
+    {
+        let st = state.clone();
+        window
+            .global::<KeyAdapter>()
+            .on_normalize_key(move |text: SharedString| {
+                let layout = st.config.borrow().letter_layout();
+                st.keymap
+                    .borrow()
+                    .text_edit_key(&text, layout)
+                    .map(|key| SharedString::from(key.to_string()))
+                    .unwrap_or(text)
+            });
+    }
 
     // Keyboard cursor navigation (arrows / Shift+arrows / Home / End).
     {
@@ -8154,6 +8178,8 @@ enum NoticeKind {
     FavExists,
     /// Danger + bookmark: favorite whose target cannot be found.
     FavMissing,
+    /// Info + gear: something the user can settle in Settings.
+    Settings,
     /// Info + closed padlock: a volume that cannot be entered as things
     /// stand — not mounted, or still encrypted. Neither a failure nor a
     /// success, so it borrows the danger tone from neither.
@@ -8162,11 +8188,13 @@ enum NoticeKind {
 
 impl NoticeKind {
     /// `(tone, icon)` — MUST match the Slint codes: tone 0 danger /
-    /// 1 success / 2 info; icon 0 padlock / 1 open padlock / 2 checkmark / 3 bookmark.
+    /// 1 success / 2 info; icon 0 padlock / 1 open padlock / 2 checkmark /
+    /// 3 bookmark / 4 gear.
     fn codes(self) -> (i32, i32) {
         match self {
             NoticeKind::Error => (0, 0),
             NoticeKind::Unavailable => (2, 0),
+            NoticeKind::Settings => (2, 4),
             NoticeKind::EjectOk => (1, 1),
             NoticeKind::Success => (1, 2),
             NoticeKind::FavAdded => (1, 3),
@@ -8377,6 +8405,24 @@ fn show_notice_ok(w: &MainWindow, text: impl Into<SharedString>) {
 }
 fn show_notice_unavailable(w: &MainWindow, text: impl Into<SharedString>) {
     notice(w, text, NoticeKind::Unavailable);
+}
+
+/// Points at the layout setting the first time a letter shortcut is pressed
+/// on a keyboard this build cannot read, then never again: the hint is there
+/// to be discovered once, not repeated at every keystroke.
+fn offer_a_letter_layout(window: &slint::Weak<MainWindow>, state: &AppState) {
+    if state.config.borrow().letter_layout_notice_seen {
+        return;
+    }
+    state.persist_config(|c| c.letter_layout_notice_seen = true);
+    let lang = state.config.borrow().language;
+    if let Some(w) = window.upgrade() {
+        notice(
+            &w,
+            i18n::tr(lang, "notice_letter_layout"),
+            NoticeKind::Settings,
+        );
+    }
 }
 
 fn notice(w: &MainWindow, text: impl Into<SharedString>, kind: NoticeKind) {

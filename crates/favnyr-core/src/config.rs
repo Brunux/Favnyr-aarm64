@@ -176,6 +176,21 @@ pub struct Config {
     /// assigned). Actions not present use their default (`shortcuts::ACTIONS`).
     #[serde(default)]
     pub shortcut_overrides: std::collections::BTreeMap<String, String>,
+    /// Keyboard layout assumed for letter shortcuts, empty for none.
+    ///
+    /// A choice and not a switch: several Cyrillic arrangements exist and they
+    /// place the same letter on different keys, so one of them has to be
+    /// named. Stored as its identifier rather than as a number, so the file
+    /// stays readable and reordering the list never changes what it means.
+    #[serde(default)]
+    pub letter_shortcut_layout: String,
+    /// Whether the one-off hint about `letter_shortcut_layout` was shown.
+    ///
+    /// The hint appears when a letter shortcut goes unanswered on a non-Latin
+    /// keyboard, which is the only moment it helps. Showing it a second time
+    /// would be nagging, so the fact is kept rather than the question.
+    #[serde(default)]
+    pub letter_layout_notice_seen: bool,
     /// Depth for computing folders' **recursive** modification date.
     /// `0` = disabled (folder's own mtime, default); `N > 0` = show the
     /// most recent date among descendants up to `N` levels. Bounded →
@@ -321,6 +336,8 @@ impl Default for Config {
             sidebar_shortcut_redirects: std::collections::BTreeMap::new(),
             default_columns: crate::columns::default_columns(),
             shortcut_overrides: std::collections::BTreeMap::new(),
+            letter_shortcut_layout: String::new(),
+            letter_layout_notice_seen: false,
             recursive_mtime_depth: 0,
             recursive_size_depth: 0,
             view_text_font_size_override: false,
@@ -348,6 +365,11 @@ impl Default for Config {
 }
 
 impl Config {
+    /// The stored layout, or none when the value names nothing known.
+    pub fn letter_layout(&self) -> crate::shortcuts::LetterLayout {
+        crate::shortcuts::LetterLayout::from_id(&self.letter_shortcut_layout)
+    }
+
     /// Loads from `path`. If the file doesn't exist, writes the default
     /// config to disk then returns it.
     pub fn load_or_default(path: &Path) -> Result<Self> {
@@ -523,11 +545,46 @@ mod tests {
     }
 
     #[test]
+    fn the_letter_layout_defaults_to_none_and_survives_a_round_trip() {
+        use crate::shortcuts::LetterLayout;
+
+        // A file written before this setting existed assumes nothing.
+        let old: Config = toml::from_str("").unwrap();
+        assert_eq!(old.letter_layout(), LetterLayout::Off);
+
+        for layout in LetterLayout::ALL {
+            let config = Config {
+                letter_shortcut_layout: layout.id().to_string(),
+                shortcut_overrides: std::collections::BTreeMap::from([(
+                    "refresh".into(),
+                    "Ctrl+с".into(),
+                )]),
+                ..Config::default()
+            };
+            let restored: Config = toml::from_str(&toml::to_string(&config).unwrap()).unwrap();
+            assert_eq!(restored.letter_layout(), layout);
+            // A chord stored as typed is never rewritten by the setting.
+            assert_eq!(restored.shortcut_overrides, config.shortcut_overrides);
+        }
+    }
+
+    #[test]
+    fn an_unknown_layout_costs_only_that_setting() {
+        // Hand-edited, or written by a later version that knows more
+        // layouts. The rest of the file must still load.
+        let config: Config =
+            toml::from_str("letter_shortcut_layout = 'klingon'\nlanguage = 'fr'").unwrap();
+        assert_eq!(config.letter_layout(), crate::shortcuts::LetterLayout::Off);
+        assert_eq!(config.language, Lang::Fr);
+    }
+
+    #[test]
     fn default_round_trip() {
         let original = Config::default();
         let s = toml::to_string_pretty(&original).unwrap();
         let back: Config = toml::from_str(&s).unwrap();
         assert_eq!(back.language, original.language);
+        assert_eq!(back.letter_shortcut_layout, original.letter_shortcut_layout);
         assert_eq!(back.theme, original.theme);
         assert_eq!(back.window_width, original.window_width);
         assert_eq!(back.window_height, original.window_height);

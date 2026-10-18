@@ -558,6 +558,13 @@ prop_expected_matched = "Matches the {algorithm} checksum"
 run_failed_with_message = "“{name}” stopped right after starting: {reason}"
 run_failed_code = "“{name}” stopped right after starting (exit code {code})."
 run_failed_unknown = "“{name}” stopped right after starting."
+settings_keyboard_russian_standard = "Russian (standard)"
+
+settings_letter_layout = "Keyboard layout for letter shortcuts (e.g. Ctrl+C)"
+settings_letter_layout_tip = "If you use a non-Latin keyboard, shortcuts like Ctrl+C do not work. Select your layout here to repair them."
+notice_letter_layout = "Shortcuts like Ctrl+C do not work on a non-Latin keyboard. Select your layout in Settings, Keyboard shortcuts."
+settings_letter_layout_off = "Off"
+settings_keyboard_ukrainian_standard = "Ukrainian (standard)"
 [shortcut_group]
 "navigation" = "Navigation"
 "selection" = "Selection"

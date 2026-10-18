@@ -405,18 +405,6 @@ impl Chord {
     }
 }
 
-/// Translates an ASCII letter or Cyrillic character into its canonical uppercase Latin key ('A'..='Z').
-///
-/// Fully cross-platform, deterministic, and safe (no OS FFI calls).
-/// Covers standard QWERTY Cyrillic keyboard layouts (Russian, Ukrainian `і`, etc.).
-/// Returns `None` if the character does not correspond to an A..Z physical key.
-pub fn normalize_char(ch: char) -> Option<char> {
-    if ch.is_ascii_alphabetic() {
-        return Some(ch.to_ascii_uppercase());
-    }
-    cyrillic_fallback(ch)
-}
-
 /// Normalizes a key name to its canonical form. Single letter → uppercase;
 /// special names are case-insensitive; unknown → returned as-is (robustness).
 fn normalize_key(k: &str) -> Option<String> {
@@ -426,8 +414,8 @@ fn normalize_key(k: &str) -> Option<String> {
     }
     if k.chars().count() == 1 {
         let c = k.chars().next().unwrap();
-        if let Some(canon) = normalize_char(c) {
-            return Some(canon.to_string());
+        if c.is_ascii_alphabetic() {
+            return Some(c.to_ascii_uppercase().to_string());
         }
         return Some(k.to_string()); // digit / literal punctuation
     }
@@ -461,8 +449,89 @@ fn normalize_key(k: &str) -> Option<String> {
     Some(canon.to_string())
 }
 
-/// Standard Cyrillic QWERTY layout mapping for Windows, Linux, and macOS.
-fn cyrillic_fallback(ch: char) -> Option<char> {
+/// Which keyboard layout the letter keys are assumed to carry.
+///
+/// Favnyr is never told the active layout: a key event carries the character
+/// produced, never the physical key. The assumption therefore has to come
+/// from the user, and it has to be a choice rather than a switch, because the
+/// Cyrillic alphabet is written on several incompatible arrangements. The
+/// same `с` sits on the C key in the Russian standard and on the S key in
+/// Bulgarian and Serbian, so guessing one layout for all of them would hand
+/// out the wrong action rather than none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum LetterLayout {
+    /// No assumption: a letter that matches no binding does nothing.
+    #[default]
+    Off,
+    /// Russian ЙЦУКЕН.
+    RussianStandard,
+    /// Ukrainian ЙЦУКЕН.
+    UkrainianStandard,
+}
+
+impl LetterLayout {
+    /// In the order the settings list offers them.
+    pub const ALL: [Self; 3] = [Self::Off, Self::RussianStandard, Self::UkrainianStandard];
+
+    /// The value written to the configuration file.
+    pub fn id(self) -> &'static str {
+        match self {
+            Self::Off => "",
+            Self::RussianStandard => "russian-standard",
+            Self::UkrainianStandard => "ukrainian-standard",
+        }
+    }
+
+    /// Reads a stored value, treating anything unrecognised as no assumption.
+    /// A hand-edited or future-written file therefore costs this one setting
+    /// rather than the whole configuration.
+    pub fn from_id(id: &str) -> Self {
+        Self::ALL
+            .into_iter()
+            .find(|layout| layout.id() == id)
+            .unwrap_or_default()
+    }
+
+    /// Position in the settings list.
+    pub fn index(self) -> i32 {
+        Self::ALL.iter().position(|l| *l == self).unwrap_or(0) as i32
+    }
+
+    /// The entry at `index`, or no assumption when it names nothing.
+    pub fn from_index(index: i32) -> Self {
+        usize::try_from(index)
+            .ok()
+            .and_then(|i| Self::ALL.get(i).copied())
+            .unwrap_or_default()
+    }
+
+    /// The Latin key this character sits on under this layout.
+    fn key(self, ch: char) -> Option<char> {
+        match self {
+            Self::Off => None,
+            Self::RussianStandard => russian_standard_key(ch),
+            Self::UkrainianStandard => ukrainian_standard_key(ch),
+        }
+    }
+}
+
+/// Ukrainian ЙЦУКЕН, stated as its single difference from the Russian one.
+///
+/// The two arrangements share twenty-five of the twenty-six letter positions.
+/// Only the S key differs: Ukrainian writes `і` where Russian writes `ы`. A
+/// Ukrainian keyboard cannot produce `ы` at all, so it is refused rather than
+/// quietly accepted, which keeps each table honest about the layout it names.
+fn ukrainian_standard_key(ch: char) -> Option<char> {
+    match ch {
+        'і' | 'І' => Some('S'),
+        'ы' | 'Ы' => None,
+        _ => russian_standard_key(ch),
+    }
+}
+
+/// Maps Russian standard letters to their Latin QWERTY positions.
+/// This is an opt-in layout assumption, never a normalization of stored keys.
+fn russian_standard_key(ch: char) -> Option<char> {
     match ch {
         'й' | 'Й' => Some('Q'),
         'ц' | 'Ц' => Some('W'),
@@ -490,7 +559,6 @@ fn cyrillic_fallback(ch: char) -> Option<char> {
         'и' | 'И' => Some('B'),
         'т' | 'Т' => Some('N'),
         'ь' | 'Ь' => Some('M'),
-        'і' | 'І' => Some('S'),
         _ => None,
     }
 }
@@ -502,6 +570,70 @@ pub struct Keymap {
 }
 
 impl Keymap {
+    /// Exact bindings always win. Layout fallback only handles Ctrl or Alt
+    /// chords, not plain typing or Ctrl+Alt events that may represent AltGr.
+    pub fn action_for_with_fallback(
+        &self,
+        chord: &Chord,
+        layout: LetterLayout,
+    ) -> Option<&'static str> {
+        if let Some(action) = self.action_for(chord) {
+            return Some(action);
+        }
+        if chord.ctrl == chord.alt {
+            return None;
+        }
+        let mut chars = chord.key.chars();
+        let key = layout.key(chars.next()?)?;
+        if chars.next().is_some() {
+            return None;
+        }
+        self.action_for(&Chord {
+            key: key.to_string(),
+            ..chord.clone()
+        })
+    }
+
+    /// True when a chord answered nothing although it carries a single
+    /// foreign letter and no layout is set. That is the only case where
+    /// naming a layout would have changed the outcome, so it is also the
+    /// only moment worth mentioning the setting. The letter is not looked
+    /// up in any table: a Greek or Bulgarian keyboard asks the question
+    /// just as legitimately, even though no entry answers it yet.
+    pub fn asks_for_a_layout(&self, chord: &Chord, layout: LetterLayout) -> bool {
+        if layout != LetterLayout::Off || chord.ctrl == chord.alt {
+            return false;
+        }
+        let mut chars = chord.key.chars();
+        let Some(ch) = chars.next() else {
+            return false;
+        };
+        if chars.next().is_some() || ch.is_ascii() || !ch.is_alphabetic() {
+            return false;
+        }
+        self.action_for(chord).is_none()
+    }
+
+    /// Text fields call this only for Ctrl without Alt, Meta or Shift.
+    /// Native Latin editing stays independent of application bindings; a
+    /// Cyrillic fallback must not consume an explicitly bound application key.
+    pub fn text_edit_key(&self, text: &str, layout: LetterLayout) -> Option<char> {
+        let mut chars = text.chars();
+        let ch = chars.next()?;
+        if chars.next().is_some() {
+            return None;
+        }
+        if ch.is_ascii_alphabetic() {
+            return Some(ch.to_ascii_uppercase());
+        }
+        let key = layout.key(ch)?;
+        let exact = Chord::from_event(text, true, false, false)?;
+        if self.action_for(&exact).is_some() {
+            return None;
+        }
+        Some(key)
+    }
+
     pub fn build(overrides: &BTreeMap<String, String>) -> Self {
         let mut effective = BTreeMap::new();
         for a in ACTIONS {
@@ -760,70 +892,231 @@ mod tests {
     }
 
     #[test]
-    fn cyrillic_letters_normalize_to_latin() {
-        assert_eq!(normalize_char('с'), Some('C'));
-        assert_eq!(normalize_char('С'), Some('C'));
-        assert_eq!(normalize_char('д'), Some('L'));
-        assert_eq!(normalize_char('Д'), Some('L'));
-        assert_eq!(normalize_char('т'), Some('N'));
-        assert_eq!(normalize_char('Т'), Some('N'));
-        assert_eq!(normalize_char('ф'), Some('A'));
-        assert_eq!(normalize_char('ч'), Some('X'));
-        assert_eq!(normalize_char('м'), Some('V'));
-        assert_eq!(normalize_char('я'), Some('Z'));
-        assert_eq!(normalize_char('и'), Some('B'));
-        assert_eq!(normalize_char('і'), Some('S'));
+    fn russian_standard_mapping_is_explicit_and_complete() {
+        for (ru, latin) in "йцукенгшщзфывапролдячсмить"
+            .chars()
+            .zip("QWERTYUIOPASDFGHJKLZXCVBNM".chars())
+        {
+            assert_eq!(russian_standard_key(ru), Some(latin));
+            assert_eq!(
+                russian_standard_key(ru.to_uppercase().next().unwrap()),
+                Some(latin)
+            );
+        }
+        for ch in ['ä', 'ö', 'ü', 'ß', 'і', 'б', 'ю', 'ж', '1', 'C'] {
+            assert_eq!(russian_standard_key(ch), None);
+        }
     }
 
     #[test]
-    fn cyrillic_shortcuts_resolve_in_keymap_and_parse() {
+    fn shortcut_storage_and_capture_keep_logical_keys() {
+        for raw in ["Ctrl+с", "Ctrl+С", "Ctrl+Shift+Т", "Ctrl+Alt+т", "Ctrl+б"] {
+            let chord = Chord::parse(raw).unwrap();
+            assert_eq!(chord.serialize(), raw);
+            assert_eq!(
+                Chord::from_event(&chord.key, chord.ctrl, chord.alt, chord.shift),
+                Some(chord)
+            );
+        }
+        assert_ne!(Chord::parse("Ctrl+с"), Chord::parse("Ctrl+C"));
+        assert_eq!(Chord::parse("ctrl+c").unwrap().serialize(), "Ctrl+C");
+    }
+
+    #[test]
+    fn a_letter_layout_is_opt_in_and_keeps_latin_bindings() {
         let km = Keymap::build(&BTreeMap::new());
-
-        // Ctrl+C (ru 'с') -> copy
-        let ev_c = Chord::from_event("с", true, false, false).unwrap();
-        assert_eq!(ev_c.serialize(), "Ctrl+C");
-        assert_eq!(km.action_for(&ev_c), Some("copy"));
-
-        // Ctrl+L (ru 'д') -> focus-address
-        let ev_l = Chord::from_event("д", true, false, false).unwrap();
-        assert_eq!(ev_l.serialize(), "Ctrl+L");
-        assert_eq!(km.action_for(&ev_l), Some("focus-address"));
-
-        // Ctrl+Shift+N (ru 'т' / 'Т') -> new-folder
-        let ev_shift_n = Chord::from_event("Т", true, false, true).unwrap();
-        assert_eq!(ev_shift_n.serialize(), "Ctrl+Shift+N");
-        assert_eq!(km.action_for(&ev_shift_n), Some("new-folder"));
-
-        // Ctrl+Alt+N (ru 'т') -> new-file
-        let ev_alt_n = Chord::from_event("т", true, true, false).unwrap();
-        assert_eq!(ev_alt_n.serialize(), "Ctrl+Alt+N");
-        assert_eq!(km.action_for(&ev_alt_n), Some("new-file"));
-
-        // Parse round-trip from settings recorder
-        assert_eq!(Chord::parse("Ctrl+с").unwrap().serialize(), "Ctrl+C");
-        assert_eq!(
-            Chord::parse("Ctrl+Shift+Т").unwrap().serialize(),
-            "Ctrl+Shift+N"
-        );
-        assert_eq!(
-            Chord::parse("Ctrl+Alt+т").unwrap().serialize(),
-            "Ctrl+Alt+N"
-        );
-
-        // Cyrillic punctuation keys (б, ю, ж) are NOT falsely converted to letters
-        assert_eq!(Chord::parse("Ctrl+б").unwrap().serialize(), "Ctrl+б");
+        for (raw, action) in [
+            ("Ctrl+с", "copy"),
+            ("Ctrl+ч", "cut"),
+            ("Ctrl+м", "paste"),
+            ("Ctrl+ф", "select-all"),
+            ("Ctrl+д", "focus-address"),
+            ("Ctrl+Shift+Т", "new-folder"),
+        ] {
+            let chord = Chord::parse(raw).unwrap();
+            assert_eq!(km.action_for_with_fallback(&chord, LetterLayout::Off), None);
+            for layout in [
+                LetterLayout::RussianStandard,
+                LetterLayout::UkrainianStandard,
+            ] {
+                assert_eq!(km.action_for_with_fallback(&chord, layout), Some(action));
+            }
+            assert_eq!(chord.serialize(), raw);
+        }
+        // Whatever the layout, a chord that already resolves keeps its action.
+        for action in ACTIONS {
+            if let Some(chord) = Chord::parse(action.default) {
+                for layout in LetterLayout::ALL {
+                    assert_eq!(
+                        km.action_for_with_fallback(&chord, layout),
+                        km.action_for(&chord)
+                    );
+                }
+            }
+        }
     }
 
     #[test]
-    fn non_cyrillic_non_ascii_characters_not_falsely_converted() {
-        // German umlauts should not be converted to A..Z
-        assert_eq!(normalize_char('ä'), None);
-        assert_eq!(normalize_char('ö'), None);
-        assert_eq!(normalize_char('ü'), None);
-        assert_eq!(normalize_char('ß'), None);
+    fn the_ukrainian_layout_differs_from_the_russian_one_at_one_key() {
+        let km = Keymap::build(&BTreeMap::new());
+        // The Ukrainian layout drops Ы and puts І where Ы sits on the
+        // Russian one, which is the S key.
+        let i = Chord::parse("Ctrl+і").unwrap();
+        let yeru = Chord::parse("Ctrl+ы").unwrap();
+        assert_eq!(
+            km.action_for_with_fallback(&i, LetterLayout::UkrainianStandard),
+            km.action_for(&Chord::parse("Ctrl+S").unwrap())
+        );
+        assert_eq!(
+            km.action_for_with_fallback(&i, LetterLayout::RussianStandard),
+            None
+        );
+        assert_eq!(
+            km.action_for_with_fallback(&yeru, LetterLayout::UkrainianStandard),
+            None
+        );
+        assert_eq!(
+            km.action_for_with_fallback(&yeru, LetterLayout::RussianStandard),
+            km.action_for(&Chord::parse("Ctrl+S").unwrap())
+        );
+        // Every other letter answers the same on both.
+        for ch in "йцукенгшщзхъфывапролджэячсмитьбю"
+            .chars()
+            .filter(|c| !matches!(c, 'ы' | 'і'))
+        {
+            let chord = Chord::parse(&format!("Ctrl+{ch}")).unwrap();
+            assert_eq!(
+                km.action_for_with_fallback(&chord, LetterLayout::UkrainianStandard),
+                km.action_for_with_fallback(&chord, LetterLayout::RussianStandard)
+            );
+        }
+    }
 
-        // Digits remain unchanged
-        assert_eq!(Chord::parse("Ctrl+1").unwrap().serialize(), "Ctrl+1");
-        assert_eq!(Chord::parse("Ctrl+9").unwrap().serialize(), "Ctrl+9");
+    #[test]
+    fn only_an_unanswered_foreign_letter_asks_for_a_layout() {
+        let km = Keymap::build(&BTreeMap::new());
+        let foreign = Chord::parse("Ctrl+с").unwrap();
+        assert!(km.asks_for_a_layout(&foreign, LetterLayout::Off));
+        // A letter no entry covers asks the question just as legitimately.
+        assert!(km.asks_for_a_layout(&Chord::parse("Ctrl+π").unwrap(), LetterLayout::Off));
+        // Nothing to suggest once a layout is set, or once the chord answers.
+        assert!(!km.asks_for_a_layout(&foreign, LetterLayout::RussianStandard));
+        let bound = Keymap::build(&BTreeMap::from([("refresh".into(), "Ctrl+с".into())]));
+        assert!(!bound.asks_for_a_layout(&foreign, LetterLayout::Off));
+        // Plain typing, Ctrl+Alt, Latin letters and non-letter keys stay out.
+        for raw in ["с", "Shift+с", "Ctrl+Alt+с", "Ctrl+C", "Ctrl+1", "Ctrl+F2"] {
+            assert!(
+                !km.asks_for_a_layout(&Chord::parse(raw).unwrap(), LetterLayout::Off),
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_layout_identifier_survives_storage_and_the_dropdown() {
+        for layout in LetterLayout::ALL {
+            assert_eq!(LetterLayout::from_id(layout.id()), layout);
+            assert_eq!(LetterLayout::from_index(layout.index()), layout);
+        }
+        // An identifier this version does not know assumes nothing.
+        assert_eq!(LetterLayout::from_id("klingon"), LetterLayout::Off);
+        assert_eq!(LetterLayout::from_id(""), LetterLayout::Off);
+        assert_eq!(LetterLayout::from_index(42), LetterLayout::Off);
+    }
+
+    #[test]
+    fn exact_cyrillic_binding_wins_without_colliding_with_latin() {
+        let km = Keymap::build(&BTreeMap::from([("refresh".into(), "Ctrl+с".into())]));
+        let ru = Chord::parse("Ctrl+с").unwrap();
+        let latin = Chord::parse("Ctrl+C").unwrap();
+        for layout in LetterLayout::ALL {
+            assert_eq!(km.action_for_with_fallback(&ru, layout), Some("refresh"));
+            assert_eq!(km.action_for_with_fallback(&latin, layout), Some("copy"));
+        }
+        assert_eq!(km.chord_of("refresh"), "Ctrl+с");
+        assert_eq!(km.conflict("refresh", "Ctrl+с"), None);
+        assert_eq!(km.conflict("refresh", "Ctrl+C"), Some("copy"));
+    }
+
+    #[test]
+    fn fallback_respects_reassignment_and_unassigned_actions() {
+        let ru = Chord::parse("Ctrl+с").unwrap();
+        let km = Keymap::build(&BTreeMap::from([
+            ("copy".into(), String::new()),
+            ("refresh".into(), "Ctrl+C".into()),
+        ]));
+        assert_eq!(
+            km.action_for_with_fallback(&ru, LetterLayout::RussianStandard),
+            Some("refresh")
+        );
+        let disabled = Keymap::build(&BTreeMap::from([("copy".into(), String::new())]));
+        assert_eq!(
+            disabled.action_for_with_fallback(&ru, LetterLayout::RussianStandard),
+            None
+        );
+        let alt = Keymap::build(&BTreeMap::from([("refresh".into(), "Alt+R".into())]));
+        assert_eq!(
+            alt.action_for_with_fallback(
+                &Chord::parse("Alt+к").unwrap(),
+                LetterLayout::RussianStandard
+            ),
+            Some("refresh")
+        );
+    }
+
+    #[test]
+    fn fallback_does_not_capture_plain_typing_or_altgr() {
+        let km = Keymap::build(&BTreeMap::from([
+            ("copy".into(), "C".into()),
+            ("cut".into(), "Shift+C".into()),
+        ]));
+        for raw in ["с", "Shift+с", "Ctrl+Alt+т", "Ctrl+ä", "Ctrl+ю", "Ctrl+і"] {
+            assert_eq!(
+                km.action_for_with_fallback(
+                    &Chord::parse(raw).unwrap(),
+                    LetterLayout::RussianStandard
+                ),
+                None
+            );
+        }
+        let exact = Keymap::build(&BTreeMap::from([("refresh".into(), "Ctrl+Alt+т".into())]));
+        assert_eq!(
+            exact.action_for_with_fallback(
+                &Chord::parse("Ctrl+Alt+т").unwrap(),
+                LetterLayout::RussianStandard
+            ),
+            Some("refresh")
+        );
+    }
+
+    #[test]
+    fn text_edit_fallback_is_optional_and_preserves_exact_bindings() {
+        let km = Keymap::build(&BTreeMap::new());
+        for (ru, latin) in [("ф", 'A'), ("с", 'C'), ("ч", 'X'), ("м", 'V')] {
+            assert_eq!(km.text_edit_key(ru, LetterLayout::Off), None);
+            for layout in [
+                LetterLayout::RussianStandard,
+                LetterLayout::UkrainianStandard,
+            ] {
+                assert_eq!(km.text_edit_key(ru, layout), Some(latin));
+            }
+        }
+        for layout in LetterLayout::ALL {
+            for (text, key) in [("a", 'A'), ("C", 'C'), ("x", 'X'), ("v", 'V')] {
+                assert_eq!(km.text_edit_key(text, layout), Some(key));
+            }
+            for text in ["", "cc", "ä", "\u{3}", "\u{16}"] {
+                assert_eq!(km.text_edit_key(text, layout), None);
+            }
+        }
+        let custom = Keymap::build(&BTreeMap::from([("refresh".into(), "Ctrl+с".into())]));
+        assert_eq!(
+            custom.text_edit_key("с", LetterLayout::RussianStandard),
+            None
+        );
+        assert_eq!(
+            custom.text_edit_key("C", LetterLayout::RussianStandard),
+            Some('C')
+        );
     }
 }

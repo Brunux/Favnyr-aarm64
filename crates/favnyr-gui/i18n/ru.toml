@@ -581,6 +581,13 @@ prop_expected_matched = "Совпадает с суммой {algorithm}"
 run_failed_with_message = "«{name}» завершился сразу после запуска: {reason}"
 run_failed_code = "«{name}» завершился сразу после запуска (код выхода {code})."
 run_failed_unknown = "«{name}» завершился сразу после запуска."
+settings_keyboard_russian_standard = "Русская (стандартная)"
+
+settings_letter_layout = "Раскладка клавиатуры для буквенных сочетаний (напр. Ctrl+C)"
+settings_letter_layout_tip = "На нелатинской клавиатуре сочетания вроде Ctrl+C не работают. Выберите здесь свою раскладку, чтобы починить их."
+notice_letter_layout = "Сочетания вроде Ctrl+C не работают на нелатинской клавиатуре. Выберите раскладку в разделе «Настройки», «Горячие клавиши»."
+settings_letter_layout_off = "Нет"
+settings_keyboard_ukrainian_standard = "Украинская (стандартная)"
 [shortcut_group]
 "navigation" = "Навигация"
 "selection" = "Выделение"

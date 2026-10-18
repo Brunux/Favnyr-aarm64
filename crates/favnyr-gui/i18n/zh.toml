@@ -586,6 +586,13 @@ prop_expected_matched = "与 {algorithm} 校验和一致"
 run_failed_with_message = "“{name}”启动后立即停止：{reason}"
 run_failed_code = "“{name}”启动后立即停止（退出代码 {code}）。"
 run_failed_unknown = "“{name}”启动后立即停止。"
+settings_keyboard_russian_standard = "俄语（标准）"
+
+settings_letter_layout = "字母快捷键的键盘布局（例如 Ctrl+C）"
+settings_letter_layout_tip = "使用非拉丁键盘时，Ctrl+C 等快捷键无法使用。在此选择您的布局即可修复。"
+notice_letter_layout = "使用非拉丁键盘时，Ctrl+C 等快捷键无法使用。请在设置的键盘快捷键中选择您的布局。"
+settings_letter_layout_off = "关闭"
+settings_keyboard_ukrainian_standard = "乌克兰语（标准）"
 [shortcut_group]
 "navigation" = "导航"
 "selection" = "选择"

@@ -558,6 +558,13 @@ prop_expected_matched = "Coincide con la suma {algorithm}"
 run_failed_with_message = "«{name}» se detuvo justo después de iniciarse: {reason}"
 run_failed_code = "«{name}» se detuvo justo después de iniciarse (código de salida {code})."
 run_failed_unknown = "«{name}» se detuvo justo después de iniciarse."
+settings_keyboard_russian_standard = "Ruso (estándar)"
+
+settings_letter_layout = "Distribución del teclado para los atajos con letra (p. ej. Ctrl+C)"
+settings_letter_layout_tip = "Si usas un teclado no latino, los atajos como Ctrl+C no funcionan. Selecciona aquí tu distribución para repararlos."
+notice_letter_layout = "Los atajos como Ctrl+C no funcionan con un teclado no latino. Selecciona tu distribución en Ajustes, Atajos de teclado."
+settings_letter_layout_off = "Ninguna"
+settings_keyboard_ukrainian_standard = "Ucraniano (estándar)"
 [shortcut_group]
 "navigation" = "Navegación"
 "selection" = "Selección"

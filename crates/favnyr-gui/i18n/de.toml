@@ -558,6 +558,13 @@ prop_expected_matched = "Stimmt mit der {algorithm}-Prüfsumme überein"
 run_failed_with_message = "„{name}“ wurde direkt nach dem Start beendet: {reason}"
 run_failed_code = "„{name}“ wurde direkt nach dem Start beendet (Exit-Code {code})."
 run_failed_unknown = "„{name}“ wurde direkt nach dem Start beendet."
+settings_keyboard_russian_standard = "Russisch (Standard)"
+
+settings_letter_layout = "Tastaturbelegung für Buchstabenkürzel (z. B. Strg+C)"
+settings_letter_layout_tip = "Mit einer nicht lateinischen Tastatur funktionieren Kürzel wie Strg+C nicht. Wählen Sie hier Ihre Belegung, um sie zu reparieren."
+notice_letter_layout = "Kürzel wie Strg+C funktionieren mit einer nicht lateinischen Tastatur nicht. Wählen Sie Ihre Belegung unter Einstellungen, Tastenkürzel."
+settings_letter_layout_off = "Keine"
+settings_keyboard_ukrainian_standard = "Ukrainisch (Standard)"
 [shortcut_group]
 "navigation" = "Navigation"
 "selection" = "Auswahl"

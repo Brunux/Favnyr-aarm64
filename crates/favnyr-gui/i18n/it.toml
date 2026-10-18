@@ -558,6 +558,13 @@ prop_expected_matched = "Corrisponde al checksum {algorithm}"
 run_failed_with_message = "«{name}» si è fermato subito dopo l’avvio: {reason}"
 run_failed_code = "«{name}» si è fermato subito dopo l’avvio (codice di uscita {code})."
 run_failed_unknown = "«{name}» si è fermato subito dopo l’avvio."
+settings_keyboard_russian_standard = "Russo (standard)"
+
+settings_letter_layout = "Disposizione della tastiera per le scorciatoie con lettera (es. Ctrl+C)"
+settings_letter_layout_tip = "Con una tastiera non latina le scorciatoie come Ctrl+C non funzionano. Seleziona qui la tua disposizione per ripararle."
+notice_letter_layout = "Le scorciatoie come Ctrl+C non funzionano con una tastiera non latina. Seleziona la tua disposizione in Impostazioni, Scorciatoie da tastiera."
+settings_letter_layout_off = "Nessuna"
+settings_keyboard_ukrainian_standard = "Ucraino (standard)"
 [shortcut_group]
 "navigation" = "Navigazione"
 "selection" = "Selezione"

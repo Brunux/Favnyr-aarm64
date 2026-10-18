@@ -582,6 +582,13 @@ prop_expected_matched = "{algorithm} のチェックサムと一致します"
 run_failed_with_message = "「{name}」は起動直後に終了しました: {reason}"
 run_failed_code = "「{name}」は起動直後に終了しました (終了コード {code})。"
 run_failed_unknown = "「{name}」は起動直後に終了しました。"
+settings_keyboard_russian_standard = "ロシア語（標準）"
+
+settings_letter_layout = "文字ショートカットのキーボードレイアウト (例: Ctrl+C)"
+settings_letter_layout_tip = "ラテン文字以外のキーボードでは Ctrl+C などのショートカットが効きません。ここでレイアウトを選ぶと復活します。"
+notice_letter_layout = "ラテン文字以外のキーボードでは Ctrl+C などのショートカットが効きません。設定のキーボードショートカットでレイアウトを選んでください。"
+settings_letter_layout_off = "なし"
+settings_keyboard_ukrainian_standard = "ウクライナ語（標準）"
 [shortcut_group]
 "navigation" = "移動"
 "selection" = "選択"
