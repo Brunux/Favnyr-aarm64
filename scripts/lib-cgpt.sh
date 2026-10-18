@@ -108,20 +108,36 @@ disk_layout_create() {
 }
 
 # Resolve the partition devices into KPART_PART/BOOT_PART/ROOT_PART.
-# lsblk lists the whole device first, then its partitions: skip the disk line.
-# Resolving the whole disk by mistake would format it, so bail out if the
-# result equals the disk itself.
+#
+# By partition *number*, never by position. `lsblk` lists a disk's partitions in
+# the order the kernel handed out their minors, and that order drifts away from
+# the partition numbers after the `partx -d`/`-a` round disk_layout_create() runs
+# so the kernel re-reads the table it was just given. Measured over 16 attaches of
+# a 2048 MiB loop (AGENTS.md, "pmbootstrap parity"): 3 came back as `3 1 2` or
+# `2 1 3`, with no line missing, so taking the 2nd, 3rd and 4th line - which is
+# what this function did - formatted p2 as the root filesystem and wrote the kpart
+# into p3.
+#
+# The labels are asserted for the same reason: a resolution that goes wrong has to
+# fail loudly instead of formatting or overwriting the wrong partition. cgpt
+# writes pmOS_kernel/pmOS_boot/pmOS_root and everything downstream expects those.
 disk_layout_parts() {
 	_disk="$1"
-	KPART_PART="$(lsblk -nro PATH "$_disk" | sed -n '2p')"
-	BOOT_PART="$(lsblk -nro PATH "$_disk" | sed -n '3p')"
-	ROOT_PART="$(lsblk -nro PATH "$_disk" | sed -n '4p')"
+	KPART_PART="$(lsblk -nro PATH,PARTN "$_disk" | awk '$2 == 1 { print $1; exit }')"
+	BOOT_PART="$(lsblk -nro PATH,PARTN "$_disk" | awk '$2 == 2 { print $1; exit }')"
+	ROOT_PART="$(lsblk -nro PATH,PARTN "$_disk" | awk '$2 == 3 { print $1; exit }')"
 	[ -n "$KPART_PART" ] && [ -n "$BOOT_PART" ] && [ -n "$ROOT_PART" ] ||
 		die "could not resolve partitions on $_disk"
 	for _p in "$KPART_PART" "$BOOT_PART" "$ROOT_PART"; do
 		[ "$_p" != "$_disk" ] ||
 			die "refusing to operate on the whole disk; partition resolution failed for $_disk"
 	done
+	[ "$(lsblk -nro PARTLABEL "$KPART_PART")" = "pmOS_kernel" ] ||
+		die "$KPART_PART is not the pmOS_kernel partition: partition resolution is wrong"
+	[ "$(lsblk -nro PARTLABEL "$BOOT_PART")" = "pmOS_boot" ] ||
+		die "$BOOT_PART is not the pmOS_boot partition: partition resolution is wrong"
+	[ "$(lsblk -nro PARTLABEL "$ROOT_PART")" = "pmOS_root" ] ||
+		die "$ROOT_PART is not the pmOS_root partition: partition resolution is wrong"
 }
 
 # Format and mount the boot and root partitions into <mountpoint>.

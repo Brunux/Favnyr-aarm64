@@ -398,6 +398,15 @@ PMBR present, kernel/efi/data types, `pmOS_*` labels, `-S 1 -T 5 -P 10`).
   the old release step never unmounted anything and the new refusal would never have fired. Test with
   `findmnt -rn -S <device>` (or `/proc/mounts`), never with `mountpoint`, when the argument is a
   device; `mountpoint -q <directory>` (as in `disk_layout_umount`) is fine.
+- **Partitions are resolved by number, never by their position in `lsblk`.** `lsblk` lists a disk's
+  partitions in the order the kernel handed out their minors, and the `partx -d`/`-a` round that
+  `disk_layout_create()` runs to make the kernel re-read the table it was just given reorders them.
+  Measured over 16 attaches of a 2048 MiB loop: 3 came back as `3 1 2` or `2 1 3` with no line
+  missing, so the positional code would format `p2` as the root filesystem and write the kpart into
+  `p3` — a card written wrong a fifth of the time, silently. It is not `partprobe`: in an A/B of 8
+  attaches each, the order drifted once with it and twice without it. `disk_layout_parts()` uses
+  `PATH,PARTN` and asserts the three `pmOS_*` labels, so a wrong resolution dies instead of touching
+  the wrong partition: 16 of 16 attach correctly, including the two that came back reordered.
 
 Intentional deviations, all of them at the line that makes them: the GPT areas are zeroed before
 `parted` (pmbootstrap leaves it to parted; it costs nothing and makes `cgpt create` immune to a stale
