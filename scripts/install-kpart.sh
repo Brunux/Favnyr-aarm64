@@ -25,7 +25,9 @@ set -euo pipefail
 . "$(dirname "$0")/lib-cgpt.sh"
 
 if [ "$(id -u)" -ne 0 ]; then
-	exec sudo -n DEVICE="$DEVICE" "$(readlink -f "$0")" "$@"
+	# sudo -n starts from a clean environment, so CONFIRM=yes has to be forwarded
+	# explicitly or the guard below can never pass through the re-exec.
+	exec sudo -n DEVICE="$DEVICE" CONFIRM="${CONFIRM:-}" "$(readlink -f "$0")" "$@"
 fi
 
 # Never act from a chroot: /proc/cmdline there belongs to the host, so the GUID
