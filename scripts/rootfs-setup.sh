@@ -107,6 +107,23 @@ systemctl enable NetworkManager ssh 2>/dev/null || true
 systemctl enable zramswap 2>/dev/null || true
 systemctl set-default graphical.target 2>/dev/null || true
 
+log "Generating ssh host keys whenever they are missing"
+# Debian's sshd-keygen.service runs only when ConditionFirstBoot=yes, i.e. when
+# /etc/machine-id was empty at boot. Everything built here ships as a copy of an
+# image (write-sd.sh, install-emmc.sh) and a copy is routinely written from a
+# tree that already generated its id, so the condition is false, ssh-keygen
+# never runs and ssh.service dies on every boot with
+# "sshd: no hostkeys available -- exiting." (hit on both the card and the eMMC
+# install). Reset the inherited condition list and key on the thing that
+# actually matters, the host keys being absent. It is a no-op - one stat - from
+# the boot that creates them on.
+install -d /etc/systemd/system/sshd-keygen.service.d
+cat >/etc/systemd/system/sshd-keygen.service.d/90-run-when-keys-are-missing.conf <<'EOF'
+[Unit]
+ConditionFirstBoot=
+ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
+EOF
+
 if [ -f "$PKGDIR/$UI.list" ] && [ "$UI" = "sway" ]; then
 	log "Configuring greetd"
 	# Debian's greetd package creates the '_greetd' system user while the

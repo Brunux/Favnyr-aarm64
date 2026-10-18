@@ -117,4 +117,15 @@ fi
 
 rm -rf "$ROOTFS/tmp/packages" "$ROOTFS/tmp/ui-files" "$ROOTFS/tmp/repo" \
 	"$ROOTFS/root/rootfs-setup.sh"
+
+# Whatever is built here ships as a disk (write-sd.sh, make-image.sh) or is
+# cloned onto one (install-emmc.sh), so it has to leave as a first boot: from an
+# empty /etc/machine-id systemd generates a fresh id and the sshd-keygen
+# drop-in (scripts/rootfs-setup.sh) the host keys. This is the same choice
+# lib-dist.sh makes for published artifacts, for the same reasons. Left as the
+# build left it, every card and every clone shares one identity - one journal,
+# one dhcp identity - and ssh.service dies with "no hostkeys available".
+: >"$ROOTFS/etc/machine-id"
+rm -f "$ROOTFS"/etc/ssh/ssh_host_*
+
 log "Rootfs ready: $ROOTFS"
