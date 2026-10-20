@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Bluetooth
+GenericName=Bluetooth devices
+Comment=Scan for a few seconds and connect or disconnect a device
+Exec=/home/brunux/.config/bin/bar-bt
+Icon=bluetooth-symbolic
+Terminal=false
+Categories=Network;
+Keywords=bluetooth;bt;headset;pair;mouse;keyboard;

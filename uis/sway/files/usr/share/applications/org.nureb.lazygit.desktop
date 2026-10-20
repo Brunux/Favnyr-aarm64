@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=lazygit
+GenericName=Git client
+Comment=The git TUI, started in the home directory
+Exec=lazygit
+Path=/home/brunux
+Icon=git-symbolic
+Terminal=true
+Categories=Development;
+Keywords=git;lazygit;commit;branch;diff;

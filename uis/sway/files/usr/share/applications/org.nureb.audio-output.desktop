@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Audio output
+GenericName=Sound output device
+Comment=Switch the sink: speakers, headphones or a Bluetooth headset
+Exec=/home/brunux/.config/bin/bar-audio
+Icon=audio-speakers-symbolic
+Terminal=false
+Categories=AudioVideo;
+Keywords=audio;sound;output;sink;speakers;headphones;pipewire;

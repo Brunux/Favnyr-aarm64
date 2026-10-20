@@ -66,10 +66,28 @@ The drop-in is swayfx-only, so `sway -C` failing means Debian's plain sway is in
 
 ## The launcher
 
-The Search key and `$mod+d` open **tofi** in drun mode (the `.desktop` entries), `$mod+Shift+d`
-opens `tofi-run` (every executable in `$PATH`, which is how the tools from `packages/tools.list` -
-`btop`, `lazygit`, `ffmpeg` - are reached: they have no `.desktop` file). Both read the same
-`~/.config/tofi/config`, so the bindings are one word each (`19-launcher.conf`).
+The Search key and `$mod+d` open **tofi** in drun mode (the `.desktop` entries); `$mod+Shift+d`
+opens the command palette, `tofi-run` behind `~/.config/bin/run-command`. Both read the same
+`~/.config/tofi/config` (`19-launcher.conf`).
+
+The two modes behave differently in a way that is easy to get wrong:
+
+* **`tofi-drun` launches.** With `drun-launch = true` it runs the entry itself, and it **does**
+  honour `Terminal=true` by prepending the `terminal` command - verified on 0.9.1 with a probe
+  whose parent was `foot` (`ftruncate` on the man page's "no effect if drun-launch" sentence is
+  wrong for this version). So `btop.desktop` and `htop.desktop` work as they are.
+* **`tofi-run` only prints.** It lists every executable in `$PATH` and writes the selection to
+  stdout - the same contract as `dmenu`, verified the same way (the probe's name came back on
+  stdout and nothing was executed). A TUI started without a tty exits at once, so
+  `run-command` runs the selection inside `foot`. That is how the `packages/tools.list` binaries
+  are reached: `btop`, `lazygit`, `tmux`, `ffmpeg` have no `.desktop` entry worth launching.
+
+This port also ships its own entries (`usr/share/applications/org.nureb.*`), because the session
+actions live in scripts that nothing else advertises: **Wi-Fi** (`bar-net`), **Wi-Fi (nmtui)**,
+**Bluetooth**, **Audio output**, **Power menu**, **Lock screen**, **Screensaver**, **Suspend**,
+**Screenshot (area)** (`grimshot save area`), **lazygit** and **tmux**. They are what makes the
+fuzzel panels and the key bindings reachable by typing, and all of the terminal ones are
+`Terminal=true` so tofi starts them in foot.
 
 It replaces **bemenu**, whose palette was fourteen flags on one command line, and it is the cheapest
 launcher with an application list that exists here. Measured on this machine, per process, with the
@@ -89,7 +107,7 @@ is the price of 14.6 MB instead of 40.
 The theme is the session's palette: base03 background at 95 %, a cyan 2 px rim, JetBrains Mono 12,
 the typed text in base2, the prompt in cyan, the highlighted row a base02 card around its text
 (`selection-background-padding = 6,12,6,12`; the two-value spelling only pads vertically in 0.9.1),
-the fuzzy match highlighted in cyan, and no pointer (`hide-cursor`). `terminal = foot` runs the entries that need a terminal (`btop`, `htop`) in foot.
+the fuzzy match highlighted in cyan, and no pointer (`hide-cursor`). `terminal = foot` is what starts the `Terminal=true` entries in this session's terminal.
 
 Debian's package is `tofi`; it ships `tofi`, `tofi-run` and `tofi-drun`, plus bash completion. The
 config has no `--check`, but a bad key makes `tofi --config <file>` print the option it could not

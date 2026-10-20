@@ -22,12 +22,14 @@ set $up k
 set $right l
 # Your preferred terminal emulator
 set $term foot
-# Your preferred application launcher. tofi-drun lists the .desktop entries,
-# tofi-run the executables in $PATH (the CLI tools in packages/tools.list have no
-# .desktop file). Both are themed by ~/.config/tofi/config, so nothing is passed
-# here - see uis/sway/README.md, "The launcher".
+# Your preferred application launcher. tofi-drun lists the .desktop entries
+# (the applications, plus this port's own session actions in
+# usr/share/applications/org.nureb.*). The command palette is tofi-run behind
+# ~/.config/bin/run-command: tofi-run prints its selection instead of running it,
+# so the wrapper starts it inside foot (see uis/sway/README.md, "The launcher").
+# Both are themed by ~/.config/tofi/config, so nothing is passed here.
 set $launcher tofi-drun
-set $runner tofi-run
+set $runner /home/brunux/.config/bin/run-command
 
 ### Output configuration
 #

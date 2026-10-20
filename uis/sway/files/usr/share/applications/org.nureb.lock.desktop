@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Lock screen
+Comment=Lock the session with swaylock
+Exec=swaylock -c 002b36
+Icon=system-lock-screen-symbolic
+Terminal=false
+Categories=System;Security;
+Keywords=lock;screen;swaylock;

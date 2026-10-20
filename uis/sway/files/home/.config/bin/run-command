@@ -1,0 +1,20 @@
+#!/bin/sh
+# Command palette behind $mod+Shift+d.
+#
+# `tofi-run` lists every executable in $PATH, but unlike tofi-drun it does not
+# run the selection: it writes it to stdout and exits (verified on tofi 0.9.1 -
+# the probe's output arrived on stdout, and the process that should have run was
+# never started). That is dmenu's contract, so the caller runs it.
+#
+# The selection is started inside foot, because everything packages/tools.list
+# ships this way is a terminal program (btop, lazygit, tmux, tesseract, ...) and
+# a TUI started without a tty exits immediately. A GUI program started from here
+# still opens its own window; it just also holds the terminal.
+#
+# The applications list (Search key, $mod+d) is tofi-drun and does not need this:
+# it honours the .desktop Terminal=true key by prepending the terminal itself.
+set -eu
+
+cmd="$(tofi-run --prompt-text 'Run  ')" || exit 0
+[ -n "$cmd" ] || exit 0
+exec foot "$cmd"

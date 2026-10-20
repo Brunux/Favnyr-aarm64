@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Wi-Fi (nmtui)
+GenericName=Wireless network editor
+Comment=Edit saved connections, addresses and the radio (nmtui, full screen)
+Exec=nmtui
+Icon=network-wireless-symbolic
+Terminal=true
+Categories=Network;
+Keywords=wifi;wireless;network;nmtui;editor;ip;

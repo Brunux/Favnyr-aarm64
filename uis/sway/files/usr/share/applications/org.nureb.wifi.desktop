@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Wi-Fi
+GenericName=Wireless network
+Comment=List the networks in range and connect to one (nmcli + fuzzel)
+Exec=/home/brunux/.config/bin/bar-net
+Icon=network-wireless-symbolic
+Terminal=false
+Categories=Network;
+Keywords=wifi;wireless;network;nmtui;connect;ssid;

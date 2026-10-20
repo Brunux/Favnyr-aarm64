@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=tmux
+GenericName=Terminal multiplexer
+Comment=Attach to the `main` session, or start it
+Exec=sh -c "tmux attach || tmux new -s main"
+Icon=utilities-terminal-symbolic
+Terminal=true
+Categories=System;TerminalEmulator;
+Keywords=tmux;terminal;session;multiplexer;

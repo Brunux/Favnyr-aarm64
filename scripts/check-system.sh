@@ -720,10 +720,26 @@ esac
 # The launcher is tofi, themed by a single config file that both modes read.
 # Without the file tofi still opens, in its own default colours, which looks like
 # a themed launcher that lost its theme rather than a missing file.
-if have tofi && have tofi-drun && [ -r "$HOME/.config/tofi/config" ]; then
-	ok "launcher complete (tofi, tofi-drun, ~/.config/tofi/config)"
+if have tofi && have tofi-drun && have tofi-run && [ -r "$HOME/.config/tofi/config" ] &&
+	[ -x "$HOME/.config/bin/run-command" ]; then
+	ok "launcher complete (tofi, tofi-drun, tofi-run behind run-command, theme)"
 else
-	fail "launcher incomplete: tofi/tofi-drun missing or ~/.config/tofi/config absent"
+	fail "launcher incomplete: tofi/tofi-drun/tofi-run, ~/.config/tofi/config or bin/run-command missing"
+fi
+
+# The session's own launcher entries. They are the only way to reach the fuzzel
+# panels and the session actions by typing, and a missing one is invisible: the
+# list simply has fewer rows and nobody notices. run-command is what makes
+# tofi-run useful (it prints the selection instead of running it).
+_missing_desktop=""
+for _d in wifi wifi-nmtui bluetooth audio-output power lock screensaver suspend \
+	screenshot-area lazygit tmux; do
+	[ -r "/usr/share/applications/org.nureb.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
+done
+if [ -z "$_missing_desktop" ]; then
+	ok "launcher entries present (session actions, nmtui, lazygit, tmux)"
+else
+	fail "launcher entries missing:$_missing_desktop"
 fi
 
 # waybar reads the backlight by device name and shows an empty module (with no

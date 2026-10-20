@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Power menu
+GenericName=Session and power
+Comment=Battery, draw and the session actions (lock, suspend, log out, reboot, power off)
+Exec=/home/brunux/.config/bin/bar-power
+Icon=system-shutdown-symbolic
+Terminal=false
+Categories=System;
+Keywords=power;battery;shutdown;reboot;logout;suspend;

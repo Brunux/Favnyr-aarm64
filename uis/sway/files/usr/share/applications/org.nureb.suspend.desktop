@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Suspend
+Comment=Suspend the machine (logind, with the helper's fallbacks)
+Exec=/home/brunux/.config/bin/sway-suspend
+Icon=system-suspend-symbolic
+Terminal=false
+Categories=System;
+Keywords=suspend;sleep;s2idle;power;

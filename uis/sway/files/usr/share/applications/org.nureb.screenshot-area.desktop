@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Screenshot (area)
+Comment=Select an area with slurp and save it with grim
+Exec=grimshot save area
+Icon=applets-screenshooter
+Terminal=false
+Categories=Graphics;
+Keywords=screenshot;capture;grim;slurp;area;

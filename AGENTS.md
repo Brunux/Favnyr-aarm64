@@ -408,10 +408,18 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   linked against musl, which cannot run against glibc. Its drop-in is not shipped, but
   `~/.config/workstyle/config.toml` is kept so `cargo install workstyle` is enough to enable it.
 - **The launcher is `tofi`, and it replaces bemenu.** `tofi-drun` lists the `.desktop` entries
-  (`$mod+d`, the Search key), `tofi-run` lists `$PATH` (`$mod+Shift+d`, the way to reach the tools
-  from `packages/tools.list` that have no `.desktop` file), and both read one file,
-  `~/.config/tofi/config` - which is why the bindings in `config.d/19-launcher.conf` are a single
-  word. Measured in this machine's headless compositor: 22.8 MB RSS / **14.6 MB PSS**, against
+  (`$mod+d`, the Search key) and *launches* them; `tofi-run` lists `$PATH` (`$mod+Shift+d`) but
+  only *prints* the selection - dmenu's contract - so `$mod+Shift+d` runs
+  `~/.config/bin/run-command`, which starts the choice in foot (everything in
+  `packages/tools.list` is a TUI, and a TUI without a tty exits at once). Both modes read one file,
+  `~/.config/tofi/config`, which is why the bindings in `config.d/19-launcher.conf` are a single
+  word. **`Terminal=true` works with `drun-launch = true`**: tofi prepends the `terminal` command
+  (verified on 0.9.1 with a probe whose parent was foot), so `btop.desktop`/`htop.desktop` and the
+  port's own entries launch in foot - the man page's "no effect if drun-launch is set to true"
+  sentence does not describe this version. This port ships `usr/share/applications/org.nureb.*` for
+  what nothing else advertises: Wi-Fi (`bar-net`), Wi-Fi (nmtui), Bluetooth, audio output, power
+  menu, lock, screensaver, suspend, area screenshot (`grimshot save area`), lazygit and tmux.
+  Measured in this machine's headless compositor: 22.8 MB RSS / **14.6 MB PSS**, against
   40.5 MB for fuzzel's drun mode and 62.1 MB for wofi's; walker (Deboma's) is a GTK4 service plus
   the elephant daemon, i.e. resident, which is the thing this port avoids. The theme is the
   session palette, and one detail is easy to get wrong: `selection-background-padding` only takes
