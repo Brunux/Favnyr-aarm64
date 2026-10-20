@@ -86,7 +86,8 @@ uis/<ui>/                  one directory per graphical shell
   files/                   tree overlaid onto the rootfs; `etc/` is copied as
                            root, `home/` is merged into /home/$USERNAME
   README.md                what the shell ships and how it deviates upstream
-packages/                  device-agnostic base package lists (base.list)
+packages/                  device-agnostic package lists (base.list: what the
+                           system needs; tools.list: the CLI tools)
 scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
                            (the ChromeOS GPT layout), lib-dist.sh (what a
                            published artifact must not carry) + build/install
@@ -445,6 +446,32 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `stty -icanon min 1` before `dd bs=1`, because canonical mode would wait for Enter. Deboma's
   `ttfx` shim exists only because Omarchy's scripts call the Rust port by that name: this script
   calls Debian's `tte` directly, so no shim is shipped.
+- **The CLI tools are Deboma's, in `packages/tools.list`** (a third list next to base and the UI
+  one, installed by `rootfs-setup.sh` between the two). It is deliberately *only* tools: everything
+  Deboma installs that is a service, a daemon or a timer stays out, which is why `plocate` is
+  absent (it is `locate` **plus** `plocate-updatedb.timer`, a systemd timer that indexes the disk),
+  and why the editor/keybindings tooling (`tree-sitter-cli`, `lua5.4`), Omarchy's typing helper
+  (`wtype`) and `gawk` (Deboma needs awk's `RT` in its theme renderer; the theme here is a static
+  file) are absent. Two Debian renames are the whole trap: **`bat` installs `batcat`** and
+  **`fd-find` installs `fdfind`**, so `rootfs-setup.sh` adds `/usr/local/bin/bat` and
+  `/usr/local/bin/fd` symlinks (guarded, so a tree without the list still builds) because the
+  aliases, `MANPAGER` and `FZF_DEFAULT_COMMAND` call them by their upstream names.
+- **The shell wiring is one file plus a symlink**: `uis/sway/files/etc/profile.d/90-cli-tools.sh`
+  holds the environment (`MANPAGER='sh -c "col -bx | bat -l man -p"'` - `bsdextrautils` supplies
+  `col`, `man-db` supplies `man` itself, which base.list does not pull in - `BAT_THEME=ansi` so bat
+  paints with the terminal's own 16 colours, i.e. the solarized palette, and `$HOME/.local/bin`
+  appended to `PATH`), and it is sourced from `uis/sway/files/home/.bashrc`, which replaces Debian's
+  skel file and defines everything else: `ls`/`lsa`/`lt`/`lta` as `eza` (`--icons=auto`), `cat` as
+  `bat --style=plain --paging=never`, a `cd` wrapper that tries the real path first and only then
+  `z`, `zd`/`ff`/`eff`, the fzf **key bindings only** (its `completion.bash` rewraps ~76 commands'
+  completion on every shell start, ~25 ms before the prompt), and `starship init bash`. Every alias
+  is guarded with `command -v eza`-style tests so the file is harmless without the packages. **The
+  terminal needs the font fallback spelled out**: foot does not use fontconfig fallback for missing
+  glyphs, so `~/.config/foot/foot.ini`'s `font=` lists `Symbols Nerd Font Mono` after JetBrains
+  Mono - `fonts-nerd-symbols` provides it - or eza's icons, fastfetch and the starship git glyphs
+  (U+F00C, U+EA71, U+EBAB, codicons) would all be boxes. waybar gets away without that because it
+  is Pango, and a terminal is not. `check-system.sh` fails on each missing binary, on the two
+  wiring files, and warns when an interactive `bash -ic 'alias ls'` does not answer `eza`.
 
 ### ChromeOS GPT (`cgpt`)
 

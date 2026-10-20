@@ -1,0 +1,117 @@
+# CLI tools (device-agnostic).
+#
+# The modern replacements Deboma installs (omarchy's "CLI / tooling" section),
+# plus the small utilities its aliases and helper scripts expect. Nothing here
+# is a service or a daemon: every line is a program that runs when it is invoked
+# and exits, so nothing stays resident in the 4 GB of this machine.
+#
+# packages/base.list keeps what the *system* needs; this file is what the *user*
+# reaches for in a terminal. Every package is wired up by
+# uis/sway/files/etc/profile.d/90-cli-tools.sh (environment) and
+# uis/sway/files/home/.bashrc (aliases, prompt, key bindings); the Arch -> Debian
+# renames and the deliberate omissions are documented in AGENTS.md.
+
+# --- the replacements -------------------------------------------------------
+# ls. Debian's eza is the maintainer's fork-aware original; the aliases in
+# ~/.bashrc are Deboma's (ls, lsa, lt, lta).
+eza
+# cat and the manual pager. Debian installs the binary as **batcat** (the name
+# `bat` belongs to another package), so rootfs-setup.sh adds the
+# /usr/local/bin/bat symlink the aliases and MANPAGER call.
+bat
+# find. Debian's binary is **fdfind** for the same reason; rootfs-setup.sh adds
+# /usr/local/bin/fd, which is also what FZF_DEFAULT_COMMAND uses.
+fd-find
+# grep, as rg. Nothing aliases `grep`: rg is not a drop-in for every flag, and
+# a silently different grep in an interactive shell is a trap.
+ripgrep
+# Fuzzy finder, for the Ctrl-R/Ctrl-T/Alt-C bindings (~/.bashrc sources
+# /usr/share/fzf/key-bindings.bash) and the `ff` preview picker.
+fzf
+# cd, by frecency (`z`, `zi`); ~/.bashrc wraps `cd` so real paths still work.
+zoxide
+# The prompt. Deboma's starship.toml is shipped at ~/.config/starship.toml,
+# which is why the shell is not Debian's plain one.
+starship
+# tldr, with the pages cached locally (the binary is `tldr`).
+tealdeer
+# top.
+btop
+# fastfetch, the system summary Deboma shows on demand. Not wired into the
+# login shell: the bar already reports the session, and a fetch on every
+# terminal would add a process to every window.
+fastfetch
+# inxi, for the hardware questions check-system.sh does not answer (audio
+# codecs, USB, PCI).
+inxi
+
+# --- terminal multiplexer / TUIs --------------------------------------------
+tmux
+# git, the TUI. Nothing calls it automatically (`g` is still git).
+lazygit
+# gum: the shell-script TUI toolkit Deboma's helpers are written with; this
+# port's bar scripts do not need it, but writing a prompt/menu in a script does.
+gum
+
+# --- small utilities --------------------------------------------------------
+# curl: base.list does not include it and several tools (yt-dlp, tldr's update,
+# npm) expect it.
+curl
+unzip
+whois
+# socat and inotify-tools (inotifywait): the two that make "watch this until
+# that happens" a one-liner.
+socat
+inotify-tools
+# qrencode / zbar-tools: generate and read QR codes from the terminal.
+qrencode
+zbar-tools
+# OCR, used by hand on screenshots. Deboma's screenshot stack calls it from its
+# own script; here it is only the tool.
+tesseract-ocr
+tesseract-ocr-eng
+
+# --- media ------------------------------------------------------------------
+yt-dlp
+# ffmpeg is what yt-dlp uses to merge a video stream and an audio stream; without
+# it yt-dlp can only save single-file formats. It is also the transcoder the
+# terminal instructions assume exists.
+ffmpeg
+
+# --- manuals ----------------------------------------------------------------
+# man itself: the image ships `--help` and nothing else without it, and the
+# MANPAGER below only exists to make it pretty.
+man-db
+# col(1), which MANPAGER pipes through to strip overstrike; it comes from the
+# util-linux extras, not from a package named "col".
+bsdextrautils
+
+# --- JavaScript runtime -----------------------------------------------------
+# Deboma installs these only for the third-party agent CLIs (Claude Code,
+# Codex, Grok), which upstream gets through mise; Debian has no mise, and
+# `npm install -g` is the route that works on both. They are tools, not
+# services, and are unused by the session itself.
+nodejs
+npm
+
+# --- deliberately not here --------------------------------------------------
+# Deboma installs these, and this port does not, because each of them is either a
+# background job or only meaningful to a program this port does not have:
+#
+#   plocate        `locate` plus plocate-updatedb.timer, a systemd timer that
+#                  indexes the whole disk. A timer is still a service (it runs
+#                  without anyone asking), and 4 GB of RAM with a card that is
+#                  rewritten on every install is not where it pays off.
+#   tree-sitter-cli, lua5.4
+#                  editor and Keybindings-view tooling for Omarchy's own
+#                  components; nothing in this session parses a grammar or Lua.
+#   wtype          types text into Wayland windows for Omarchy's shell; this
+#                  session has no on-screen keyboard.
+#   gawk           installed upstream because omarchy's theme renderer needs
+#                  awk's RT variable; the solarized theme here is a static file,
+#                  and Debian's mawk is the faster default.
+#   libnotify-bin  notify-send is already pulled in by grimshot (or by mako's
+#                  client tools), so listing it would change nothing.
+#   jq, wl-clipboard
+#                  already in uis/sway/packages.list (the bar and the session
+#                  use them).

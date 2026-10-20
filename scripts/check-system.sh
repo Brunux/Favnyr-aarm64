@@ -618,6 +618,34 @@ else
 	fail "idle screensaver incomplete:$_saver (the idle screen is blank)"
 fi
 
+# The CLI tools of packages/tools.list, wired by /etc/profile.d/90-cli-tools.sh
+# and ~/.bashrc.  A missing binary is the quietest kind of breakage: the alias is
+# simply not defined and `ls` silently falls back to coreutils, so this is a FAIL
+# and not a warning.
+_missing_tools=""
+for _c in eza bat fd rg fzf zoxide starship tldr btop fastfetch inxi tmux \
+	lazygit gum curl unzip whois socat inotifywait qrencode zbarimg tesseract \
+	ffmpeg node npm col man; do
+	have "$_c" || _missing_tools="$_missing_tools $_c"
+done
+[ -r "$HOME/.bashrc" ] || _missing_tools="$_missing_tools .bashrc"
+[ -r /etc/profile.d/90-cli-tools.sh ] || _missing_tools="$_missing_tools profile.d/90-cli-tools.sh"
+[ -r "$HOME/.config/starship.toml" ] || _missing_tools="$_missing_tools .config/starship.toml"
+if [ -z "$_missing_tools" ]; then
+	ok "CLI tools complete (eza, bat, fd, rg, fzf, zoxide, starship, btop, ...)"
+else
+	fail "CLI tools incomplete:$_missing_tools"
+fi
+
+# `ls` is the one people notice.  Ask an interactive bash what the alias is -
+# that also proves ~/.bashrc is read at all - and match with a case statement:
+# `producer | grep -q` is the pipefail trap this script documents at the top.
+_ls_alias="$(bash -ic 'alias ls' 2>/dev/null || true)"
+case "$_ls_alias" in
+	*eza*) ok "ls is eza in an interactive shell" ;;
+	*) warn "ls is not eza (alias: ${_ls_alias:-none}); ~/.bashrc is not being read" ;;
+esac
+
 # waybar reads the backlight by device name and shows an empty module (with no
 # error anywhere) when the name does not exist.  Read it with bash's own regex
 # rather than a pipe: `set -o pipefail` plus an early-exiting filter is the

@@ -26,7 +26,10 @@ launcher, waybar and the foot terminal.
 | `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, idle screensaver. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key launcher binding. |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
-| `home/.config/foot/foot.ini` | Solarized palette and JetBrains Mono for the session terminal and the bar's popups. |
+| `home/.config/foot/foot.ini` | Solarized palette, JetBrains Mono and the Nerd Font fallback for the session terminal and the bar's popups. |
+| `home/.bashrc` | The interactive shell: `ls` is eza, `cat` is bat, `cd` is zoxide, fzf key bindings and the starship prompt (see **The CLI tools**). |
+| `home/.config/starship.toml` | Deboma's prompt: directory and git state in the theme's cyan. |
+| `etc/profile.d/90-cli-tools.sh` | The CLI environment (`MANPAGER`, `BAT_THEME`, `PATH`), shared by login shells and `~/.bashrc`. |
 | `home/.config/foot/screensaver.ini` | The idle screensaver's terminal: black, no padding, 26 pt. |
 | `home/.config/mako/config` | Solarized theme for the notification daemon (`mako-notifier`). |
 | `home/.config/nureb/screensaver.txt` | The logo the idle screensaver animates and then leaves on screen. |
@@ -165,6 +168,39 @@ suspend for the same reason. The bar menu has a **Screensaver** entry that start
 
 The logo is `~/.config/nureb/screensaver.txt`, 7 rows of block art invented here (Deboma's is ASCII
 art of the Omarchy mark), printed in solarized cyan at 26 pt.
+
+## The CLI tools
+
+Deboma ships an opinionated terminal and this port keeps it: the tools are listed in
+`packages/tools.list` (a third list next to `packages/base.list` and `uis/sway/packages.list`,
+installed by `rootfs-setup.sh`) and wired by two files — `etc/profile.d/90-cli-tools.sh` for the
+environment and `home/.bashrc` for the interactive shell.
+
+| Instead of | Tool | Notes |
+|---|---|---|
+| `ls` | **eza** | `ls -lh --group-directories-first --icons=auto`, plus `lsa`, `lt`, `lta`. |
+| `cat` | **bat** | `--style=plain --paging=never`. Debian's binary is `batcat`; `rootfs-setup.sh` adds `/usr/local/bin/bat`. |
+| `find` | **fd** | Debian's binary is `fdfind`, same symlink. It is also `FZF_DEFAULT_COMMAND`. |
+| `grep` | **ripgrep** | Not aliased: `rg` is not a drop-in for every `grep` flag, and a quietly different grep is a trap. |
+| `cd` | **zoxide** | A `cd` wrapper tries the real path first, so only non-paths jump by frecency. |
+| the prompt | **starship** | Deboma's `starship.toml`, shipped as `~/.config/starship.toml`. |
+| `top` | **btop** | |
+| `man` pager | **bat** | `MANPAGER='sh -c "col -bx | bat -l man -p"'`; `bsdextrautils` supplies `col`, `man-db` supplies `man` itself. |
+
+Also present: `fzf` (key bindings only — its completion wrappers cost ~25 ms per shell start), `tldr`
+(`tealdeer`), `fastfetch`, `inxi`, `tmux`, `lazygit`, `gum`, `yt-dlp`, `ffmpeg`, `curl`, `unzip`,
+`whois`, `socat`, `inotify-tools`, `qrencode`, `zbar-tools`, `tesseract-ocr` and `nodejs`/`npm`.
+
+`ff` and `eff` are the fzf helpers: `ff` previews with bat, `eff` opens the pick. Nothing is a
+service or a daemon — `plocate` is deliberately absent because it is `locate` *plus*
+`plocate-updatedb.timer`, and `tree-sitter-cli`/`lua5.4`/`wtype`/`gawk` are absent because they only
+feed Omarchy's own components, which this port does not have. The full rationale is in
+`packages/tools.list`.
+
+**The Nerd Font fallback has to be listed in `foot.ini`.** foot does not fall back through
+fontconfig for a glyph its font lacks — it draws a box — so `font=` names `Symbols Nerd Font Mono`
+after JetBrains Mono (`fonts-nerd-symbols`). That is what makes eza's icons, fastfetch's logo and
+the starship git glyphs render. waybar needs no such line: it is a Pango program.
 
 ## Deviations from the Nura original
 

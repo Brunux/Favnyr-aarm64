@@ -27,6 +27,12 @@ log "Installing base packages"
 # shellcheck disable=SC2046
 apt-get install -y --no-install-recommends $(pkgs "$PKGDIR/base.list")
 
+if [ -f "$PKGDIR/tools.list" ]; then
+	log "Installing CLI tool packages"
+	# shellcheck disable=SC2046
+	apt-get install -y --no-install-recommends $(pkgs "$PKGDIR/tools.list")
+fi
+
 if [ -f "$PKGDIR/device.list" ]; then
 	log "Installing device packages"
 	# shellcheck disable=SC2046
@@ -38,6 +44,21 @@ if [ -f "$PKGDIR/$UI.list" ]; then
 	# shellcheck disable=SC2046
 	apt-get install -y --no-install-recommends $(pkgs "$PKGDIR/$UI.list")
 fi
+
+log "Linking the short names Debian's bat and fd-find packages do not install"
+# Both binaries were renamed in Debian to avoid a name clash (bat -> batcat,
+# fd-find -> fdfind), and every shell alias, the MANPAGER and
+# FZF_DEFAULT_COMMAND call them by their upstream names. Deboma's setup.sh does
+# the same thing. ln is guarded: a tree without packages/tools.list keeps
+# building, it just does not get the aliases' targets.
+for _pair in bat:batcat fd:fdfind; do
+	_name=${_pair%%:*}
+	_target=${_pair#*:}
+	if [ -x "/usr/bin/$_target" ]; then
+		ln -sfn "/usr/bin/$_target" "/usr/local/bin/$_name"
+	fi
+done
+unset _pair _name _target
 
 if command -v depthchargectl >/dev/null 2>&1; then
 	log "Disabling depthcharge-tools' system hooks"
