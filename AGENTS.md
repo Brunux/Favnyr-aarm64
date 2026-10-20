@@ -380,6 +380,16 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   exclusions must precede `k:0000:0000`, because keyd returns on the first matching entry, and
   they are hashes of the device name, its key count and the abs/rel masks (`keyd.rvaiya monitor`
   prints them, and `journalctl -u keyd` logs what got matched).
+- **Tablet mode and the sensors are already in the kernel** - nothing has to be written:
+  `cros_ec_buttons` reports `SW=3` (`SW_LID` + `SW_TABLET_MODE`), so sway's **`bindswitch
+  tablet:on`/`tablet:off`** works (the compositor has `bindswitch`/`unbindswitch`); `iio:device1`
+  and `iio:device4` are `cros-ec-accel` (`in_accel_{x,y,z}_raw`), `iio:device2` is
+  `cros-ec-lid-angle` (`in_angl_raw`), `iio:device3` a gyro. Orientation is therefore readable from
+  sysfs at whatever rate is wanted, and **on-screen keyboards work**: `libwlroots-0.20` exposes
+  `zwp_virtual_keyboard_manager_v1` and sway creates it (`wlr_virtual_keyboard_manager_v1_create`),
+  so `wvkbd` (826 kB, binary `wvkbd-mobintl`, cairo/pango only) types into the focused client.
+  `iio-sensor-proxy` (236 kB) is packaged if the D-Bus orientation API is preferred over reading
+  sysfs. None of this is implemented yet - the design is the tablet section of `docs/plan-rofi.md`.
 - **Nerd Fonts / waybar icons**: Debian has no Nerd-patched Adwaita Mono, so the theme uses
   `JetBrains Mono` for the text. Beware `fonts-nerd-symbols`: it is **DFSG-stripped** and only
   ships Octicons, Codicons, Devicons, Seti and Powerline. It has **no Font Awesome

@@ -158,38 +158,101 @@ Omarchy's `Super+K`), **dictation** (`dictate` + `dictate-model`, whisper.cpp, `
 Omarchy's `Super+Ctrl+X`), **hibernate** (`sway-hibernate`, gated on a disk swap and `resume=`) and
 **agents** (`rofi-agents`: launch/install/default/accounts, `Alt+Ctrl+Shift+A` as Omarchy's
 `Super+Shift+Ctrl+A`; its usage meters are deliberately left out).
-The plan's P0 #4 (keybindings) is therefore done, and #1/#2/#3/#5-#10 are still open.
+The plan's P0 #4 (keybindings) is therefore done, and #1/#2/#3/#5-#10 are still open. All of it is
+in the image written to the card at `2df252d` (the first boot that carries it is the one waiting to
+be tested on hardware).
 
-## Ideas from other distros (the review asked for)
+## Agreed scope: three batches
 
-What other desktops ship that this port does not have, filtered by "can it be a script plus a rofi
-list, with no daemon". Costs are the transient kind (14-17 MB while open) unless stated.
+Reviewed against other desktops (KRunner, GNOME Shell search, ChromeOS quick settings, Regolith's
+`iliana`, Universal Blue's `ujust`, MX/Garuda/CachyOS assistants, Raycast/Spotlight, PowerToys), and
+filtered by "can it be a rofi list plus a script, with no resident process". Costs are transient
+(14-17 MB per rofi window) unless stated.
 
-| Idea | Seen in | Cost | Verdict |
-|---|---|---|---|
-| **System tasks menu** (`ujust`-style: update, backup, restore, reinstall the kpart, check-system, journal errors, disk usage) | Universal Blue/Bazzite `ujust`, MX Tools, Garuda Assistant, CachyOS Hello | none (the scripts exist) | **best next win**: it exposes `check-system.sh`, `backup-system.sh`, `install-kpart.sh` and `ncdu` from the launcher, which is where a first-time user looks |
-| **Snippets** (canned texts: addresses, signatures, commands) | Raycast/Spotlight workflows, Omarchy's clipboard | none (`wtype`, `wl-copy`) | cheap and genuinely useful; a `~/.config/snippets.tsv` + `rofi -dmenu` |
-| **Password manager** (rbw or passmenu) | Omarchy (`Super+Shift+/`, rbw), many tiling setups | `rbw` (1.5 MB) or `pass` (129 kB) | worth it once a vault exists; `rbw` has rofi integration built in |
-| **Screenshot annotation** (`grimshot` → `swappy`) | many sway setups, macOS | `swappy` (179 kB) | small, improves an existing feature |
-| **Screen recording toggle** (`wf-recorder` + `slurp`) | Omarchy (`Alt+Print`), GNOME | `wf-recorder` (220 kB) | already in the P1 plan; no audio capture yet |
-| **Emoji, clipboard history, calculator, file picker, OCR/QR, QR codes, media, timezone, DNS** | Omarchy | see P0/P1 above | already planned |
-| **Touchscreen on/off and screen rotation** | Omarchy `toggle-touchscreen`; tablet distros | none (`swaymsg input`/`output`) | this machine is a detachable: portrait mode and "touchscreen off while typing" are real wins |
-| **On-screen keyboard** for tablet mode | GNOME/Phosh (`squeekboard`), mobile distros | `wvkbd` (826 kB, lighter) + 2-25 MB resident while shown | needs tablet-mode detection (the cros-ec switch) and input-method setup; a project, not a script |
-| **Phone integration** (KDE Connect: files, clipboard, notifications) | KDE, GSConnect | `kdeconnect` (8.6 MB) + a resident `kdeconnectd` | the one daemon here would be justified, but it is a daemon; decide deliberately |
-| **First-run welcome** | CachyOS Hello, EndeavourOS Welcome, Garuda | none | already covered by the Learn page |
-| **Pre-update snapshot** (Btrfs rollback) | Garuda, openSUSE | `backup-system.sh` before `apt full-upgrade` (GBs per run) | the port's backups are tarballs on removable media; automatic pre-update copies are a policy decision, not a feature |
-| **Recent files** | GNOME/Pop!_OS | parse `recently-used.xbel` | low value here: no GUI applications write it |
-| **Weather / world clock / calendar** | Omarchy's bar, GNOME | `curl wttr.in` in foot; waybar's calendar tooltip already exists | nice-to-have, one script |
-| **Unit/currency conversion** | Raycast, GNOME's calculator | needs a rates source for currency | calculator yes (planned), currency no |
-| **Notifications centre / history** | GNOME, KDE, Omarchy | mako's `makoctl` has a history (`makoctl history`), rofi could list it | small, once mako history is enabled |
-| **Container/dev environments** (toolbox/distrobox) | Silverblue, Bazzite | `podman` + `distrobox` | out of scope for 4 GB and one eMMC |
-| **Power profiles** | Pop!_OS, GNOME | `power-profiles-daemon` (a daemon) | the bar's power panel shows the readings; the daemon is not worth its memory |
+### Batch A - zero new packages
 
-## Order of work
+| Feature | From | Shape |
+|---|---|---|
+| **Quick settings** | ChromeOS quick settings, GNOME quick menu | one `-dmenu` list with a state marker per row: Wi-Fi radio, Bluetooth power, night light, do-not-disturb, touchpad, keyboard layout, rotation, link to the notification list |
+| **Notification history + DND** | GNOME, Omarchy | `makoctl history` (JSON; `history` is already 1) → rofi; Enter copies, Alt+1 dismisses, `makoctl dismiss -a`; a `[mode=do-not-disturb]` section for the toggle |
+| **Kill process** | macOS/Raycast, KRunner | `ps --sort=-rss` → rofi → TERM, Alt+1 KILL, never the session's own tree |
+| **SSH hosts** | KRunner, rofi itself | **`rofi -show ssh`** - built in; add `ssh` to `modes` and a menu row (free) |
+| **Places** | KRunner places, GNOME Files | static list (Home, Downloads, Documents, Pictures, `/media`, the card) → foot or `xdg-open` |
+| **Search the manual** | - | `rg` over `/usr/share/doc/nureb` → open the page at the match |
+| **Keyboard layout** | KRunner, GNOME | `swaymsg input <id> xkb_layout …`; the bar indicator follows |
+| **Touchpad toggle** | Omarchy | `swaymsg input type:touchpad events toggle` + a state file for the marker |
+| **Night light toggle** | elementary, GNOME | `wlsunset` runs permanently today; the toggle stops it or restarts it with the configured temperature |
+| **Free space / cleanup** | MX Cleanup, CachyOS, BleachBit | a report (`df`, `~/.cache`, journal, apt cache, trash) plus `apt clean`, `journalctl --vacuum-time=7d`, thumbnails, `gio trash --empty` |
 
-1. **Batch A (one rebuild, ~4 h)**: emoji, calculator, keybindings, timezone, QR, OCR, QR-from-region,
-   About, media, plus the new `bar-menu` entries. Packages: `wtype`, `cliphist`, `imv` (optional).
-2. **Batch B (~4 h)**: clipboard history (the watcher decision), file picker, DNS, screen recording.
-3. **Batch C (design)**: the full root menu tree, then whatever P1 items the tree makes visible.
-4. **Never**: the Arch/Hyprland/Quickshell-specific lists and the theme system, unless the theme
-   work becomes a project of its own.
+### Batch B - one small package each
+
+| Feature | Package | Note |
+|---|---|---|
+| Emoji picker | `wtype` (already installed) | data file → rofi → `wl-copy` + `wtype -M shift -k Insert` (Omarchy's insertion trick) |
+| Clipboard history | `cliphist` (2.2 MB) | **the one resident piece** (`wl-paste --watch cliphist store`, ~2 MB); Alt+1 deletes, images decode to `~/Pictures/clipboard/` |
+| Calculator | none | script mode, recomputed per keystroke with `awk` |
+| Snippets | none | `~/.config/snippets.tsv` → rofi → `wtype`/`wl-copy` |
+| Password store | `pass` (129 kB; `gnupg` is installed) or `rbw` (15 MB, Bitwarden) | `passmenu`-style; decision open |
+| Screenshot annotation | `swappy` (179 kB) | `grimshot save area` → `swappy -f` |
+| Rotation (manual) | `wlr-randr` (81 kB) | output transform; see the tablet section |
+| Unit conversion | `units` (917 kB) or a python table | script mode like the calculator |
+| Screen recording | `wf-recorder` (220 kB) | region or full, start/stop via a pid file, mako notification; audio later |
+| Translate | `translate-shell` (277 kB) | network; to a notification and the clipboard |
+| Weather | none (`curl`) | `wttr.in` in foot |
+| World clock | none | `TZ=… date` list |
+| Disk usage | `ncdu` (156 kB) | ncdu in foot for `/`, `/home`, the card |
+| Mirror ranking | `netselect-apt` (35 kB) | a system task, last |
+| File picker, OCR, QR, timezone, DNS, apt search, reminders, agents usage, theme | as planned above / in `docs/plan-agents.md` | |
+
+### Batch C - projects
+
+Tablet mode + on-screen keyboard (below), screen recording with audio, agents usage from local logs,
+the theme switcher.
+
+## Tablet mode, on-screen keyboard and rotation
+
+Verified on the device, not assumed:
+
+| Evidence | Meaning |
+|---|---|
+| `/proc/bus/input/devices` → `cros_ec_buttons`, `SW=3` | the kernel already reports **`SW_LID` + `SW_TABLET_MODE`**; no driver to write |
+| `swayfx` strings: `bindswitch`, `unbindswitch`, `tablet`, `dock` | **`bindswitch tablet:on/off` works in the session configuration** |
+| `iio:device1` `cros-ec-accel`, `in_accel_{x,y,z}_raw` | accelerometer: orientation is readable from sysfs |
+| `iio:device2` `cros-ec-lid-angle`, `in_angl_raw` | lid angle, for the folding half |
+| `iio:device3` gyro, `iio:device4` a second accelerometer | more than enough for rotation |
+| `libwlroots-0.20` exposes `zwp_virtual_keyboard_manager_v1`, and sway creates it (`wlr_virtual_keyboard_manager_v1_create`) | wvkbd can type into the focused client |
+| `wvkbd` 0.15 ships `/usr/bin/wvkbd-mobintl` (826 kB, cairo/pango only); `iio-sensor-proxy` 236 kB is packaged | the keyboard itself, and the optional D-Bus orientation service |
+
+Design: `bindswitch tablet:on` runs `tablet-mode on`, which starts `wvkbd-mobintl`, disables the
+touchpad, and starts a **1 Hz accelerometer poller** that applies `swaymsg output … transform`;
+`tablet:off` kills the keyboard and the poller and restores both. One process only while the
+keyboard is detached, nothing resident otherwise, and "Rotate screen" in quick settings covers the
+manual case. `wvkbd-mobintl` is the mobile-international layout; another layout is a one-line change.
+
+Acceptance: detach the keyboard → the keyboard appears, typing reaches a foot window, the screen
+turns with the device; reattach → keyboard gone, touchpad back, orientation normal.
+
+## Deliberately not doing
+
+`fwupd` (17 MB; this device's firmware is ChromeOS's, never flashed) · `power-profiles-daemon` (a
+daemon) · KDE Connect / GSConnect (a daemon) · browser history, contacts, recent documents (no
+browser, no store, no GUI apps) · `dictd` dictionaries (little value offline) · "always on top" (not
+a sway concept) · a theme *store* (the theme switcher is its own project).
+
+## Order and effort
+
+| Round | Contents | Effort |
+|---|---|---|
+| 1 | Batch A (ten menus, no packages) + the manual page for them | ~1 day |
+| 2 | Batch B (emoji, clipboard, calculator, snippets, pass, swappy, wlr-randr, units, recording, translate, weather, world clock, ncdu) | ~1 day |
+| 3 | Tablet mode + on-screen keyboard + rotation | ~half day; needs the keyboard detached to test |
+| 4 | Agents usage (local logs), recording with audio, theme switcher | open |
+
+## Decisions open
+
+1. **Password store**: `pass` (129 kB, GPG installed) or `rbw` (15 MB, Bitwarden)?
+2. **Clipboard watcher**: accept `wl-paste --watch cliphist store` (the only resident process in this
+   plan, ~2 MB) or skip clipboard history?
+3. **Rotation**: sysfs poller while in tablet mode (no extra package) or `iio-sensor-proxy` +
+   `monitor-sensor` (D-Bus activated)?
+4. **On-screen keyboard layout**: `wvkbd-mobintl` as shipped, or latin-american?
