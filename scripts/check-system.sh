@@ -606,6 +606,13 @@ else
 	fail "/etc/greetd/config.toml is missing"
 fi
 have tuigreet && ok "tuigreet is installed" || warn "tuigreet is not installed"
+# greetd hands the session only the PAM environment, so pam_env is what puts the
+# locale there; without it every terminal warns "'C' is not a UTF-8 locale" and
+# sorting/matching run on the C locale.
+case "${LANG:-}" in
+*UTF-8* | *utf8*) ok "session locale is UTF-8 (${LANG})" ;;
+*) fail "session LANG is '${LANG:-unset}': greetd needs pam_env in /etc/pam.d/greetd (terminals warn and sorting is C)" ;;
+esac
 if have sway; then
 	# The session runs the wlroots fork built by scripts/build-swayfx.sh, not
 	# Debian's plain sway: 26-swayfx.conf needs it (corners, shadows, and blur

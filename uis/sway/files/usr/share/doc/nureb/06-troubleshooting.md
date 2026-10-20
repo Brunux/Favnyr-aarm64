@@ -100,6 +100,25 @@ shipped `~/.config/foot/foot.ini` names `Symbols Nerd Font Mono` after JetBrains
 Mono, which is what makes eza's icons, faststart and the starship glyphs render.
 If you replace the font line, keep a symbol font in the list.
 
+## A terminal starts with "not a UTF-8 locale"
+
+```
+warning: foot: 'C' is not a UTF-8 locale, falling back to 'C.UTF-8'
+```
+
+The locale is installed but the **session** did not get it. greetd starts the
+session with the PAM environment only, so `/etc/pam.d/greetd` needs the two
+`pam_env.so` lines that `/etc/pam.d/login` uses (the image ships them; a
+hand-built system may not):
+
+```
+session	required	pam_env.so readenv=1
+session	required	pam_env.so readenv=1 envfile=/etc/default/locale
+```
+
+Log out and back in afterwards. `check-system.sh` reports the session locale, so
+this is one line in the report rather than a warning you have to notice.
+
 ## The brightness keys do nothing
 
 `brightnessctl` needs write access to `/sys/class/backlight/*/brightness`. The

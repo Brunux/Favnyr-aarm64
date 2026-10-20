@@ -1,0 +1,127 @@
+debian-aarch64 system report  2026-10-20 17:23:18 CST
+
+==> Boot
+  ----  kernel  7.2.7-mt81
+  ----  cmdline cros_secure kern_guid=3a1c67fa-0947-0d4f-863c-3bf0a119df9e quiet loglevel=2 transparent_hugepage=madvise root=UUID=c3b90d68-a5ae-4ed5-85dc-9bdfcf957683 rootwait rw
+  OK    depthcharge substituted kern_guid
+  OK    root=UUID= present
+  OK    kernel partition /dev/mmcblk1p1 (kern_guid=3a1c67fa-0947-0d4f-863c-3bf0a119df9e)
+  OK    the kernel partition holds a dev-signed FIT
+  OK    device tree: Google Hayato rev1
+  OK    modules for 7.2.7-mt81 installed
+
+==> Firmware
+  OK    firmware mediatek/mt8192/scp.img: requested before the rootfs was up, then loaded
+  OK    no errors from the wireless/Bluetooth/audio subsystems
+
+==> Storage
+  ----  root    /dev/mmcblk1p3 (UUID c3b90d68-a5ae-4ed5-85dc-9bdfcf957683)
+  ----  booted from removable storage
+  OK    /etc/fstab matches the mounted root
+  OK    swap active: /dev/zram0
+  OK    /boot is a separate filesystem (/dev/mmcblk1p2) matching /etc/fstab
+  OK    the running kernel's vmlinuz is on /boot
+  OK    root filesystem 20% used
+
+==> Display and GPU
+  OK    display connected on card1-eDP-1
+  OK    panfrost loaded (GPU acceleration available)
+  OK    backlight writable by group video (664 video)
+  OK    session user is in group video
+
+==> Input
+  OK    4 keyboard device(s)
+  OK    6 pointer/touch device(s)
+  ----  devices: cros_ec|cros_ec_buttons|Elan Touchpad|hid-over-i2c 04F3:2E70|hid-over-i2c 04F3:2E70 UNKNOWN|hid-over-i2c 04F3:2E70 UNKNOWN|hid-over-i2c 04F3:2E70 Stylus|hid-over-i2c 04F3:2E70 Stylus|mt8192_mt6359_rt1015p_rt5682 Headset Jack|keyd virtual keyboard|keyd virtual pointer|
+  OK    keyd.service is active
+  OK    keyd leaves the sleep key alone
+  OK    keyd matched its keyboard: 0000:0000:ab51e20b  /etc/keyd/default.conf        (cros_ec)
+
+==> Network
+  OK    wireless interface: wlp1s0
+  ----  regulatory domain: world (country 00), set once NetworkManager or the AP provides one
+  OK    NetworkManager is active (connected:full)
+  OK    1 Wi-Fi profile(s) installed
+  OK    no Wi-Fi profile pins an interface name
+  OK    nmtui present
+
+==> Bluetooth
+  ----  controller 74:4C:A1:XX:XX:XX (public)
+  OK    controller powered
+  ----  btmgmt: 	current settings: powered ssp br/edr le secure-conn wide-band-speech 
+
+==> Audio
+  OK    audio server: PulseAudio (on PipeWire 1.6.9)
+  OK    sound card: alsa_card.platform-sound
+  OK    ALSA codec: mt8192_mt6359 mt8192_mt6359_rt1015p_rt5682 mt8192mt6359rt1
+  OK    card active profile: HiFi
+  OK    sinks: alsa_output.platform-sound.HiFi__Headphones__sink alsa_output.platform-sound.HiFi__Speaker__sink 
+  OK    alsa 'default' PCM available (pipewire-alsa)
+
+==> Suspend and power
+  OK    /sys/power/state advertises suspend (freeze mem disk)
+  OK    systemd-logind is active (its button handling is the polkit-free suspend path)
+  OK    polkitd is active (session suspend via loginctl)
+  OK    sway-suspend helper is executable
+  WARN  no suspend recorded in this boot: press the Lock key to test it
+
+==> System tuning
+  OK    cpufreq governor is schedutil on every policy
+  OK    MGLRU enabled (0x0003)
+  OK    transparent hugepages: madvise
+  OK    swap is zram (0 kB)
+  OK    zram swap is a systemd unit (systemd-oomd can manage it)
+  OK    systemd-oomd is active (kills a hog on memory pressure)
+  OK    vm.swappiness=150 (swapping to compressed RAM is cheap)
+  OK    eMMC I/O scheduler: kyber
+  OK    kernel config carries the tuning (config-7.2.7-mt81)
+
+==> Clock
+  ----  America/Mexico_City / local RTC no
+  OK    clock synchronised
+
+==> Session
+  OK    greetd is active
+  OK    greeter vt = 7
+  OK    greeter user _greetd exists
+  OK    tuigreet is installed
+  OK    compositor is swayfx version 0.6 (based on sway 1.12.0)
+  OK    sway configuration is valid
+  OK    Xwayland present (X11 programs can run)
+  OK    every command the sway configuration invokes is installed
+  OK    a notification daemon owns org.freedesktop.Notifications (mako)
+  OK    bar menus complete (scripts plus fuzzel, nmcli, bluetoothctl, jq)
+  OK    idle screensaver complete (tte, logo, launcher, terminal profile)
+  OK    CLI tools complete (eza, bat, fd, rg, fzf, zoxide, starship, btop, ...)
+  OK    ls is eza in an interactive shell
+  OK    launcher complete (rofi, config.rasi, solarized.rasi)
+  OK    bar-pick (rofi -dmenu) is executable
+  OK    manual installed (7 pages) and rofi-learn present
+  OK    keybindings view (rofi-keys) is executable
+  OK    dictation tools present (whisper-cli, wtype, parecord)
+  SKIP  no speech model yet: the dictation shortcut fetches tiny.en (78 MB) on first use
+  SKIP  no disk swap: hibernation needs a swap labelled nureb_swap (see sway-hibernate)
+  OK    agents menu (rofi-agents) is executable
+  SKIP  no coding-agent CLI installed yet (the Agents menu installs one with npm)
+  OK    launcher entries present (session actions, nmtui, lazygit, tmux)
+  OK    waybar backlight device backlight-lcd0 exists
+
+==> Fonts and icons
+  OK    font family present: JetBrains Mono
+  OK    font family present: FontAwesome
+  OK    font family present: Material Design Icons
+  OK    font family present: Symbols Nerd Font
+
+==> Declared packages
+  OK    all 106 declared package(s) are installed
+
+==> Journal
+  WARN  319 error-priority line(s) this boot; the last ones:
+          Oct 20 17:23:19 asurada kernel: power_supply sbs-8-000b: driver failed to report `time_to_empty_now' property: -5
+          Oct 20 17:23:19 asurada kernel: power_supply sbs-8-000b: driver failed to report `time_to_empty_now' property: -5
+          Oct 20 17:23:19 asurada kernel: power_supply sbs-8-000b: driver failed to report `time_to_empty_now' property: -5
+          Oct 20 17:23:19 asurada kernel: power_supply sbs-8-000b: driver failed to report `time_to_empty_now' property: -5
+          Oct 20 17:23:19 asurada kernel: power_supply sbs-8-000b: driver failed to report `time_to_empty_now' property: -5
+          Oct 20 17:23:19 asurada kernel: power_supply sbs-8-000b: driver failed to report `time_to_empty_now' property: -5
+
+==> Summary  74 OK, 2 WARN, 0 FAIL

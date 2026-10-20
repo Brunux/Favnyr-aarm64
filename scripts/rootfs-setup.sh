@@ -217,6 +217,22 @@ vt = 7
 command = "tuigreet --time --time-format '%a, %d %b  %H:%M' --greeting 'Welcome back to Debian' --greet-align center --width 60 --window-padding 2 --container-padding 1 --prompt-padding 1 --asterisks --asterisks-char '*' --kb-command 2 --kb-sessions 3 --kb-power 12 --power-no-setsid --remember --remember-session --theme 'border=cyan;text=white;time=cyan;container=black;title=yellow;greet=cyan;prompt=cyan;input=white;action=blue;button=yellow' --cmd sway"
 user = "$GREETD_USER"
 EOF
+
+	# greetd does not pass its own environment to the session: its worker execs
+	# /bin/sh with the PAM environment alone (pam_getenvlist()), and Debian's
+	# common-session only brings in pam_systemd. Without pam_env the session
+	# therefore starts with no LANG at all - every terminal prints
+	# "warning: foot: 'C' is not a UTF-8 locale, falling back to 'C.UTF-8'" - and
+	# sorting, matching and non-ASCII text are C instead of UTF-8. These are the
+	# two lines Debian's /etc/pam.d/login uses for the same job, and pam_systemd
+	# passes what they set on to the user manager as well.
+	if ! grep -q 'pam_env\.so.*envfile=/etc/default/locale' /etc/pam.d/greetd; then
+		cat >>/etc/pam.d/greetd <<'EOF'
+# Locale for the session: greetd builds the session environment from PAM alone.
+session	required	pam_env.so readenv=1
+session	required	pam_env.so readenv=1 envfile=/etc/default/locale
+EOF
+	fi
 	systemctl enable greetd 2>/dev/null || true
 fi
 

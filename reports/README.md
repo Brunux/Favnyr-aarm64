@@ -94,3 +94,73 @@ the staged tree plus the one package — which is what the eMMC install will cop
 
 When a later report is taken, add it here next to this one instead of replacing
 it: the diff between two reports is what shows a regression.
+
+## check-system-2026-10-20-card.txt
+
+Third report, from the card rewritten with the three-partition layout and the
+kernel-tuning work (image built from `2df252d`): **74 OK, 2 WARN, 0 FAIL**. It is
+the first boot that carries the tuning, and that section is the point of the
+report - every line of it is a setting that had to survive the build:
+
+```
+OK    cpufreq governor is schedutil on every policy
+OK    MGLRU enabled (0x0003)
+OK    transparent hugepages: madvise
+OK    swap is zram (0 kB)
+OK    zram swap is a systemd unit (systemd-oomd can manage it)
+OK    systemd-oomd is active (kills a hog on memory pressure)
+OK    vm.swappiness=150 (swapping to compressed RAM is cheap)
+OK    eMMC I/O scheduler: kyber
+OK    kernel config carries the tuning (config-7.2.7-mt81)
+```
+
+The command line in the report shows the other half of it
+(`transparent_hugepage=madvise` next to `cros_secure` and `kern_guid`), and the
+session lines show what the same image ships: `swayfx version 0.6`, Xwayland,
+mako on the session bus, seven manual pages, `rofi-keys`, the dictation tools,
+the agents menu, and all 106 declared packages installed.
+
+The two WARNs are the expected ones:
+
+| line in the report | what it is |
+|---|---|
+| `WARN no suspend recorded in this boot: press the Lock key to test it` | The check asks for evidence rather than assuming it: no suspend had happened yet when the report was taken. It is not a regression - the earlier reports recorded 1 and 5 cycles. |
+| `WARN 319 error-priority line(s) this boot` | The `sbs-8-000b` fuel-gauge noise, upstream, present in Nura's own log. |
+
+This report describes the session **before** the Omarchy key scheme and the file
+browser (`c481713`, `d705581`): those live in the committed tree, not on this
+card, and the next card has to be written to show them.
+
+## foot-locale-warning.txt
+
+One line, copied from the terminal that printed it:
+
+```
+warning: foot: 'C' is not a UTF-8 locale, falling back to 'C.UTF-8'
+```
+
+It is not a foot bug and not a missing locale: `/etc/locale.conf` carries
+`LANG=en_US.UTF-8`, `locale -a` lists `en_US.utf8`, and `LANG=en_US.UTF-8 locale
+charmap` prints `UTF-8`. What was missing is the variable reaching the session at
+all.
+
+**greetd does not pass its own environment to the session.** Its session worker
+execs `/bin/sh -c "exec <cmd>"` with the **PAM environment alone**
+(`pam_getenvlist()`), and Debian's `/etc/pam.d/greetd` brings in
+`common-session`, which here contains only `pam_systemd` - no `pam_env`. So
+`tuigreet --cmd sway` started sway with no `LANG`, every foot inherited that,
+and the warning is foot falling back to `C.UTF-8`. Sorting, case-insensitive
+matching and non-ASCII text were on the C locale for the same reason.
+
+The fix is the one Debian's `/etc/pam.d/login` already uses:
+
+```
+session	required	pam_env.so readenv=1
+session	required	pam_env.so readenv=1 envfile=/etc/default/locale
+```
+
+`rootfs-setup.sh` appends them to `/etc/pam.d/greetd` when it writes the greeter
+configuration, and `pam_systemd` then passes the same environment on to the user
+manager. The card this report came from was patched in place, so its next boot is
+the one that proves it; an image built from the commit that carries the fix has
+it without the patch.

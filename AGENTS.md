@@ -252,6 +252,15 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `/etc/greetd/config.toml`. With the upstream name the service dies with
   `configured default session user 'greetd' not found` and the machine silently falls back to a
   console login on tty1.
+  **greetd does not pass its own environment to the session**: its worker execs
+  `/bin/sh -c "exec <cmd>"` with the PAM environment alone (`pam_getenvlist()`), and Debian's
+  `common-session` carries only `pam_systemd` here. Without `pam_env` in `/etc/pam.d/greetd` the
+  session starts with no `LANG` even though `/etc/locale.conf` sets one - every terminal prints
+  `warning: foot: 'C' is not a UTF-8 locale, falling back to 'C.UTF-8'`, and sorting, matching and
+  non-ASCII text are on the C locale. `rootfs-setup.sh` appends the two `pam_env.so` lines Debian's
+  `/etc/pam.d/login` uses (`readenv=1`, `envfile=/etc/default/locale`), and `pam_systemd` passes the
+  result on to the user manager. Do not "fix" this in the foot configuration: foot is right, the
+  session is what lacks the variable.
 - **SSH host keys**: Debian's `sshd-keygen.service` is gated on `ConditionFirstBoot=yes`, i.e. it
   generates keys only when `/etc/machine-id` was *empty at boot*. Every system here is a *copy* of
   an image (`write-sd.sh`, `install-emmc.sh`), and the copy is written from a tree that already
