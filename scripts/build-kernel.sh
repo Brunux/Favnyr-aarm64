@@ -58,6 +58,23 @@ fetch_and_prepare() {
 
 build_kernel() {
 	log "Building kernel $KERNEL_RELEASE ($JOBS jobs)"
+	# olddefconfig first, non-interactively. kbuild runs it on its own when the
+	# tree grew a symbol, but then it asks its question on the build's stdin and
+	# the answer is whatever the stream happens to contain: a config with a
+	# duplicated `# CONFIG_HZ_1000 is not set` once produced a full rebuild at
+	# HZ=100 instead of 1000, silently.
+	make -C "$KERNEL_SRC" ARCH="$KERNEL_ARCH" LLVM=1 olddefconfig </dev/null >/dev/null
+	# The shipped file is the source of truth, so anything that ends up different
+	# is drift worth seeing (compiler-probe symbols embed tool versions and change
+	# on every build, hence the exclusions).
+	_drift=""
+	while IFS= read -r _line; do
+		case "$_line" in
+			CONFIG_CC_*|CONFIG_AS_*|CONFIG_LD_*|CONFIG_BINDGEN_*|CONFIG_RUSTC_*|CONFIG_CLANG_*|CONFIG_PAHOLE_*) continue ;;
+		esac
+		grep -qxF "$_line" "$KERNEL_CONFIG" || _drift="$_drift ${_line%%=*}"
+	done <"$KERNEL_SRC/.config"
+	[ -z "$_drift" ] || warn "config drift (built value differs from $KERNEL_CONFIG):$_drift"
 	make -C "$KERNEL_SRC" ARCH="$KERNEL_ARCH" LLVM=1 -j"$JOBS"
 }
 
