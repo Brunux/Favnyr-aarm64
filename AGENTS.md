@@ -95,7 +95,8 @@ scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
 reports/                   check-system.sh output captured on real hardware, kept
                            as evidence for the checks (see reports/README.md)
 docs/                      plan.md, recon.md, optimization.md (measured device
-                           and kernel-config findings), releases/<version>.md
+                           and kernel-config findings), plan-rofi.md (what of
+                           Omarchy's menus can move onto rofi), releases/<version>.md
                            (release notes, reused as the tag message and the
                            GitHub release body), screenshots/
 ```
