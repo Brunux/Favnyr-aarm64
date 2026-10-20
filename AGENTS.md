@@ -346,6 +346,19 @@ uncommitted changes, since those do not travel into the image.
 - `bemenu` in Debian pulls one backend through an alternative dependency; add
   **`libbemenu-wayland`** explicitly for the Wayland session. `grimshot` is a package of its own.
   `pactl` (the XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
+- **The bar's menus are short-lived `fuzzel` popups, not panels.** Deboma answers a click on the
+  bar with a Quickshell panel, and that shell is 361 MB of PSS - more than half of the Deboma
+  session. `uis/sway/files/home/.config/bin/bar-*` reproduce the same interactions with
+  `fuzzel --dmenu` (`bar-pick` holds the palette), with `nmtui`, `bluetoothctl` and the apt updater
+  in `alacritty --class popup` (floated by `config.d/25-bar-panels.conf`) and `swaynag` for the
+  power panel, so nothing stays resident; `fuzzel` and `jq` are the only packages this added. Two
+  things follow from that and both are easy to get wrong: `custom` modules only re-run on an
+  interval, so every `bar-*` ends with `pkill -RTMIN+8 waybar` and every such module declares
+  `"signal": 8`; and a module with nothing to say prints `{"class":"empty"}` so that
+  `#custom-updates.empty` / `#custom-keyboard-layout.empty` collapse it, because waybar would
+  otherwise leave an empty card on the bar. waybar's `backlight` module names its device
+  (`backlight-lcd0`, not `backlight`); a wrong name shows nothing and logs nothing, so
+  `check-system.sh` compares it with `/sys/class/backlight`.
 
 ### ChromeOS GPT (`cgpt`)
 

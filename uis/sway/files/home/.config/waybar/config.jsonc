@@ -1,3 +1,22 @@
+// Solarized bar, ported from the maintainer's Deboma (Omarchy) session.
+//
+// Every pointer interaction that Deboma answers with a panel is answered here
+// with a short-lived fuzzel popup from ~/.config/bin/bar-*, and nothing stays
+// resident: the bar itself is the only process this file keeps alive.  Icons
+// are written as \uXXXX so the codepoints are readable and survive any editor;
+// they come from fonts-font-awesome-legacy (see uis/sway/README.md).
+//
+// Clicks:
+//   menu        left: root menu   right: terminal
+//   clock       left: switch format (time/seconds)   scroll: calendar months
+//   updates     left: open the updater (only visible when something is pending)
+//   tray        the StatusNotifier items of running applications
+//   layout      left: next xkb layout (hidden with a single layout)
+//   bluetooth   left: device list  right: bluetoothctl in a floating terminal
+//   network     left: Wi-Fi list   right: nmtui in a floating terminal
+//   volume      left: mute  right: output list  scroll: volume
+//   brightness  scroll: backlight
+//   battery     left: power panel  right: root menu
 {
     "layer": "top",
     "position": "top",
@@ -7,6 +26,7 @@
     "margin-left": 6,
     "margin-right": 6,
     "modules-left": [
+        "custom/menu",
         "sway/workspaces",
         "sway/mode"
     ],
@@ -14,13 +34,21 @@
         "clock"
     ],
     "modules-right": [
-        "cpu",
-        "memory",
-        "temperature",
-        "disk",
+        "custom/updates",
+        "tray",
+        "custom/keyboard-layout",
+        "custom/bluetooth",
         "network",
+        "pulseaudio",
+        "backlight",
         "battery"
     ],
+    "custom/menu": {
+        "format": "<span font_desc='JetBrains Mono 13'>\uf17c</span>",
+        "tooltip": false,
+        "on-click": "~/.config/bin/bar-menu",
+        "on-click-right": "alacritty"
+    },
     "sway/workspaces": {
         "disable-scroll": true,
         "all-outputs": true,
@@ -36,40 +64,84 @@
         }
     },
     "sway/mode": {
-        "format": "<span font_desc='JetBrains Mono 13'>󰌌</span>  {}",
+        "format": "<span font_desc='JetBrains Mono 13'>\uf11c</span>  {}",
         "tooltip": false
     },
-    "cpu": {
-        "interval": 3,
-        "format": "<span font_desc='JetBrains Mono 13'></span>  {usage}%",
-        "tooltip-format": "CPU usage: {usage}%\nLoad: {load1} / {load5} / {load15}"
+    "clock": {
+        "format": "<span font_desc='JetBrains Mono 13'>\uf073</span>  {:%a %d %b  %H:%M}",
+        "format-alt": "<span font_desc='JetBrains Mono 13'>\uf073</span>  {:%H:%M:%S}",
+        "tooltip-format": "<big>{:%A, %d %B %Y}</big>\n<tt><small>{calendar}</small></tt>",
+        "calendar": {
+            "mode": "month",
+            "mode-mon-col": 3,
+            "weeks-pos": "right",
+            "on-scroll": 1
+        },
+        "interval": 30
     },
-    "memory": {
-        "interval": 5,
-        "format": "<span font_desc='JetBrains Mono 13'>󰍛</span>  {percentage}%",
-        "tooltip-format": "RAM: {used:0.1f} / {total:0.1f} GiB"
+    "custom/updates": {
+        "exec": "~/.config/bin/bar-updates",
+        "return-type": "json",
+        "interval": 21600,
+        "signal": 8,
+        "tooltip": true,
+        "on-click": "alacritty --class popup -e bash -lc 'sudo apt update && sudo apt full-upgrade; echo; echo Press Enter to close; read -r _'"
     },
-    "temperature": {
-        "interval": 5,
-        "critical-threshold": 80,
-        "format": "<span font_desc='JetBrains Mono 13'></span>  {temperatureC}°C",
-        "format-critical": "<span font_desc='JetBrains Mono 13'></span>  {temperatureC}°C",
-        "tooltip": true
+    "tray": {
+        "icon-size": 14,
+        "spacing": 10,
+        "show-passive-items": true
     },
-    "disk": {
+    "custom/keyboard-layout": {
+        "exec": "~/.config/bin/bar-key",
+        "return-type": "json",
+        "interval": 10,
+        "signal": 8,
+        "tooltip": true,
+        "on-click": "~/.config/bin/bar-key next"
+    },
+    "custom/bluetooth": {
+        "exec": "~/.config/bin/bar-bt status",
+        "return-type": "json",
         "interval": 30,
-        "path": "/",
-        "format": "<span font_desc='JetBrains Mono 13'></span>  {percentage_used}%",
-        "tooltip-format": "Root filesystem\nUsed: {used} / {total}\nFree: {free}"
+        "signal": 8,
+        "tooltip": true,
+        "on-click": "~/.config/bin/bar-bt",
+        "on-click-right": "alacritty --class popup -e bluetoothctl"
     },
     "network": {
         "interval": 10,
-        "format-wifi": "<span font_desc='JetBrains Mono 13'></span>  {signalStrength}%",
-        "format-ethernet": "<span font_desc='JetBrains Mono 13'>󰈀</span>  Ethernet",
-        "format-linked": "<span font_desc='JetBrains Mono 13'>󰈀</span>  {ifname}",
-        "format-disconnected": "<span font_desc='JetBrains Mono 13'>󰖪</span>  Offline",
-        "tooltip-format-wifi": "{essid}\n{ifname}: {ipaddr}\nGateway: {gwaddr}",
-        "tooltip-format-ethernet": "{ifname}: {ipaddr}\nGateway: {gwaddr}"
+        "format-wifi": "<span font_desc='JetBrains Mono 13'>\uf1eb</span>  {signalStrength}%",
+        "format-ethernet": "<span font_desc='JetBrains Mono 13'>\uf233</span>  Ethernet",
+        "format-linked": "<span font_desc='JetBrains Mono 13'>\uf1e6</span>  {ifname}",
+        "format-disconnected": "<span font_desc='JetBrains Mono 13'>\uf05e</span>  Offline",
+        "tooltip-format-wifi": "{essid}\n{ifname}: {ipaddr}\nGateway: {gwaddr}\nClick to pick a network",
+        "tooltip-format-ethernet": "{ifname}: {ipaddr}\nGateway: {gwaddr}",
+        "on-click": "~/.config/bin/bar-net",
+        "on-click-right": "alacritty --class popup -e nmtui"
+    },
+    "pulseaudio": {
+        "format": "<span font_desc='JetBrains Mono 13'>{icon}</span>  {volume}%",
+        "format-muted": "<span font_desc='JetBrains Mono 13'>\uf026</span>  muted",
+        "format-icons": {
+            "default": [
+                "\uf026",
+                "\uf027",
+                "\uf028"
+            ]
+        },
+        "tooltip-format": "{desc}",
+        "scroll-step": 5,
+        "on-click": "pactl set-sink-mute @DEFAULT_SINK@ toggle",
+        "on-click-right": "~/.config/bin/bar-audio"
+    },
+    "backlight": {
+        "device": "backlight-lcd0",
+        "format": "<span font_desc='JetBrains Mono 13'>\uf185</span>  {percent}%",
+        "tooltip": false,
+        "interval": 5,
+        "on-scroll-up": "brightnessctl set 5%+",
+        "on-scroll-down": "brightnessctl set 5%-"
     },
     "battery": {
         "bat": "sbs-8-000b",
@@ -78,22 +150,19 @@
             "critical": 15
         },
         "format": "<span font_desc='JetBrains Mono 13'>{icon}</span>  {capacity}%",
-        "format-charging": "<span font_desc='JetBrains Mono 13'></span>  {capacity}%",
-        "format-plugged": "<span font_desc='JetBrains Mono 13'></span>  {capacity}%",
-        "format-full": "<span font_desc='JetBrains Mono 13'></span>  {capacity}%",
+        "format-charging": "<span font_desc='JetBrains Mono 13'>\uf0e7</span>  {capacity}%",
+        "format-plugged": "<span font_desc='JetBrains Mono 13'>\uf1e6</span>  {capacity}%",
+        "format-full": "<span font_desc='JetBrains Mono 13'>\uf240</span>  {capacity}%",
         "format-icons": [
-            "",
-            "",
-            "",
-            "",
-            ""
+            "\uf244",
+            "\uf243",
+            "\uf242",
+            "\uf241",
+            "\uf240"
         ],
-        "tooltip-format": "Remaining: {timeTo}",
-        "interval": 30
-    },
-    "clock": {
-        "format": "<span font_desc='JetBrains Mono 13'></span>  {:%d %b %H:%M}",
-        "tooltip-format": "<big>{:%A, %d %B %Y}</big>\n<tt><small>{calendar}</small></tt>",
-        "interval": 30
+        "tooltip-format": "Battery {capacity}%\nClick for draw, time left and memory",
+        "interval": 30,
+        "on-click": "~/.config/bin/bar-power",
+        "on-click-right": "~/.config/bin/bar-menu"
     }
 }

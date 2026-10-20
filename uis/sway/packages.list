@@ -23,6 +23,13 @@ waybar
 bemenu
 libbemenu-wayland
 alacritty
+# fuzzel draws the bar's click-through menus (Wi-Fi, Bluetooth, audio output,
+# the root menu): one process for as long as the popup is open and nothing
+# afterwards. This is the bar's replacement for Deboma's Quickshell panels;
+# see uis/sway/README.md.
+fuzzel
+# jq parses `swaymsg -t get_inputs` for the keyboard-layout indicator.
+jq
 grimshot
 grim
 slurp

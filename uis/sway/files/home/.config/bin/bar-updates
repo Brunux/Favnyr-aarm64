@@ -1,0 +1,25 @@
+#!/bin/sh
+# How many packages apt would upgrade, as a waybar custom module.
+#
+# Deboma runs `omarchy-update-available` on a timer and shows a count on the
+# bar.  This is the Debian equivalent with no daemon: apt-daily already
+# downloads the package lists, so counting them costs one apt read and no
+# network.  Clicking the indicator opens a floating terminal that runs the
+# upgrade (25-bar-panels.conf floats it).
+#
+# The module is empty (and collapses, see style.css) when there is nothing to
+# do, so the bar does not carry a permanent zero.
+
+set -eu
+
+n=$(apt list --upgradable 2>/dev/null | grep -c '\[upgradable from' || true)
+n=${n:-0}
+icon="<span font_desc='JetBrains Mono 13'></span>"
+
+if [ "$n" -eq 0 ]; then
+	printf '{"text":"","class":"empty","tooltip":"System up to date"}\n'
+	exit 0
+fi
+
+printf '{"text":"%s  %s","class":"pending","tooltip":"%s package(s) can be upgraded.\\nClick to open the updater."}\n' \
+	"$icon" "$n" "$n"

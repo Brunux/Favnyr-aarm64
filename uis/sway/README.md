@@ -23,13 +23,82 @@ launcher, waybar and the Alacritty terminal.
 | Path | What it is |
 |---|---|
 | `etc/sway/config` | System half of the session (replaces Debian's default file). Includes `config.d/*` at the end. |
-| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, lock, volume, sleep, gestures, screenshots, theme, touchpad. |
+| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key launcher binding. |
-| `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme. |
+| `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
+| `home/.config/bin/bar-*` | The menus the bar opens on click: `bar-menu`, `bar-net`, `bar-bt`, `bar-key`, `bar-audio`, `bar-updates`, `bar-power`, plus the shared `bar-pick`. |
 | `home/.config/workstyle/config.toml` | Icon map for workstyle (see below). |
 | `home/Pictures/Wallpapers/mountains.jpg` | Wallpaper referenced by `etc/sway/config`. |
 | `etc/keyd/default.conf` | Chromebook keymap for keyd: F-keys and VT switching (see below). |
 | `etc/udev/rules.d/90-brightnessctl.rules` | Gives the `video` group write access to the backlight, so `brightnessctl` works for the unprivileged session (see below). |
+
+## The bar
+
+The bar is the Deboma (Omarchy) bar, ported: the same left-to-right reading (menu, workspaces,
+clock, updates, tray, layout, bluetooth, network, volume, brightness, battery) and the same
+interactions.  What differs is what happens on a click.  Deboma answers with a Quickshell panel, and
+the shell process that draws those panels costs **361 MB** of PSS: more than half of the whole
+Deboma session and several times a booted Nureb.  Here every click runs a short-lived process
+instead, and nothing survives the click:
+
+| Indicator | Left click | Right click | Scroll |
+|---|---|---|---|
+| menu | root menu (terminal, Wi-Fi, Bluetooth, audio output, lock, suspend, log out, reboot, power off) | terminal | – |
+| workspaces | focus / move (sway) | – | disabled |
+| clock | switch format (date + time / seconds) | – | previous / next month (hover shows the month grid) |
+| updates | apt updater in a floating terminal (the module only exists while something is pending) | – | – |
+| tray | application StatusNotifier items | – | – |
+| layout | next xkb layout (the module hides itself when only one layout is configured) | – | – |
+| bluetooth | device list from a 3 s scan; picking one connects it, picking a connected one disconnects it | `bluetoothctl` in a floating terminal | – |
+| network | Wi-Fi list, strongest first, the active one marked `*`; a new secured network asks for its password in a masked prompt | `nmtui` in a floating terminal | – |
+| volume | mute / unmute | output list (speakers, headphones, a Bluetooth headset): switches the default and moves the playing streams | volume, 5% steps |
+| brightness | – | – | backlight, 5% steps |
+| battery | power panel: charge, state, draw, time left, charger, uptime, memory, swap, kernel | root menu | – |
+
+`fuzzel` in dmenu mode draws the menus; `alacritty --class popup` (floated by
+`etc/sway/config.d/25-bar-panels.conf`) runs what needs a real terminal, `nmtui` and
+`bluetoothctl`; `swaynag` shows the power panel.  All three are already in the image for other
+reasons, so the only package this added is `fuzzel`.  The bar itself is the only resident process.
+
+The scripts are POSIX `sh`, they live in `home/.config/bin/`, and they share `bar-pick`, which holds
+the palette and geometry of every popup (solarized dark, cyan selection, rounded corners).  Each one
+documents at the top of the file which Deboma widget it reproduces.  Icons are written in
+`config.jsonc` as `\uXXXX` escapes so the codepoint is readable and survives any editor; they are
+Font Awesome (see the font table below).
+
+### Refreshing
+
+waybar polls `custom` modules on an `interval`, so a click that changes something would stay
+invisible until the next tick.  Every bar script therefore ends with `pkill -RTMIN+8 waybar` and
+every `custom` module declares `"signal": 8`, so one signal re-runs all of them at once.  The
+intervals are long on purpose (`bar-updates` every 6 hours, Bluetooth every 30 s, the layout every
+10 s) to keep the fork count at zero in the steady state; the signal covers the interactive case.
+
+Two modules collapse to zero width when they have nothing to say, using the CSS class the script
+prints in its JSON (`"class": "empty"`, matched by `#custom-updates.empty` in `style.css`): no
+upgrades pending, and a single keyboard layout.  Without that they would leave an empty card on the
+bar.
+
+### What was left out of the Deboma bar
+
+* **weather**, **elsewhen** (time until the next calendar event), **indicators** and **agents**:
+  none of them is a control, and each one is another process or network call.
+* **workstyle** (workspace icons) is not packaged in Debian; see above.
+* **Power profiles** in the power panel need `power-profiles-daemon`, a resident daemon and a
+  D-Bus service for a setting that is not exposed through sysfs on this SoC.  The panel shows the
+  readings instead; add the package to `packages.list` if the profiles matter more than the memory.
+* **The calendar opens on hover, not on click.**  waybar's clock shows `{calendar}` in its
+  tooltip, which costs no process; a click switches the clock format instead.
+* **No CPU / memory / temperature / disk modules.**  The Deboma bar does not show them and this port
+  follows that layout.  They are one line each in `config.jsonc` (plus their card in `style.css`)
+  if they are wanted back.
+
+`nmcli`, `bluetoothctl`, `pactl` and `brightnessctl` come with packages that were already listed
+(`network-manager`, `bluez`, `pulseaudio-utils`); the additions are `fuzzel` and `jq` (the latter
+parses `swaymsg -t get_inputs` for the layout indicator).  `scripts/check-system.sh` verifies all of
+it on the device: every bar script executable, those tools present, and the backlight device named
+in `config.jsonc` existing under `/sys/class/backlight` (a wrong name leaves waybar's module empty
+with no error anywhere).
 
 ## Deviations from the Nura original
 

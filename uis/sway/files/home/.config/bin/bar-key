@@ -1,0 +1,73 @@
+#!/bin/sh
+# Keyboard-layout indicator on the bar.
+#
+#   bar-key        what waybar polls: the active xkb layout as JSON, and an
+#                  empty module when only one layout is configured
+#   bar-key next   switch to the next layout (a click on the indicator)
+#
+# Deboma shows the layout of the active keyboard and cycles it on click.  The
+# layout lives in the compositor's input configuration, not in a file, so it is
+# read back from `swaymsg -t get_inputs` and switched per input: a second
+# keyboard (the cros-ec one and a USB one can both be present) would otherwise
+# keep its own active layout.
+#
+# waybar's signal 8 (see config.jsonc) re-runs this immediately after a switch,
+# so the indicator never shows the previous layout.
+
+set -eu
+
+dir=$(dirname "$0")
+icon="<span font_desc='JetBrains Mono 13'></span>"
+
+switch() {
+	for id in $(swaymsg -t get_inputs -r | jq -r '.[] | select(.type == "keyboard") | .identifier'); do
+		swaymsg input "$id" xkb_switch_layout next >/dev/null 2>&1 || true
+	done
+	pkill -RTMIN+8 waybar 2>/dev/null || true
+}
+
+if [ "${1:-status}" = next ]; then
+	switch
+	exit 0
+fi
+
+json=$(swaymsg -t get_inputs -r 2>/dev/null || true)
+
+# layouts <TAB> active-code <TAB> active-name
+info=$(
+	printf '%s' "$json" | jq -r '
+		if type != "array" then empty
+		else
+			[ .[] | select(.type == "keyboard") ] as $kb
+			| if ($kb | length) == 0 then empty
+			else
+				($kb | map((.xkb_layout_names // []) | length) | max) as $n
+				| ($kb | map(select((.xkb_layout_names // []) | length == $n)) | first) as $k
+				| (($k.xkb_layout_names // []) | index($k.xkb_active_layout_name)) as $i
+				| (($k.xkb_layout // "") | split(",") | .[$i // 0] // "") as $code
+				| "\($n)\t\($code)\t\($k.xkb_active_layout_name // "")"
+			end
+		end' 2>/dev/null || true
+)
+
+layouts=0
+code=
+active=
+if [ -n "$info" ]; then
+	IFS=$(printf '\t') read -r layouts code active <<EOF
+$info
+EOF
+fi
+
+active=${active:-default}
+if [ "${layouts:-0}" -le 1 ]; then
+	printf '{"text":"","class":"empty","tooltip":"%s"}\n' "Single keyboard layout: $active"
+	exit 0
+fi
+
+# xkb_layout is the configured code ("us,latam"); the human name is longer and
+# does not fit the bar, so the code is shown, upper-cased.
+code=$(printf '%s' "${code:-$active}" | tr '[:lower:]' '[:upper:]')
+tooltip="Layout: $active\nClick to switch to the next one"
+
+printf '{"text":"%s  %s","class":"on","tooltip":"%s"}\n' "$icon" "$code" "$tooltip"

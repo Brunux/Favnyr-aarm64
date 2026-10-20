@@ -28,12 +28,16 @@ tooltip label {
     color: #eee8d5;
 }
 
-/* Equal padding, height, and background for every system indicator, including the centered clock. */
-#cpu,
-#memory,
-#temperature,
-#disk,
+/* Every indicator is the same card, whether it is a built-in module or one of
+   the bar-* scripts: equal padding, height and background. */
+#custom-menu,
+#custom-updates,
+#tray,
+#custom-keyboard-layout,
+#custom-bluetooth,
 #network,
+#pulseaudio,
+#backlight,
 #battery {
     margin: 4px 0;
     padding: 0 9px;
@@ -42,22 +46,21 @@ tooltip label {
     border-radius: 5px;
 }
 
-#cpu         { color: #2aa198; } /* cyan */
-#memory      { color: #859900; } /* green */
-#temperature { color: #b58900; } /* yellow */
-#temperature.critical {
-    color: #dc322f;
-    background: #3b2023;
-    border-color: #dc322f;
-}
-#disk        { color: #268bd2; } /* blue */
-#network     { color: #2aa198; }
+#custom-menu          { color: #2aa198; } /* cyan */
+#custom-updates       { color: #b58900; } /* yellow */
+#custom-keyboard-layout { color: #839496; } /* base0 */
+#custom-bluetooth     { color: #586e75; } /* base01, i.e. off */
+#custom-bluetooth.on  { color: #268bd2; } /* blue */
+#network              { color: #2aa198; }
 #network.disconnected {
     color: #dc322f;
     border-color: #dc322f;
 }
-#battery     { color: #859900; }
-#battery.warning { color: #b58900; }
+#pulseaudio           { color: #6c71c4; } /* violet */
+#pulseaudio.muted     { color: #dc322f; }
+#backlight            { color: #b58900; }
+#battery              { color: #859900; }
+#battery.warning      { color: #b58900; }
 #battery.critical:not(.charging) {
     color: #dc322f;
     background: #3b2023;
@@ -65,6 +68,44 @@ tooltip label {
 }
 #battery.charging,
 #battery.plugged { color: #2aa198; }
+
+#custom-menu:hover,
+#custom-updates:hover,
+#custom-keyboard-layout:hover,
+#custom-bluetooth:hover,
+#network:hover,
+#pulseaudio:hover,
+#backlight:hover,
+#battery:hover {
+    background: #0b4652;
+}
+
+/* The StatusNotifier icons keep their own colours; only the slot is themed. */
+#tray {
+    padding: 0 6px;
+    color: #93a1a1;
+}
+
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+    background: #3b2023;
+    border-color: #dc322f;
+}
+
+/* A module whose script reports nothing (no upgrades, a single keyboard
+   layout) collapses to zero width instead of leaving an empty card on the
+   bar.  The class comes from the JSON the script prints. */
+#custom-updates.empty,
+#custom-keyboard-layout.empty {
+    padding: 0;
+    margin: 0;
+    border: none;
+    background: transparent;
+}
+
 /* The centered clock is plain text, not a rounded module/card. */
 #clock {
     color: #eee8d5; /* base2 */
@@ -74,15 +115,6 @@ tooltip label {
     box-shadow: none;
     padding: 0;
     margin: 0;
-}
-
-#cpu:hover,
-#memory:hover,
-#temperature:hover,
-#disk:hover,
-#network:hover,
-#battery:hover {
-    background: #0b4652;
 }
 
 /* Workspace buttons look like compact terminal tabs. */

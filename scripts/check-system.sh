@@ -563,6 +563,45 @@ else
 	warn "commands referenced by the sway configuration are missing:$_missing_cmds"
 fi
 
+# The bar's menus are the whole port of Deboma's panels: each indicator draws
+# from waybar and runs ~/.config/bin/bar-* on click.  A missing script or a
+# missing tool does not log anything - the indicator still appears and every
+# click is a silent no-op - so this is a FAIL, not a warning.
+_missing_bar=""
+for _c in fuzzel jq nmcli bluetoothctl pactl brightnessctl alacritty; do
+	have "$_c" || _missing_bar="$_missing_bar $_c"
+done
+for _s in bar-pick bar-menu bar-net bar-bt bar-key bar-audio bar-updates bar-power; do
+	[ -x "$HOME/.config/bin/$_s" ] || _missing_bar="$_missing_bar bin/$_s"
+done
+if [ -z "$_missing_bar" ]; then
+	ok "bar menus complete (scripts plus fuzzel, nmcli, bluetoothctl, jq)"
+else
+	fail "bar menus broken:$_missing_bar (clicking those indicators does nothing)"
+fi
+
+# waybar reads the backlight by device name and shows an empty module (with no
+# error anywhere) when the name does not exist.  Read it with bash's own regex
+# rather than a pipe: `set -o pipefail` plus an early-exiting filter is the
+# pitfall this script already documents at the top.
+_bl=""
+_cfg="$HOME/.config/waybar/config.jsonc"
+if [ -r "$_cfg" ]; then
+	while IFS= read -r _line; do
+		if [[ $_line =~ \"device\":\ *\"([^\"]*)\" ]]; then
+			_bl=${BASH_REMATCH[1]}
+			break
+		fi
+	done <"$_cfg"
+fi
+if [ -n "$_bl" ]; then
+	if [ -d "/sys/class/backlight/$_bl" ]; then
+		ok "waybar backlight device $_bl exists"
+	else
+		fail "waybar names backlight device '$_bl'; /sys/class/backlight has: $(ls /sys/class/backlight 2>/dev/null | tr '\n' ' ')"
+	fi
+fi
+
 # ---------------------------------------------------------------------------
 section "Fonts and icons"
 # ---------------------------------------------------------------------------

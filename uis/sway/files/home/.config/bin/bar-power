@@ -1,0 +1,109 @@
+#!/bin/sh
+# Power panel behind the bar's battery indicator (left click).
+#
+# Deboma draws this as a Quickshell panel: charge, draw, time left, plus the
+# system block.  The same numbers are read straight out of /sys here and shown
+# in a swaynag banner, which is a layer surface sway already ships: no new
+# package, no resident process, and it does not take the keyboard away from the
+# session.
+#
+# The gauge of interest is the system one (`sbs-8-000b`).  This machine also
+# exposes the active pen as a battery (scope `Device`, a HID device with its own
+# capacity), so the loop below prefers scope `System` and only falls back to
+# anything else.
+#
+# The fuel gauge also fails `status`, `health` and `time_to_empty_now` on this
+# hardware (see AGENTS.md), so every value here is optional: it says "unknown"
+# instead of showing a zero, and the charge direction is derived from the sign
+# of current_now when the gauge does not report it.
+
+set -eu
+
+read_sys() { cat "$1" 2>/dev/null || true; }
+
+bat=
+fallback=
+for d in /sys/class/power_supply/*; do
+	[ "$(read_sys "$d/type")" = Battery ] || continue
+	# A scope of `Device` is a peripheral's own cell (the active pen here), not
+	# the machine's battery.  The sbs gauge has no scope file at all, which is
+	# why "not explicitly a device battery" is the test rather than `System`.
+	case $(read_sys "$d/scope") in
+		Device | Peripheral)
+			if [ -z "${fallback:-}" ]; then fallback=$d; fi
+			continue
+			;;
+	esac
+	bat=$d
+	break
+done
+bat=${bat:-${fallback:-}}
+
+if [ -z "${bat:-}" ]; then
+	swaynag -t warning -m 'No battery found in /sys/class/power_supply' -b Close >/dev/null 2>&1 &
+	exit 0
+fi
+
+cap=$(read_sys "$bat/capacity")
+cap=${cap:-unknown}
+state=$(read_sys "$bat/status")
+state=${state:-unknown}
+curr=$(read_sys "$bat/current_now")
+
+# power_now is µW. When the gauge does not publish it, voltage × current is
+# the same number (µV × µA / 1e12 = W).  The sign is the charge direction, not
+# a negative draw, so it is dropped from the display.
+draw=$(read_sys "$bat/power_now")
+if [ -n "$draw" ] && [ "$draw" != 0 ]; then
+	draw=$(awk -v p="$draw" 'BEGIN { if (p < 0) p = -p; printf "%.1f W", p / 1000000 }')
+else
+	volt=$(read_sys "$bat/voltage_now")
+	if [ -n "$volt" ] && [ -n "$curr" ]; then
+		draw=$(awk -v v="$volt" -v i="$curr" 'BEGIN { p = (v / 1000000) * (i / 1000000); if (p < 0) p = -p; printf "%.1f W", p }')
+	else
+		draw=unknown
+	fi
+fi
+
+if [ "$state" = unknown ] && [ -n "$curr" ]; then
+	if [ "$curr" -lt 0 ] 2>/dev/null; then
+		state=Discharging
+	else
+		state=Charging
+	fi
+fi
+
+left=$(read_sys "$bat/time_to_empty_now")
+if [ -n "$left" ] && [ "$left" -gt 0 ] 2>/dev/null; then
+	left=$(awk -v s="$left" 'BEGIN { printf "%dh %02dm", s / 3600, (s % 3600) / 60 }')
+else
+	left=unknown
+fi
+
+charger='not connected'
+for d in /sys/class/power_supply/*; do
+	case $(read_sys "$d/type") in
+		Mains | USB | USB_C)
+			if [ "$(read_sys "$d/online")" = 1 ]; then charger=connected; fi
+			;;
+	esac
+done
+
+uptime=$(awk -v s="$(cut -d. -f1 /proc/uptime)" 'BEGIN { printf "%dh %02dm", s / 3600, (s % 3600) / 60 }')
+
+mem=$(awk '/^MemTotal:/{t=$2} /^MemAvailable:/{a=$2} END { printf "%.1f / %.1f GiB", (t-a)/1048576, t/1048576 }' /proc/meminfo)
+
+swap=$(awk '/^SwapTotal:/{t=$2} /^SwapFree:/{f=$2} END { printf "%.0f MiB", (t-f)/1024 }' /proc/meminfo)
+
+msg=$(printf '%-11s%s\n' \
+	'Battery' "$cap%  ($state)" \
+	'Draw' "$draw" \
+	'Remaining' "$left" \
+	'Charger' "$charger" \
+	'Uptime' "$uptime" \
+	'Memory' "$mem" \
+	'Swap' "$swap" \
+	'Kernel' "$(uname -r)")
+
+printf '%s\n' "$msg"
+swaynag -t info -m "$msg" -b Close >/dev/null 2>&1 &

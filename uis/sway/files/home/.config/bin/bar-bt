@@ -1,0 +1,130 @@
+#!/bin/sh
+# Bluetooth indicator and picker behind the bar.
+#
+#   bar-bt          left click: scan briefly, then list the devices found;
+#                   picking one connects it (or disconnects it, when it is
+#                   already connected)
+#   bar-bt status   what waybar polls: a JSON icon, dimmed while the radio is
+#                   off, with the connected devices in the tooltip
+#
+# Deboma's bluetooth plugin keeps a panel process alive to draw this list.  One
+# short-lived fuzzel + bluetoothctl pair per click gives the same interaction
+# for the duration of the click only.  Right click on the indicator opens
+# bluetoothctl in a floating terminal for what a list cannot do (pairing keys,
+# trust, remove, agent).
+#
+# The scan is the 3 s version bluetoothd offers (`--timeout`); `timeout` is
+# only a guard in case that option ever goes away, so the menu cannot hang.
+
+set -eu
+
+dir=$(dirname "$0")
+tab=$(printf '\t')
+icon="<span font_desc='JetBrains Mono 13'></span>"
+
+fail() { swaynag -t warning -m "$*" -b Close >/dev/null 2>&1 & }
+
+# "Powered: yes" is the only line of `bluetoothctl show` this needs; the
+# controller does not have to be the default one (there is only one here).
+powered() {
+	bluetoothctl show 2>/dev/null | sed -n 's/^[[:space:]]*Powered:[[:space:]]*//p' | head -1
+}
+
+# MAC<TAB>name, one per connected device.
+connected_devices() {
+	bluetoothctl devices Connected 2>/dev/null |
+		sed -n 's/^Device \([0-9A-Fa-f:]*\)[[:space:]]\{1,\}\(.*\)$/\1	\2/p'
+}
+
+status() {
+	conn=$(connected_devices)
+	if [ "$(powered)" = yes ]; then
+		names=$(printf '%s\n' "$conn" | cut -f2)
+		n=$(printf '%s\n' "$names" | grep -c . || true)
+		tooltip='Bluetooth on'
+		while IFS= read -r name; do
+			[ -n "$name" ] || continue
+			tooltip="$tooltip\n  $name"
+		done <<EOF
+$names
+EOF
+		text=$icon
+		[ "${n:-0}" -gt 0 ] && text="$text $n"
+		printf '{"text":"%s","class":"on","tooltip":"%s"}\n' "$text" "$tooltip"
+	else
+		printf '{"text":"%s","class":"off","tooltip":"Bluetooth off - click to turn it on"}\n' "$icon"
+	fi
+}
+
+if [ "${1:-pick}" = status ]; then
+	status
+	exit 0
+fi
+
+if [ "$(powered)" != yes ]; then
+	choice=$(printf '%s\n' 'Turn Bluetooth on' | "$dir/bar-pick" 'Bluetooth is off') || exit 0
+	if [ "$choice" = 'Turn Bluetooth on' ]; then
+		bluetoothctl power on >/dev/null 2>&1 || fail 'Bluetooth: could not power the controller on'
+		pkill -RTMIN+8 waybar 2>/dev/null || true
+	fi
+	exit 0
+fi
+
+timeout 6 bluetoothctl --timeout 3 scan on >/dev/null 2>&1 || true
+
+known=$(bluetoothctl devices 2>/dev/null |
+	sed -n 's/^Device \([0-9A-Fa-f:]*\)[[:space:]]\{1,\}\(.*\)$/\1	\2/p')
+
+# Connected devices first (flag 0), then everything else, one row per MAC.
+devices=$(
+	{
+		printf '%s\n' "$(connected_devices)" | sed "s/^/c$tab/"
+		printf '%s\n' "$known" | sed "s/^/k$tab/"
+	} |
+		awk -F"$tab" '
+			NF < 3 { next }
+			{ if ($2 in seen) next; seen[$2] = 1; printf "%d\t%s\t%s\n", ($1 == "c" ? 0 : 1), $2, $3 }' |
+		sort -t "$tab" -k1,1n
+)
+
+menu=$(
+	printf '%s\n' "$devices" |
+		awk -F"$tab" 'NF >= 3 { printf "%s%s  ·  %s\n", ($1 == 0 ? "* " : "  "), $3, $2 }'
+)
+[ -n "$menu" ] || menu='No devices found'
+
+choice=$(
+	printf '%s\n' "$menu" 'Turn Bluetooth off' 'Open bluetoothctl' |
+		"$dir/bar-pick" 'Bluetooth'
+) || exit 0
+
+case $choice in
+	'') exit 0 ;;
+	'No devices found') exit 0 ;;
+	'Turn Bluetooth off')
+		bluetoothctl power off >/dev/null 2>&1 || fail 'Bluetooth: could not power the controller off'
+		pkill -RTMIN+8 waybar 2>/dev/null || true
+		exit 0
+		;;
+	'Open bluetoothctl') exec alacritty --class popup -e bluetoothctl ;;
+esac
+
+mac=${choice##* }
+case $(printf '%s\n' "$(connected_devices)" | cut -f1) in
+	*"$mac"*)
+		out=$(bluetoothctl disconnect "$mac" 2>&1 || true)
+		case $out in
+			*'Successful disconnected'* | *'not connected'*) ;;
+			*) fail "Bluetooth: $out" ;;
+		esac
+		;;
+	*)
+		out=$(bluetoothctl connect "$mac" 2>&1 || true)
+		case $out in
+			*'Connection successful'*) ;;
+			*) fail "Bluetooth: $out" ;;
+		esac
+		;;
+esac
+
+pkill -RTMIN+8 waybar 2>/dev/null || true

@@ -1,0 +1,43 @@
+#!/bin/sh
+# The bar's left-most button: applications and the session in one menu.
+#
+# Deboma's menu plugin lists the applications and the session actions in a
+# Quickshell window.  This is the cheap equivalent: fuzzel over a fixed list,
+# one process per click.  `Terminal` is also on the right-click so the common
+# case needs no menu at all (see waybar `custom/menu`).
+#
+# Wi-Fi, Bluetooth and the audio output are entries here as well as on their
+# own indicators: the power-menu habit ("everything is one menu") survives.
+
+set -eu
+
+dir=$(dirname "$0")
+
+choice=$(
+	printf '%s\n' \
+		Terminal \
+		'Wi-Fi' \
+		Bluetooth \
+		'Audio output' \
+		Lock \
+		Suspend \
+		'Log out' \
+		Reboot \
+		'Power off' |
+		"$dir/bar-pick" Menu
+) || exit 0
+
+case $choice in
+	'') exit 0 ;;
+	Terminal) exec alacritty ;;
+	'Wi-Fi') exec "$dir/bar-net" ;;
+	Bluetooth) exec "$dir/bar-bt" ;;
+	'Audio output') exec "$dir/bar-audio" ;;
+	# Same commands as the key bindings in etc/sway/config.d, so the locked
+	# screen and the suspend path behave identically from the bar.
+	Lock) exec swaylock -c 002b36 ;;
+	Suspend) exec "$dir/sway-suspend" ;;
+	'Log out') exec swaymsg exit ;;
+	Reboot) exec systemctl reboot ;;
+	'Power off') exec systemctl poweroff ;;
+esac

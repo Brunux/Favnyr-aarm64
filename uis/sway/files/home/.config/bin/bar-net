@@ -1,0 +1,113 @@
+#!/bin/sh
+# Wi-Fi picker behind the bar's network indicator.
+#
+# Deboma's network plugin lists the access points in a Quickshell popup and
+# connects to the one that is clicked.  This reproduces that behaviour with
+# nmcli + fuzzel: everything runs for as long as the popup is open, and nothing
+# stays behind.  Left click on the indicator opens this list; right click opens
+# nmtui in a floating terminal (etc/sway/config.d/25-bar-panels.conf), which is
+# the full editor for saved connections.
+#
+# The list is what `nmcli device wifi list --rescan yes` returns, strongest
+# first, the active network marked with `*`.  Networks in range are shown with
+# their security and signal; picking a known one activates the saved profile,
+# picking a new secured one asks for the password in a masked fuzzel prompt.
+
+set -eu
+
+dir=$(dirname "$0")
+tab=$(printf '\t')
+
+fail() { swaynag -t warning -m "$*" -b Close >/dev/null 2>&1 & }
+
+if [ "$(nmcli radio wifi 2>/dev/null)" != "enabled" ]; then
+	choice=$(printf '%s\n' 'Turn Wi-Fi on' | "$dir/bar-pick" 'Wi-Fi is off') || exit 0
+	if [ "$choice" = 'Turn Wi-Fi on' ]; then
+		nmcli radio wifi on >/dev/null 2>&1 || fail 'Wi-Fi: could not turn the radio on'
+	fi
+	exit 0
+fi
+
+# IN-USE,SSID,SECURITY,SIGNAL, one line per access point.  nmcli escapes a
+# literal ':' in an SSID as '\:', which still splits into its own field; the
+# loop below joins those fields back into the name.  Duplicate SSIDs (mesh and
+# multi-band) collapse to the strongest one, active networks sort first.
+scan=$(
+	nmcli --terse --fields IN-USE,SSID,SECURITY,SIGNAL \
+		device wifi list --rescan yes 2>/dev/null |
+		awk -F: '
+			{
+				n = NF
+				if (n < 4) next
+				act = ($1 == "*") ? 0 : 1
+				sig = $n + 0
+				sec = $(n - 1)
+				ssid = $2
+				for (i = 3; i <= n - 2; i++) ssid = ssid ":" $i
+				gsub(/\\:/, ":", ssid)
+				if (ssid == "") next
+				if (!(ssid in best) || sig > best[ssid]) {
+					best[ssid] = sig
+					secs[ssid] = sec
+					acts[ssid] = act
+				}
+			}
+			END {
+				for (s in best) printf "%d\t%04d\t%d\t%s\t%s\n", acts[s], 999 - best[s], best[s], s, secs[s]
+			}' |
+		sort -t "$tab" -k1,1n -k2,2n |
+		cut -f1,3-
+)
+
+# act, signal, ssid, security -> the line the menu shows.  The `*`/`  ` prefix
+# and the two spaces around the middle dot are the contract with the parsing
+# below; an SSID containing "  ·  " is the one thing that would confuse it.
+menu=$(
+	printf '%s\n' "$scan" |
+		awk -F"$tab" 'NF >= 4 {
+			printf "%s%s  ·  %s%%  ·  %s\n", ($1 == 0 ? "* " : "  "), $3, $2, ($4 == "" || $4 == "--" ? "open" : $4)
+		}'
+)
+[ -n "$menu" ] || menu='No networks in range'
+
+choice=$(
+	printf '%s\n' "$menu" 'Turn Wi-Fi off' 'Network settings (nmtui)' |
+		"$dir/bar-pick" 'Wi-Fi'
+) || exit 0
+
+case $choice in
+	'') exit 0 ;;
+	'No networks in range') exit 0 ;;
+	'Turn Wi-Fi off')
+		nmcli radio wifi off >/dev/null 2>&1 || fail 'Wi-Fi: could not turn the radio off'
+		pkill -RTMIN+8 waybar 2>/dev/null || true
+		exit 0
+		;;
+	'Network settings (nmtui)') exec alacritty --class popup -e nmtui ;;
+esac
+
+ssid=${choice#??}
+ssid=${ssid%%  ·*}
+[ -n "$ssid" ] || exit 0
+
+sec=$(
+	printf '%s\n' "$scan" |
+		awk -F"$tab" -v want="$ssid" '$3 == want { print $4; exit }'
+)
+
+if nmcli --terse --fields NAME connection show 2>/dev/null | grep -Fxq -- "$ssid"; then
+	out=$(nmcli device wifi connect "$ssid" 2>&1) ||
+		out=$(nmcli connection up id "$ssid" 2>&1) ||
+		{ fail "Wi-Fi: $out"; exit 0; }
+else
+	pw=
+	if [ -n "$sec" ] && [ "$sec" != "--" ]; then
+		pw=$("$dir/bar-pick" "Password for $ssid" --password) || exit 0
+		[ -n "$pw" ] || exit 0
+		out=$(nmcli device wifi connect "$ssid" password "$pw" 2>&1) || { fail "Wi-Fi: $out"; exit 0; }
+	else
+		out=$(nmcli device wifi connect "$ssid" 2>&1) || { fail "Wi-Fi: $out"; exit 0; }
+	fi
+fi
+
+pkill -RTMIN+8 waybar 2>/dev/null || true
