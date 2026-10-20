@@ -16,7 +16,7 @@ is only half done after `apt`: the new kernel lands in `/boot` and `/lib/modules
 but `p1` still carries the old one. Finish it from the repository copy:
 
 ```sh
-sudo ~/Dev/debian-aarch64/scripts/install-kpart.sh
+sudo ~/Dev/Nureb/scripts/install-kpart.sh
 ```
 
 That script finds the partition this machine booted from (it compares
@@ -47,7 +47,7 @@ at 50 % pressure instead of letting the machine freeze. `swapon --show` and
 ## Health and backups
 
 ```sh
-check-system.sh ~/Dev/debian-aarch64    # OK / WARN / FAIL, one line per check
+check-system.sh ~/Dev/Nureb    # OK / WARN / FAIL, one line per check
 ```
 
 Every check corresponds to a bug this port has already hit, so a `FAIL` is a
@@ -57,8 +57,8 @@ regression, not a theory. The image ships the script as
 Backups are made of the *parts* a disk cannot be regenerated from:
 
 ```sh
-sudo ~/Dev/debian-aarch64/scripts/backup-system.sh /media/you/BACKUP
-sudo ~/Dev/debian-aarch64/scripts/restore-system.sh /media/you/BACKUP /dev/mmcblk0
+sudo ~/Dev/Nureb/scripts/backup-system.sh /media/you/BACKUP
+sudo ~/Dev/Nureb/scripts/restore-system.sh /media/you/BACKUP /dev/mmcblk0
 ```
 
 The kernel partition, the partition table, `/boot` and the root filesystem go
@@ -106,8 +106,8 @@ booting the card and running the installer again.
 
 ```sh
 sudo apt update && sudo apt full-upgrade
-sudo ~/Dev/debian-aarch64/scripts/install-kpart.sh   # if the kernel changed
-check-system.sh ~/Dev/debian-aarch64
+sudo ~/Dev/Nureb/scripts/install-kpart.sh   # if the kernel changed
+check-system.sh ~/Dev/Nureb
 ```
 
 The image itself is a snapshot: it is rebuilt from the repository, not upgraded

@@ -40,7 +40,7 @@ everything above the kernel.
 | `~/.config/{waybar,foot,rofi,mako}/` | the look of each piece |
 | `~/.config/bin/` | every script this desktop ships; they are all plain shell |
 | `/usr/share/doc/nureb/` | these pages |
-| `~/Dev/debian-aarch64/` | a **snapshot** of the repository this image was built from, with a `REVISION` file naming the commit |
+| `~/Dev/Nureb/` | a **snapshot** of the repository this image was built from, with a `REVISION` file naming the commit. The directory is named after the repository: if it is ever renamed, the copy takes the new name |
 
 That last one matters: the image carries the tested tree, and the scripts that
 rewrite the kernel partition (`scripts/install-kpart.sh`) or back the system up
@@ -51,7 +51,7 @@ than you think.
 ## Is everything healthy?
 
 ```sh
-check-system.sh ~/Dev/debian-aarch64
+check-system.sh ~/Dev/Nureb
 ```
 
 It prints one line per check (`OK`, `WARN`, `FAIL`, `SKIP`), and every check maps

@@ -3,7 +3,7 @@
 Start with the report; it is faster than reading logs:
 
 ```sh
-check-system.sh ~/Dev/debian-aarch64
+check-system.sh ~/Dev/Nureb
 journalctl -b -p err --no-pager | tail -50
 ```
 
@@ -61,14 +61,14 @@ The firmware boots `p1`, not `/boot`. If the machine comes back to the firmware
 menu, or boots the old kernel, the kernel partition was not rewritten:
 
 ```sh
-sudo ~/Dev/debian-aarch64/scripts/install-kpart.sh
+sudo ~/Dev/Nureb/scripts/install-kpart.sh
 ```
 
 To see the boot messages (they are quiet by default), build a verbose kpart once:
 
 ```sh
 KERNEL_CMDLINE_OVERRIDE="console=tty0 ignore_loglevel loglevel=7" \
-  sudo -E ~/Dev/debian-aarch64/scripts/make-kpart.sh
+  sudo -E ~/Dev/Nureb/scripts/make-kpart.sh
 ```
 
 Never append a bare `debug`: initramfs-tools then sends its own output to a file

@@ -142,11 +142,11 @@ The full tour is the manual's *Shortcuts* page, and the live list is Alt+Shift+K
 ### Health, updates and the boot partition
 
 ```sh
-check-system.sh ~/Dev/debian-aarch64     # OK/WARN/FAIL, one line per check (also /usr/local/sbin)
+check-system.sh ~/Dev/Nureb     # OK/WARN/FAIL, one line per check (also /usr/local/sbin)
 ```
 
 The kernel is **inside** the ChromeOS kernel partition (`p1`), not only in `/boot`, so after a kernel
-update the partition has to be rewritten: `sudo ~/Dev/debian-aarch64/scripts/install-kpart.sh`. The
+update the partition has to be rewritten: `sudo ~/Dev/Nureb/scripts/install-kpart.sh`. The
 manual's *The system* page explains the layout, suspend, hibernate, backups and the firmware menu.
 
 ### Where to read more

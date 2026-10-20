@@ -22,7 +22,7 @@ repository.
 ## What is installed, and where the lists are
 
 The image is built from four package lists in the repository, copied on the
-machine at `~/Dev/debian-aarch64/`:
+machine at `~/Dev/Nureb/`:
 
 | List | Holds |
 |---|---|
