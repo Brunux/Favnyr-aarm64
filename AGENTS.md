@@ -94,9 +94,10 @@ scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
                            scripts, including make-image.sh / make-release.sh
 reports/                   check-system.sh output captured on real hardware, kept
                            as evidence for the checks (see reports/README.md)
-docs/                      plan.md, recon.md, releases/<version>.md (release
-                           notes, reused as the tag message and the GitHub
-                           release body), screenshots/
+docs/                      plan.md, recon.md, optimization.md (measured device
+                           and kernel-config findings), releases/<version>.md
+                           (release notes, reused as the tag message and the
+                           GitHub release body), screenshots/
 ```
 
 Select a device with `DEVICE=<codename> scripts/...`; with a single device it is picked
@@ -482,6 +483,12 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
 
 ### ChromeOS GPT (`cgpt`)
 
+- **`depthcharge-tools.service` must keep running** (`depthchargectl bless`, 0.66 s of boot).
+  ChromeOS kernel partitions carry `tries`/`successful` attributes (`-S 1 -T 5 -P 10` in
+  `lib-cgpt.sh`) and the firmware spends one try per boot until something marks the partition
+  successful. Masking that unit - it looks like a leftover from the package - would leave the
+  kernel partition unbootable after five boots, which reads as a firmware problem. The image ships
+  it enabled by the package (`basic.target.wants/`).
 - **Do not pass `-z` to `cgpt create`**: it zeroes the GPT areas *after* writing them, so the
   following `cgpt add` fails with `GptSanityCheck() returned 2: GPT_ERROR_INVALID_HEADERS`.
 - **`cgpt` does not write a protective MBR**, and the Linux kernel refuses to parse a GPT without
