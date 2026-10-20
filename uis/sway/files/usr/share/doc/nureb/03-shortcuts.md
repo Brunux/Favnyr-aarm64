@@ -17,6 +17,7 @@ the command. This page is the tour.
 | Alt+Tab | window switcher |
 | Alt+Shift+D | command palette (`$PATH`; Shift+Enter runs it in foot) |
 | Alt+Shift+K | every key binding, searchable, Enter copies the command |
+| Alt+Ctrl+F | files: browse a directory, Enter reads a text file in foot |
 | Alt+Return | terminal (foot) |
 | Alt+Q (or Alt+Shift+Q) | close the focused window |
 | Alt+Shift+C | reload the configuration |
@@ -91,6 +92,7 @@ wherever sway does not already own the key.
 | system menu | Super+Escape | Alt+Escape → the power panel |
 | audio / Bluetooth / network / power panels | Super+Ctrl+A/B/W/P | Alt+Ctrl+A/B/W/P |
 | screenshot | Super+Shift+S, Print | Alt+Shift+S, Alt+Shift+F, Alt+Ctrl+S |
+| files | Super+Shift+F opens the file manager | Alt+Ctrl+F: `rofi-files` |
 | fullscreen | Super+F | Alt+F |
 | volume, brightness, media keys | XF86 keys | the same keys |
 | workspaces | Super+Tab cycles | Alt+1..0 and three-finger swipe |

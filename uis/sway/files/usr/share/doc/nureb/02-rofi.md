@@ -1,7 +1,8 @@
 # rofi: the launcher, the window list and every menu
 
-One binary, four jobs. It exists while its window is on screen and nothing of it
-stays afterwards (14-17 MB of memory while open; there is no daemon).
+One binary, a handful of jobs. It exists while its window is on screen and
+nothing of it stays afterwards (14-17 MB of memory while open; there is no
+daemon).
 
 | You press | What opens | What it lists |
 |---|---|---|
@@ -9,6 +10,7 @@ stays afterwards (14-17 MB of memory while open; there is no daemon).
 | **Alt+Tab** | `rofi -show window` | the open windows (sway has no switcher of its own; this uses wlroots' foreign-toplevel protocol) |
 | **Alt+Shift+D** | `rofi -show run` | every executable in `$PATH`. **Enter** runs it, **Shift+Enter** runs it in foot |
 | **Alt+Shift+K** | `rofi-keys` | every key binding this session defines, parsed from `/etc/sway` and `~/.config/sway`. Enter copies the command |
+| **Alt+Ctrl+F** | `rofi-files` | the filesystem: directories first, sizes and dates dimmed. Enter opens a directory or reads a text file in foot; the dotfiles are one row away |
 | any bar module click | `bar-pick` → `rofi -dmenu` | the fixed list that module hands it (Wi-Fi networks, sinks, devices, power actions, …) |
 | **Learn** (bar menu) | `rofi-learn` | these pages, opened in foot |
 
@@ -24,6 +26,31 @@ stays afterwards (14-17 MB of memory while open; there is no daemon).
 | **Shift+Enter** | accept it *in a terminal* (run mode and terminal-only applications) |
 | Escape | close without choosing (exit status 1, which is what the bar scripts test) |
 | Ctrl+Tab | cycle modes, when the theme keeps the mode switcher (it does not here - each shortcut opens the mode it wants) |
+
+## Browsing files
+
+`rofi-files` (Alt+Ctrl+F, "Files" in the root menu and the launcher) is a shell
+script over `rofi -dmenu`, because rofi 2.0 has no filebrowser mode and this
+image has no `xdg-open`:
+
+* directories come first, in cyan and with a trailing `/`; then files, with the
+  size and the date in the dim colour; a symlink to a directory navigates like a
+  directory, and a broken one says so;
+* **Enter** opens a directory (the listing reopens there) or reads a text file:
+  `bat`, paged and in the terminal's own solarized colours (`BAT_THEME=ansi`),
+  inside the floated `popup` window;
+* the first row is `↑ parent directory`, and the last one toggles the dotfiles
+  (hidden ones are out of the way until asked for);
+* typing filters the list; a path that matches no row is taken literally, so
+  `/etc/sway/config.d` or `~/notes.md` can be typed and opened with
+  **Ctrl+Return** (or plain Enter once nothing matches);
+* the line under the prompt says where you are, how many directories and files
+  are there and how much space is left;
+* a binary file is not opened: there is no image or PDF viewer in this image, and
+  bat would show an empty page, so a notification says so instead.
+
+It is the same trade as everything else here: 16 MB while open, nothing
+afterwards.
 
 ## The theme
 
@@ -55,8 +82,8 @@ own (`window`, `inputbar`, `element`, `element selected`, `prompt`, `element-tex
   session's theme and the same "Escape means cancel" contract; see the scripts in
   `~/.config/bin/` for a dozen examples.
 * **A dynamic list**: rofi can re-run a script on every keystroke (`-modi
-  "name:script"`), which is how a calculator or a file finder is built. Nothing
-  in this image needs it yet.
+  "name:script"`), which is how a calculator is built. The file browser does not
+  need it: it lists one directory per run and reopens in the chosen one.
 
 ## When rofi misbehaves
 

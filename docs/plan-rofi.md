@@ -162,6 +162,13 @@ The plan's P0 #4 (keybindings) is therefore done, and #1/#2/#3/#5-#10 are still 
 in the image written to the card at `2df252d` (the first boot that carries it is the one waiting to
 be tested on hardware).
 
+Added after this plan was written: the **file browser** (`rofi-files`, `Alt+Ctrl+F`, "Files" in the
+root menu and the launcher). It was not in the batches because the assumption was that rofi 2.0
+still had a `filebrowser` mode; it does not (its modes are drun, run, window and ssh) and the image
+has no `xdg-open`, so the view is a script over `rofi -dmenu -markup-rows` that reopens itself in
+the chosen directory and reads text files with `bat` in the floated foot window. No new package:
+it is the same "rofi plus a script, nothing resident" shape as the rest of the plan.
+
 ## Agreed scope: three batches
 
 Reviewed against other desktops (KRunner, GNOME Shell search, ChromeOS quick settings, Regolith's

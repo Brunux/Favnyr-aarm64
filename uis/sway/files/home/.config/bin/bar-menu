@@ -16,6 +16,7 @@ dir=$(dirname "$0")
 choice=$(
 	printf '%s\n' \
 		Terminal \
+		Files \
 		Agents \
 		Learn \
 		Keybindings \
@@ -36,6 +37,7 @@ choice=$(
 case $choice in
 	'') exit 0 ;;
 	Terminal) exec foot ;;
+	Files) exec "$dir/rofi-files" ;;
 	# The manual, the key view and the agent launcher: the same scripts the
 	# launcher entries call.
 	Agents) exec "$dir/rofi-agents" ;;

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Files
+GenericName=File browser
+Comment=Browse the filesystem, and read a text file in the terminal
+Exec=/home/brunux/.config/bin/rofi-files
+Icon=system-file-manager
+Terminal=false
+Categories=System;FileTools;
+Keywords=files;browse;open;view;directory;folder;text;

@@ -741,6 +741,8 @@ else
 fi
 [ -x "$HOME/.config/bin/rofi-keys" ] && ok "keybindings view (rofi-keys) is executable" ||
 	fail "bin/rofi-keys is missing: the key view has no script"
+[ -x "$HOME/.config/bin/rofi-files" ] && ok "file browser (rofi-files) is executable" ||
+	fail "bin/rofi-files is missing: Alt+Ctrl+F and the Files menu entry do nothing"
 
 # Dictation: the shortcut records with parecord and transcribes with whisper-cli.
 # The model is fetched on first use, so its absence is not a failure.
@@ -780,7 +782,7 @@ for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_
 # list simply has fewer rows and nobody notices.
 _missing_desktop=""
 for _d in wifi wifi-nmtui bluetooth audio-output power lock screensaver suspend \
-	screenshot-area lazygit tmux; do
+	screenshot-area lazygit tmux files; do
 	[ -r "/usr/share/applications/org.nureb.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
 done
 if [ -z "$_missing_desktop" ]; then

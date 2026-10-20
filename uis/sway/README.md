@@ -124,6 +124,32 @@ To check the theme after an edit, run `rofi -show drun` in the session: a parse 
 dialog naming the file, line and column. `rofi -dump-config` does **not** report theme parse
 errors.
 
+## The file browser
+
+`rofi-files` (`Alt+Ctrl+F`, "Files" in the root menu and the launcher) exists because rofi 2.0
+has no `filebrowser` mode - its modes are `drun`, `run`, `window` and `ssh` - and this image
+carries no `xdg-open`. It is a shell script around `rofi -dmenu`:
+
+* the rows are Pango markup, directories first (cyan, trailing `/`), then files with the size
+  and the date dimmed; `find -L` decides the type, so a symlink to a directory navigates and a
+  broken link says so;
+* the name column is padded to the longest name in the listing, which works because the theme
+  is monospace, and dmenu matches the text **with the markup stripped** (verified: a filter on
+  a tag name finds no row), so typing a name is not disturbed by the styling;
+* Enter opens a directory or, for a text file, `bat --paging=always` with `BAT_THEME=ansi`
+  inside the floated `popup` foot window; the first ten bytes are checked for a NUL before that,
+  because bat would show a binary as an empty page and there is no image or PDF viewer here;
+* `↑ parent directory` is the first row (and the one that is *not* preselected), the dotfiles
+  are toggled by the last row, and a typed path that matches nothing is taken literally, which is
+  what makes Ctrl+Return useful;
+* the line under the prompt carries the path, the counts and the free space.
+
+Nothing is cached or resident: the listing is built per run, and the viewer is foot's own
+window. `check-system.sh` fails when the script is missing, because Alt+Ctrl+F and the menu
+entry would silently do nothing.
+
+![rofi-files over ~/Documents, with the sizes and dates dimmed](../../docs/screenshots/hayato-r1-files.png)
+
 ## The key scheme
 
 The session speaks Omarchy's keys with `Alt` in place of `Super`, so an action keeps the
@@ -140,6 +166,7 @@ own it. The whole set is the *Shortcuts* page of the manual
 | system | `Alt+Escape` power panel, `Alt+Ctrl+L` lock, `Alt+Shift+Escape` lock+sleep, `Alt+Ctrl+Escape` sleep | `21-lock-screen.conf`, `22-sleep.conf` |
 | windows | `Alt+Q` close, `Alt+T` float, `Alt+F` fullscreen, `Alt+grave` scratchpad, `Alt+R` resize | `config`, `24-keys.conf` |
 | views | `Alt+Shift+K` every binding, `Alt+Ctrl+X` dictation, `Alt+Ctrl+Shift+A` agents | `24-keys.conf` |
+| files | `Alt+Ctrl+F` (`rofi-files`) | `24-keys.conf` |
 
 The three places where the letter differs are deviations with a reason, and each is written
 next to the binding: close is `Alt+Q` because `Alt+W` is sway's tabbed layout, the key view is
@@ -147,6 +174,8 @@ next to the binding: close is `Alt+Q` because `Alt+W` is sway's tabbed layout, t
 sway's layouts are stacking/tabbed/split rather than Hyprland's dwindle/master/scrolling.
 The panel keys run the very scripts the bar's indicators run (`bar-audio`, `bar-bt`,
 `bar-net`, `bar-power`), so a panel has one implementation and two ways to reach it.
+
+![The key view: categories, keys and the description from the comment above each binding](../../docs/screenshots/hayato-r1-keys.png)
 
 **Every binding carries its description on a comment line above**, and the description
 covers the bindings below it until a blank line or another comment, because `rofi-keys` reads

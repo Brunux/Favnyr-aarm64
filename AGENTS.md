@@ -442,6 +442,17 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   and the Wi-Fi password (`-password`, with stdin from /dev/null - otherwise rofi waits on the tty
   for EOF and the prompt never appears). `grimshot` is a package of its own. `pactl` (the
   XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
+- **The file browser is a script, because rofi 2.0 has no `filebrowser` mode** (its modes are
+  `drun`, `run`, `window`, `ssh`) **and the image has no `xdg-open`**. `rofi-files` (`Alt+Ctrl+F`,
+  "Files" in the root menu and the launcher) lists one directory per run with `find -L ... -printf`
+  as `rofi -dmenu -markup-rows`, and Enter reopens the script in the chosen directory or reads the
+  file with `bat --paging=always` in the floated `popup` foot window (`BAT_THEME=ansi`, since
+  foot runs the command directly and never sources the profile). The details that make it work:
+  dmenu matches the **markup-stripped** text, so the dim size/date do not get in the way of
+  typing (verified: `-filter span` matches nothing); `-L` makes a symlink to a directory navigate
+  and leaves only broken links as `l`; the name column is padded to the longest name because the
+  theme is monospace; and anything that is not text is refused with a notification, because bat
+  would render a binary as an empty page and there is no image or PDF viewer in the image.
 - **The key scheme mirrors Omarchy's**, with `Alt` where Omarchy uses `Super`: the panels are
   `Alt+Ctrl+A/B/W/P` (audio, Bluetooth, network, power - the same scripts the bar's indicators run),
   the root menu is `Alt+Space` (Omarchy's `Super+Space`; sway's `focus mode_toggle` had that key and

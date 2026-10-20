@@ -1,0 +1,202 @@
+#!/bin/sh
+# Browse the filesystem in rofi, and read text files in foot.
+#
+# rofi 2.0 has no filebrowser mode (its modes are drun, run, window and ssh) and
+# this image has no xdg-open, so the browsing is a shell script over rofi's
+# dmenu: the directory's entries as markup rows, directories first, and the
+# selected text file opened with bat in a floated foot window (the `popup`
+# app-id from config.d/25-bar-panels.conf). Nothing stays resident.
+#
+#   rofi-files            start in the current directory
+#   rofi-files <dir>      start there
+#   rofi-files --hidden   start with the dotfiles shown
+#
+# Enter opens a directory (the listing reopens there) or reads a file; a typed
+# path works too, because dmenu hands back the typed text when no row matches.
+# Alt+Ctrl+F opens it from the session; it is also in the root menu and the
+# launcher ("Files").
+set -eu
+
+theme="$HOME/.config/rofi/solarized.rasi"
+base1="#93a1a1"     # file names, a step above the dim metadata
+base01="#586e75"    # metadata, paths and the arrows
+cyan="#2aa198"      # directories, the same colour the key view gives a section
+yellow="#b58900"    # the hidden-files switch
+
+hidden=no
+dir=""
+while [ $# -gt 0 ]; do
+	case $1 in
+		--hidden) hidden=yes; shift ;;
+		--) shift; break ;;
+		-*) printf 'usage: rofi-files [--hidden] [directory]\n' >&2; exit 2 ;;
+		*) dir=$1; shift ;;
+	esac
+done
+if [ $# -gt 0 ]; then dir=$1; fi
+if [ -z "$dir" ]; then dir=$PWD; fi
+if [ ! -d "$dir" ]; then
+	notify-send -a Files "Not a directory" "$dir"
+	exit 1
+fi
+dir=$(cd -- "$dir" && pwd)
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/files.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+table="$tmp/table"
+list="$tmp/list"
+
+# A typed path goes through: dmenu returns the input text when no row matches,
+# so it is resolved the way the shell would and the listing starts over.
+browse() {
+	exec "$0" $( if [ "$hidden" = yes ]; then printf -- --hidden; fi ) "$1"
+}
+
+# -L follows symlinks, so a link to a directory is a directory to open and a
+# link to a file is a file to read; only a broken link stays an `l`.
+# -maxdepth 1 and no name filter: the dotfiles are dropped below, so that the
+# hidden-files row is the one place that decides. A name with a tab or a
+# newline is skipped instead of corrupting a row.
+find -L "$dir" -mindepth 1 -maxdepth 1 \
+	! -name "$(printf '*\t*')" ! -name "$(printf '*\n*')" \
+	-printf '%y\t%f\t%s\t%TY-%Tm-%Td\t%l\n' 2>/dev/null > "$list" || :
+
+count() {
+	if [ "$hidden" = yes ]; then
+		awk -F'\t' -v t="$1" '(t == "d") ? ($1 == "d") : ($1 != "d")' "$list"
+	else
+		awk -F'\t' -v t="$1" 'substr($2, 1, 1) != "." && ((t == "d") ? ($1 == "d") : ($1 != "d"))' "$list"
+	fi | wc -l
+}
+dirs=$(count d)
+files=$(count f)
+
+# The name column is padded to the longest name, so sizes and dates line up.
+# Names may carry a "/" or an "@" after padding, hence the +2.
+width=$(awk -F'\t' 'length($2) > m { m = length($2) } END { print m + 3 }' "$list")
+
+# One Pango markup row each. dmenu matches the text with the markup stripped
+# (verified: a filter on a tag name finds no row), so the metadata can be dim
+# without getting in the way of typing a name.
+rows() {
+	awk -F'\t' -v dir="$dir" -v w="$width" -v base1="$base1" -v base01="$base01" '
+	function esc(s) { gsub(/&/, "\\&amp;", s); gsub(/</, "\\&lt;", s); gsub(/>/, "\\&gt;", s); return s }
+	function human(b) {
+		if (b < 1024) return b " B"
+		split("K M G T", u, " ")
+		i = 0
+		while (b >= 1024 && i < 4) { b /= 1024; i++ }
+		return sprintf((b < 10 ? "%.1f" : "%.0f") "%s", b, u[i])
+	}
+	{
+		path = (dir == "/" ? "" : dir) "/" $2
+		glyph = "\302\267"; colour = base1; weight = "normal"; tag = $4; kind = "file"
+		if ($1 == "d") {
+			glyph = "\342\226\270"; colour = "#2aa198"; weight = "bold"; label = $2 "/"; kind = "dir"
+		} else if ($1 == "l") {
+			glyph = "\302\267"; label = $2 "@"; tag = $4 " \302\267 broken link"
+		} else if ($1 == "f") {
+			label = $2; tag = human($3) " \302\267 " $4
+		} else {
+			label = $2; tag = $1 " \302\267 " $4
+		}
+		printf "<span foreground=\"%s\">%s</span> <span weight=\"%s\" foreground=\"%s\">%s</span>  <span foreground=\"%s\">%s</span>\t%s\t%s\n",
+			base01, glyph, weight, colour, esc(sprintf("%-" w "s", label)), base01, esc(tag), kind, path
+	}'
+}
+
+if [ "$dir" != "/" ]; then
+	printf '<span foreground="%s">\342\206\221 parent directory</span>\tup\t%s\n' \
+		"$base01" "$(dirname -- "$dir")" >> "$table"
+fi
+if [ "$hidden" = yes ]; then
+	awk -F'\t' '$1 == "d"' "$list" | sort -f -t "$(printf '\t')" -k2 | rows >> "$table"
+	awk -F'\t' '$1 != "d"' "$list" | sort -f -t "$(printf '\t')" -k2 | rows >> "$table"
+	printf '<span foreground="%s">\302\267 hidden files</span>  <span foreground="%s">shown</span>\thidden\tno\n' \
+		"$yellow" "$base01" >> "$table"
+else
+	awk -F'\t' '$1 == "d" && substr($2, 1, 1) != "."' "$list" | sort -f -t "$(printf '\t')" -k2 | rows >> "$table"
+	awk -F'\t' '$1 != "d" && substr($2, 1, 1) != "."' "$list" | sort -f -t "$(printf '\t')" -k2 | rows >> "$table"
+	printf '<span foreground="%s">\302\267 hidden files</span>  <span foreground="%s">hidden</span>\thidden\tyes\n' \
+		"$yellow" "$base01" >> "$table"
+fi
+
+shown=$dir
+case $dir in
+	"$HOME") shown="~" ;;
+	"$HOME"/*) shown="~${dir#"$HOME"}" ;;
+esac
+free=$(df -h --output=avail -- "$dir" 2>/dev/null | tail -n 1 | tr -d ' ' || :)
+mesg=$(printf '%s  \302\267  %s dir%s  \302\267  %s file%s  \302\267  %s free  \302\267  Enter opens  \302\267  Ctrl+Return takes a typed path' \
+	"$shown" \
+	"$dirs" "$(if [ "$dirs" -eq 1 ]; then :; else printf s; fi)" \
+	"$files" "$(if [ "$files" -eq 1 ]; then :; else printf s; fi)" \
+	"${free:-?}")
+
+# The parent row is first, so the selection starts on the first real entry.
+first=0
+if [ "$dir" != "/" ]; then first=1; fi
+
+choice=$(cut -f1 "$table" |
+	rofi -dmenu -markup-rows -i -theme "$theme" \
+		-p "Files" -lines 18 -selected-row "$first" \
+		-theme-str "window { width: 58%; }
+mainbox { children: [ inputbar, message, listview ]; }" \
+		-mesg "$mesg") || exit 0
+
+if [ -z "$choice" ]; then exit 0; fi
+
+action=$(awk -F'\t' -v d="$choice" '$1 == d { print $2; exit }' "$table")
+payload=$(awk -F'\t' -v d="$choice" '$1 == d { print $3; exit }' "$table")
+
+if [ -z "$action" ]; then
+	case $choice in
+		"~") choice="$HOME" ;;
+		"~/"*) choice="$HOME/${choice#\~/}" ;;
+	esac
+	if [ -d "$choice" ]; then
+		browse "$choice"
+	fi
+	if [ -f "$choice" ]; then
+		action=file
+		payload=$(cd -- "$(dirname -- "$choice")" && pwd)/$(basename -- "$choice")
+	else
+		notify-send -a Files "No such path" "$choice"
+		exit 0
+	fi
+fi
+
+case $action in
+	dir|up) browse "$payload" ;;
+	hidden)
+		if [ "$payload" = yes ]; then
+			exec "$0" --hidden "$dir"
+		else
+			exec "$0" "$dir"
+		fi
+		;;
+	file)
+		# bat in foot, paged and solarized (BAT_THEME=ansi is what the shell
+		# profile sets; foot runs the command directly, so pass it here).
+		# Only text is opened: bat would show a binary as an empty page.
+		if [ ! -e "$payload" ]; then
+			notify-send -a Files "$(basename -- "$payload")" "Broken link, there is nothing there"
+			exit 0
+		fi
+		if [ ! -r "$payload" ]; then
+			notify-send -a Files "$(basename -- "$payload")" "Not readable by this user"
+			exit 0
+		fi
+		total=$(head -c 4096 -- "$payload" 2>/dev/null | wc -c)
+		text=$(head -c 4096 -- "$payload" 2>/dev/null | tr -d '\000' | wc -c)
+		if [ "$text" -eq "$total" ]; then
+			setsid foot --app-id=popup --title="$(basename -- "$payload")" \
+				env BAT_THEME=ansi bat --paging=always --style=numbers \
+				--file-name="$(basename -- "$payload")" -- "$payload" \
+				>/dev/null 2>&1 &
+		else
+			notify-send -a Files "$(basename -- "$payload")" \
+				"Not a text file, and this image has no viewer for it"
+		fi
+		;;
+esac

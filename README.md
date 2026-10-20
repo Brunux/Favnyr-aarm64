@@ -115,12 +115,17 @@ User `brunux` (or the one the image was built with), password `debian`, password
 | **Alt+Shift+K** | every key binding, searchable, generated from the configuration |
 | Alt+Return | terminal · Alt+Q: close a window · Alt+grave: scratchpad |
 | Alt+Ctrl+A / B / W / P | audio, Bluetooth, network and power panels |
+| Alt+Ctrl+F | files: browse a directory, read a text file in foot |
 | **Lock key** (or Alt+Ctrl+L) | locks, and logind suspends a moment later |
 | Alt+Escape | system panel (lock, suspend, log out, reboot, power off) |
 | Alt+Ctrl+X | dictation · Alt+Ctrl+Shift+A: agents · Alt+Shift+E: exit the session (asks first) |
 
 The letters are Omarchy's, with `Alt` where Omarchy uses `Super`; the manual's
 *Shortcuts* page lists the three deliberate deviations and the whole mapping.
+
+![The key view, generated from the configuration](docs/screenshots/hayato-r1-keys.png)
+
+*Alt+Shift+K: every binding, parsed from the session's own files, Enter copies the command.*
 
 The full tour is the manual's *Shortcuts* page, and the live list is Alt+Shift+K.
 
