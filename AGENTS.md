@@ -288,7 +288,7 @@ uncommitted changes, since those do not travel into the image.
   `KEY_BRIGHTNESSDOWN` (evdev 224) as keycode 232.
 
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
-  key opens bemenu, waybar, Alacritty). `rootfs-setup.sh` rewrites `/home/brunux` inside the
+  key opens bemenu, waybar, foot). `rootfs-setup.sh` rewrites `/home/brunux` inside the
   shipped text files to `$USERNAME`, and merges `uis/sway/files/home/` into that home.
 - **tuigreet**: Debian ships the *original* tuigreet **0.9.1**, which has no `--config`/TOML
   support and no background animations (Nura runs the fork, which has both). The greeter's
@@ -350,7 +350,7 @@ uncommitted changes, since those do not travel into the image.
   bar with a Quickshell panel, and that shell is 361 MB of PSS - more than half of the Deboma
   session. `uis/sway/files/home/.config/bin/bar-*` reproduce the same interactions with
   `fuzzel --dmenu` (`bar-pick` holds the palette), with `nmtui`, `bluetoothctl` and the apt updater
-  in `alacritty --class popup` (floated by `config.d/25-bar-panels.conf`) and `swaynag` for the
+  in `foot --app-id=popup` (floated by `config.d/25-bar-panels.conf`) and `swaynag` for the
   power panel, so nothing stays resident; `fuzzel` and `jq` are the only packages this added. Two
   things follow from that and both are easy to get wrong: `custom` modules only re-run on an
   interval, so every `bar-*` ends with `pkill -RTMIN+8 waybar` and every such module declares

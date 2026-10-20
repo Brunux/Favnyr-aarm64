@@ -19,7 +19,7 @@ First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada
 ![The ported sway session on the Hayato rev1](docs/screenshots/hayato-r1-sway.png)
 
 *The ported session on the Hayato: waybar (battery, temperature, backlight, wireless) over
-Alacritty with the solarized theme.*
+the terminal with the solarized theme.*
 
 > **Note on how this project is developed:** the work is carried out **by an AI agent running on
 > [OpenCode](https://opencode.ai)** together with the maintainer (see

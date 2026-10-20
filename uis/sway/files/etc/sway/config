@@ -21,7 +21,7 @@ set $down j
 set $up k
 set $right l
 # Your preferred terminal emulator
-set $term alacritty
+set $term foot
 # Your preferred application launcher (solarized palette, centred).
 set $launcher bemenu-run --center --list 8 --fixed-height --border 2 --border-radius 8 --bdr '#2aa198' --width-factor 0.45 -i --fn 'monospace 10' --tb '#073642' --tf '#93a1a1' --fb '#002b36' --ff '#839496' --nb '#002b36' --nf '#839496' --hb '#073642' --hf '#2aa198' --sb '#073642' --sf '#fdf6e3' --prompt 'Launch: '
 

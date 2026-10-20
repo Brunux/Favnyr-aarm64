@@ -106,7 +106,7 @@ case $choice in
 		pkill -RTMIN+8 waybar 2>/dev/null || true
 		exit 0
 		;;
-	'Open bluetoothctl') exec alacritty --class popup -e bluetoothctl ;;
+	'Open bluetoothctl') exec foot --app-id=popup bluetoothctl ;;
 esac
 
 mac=${choice##* }

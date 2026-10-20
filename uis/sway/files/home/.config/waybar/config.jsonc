@@ -47,7 +47,7 @@
         "format": "<span font_desc='JetBrains Mono 13'>\uf17c</span>",
         "tooltip": false,
         "on-click": "~/.config/bin/bar-menu",
-        "on-click-right": "alacritty"
+        "on-click-right": "foot"
     },
     "sway/workspaces": {
         "disable-scroll": true,
@@ -85,7 +85,7 @@
         "interval": 21600,
         "signal": 8,
         "tooltip": true,
-        "on-click": "alacritty --class popup -e bash -lc 'sudo apt update && sudo apt full-upgrade; echo; echo Press Enter to close; read -r _'"
+        "on-click": "foot --app-id=popup bash -lc 'sudo apt update && sudo apt full-upgrade; echo; echo Press Enter to close; read -r _'"
     },
     "tray": {
         "icon-size": 14,
@@ -107,7 +107,7 @@
         "signal": 8,
         "tooltip": true,
         "on-click": "~/.config/bin/bar-bt",
-        "on-click-right": "alacritty --class popup -e bluetoothctl"
+        "on-click-right": "foot --app-id=popup bluetoothctl"
     },
     "network": {
         "interval": 10,
@@ -118,7 +118,7 @@
         "tooltip-format-wifi": "{essid}\n{ifname}: {ipaddr}\nGateway: {gwaddr}\nClick to pick a network",
         "tooltip-format-ethernet": "{ifname}: {ipaddr}\nGateway: {gwaddr}",
         "on-click": "~/.config/bin/bar-net",
-        "on-click-right": "alacritty --class popup -e nmtui"
+        "on-click-right": "foot --app-id=popup nmtui"
     },
     "pulseaudio": {
         "format": "<span font_desc='JetBrains Mono 13'>{icon}</span>  {volume}%",

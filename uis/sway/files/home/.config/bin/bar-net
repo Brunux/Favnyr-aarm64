@@ -83,7 +83,7 @@ case $choice in
 		pkill -RTMIN+8 waybar 2>/dev/null || true
 		exit 0
 		;;
-	'Network settings (nmtui)') exec alacritty --class popup -e nmtui ;;
+	'Network settings (nmtui)') exec foot --app-id=popup nmtui ;;
 esac
 
 ssid=${choice#??}

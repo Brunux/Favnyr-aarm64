@@ -16,7 +16,7 @@ configured `USERNAME` inside the text files.
 
 This desktop was ported from the maintainer's Nura (postmarketOS) session, so it
 keeps the solarized theme, the `Alt` modifier + Search-key launcher, the bemenu
-launcher, waybar and the Alacritty terminal.
+launcher, waybar and the foot terminal.
 
 ## Layout
 
@@ -55,7 +55,7 @@ instead, and nothing survives the click:
 | brightness | – | – | backlight, 5% steps |
 | battery | power panel: charge, state, draw, time left, charger, uptime, memory, swap, kernel | root menu | – |
 
-`fuzzel` in dmenu mode draws the menus; `alacritty --class popup` (floated by
+`fuzzel` in dmenu mode draws the menus; `foot --app-id=popup` (floated by
 `etc/sway/config.d/25-bar-panels.conf`) runs what needs a real terminal, `nmtui` and
 `bluetoothctl`; `swaynag` shows the power panel.  All three are already in the image for other
 reasons, so the only package this added is `fuzzel`.  The bar itself is the only resident process.

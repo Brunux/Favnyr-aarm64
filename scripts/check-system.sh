@@ -554,7 +554,7 @@ if have sway; then
 	fi
 fi
 _missing_cmds=""
-for _c in waybar alacritty bemenu swaylock swaynag swaybg brightnessctl grimshot wlsunset wpctl pactl; do
+for _c in waybar foot bemenu swaylock swaynag swaybg brightnessctl grimshot wlsunset wpctl pactl; do
 	have "$_c" || _missing_cmds="$_missing_cmds $_c"
 done
 if [ -z "$_missing_cmds" ]; then
@@ -568,7 +568,7 @@ fi
 # missing tool does not log anything - the indicator still appears and every
 # click is a silent no-op - so this is a FAIL, not a warning.
 _missing_bar=""
-for _c in fuzzel jq nmcli bluetoothctl pactl brightnessctl alacritty; do
+for _c in fuzzel jq nmcli bluetoothctl pactl brightnessctl foot; do
 	have "$_c" || _missing_bar="$_missing_bar $_c"
 done
 for _s in bar-pick bar-menu bar-net bar-bt bar-key bar-audio bar-updates bar-power; do

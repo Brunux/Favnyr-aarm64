@@ -29,7 +29,7 @@ choice=$(
 
 case $choice in
 	'') exit 0 ;;
-	Terminal) exec alacritty ;;
+	Terminal) exec foot ;;
 	'Wi-Fi') exec "$dir/bar-net" ;;
 	Bluetooth) exec "$dir/bar-bt" ;;
 	'Audio output') exec "$dir/bar-audio" ;;
