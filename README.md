@@ -12,14 +12,27 @@ First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada
   (`scripts/backup-system.sh`, `scripts/restore-system.sh`).
 - **Release:** [`v0.1.1`](docs/releases/v0.1.1.md) — the precompiled image, with the eMMC install
   validated on hardware (see [Download and flash](#download-and-flash-a-precompiled-image)).
-- **Plan:** [`docs/plan.md`](docs/plan.md)
-- **Recon of the reference machine:** [`docs/recon.md`](docs/recon.md)
+  `main` is ahead of it: the session now runs **rofi** for the launcher, the window switcher and the
+  bar's menus, ships a **manual**, **dictation**, an **agents** menu and **hibernate**, and the
+  kernel is tuned for this SoC (see [Using the system](#using-the-system)). The next release
+  carries them.
+- **Using it:** [Using the system](#using-the-system) below, and the manual that ships in the image
+  (`/usr/share/doc/nureb/`, or **Learn** in the launcher) - its sources are
+  [`uis/sway/files/usr/share/doc/nureb/`](uis/sway/files/usr/share/doc/nureb/).
+- **The session in detail:** [`uis/sway/README.md`](uis/sway/README.md) · **the compositor:**
+  [`compositors/swayfx/README.md`](compositors/swayfx/README.md)
+- **Measured device tuning:** [`docs/optimization.md`](docs/optimization.md)
+- **What of Omarchy can move onto rofi:** [`docs/plan-rofi.md`](docs/plan-rofi.md) ·
+  **the agents feature, phased:** [`docs/plan-agents.md`](docs/plan-agents.md)
+- **Plan:** [`docs/plan.md`](docs/plan.md) · **Recon of the reference machine:**
+  [`docs/recon.md`](docs/recon.md) · **hardware reports:** [`reports/`](reports/)
 - **Agent/build instructions:** [`AGENTS.md`](AGENTS.md)
 
 ![The ported sway session on the Hayato rev1](docs/screenshots/hayato-r1-sway.png)
 
-*The ported session on the Hayato: waybar (battery, temperature, backlight, wireless) over
-the terminal with the solarized theme.*
+*An early build of the ported session on the Hayato: waybar over the terminal with the solarized
+theme. Today's bar carries more modules (menu, workspaces, updates, tray, keyboard layout,
+Bluetooth, network, volume, brightness, battery).*
 
 > **Note on how this project is developed:** the work is carried out **by an AI agent running on
 > [OpenCode](https://opencode.ai)** together with the maintainer (see
@@ -66,6 +79,90 @@ from the on-image copy of the repository: it writes `/dev/mmcblk0` and destroys 
 
 ---
 
+## Using the system
+
+What an image built from `main` boots into (the published `v0.1.1` predates the launcher, the manual,
+dictation and the agents menu), and how to learn the rest without leaving the machine. Everything
+here is also in the manual the image carries: **Learn** in the launcher, or `/usr/share/doc/nureb/` on
+the machine, or the same files under
+[`uis/sway/files/usr/share/doc/nureb/`](uis/sway/files/usr/share/doc/nureb/) here.
+
+### First login
+
+User `brunux` (or the one the image was built with), password `debian`, passwordless `sudo`.
+**Change the password** (`passwd`) before using it for anything real.
+
+### The session
+
+| Piece | What it is |
+|---|---|
+| compositor | **swayfx** (a sway fork) with rounded corners and shadows, blur off |
+| bar | **waybar**: menu, workspaces, clock, updates, tray, keyboard layout, Bluetooth, network, volume, brightness, battery - each click opens a short-lived **rofi** list |
+| terminal | **foot** (solarized) |
+| launcher | **rofi**: applications (`-show drun`), windows (`-show window`), commands (`-show run`), and the bar's own menus (`-dmenu`) |
+| notifications | **mako**, under the bar |
+| idle | the screensaver at 150 s, the lock at 300 s |
+| manual | **Learn**, seven pages opened with `bat` in foot |
+
+### The keys worth knowing on day one
+
+| Keys | Does |
+|---|---|
+| **Search** (or Alt+D) | launcher |
+| Alt+Tab | window switcher (sway has none of its own) |
+| Alt+Shift+D | command palette (`$PATH`; Shift+Enter runs it in foot) |
+| **Alt+Shift+K** | every key binding, searchable, generated from the configuration |
+| Alt+Return | terminal · Alt+grave: the root menu · Alt+Shift+Q: close a window |
+| **Lock key** | locks, and logind suspends a moment later |
+| Alt+Ctrl+X | dictation · Alt+Ctrl+Shift+A: agents · Alt+Shift+E: exit the session (asks first) |
+
+The full tour is the manual's *Shortcuts* page, and the live list is Alt+Shift+K.
+
+### Features that are one script each
+
+* **Learn** - the manual, in the launcher and the root menu.
+* **Dictation** (Alt+Ctrl+X) - `parecord` → `whisper-cli` → `wtype`; the 78 MB model is fetched on
+  first use and verified. No daemon.
+* **Agents** (Alt+Ctrl+Shift+A) - launch Claude Code / Codex / OpenCode / Gemini / Copilot, install
+  one with npm (into `~/.local`, never `/usr/local`), and keep **accounts** per agent (Claude Code
+  via `CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`). Usage meters are planned, not built; see
+  [`docs/plan-agents.md`](docs/plan-agents.md).
+* **Hibernate** - refused unless a **disk** swap (not zram) of at least 2/5 of RAM exists *and* the
+  kernel command line carries `resume=` (a swap partition labelled `nureb_swap` is the intended
+  wiring). Each missing condition says what to do.
+* **Screenshots** - region, full screen, or region to the clipboard.
+
+### The terminal
+
+`ls` is **eza**, `cat` is **bat**, `cd` jumps with **zoxide**, `Ctrl+R`/`Ctrl+T`/`Alt+C` are
+**fzf**, `rg` is ripgrep, `fd` is find, the prompt is **starship**, and `tmux`, `btop`, `lazygit`,
+`tldr`, `ffmpeg`, `yt-dlp`, `jq`, `tesseract`, `zbarimg`, `qrencode` are there.
+`man <tool>` and `tldr <tool>` explain the rest; the manual's *Software* page has the table.
+
+### Health, updates and the boot partition
+
+```sh
+check-system.sh ~/Dev/debian-aarch64     # OK/WARN/FAIL, one line per check (also /usr/local/sbin)
+```
+
+The kernel is **inside** the ChromeOS kernel partition (`p1`), not only in `/boot`, so after a kernel
+update the partition has to be rewritten: `sudo ~/Dev/debian-aarch64/scripts/install-kpart.sh`. The
+manual's *The system* page explains the layout, suspend, hibernate, backups and the firmware menu.
+
+### Where to read more
+
+| Topic | File |
+|---|---|
+| the manual as shipped (welcome, rofi, shortcuts, software, the system, troubleshooting, agents) | [`uis/sway/files/usr/share/doc/nureb/`](uis/sway/files/usr/share/doc/nureb/) |
+| the session: bar, launcher, idle screen, CLI tools, deviations from Nura | [`uis/sway/README.md`](uis/sway/README.md) |
+| the compositor: why swayfx, its effects policy, the packaging | [`compositors/swayfx/README.md`](compositors/swayfx/README.md) |
+| why the device is tuned the way it is (MGLRU, schedutil, HZ, zram, THP) | [`docs/optimization.md`](docs/optimization.md) |
+| what of Omarchy's desktop can move onto rofi, and ideas from other distros | [`docs/plan-rofi.md`](docs/plan-rofi.md) |
+| the agents feature, phased, and the "thin layer" decision | [`docs/plan-agents.md`](docs/plan-agents.md) |
+| every engineering gotcha (boot chain, keyd, audio, suspend, fonts, packages) | [`AGENTS.md`](AGENTS.md) |
+| hardware validation evidence | [`reports/`](reports/) |
+| the release notes and the plan | [`docs/releases/`](docs/releases/), [`docs/plan.md`](docs/plan.md) |
+
 ## Architecture
 
 Devices and kernels are decoupled, so a new port is a new directory (and only a new kernel
@@ -95,7 +192,7 @@ uis/<ui>/                  one directory per graphical shell (sway, ...)
   files/                   tree overlaid onto the rootfs (etc/ as root,
                            home/ merged into the user's home)
   README.md                what the shell ships and how it differs upstream
-packages/                  device-agnostic base package lists (base.list)
+packages/                  device-agnostic package lists (base.list, tools.list)
 scripts/
   lib.sh                   resolves device + kernel + UI, shared config
   lib-cgpt.sh              the ChromeOS GPT layout (kernel + boot + root)
@@ -116,7 +213,8 @@ scripts/
   restore-system.sh        restore such a backup onto a disk (root only, from the live SD)
   check-system.sh          hardware + configuration report (runs on the booted image)
   build.sh                 the full pipeline (no block devices touched)
-docs/                      plan, recon, release notes, screenshots
+docs/                      plan, recon, optimization, plan-rofi, plan-agents,
+                           release notes, screenshots
 reports/                   check-system.sh output captured on real hardware
 ```
 
@@ -156,8 +254,9 @@ the firmware would go on loading the old kernel.
 
 ## Requirements
 
-- Host: an aarch64 machine (native build, no cross-compiler). The scripts target Alpine (apk)
-  for the host toolchain but only call standard tools.
+- Host: an aarch64 machine (native build, no cross-compiler). `scripts/00-deps.sh` installs the host
+  toolchain from **apk or apt** (the script checks which one exists), and the rest only calls
+  standard tools.
 - `sudo` (the build re-execs itself through `sudo`, non-interactively).
 - Network access to `cdn.kernel.org`, `deb.debian.org`.
 - A microSD/USB device for the external-boot path.
@@ -372,6 +471,13 @@ scripts/install-kpart.sh         # rewrite the kernel partition it booted from (
       the installed system from the firmware's internal-disk entry.
 - [x] Back the running installation up and restore it (`scripts/backup-system.sh`,
       `scripts/restore-system.sh`).
+- [x] A session that is rofi end to end (launcher, window switcher, command palette, the bar's
+      menus), with the manual, dictation, agents and hibernate shipped as scripts - nothing
+      resident.
+- [x] Measure the device and apply what it showed: MGLRU, `schedutil`, 1000 Hz timers, THP
+      `madvise`, kyber, a zram swap unit, `systemd-oomd` (see
+      [`docs/optimization.md`](docs/optimization.md)).
+- [ ] Validate that tuning and the new session on hardware with a fresh report in `reports/`.
 - [ ] Byte-reproducible artifacts: `SOURCE_DATE_EPOCH` for the FIT, stable filesystem UUIDs.
 - [ ] CI/CD: kernel build, rootfs build and image assembly, plus a portability check across
       `devices/`. The device-driven layout and the "no block device" `build.sh` are already
