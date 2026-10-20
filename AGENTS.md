@@ -96,7 +96,8 @@ reports/                   check-system.sh output captured on real hardware, kep
                            as evidence for the checks (see reports/README.md)
 docs/                      plan.md, recon.md, optimization.md (measured device
                            and kernel-config findings), plan-rofi.md (what of
-                           Omarchy's menus can move onto rofi), releases/<version>.md
+                           Omarchy's menus can move onto rofi), plan-agents.md
+                           (the agents feature, phased), releases/<version>.md
                            (release notes, reused as the tag message and the
                            GitHub release body), screenshots/
 ```
@@ -431,6 +432,43 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   and the Wi-Fi password (`-password`, with stdin from /dev/null - otherwise rofi waits on the tty
   for EOF and the prompt never appears). `grimshot` is a package of its own. `pactl` (the
   XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
+- **Learn, the key view, dictation and hibernate are four rofi/terminal features with no resident
+  process.** `usr/share/doc/nureb/*.md` is the manual (six pages: welcome, rofi, shortcuts, software,
+  the system, troubleshooting); `rofi-learn` lists them and opens the choice with
+  `bat --paging=always` in foot, so the page is solarized and nothing stays. `rofi-keys` (Alt+Shift+K,
+  Omarchy's Super+K) is *generated* from `/etc/sway/config`, `config.d/*.conf` and
+  `~/.config/sway/config`: it expands `set $var`, takes the comment above each binding as its
+  description, and shows the list with `rofi -dmenu -markup-rows` (bold keys, dim descriptions); the
+  row-to-command mapping lives in a temp TSV because a markup string cannot be parsed back, and Enter
+  copies the command. A hand-written list would drift the first time someone edits the configuration,
+  which is why this one is parsed. `dictate` (Alt+Ctrl+X, Omarchy's Super+Ctrl+X) records with
+  `parecord` at 16 kHz, transcribes with `whisper-cli` and types with `wtype` (clipboard as the
+  fallback when the focused surface refuses a virtual keyboard); the model is fetched by
+  `dictate-model` on first use - 78 MB tiny.en, 148 MB base.en - **verified against a pinned SHA256**
+  and kept in `~/.local/share/whisper/`, so it survives a rebuilt image. Recording stops itself after
+  60 s and its state is a pid file in `$XDG_RUNTIME_DIR`, never a watcher. Omarchy runs voxtype (a
+  Rust daemon) for the same interaction. `sway-hibernate` refuses unless three things hold, each with
+  its own message: `/sys/power/state` has `disk`, a **disk** swap (not zram) of at least 2/5 of RAM
+  exists, and the kernel command line carries `resume=`. `resume=LABEL=nureb_swap` is the intended
+  wiring (initramfs-tools resolves the label through udev, so an SD swap partition labelled
+  `nureb_swap` is enough) - a swap *file* cannot be used for resume because it has no label. The
+  default image has no disk swap, so the menu entry explains instead of hibernating into a swap the
+  machine cannot resume from. `check-system.sh` checks the manual, `rofi-keys`, the dictation tools,
+  the model (SKIP when absent) and the hibernate conditions (SKIP/WARN, never FAIL).
+- **Agents** (`rofi-agents`, Alt+Ctrl+Shift+A = Omarchy's Super+Shift+Ctrl+A) is the local half of
+  Omarchy's agents feature: launch (in foot, from `~/Work`, because the agents refuse to remember
+  trust in `$HOME`), install (`npm install -g --prefix ~/.local <pkg>` - an explicit prefix, so npm
+  never needs root and never touches `/usr/local`, and `~/.local/bin` is already on PATH), default
+  agent, and accounts. An "account" is a directory under
+  `~/.local/share/nureb/agents/<agent>/<name>` used through the variable the CLI itself documents:
+  **`CLAUDE_CONFIG_DIR`** for Claude Code and **`CODEX_HOME`** for Codex. OpenCode, Gemini and
+  Copilot have no such variable and the menu says so instead of pretending. A new account is created
+  empty on purpose - the first launch there runs the CLI's own sign-in, so two subscriptions never
+  share a token. **The usage meters are not ported**: Omarchy's bar panel reads provider APIs (and
+  local session logs) that change shape and need credentials, and a broken meter is worse than none;
+  the shape that would fit here is a stdlib `python3` script printing one line for a waybar `custom`
+  module, not a daemon and not a new language. Nothing in this feature is resident: the menu is rofi
+  (~16 MB while open) and then the agent is the agent.
 - **The bar's menus are short-lived `rofi -dmenu` popups, not panels.** Deboma answers a click on
   the bar with a Quickshell panel, and that shell is 361 MB of PSS - more than half of the Deboma
   session. `uis/sway/files/home/.config/bin/bar-*` reproduce the same interactions through
