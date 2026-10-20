@@ -6,7 +6,13 @@
 #   * workstyle - not packaged in Debian (see uis/sway/README.md).
 
 # compositor + session tools
-sway
+# The compositor is NOT here: `sway` would install Debian's plain sway, and the
+# session runs the wlroots fork built by scripts/build-swayfx.sh
+# (compositors/swayfx/) which provides sway, conflicts with it and replaces it.
+# It installs the same /usr/bin/sway, so greetd, /etc/sway and the keybinds do
+# not change; `scripts/install-swayfx.sh` puts it in the rootfs, and the effects
+# in config.d/26-swayfx.conf are what plain sway cannot parse.
+#
 # sway starts Xwayland by default. Without the package every session logs two
 # red lines ("cannot find xwayland binary", "Failed to start Xwayland") and
 # X11-only programs (emulators, Wine, some Java/Steam games) cannot run at all;

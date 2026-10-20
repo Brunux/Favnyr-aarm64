@@ -85,6 +85,11 @@ kernels/<flavor>/          one directory per kernel (shared by devices)
   patches/*.patch          patches
   patches/series           apply order, one filename per line
   APKBUILD.reference       upstream kernel package (reference only)
+compositors/<name>/        one directory per compositor built from source
+  version                  upstream version, e.g. 0.6
+  scenefx-version          the effects library it links against
+  SHA256SUMS               tarball checksums, verified on every build
+  README.md                what it is, why it is built here, its effects policy
 uis/<ui>/                  one directory per graphical shell (sway, ...)
   packages.list            packages to install (Debian names)
   files/                   tree overlaid onto the rootfs (etc/ as root,
@@ -97,8 +102,10 @@ scripts/
   lib-dist.sh              what a published artifact must not carry
   00-deps.sh               host build dependencies (apk)
   build-kernel.sh          download + patch + build + stage the kernel
+  build-swayfx.sh          build scenefx + swayfx and package them as .debs
   build-rootfs.sh          debootstrap the Debian rootfs
   install-kernel.sh        copy the staged kernel into the rootfs, build the initramfs
+  install-swayfx.sh        install the compositor .debs (rootfs, or `/` on a running system)
   make-kpart.sh            build the signed depthcharge FIT kpart
   write-sd.sh              partition + populate a microSD/USB
   make-image.sh            build a distributable disk image (no card needed)
@@ -120,8 +127,10 @@ picked automatically).
 
 The graphical shell is a separate axis: `uis/<name>/` holds its package list and a file tree that
 `build-rootfs.sh` stages and `rootfs-setup.sh` installs. Select it with `UI=<name>` (default
-`sway`). `uis/sway/` ports the maintainer's Nura session — see
-[`uis/sway/README.md`](uis/sway/README.md) for the layout and the deliberate deviations.
+`sway`). `uis/sway/` ports the maintainer's Nura session on top of **swayfx** (the wlroots fork
+built from [`compositors/swayfx/`](compositors/swayfx/README.md), with rounded corners and shadows
+and blur disabled) — see [`uis/sway/README.md`](uis/sway/README.md) for the layout and the
+deliberate deviations.
 
 ### What comes from Nura and what is Debian
 

@@ -536,6 +536,16 @@ else
 fi
 have tuigreet && ok "tuigreet is installed" || warn "tuigreet is not installed"
 if have sway; then
+	# The session runs the wlroots fork built by scripts/build-swayfx.sh, not
+	# Debian's plain sway: 26-swayfx.conf needs it (corners, shadows, and blur
+	# switched off explicitly).  The version string is the only cheap way to
+	# tell the two /usr/bin/sway binaries apart, and plain sway would start but
+	# silently ignore the effects.
+	_sway_version="$(sway --version 2>/dev/null | head -n1)"
+	case "$_sway_version" in
+	*swayfx*) ok "compositor is $_sway_version" ;;
+	*) fail "compositor is '${_sway_version:-unknown}', not swayfx: rounded corners and shadows are missing (run scripts/install-swayfx.sh)" ;;
+	esac
 	if XDG_RUNTIME_DIR="$RUNTIME" WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
 		sway -C -c /etc/sway/config >/dev/null 2>&1; then
 		ok "sway configuration is valid"

@@ -39,6 +39,7 @@ fi
 [ -d "$ROOTFS" ] || die "rootfs not found: $ROOTFS (run build-rootfs.sh first)"
 [ -f "$ROOTFS/boot/vmlinuz-$KERNEL_RELEASE" ] ||
 	die "the rootfs has no /boot/vmlinuz-$KERNEL_RELEASE: run install-kernel.sh first"
+require_compositor "$ROOTFS"
 
 log "Image: $IMG ($SIZE_MIB MiB, device=$DEVICE)"
 rm -f "$IMG"

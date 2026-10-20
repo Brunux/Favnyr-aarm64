@@ -20,6 +20,7 @@ fi
 
 [ -b "$BLOCK" ] || die "not a block device: $BLOCK"
 [ -d "$ROOTFS" ] || die "rootfs not found: $ROOTFS (run build-rootfs.sh first)"
+require_compositor "$ROOTFS"
 
 # Safety: never touch the internal eMMC or the running root device.
 ROOT_SRC="$(findmnt -n -o SOURCE / 2>/dev/null || true)"

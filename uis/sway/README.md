@@ -23,14 +23,37 @@ launcher, waybar and the foot terminal.
 | Path | What it is |
 |---|---|
 | `etc/sway/config` | System half of the session (replaces Debian's default file). Includes `config.d/*` at the end. |
-| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels. |
+| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key launcher binding. |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
+| `home/.config/foot/foot.ini` | Solarized palette and JetBrains Mono for the session terminal and the bar's popups. |
 | `home/.config/bin/bar-*` | The menus the bar opens on click: `bar-menu`, `bar-net`, `bar-bt`, `bar-key`, `bar-audio`, `bar-updates`, `bar-power`, plus the shared `bar-pick`. |
 | `home/.config/workstyle/config.toml` | Icon map for workstyle (see below). |
 | `home/Pictures/Wallpapers/mountains.jpg` | Wallpaper referenced by `etc/sway/config`. |
 | `etc/keyd/default.conf` | Chromebook keymap for keyd: F-keys and VT switching (see below). |
 | `etc/udev/rules.d/90-brightnessctl.rules` | Gives the `video` group write access to the backlight, so `brightnessctl` works for the unprivileged session (see below). |
+
+## The compositor
+
+The session runs **swayfx**, the wlroots fork that draws the effects Deboma gets from Hyprland:
+rounded corners, shadows under windows, and (unused here) a blurred backdrop. Debian only packages
+plain sway, so both the fork and its effects library are built from source
+(`compositors/swayfx/`, `scripts/build-swayfx.sh`) and installed as `swayfx` + `libscenefx-0.5`,
+which replace Debian's `sway` package. That is why `packages.list` does not mention `sway`: the
+binary, `/etc/sway` and the greeter's `sway` command are the same either way, but
+`scripts/install-swayfx.sh` has to put the fork in place.
+
+`etc/sway/config.d/26-swayfx.conf` enables the cheap effects and switches blur off explicitly:
+
+| Effect | State | Why |
+|---|---|---|
+| `corner_radius 6` + `smart_corner_radius` | on | The corner is cut out of the window's buffer when it is committed; with the 8 px inner gap the radius is visible and nothing is done per frame. |
+| `shadows` | on | One blurred texture per window, drawn once per frame. |
+| `default_dim_inactive 0.0` | off | The solarized palette already dims unfocused borders; dimming a terminal turns its text grey. |
+| `blur` | **off** | A Gaussian pass over the whole damaged region on every frame, and it defeats direct scanout for a maximised window. On the Mali-G57 that is the one effect that costs frames and battery, so it is disabled with `blur disable` rather than left to the default. |
+
+The drop-in is swayfx-only, so `sway -C` failing means Debian's plain sway is installed again
+(`scripts/check-system.sh` fails on that, and on a `sway --version` that does not say `swayfx`).
 
 ## The bar
 

@@ -92,6 +92,42 @@ KERNEL_LOCALVERSION="$(sed -n 's/^CONFIG_LOCALVERSION="\(.*\)"$/\1/p' "$KERNEL_C
 KERNEL_RELEASE="${KERNEL_RELEASE:-${KERNEL_VERSION}${KERNEL_LOCALVERSION}}"
 
 # ---------------------------------------------------------------------------
+# Compositor
+# ---------------------------------------------------------------------------
+# The session does not run Debian's sway: it runs a wlroots fork that can round
+# corners, draw shadows and blur, built from compositors/<name>/ (version pins +
+# checksums) into .debs under $COMPOSITOR_STAGE. Everything else keeps the name
+# `sway`: the package provides it, the binaries are /usr/bin/sway*, and the
+# configuration lives in /etc/sway.
+COMPOSITOR="swayfx"
+COMPOSITOR_DIR="$REPO_DIR/compositors/$COMPOSITOR"
+[ -d "$COMPOSITOR_DIR" ] || die "compositor '$COMPOSITOR' not found in $REPO_DIR/compositors"
+COMPOSITOR_VERSION="$(cat "$COMPOSITOR_DIR/version")"
+SCENEFX_VERSION="$(cat "$COMPOSITOR_DIR/scenefx-version")"
+COMPOSITOR_STAGE="$WORK_DIR/${COMPOSITOR}-stage"
+COMPOSITOR_SRC="$SRC_DIR/$COMPOSITOR-$COMPOSITOR_VERSION"
+SCENEFX_SRC="$SRC_DIR/scenefx-$SCENEFX_VERSION"
+COMPOSITOR_TARBALL="$COMPOSITOR-$COMPOSITOR_VERSION.tar.gz"
+SCENEFX_TARBALL="scenefx-$SCENEFX_VERSION.tar.gz"
+COMPOSITOR_URL="https://github.com/WillPower3309/$COMPOSITOR/archive/refs/tags/$COMPOSITOR_VERSION.tar.gz"
+SCENEFX_URL="https://github.com/wlrfx/scenefx/archive/refs/tags/$SCENEFX_VERSION.tar.gz"
+
+# Refuse to write an image whose rootfs has no compositor: nothing in
+# uis/*/packages.list installs sway any more (the fork replaces it), so a rootfs
+# that went through build-rootfs.sh but not install-swayfx.sh boots to a greeter
+# that cannot start a session.
+require_compositor() {
+	local root="$1"
+	[ -x "$root/usr/bin/sway" ] ||
+		die "no compositor in $root (run scripts/install-swayfx.sh)"
+	local se
+	for se in "$root"/usr/lib/*/libscenefx-*.so; do
+		[ -e "$se" ] && return 0
+	done
+	die "the compositor in $root is Debian's plain sway (libscenefx is missing): run scripts/install-swayfx.sh"
+}
+
+# ---------------------------------------------------------------------------
 # Boot chain (depthcharge / ChromeOS GPT)
 # ---------------------------------------------------------------------------
 DEPTHCHARGE_BOARD="${deviceinfo_depthcharge_board:-}"

@@ -28,6 +28,12 @@ if command -v apk >/dev/null 2>&1; then
 		git curl wget \
 		dtc kmod \
 		make gcc musl-dev binutils pkgconf \
+		meson samurai scdoc \
+		wlroots-dev wayland-protocols wayland-dev \
+		pixman-dev libdrm-dev mesa-dev lcms2-dev \
+		libxkbcommon-dev cairo-dev pango-dev gdk-pixbuf-dev \
+		pcre2-dev json-c-dev libevdev-dev libinput-dev elogind-dev \
+		xcb-util-wm-dev xcb-util-dev \
 		debootstrap \
 		cgpt vboot-utils depthcharge-tools \
 		e2fsprogs dosfstools parted gptfdisk \
@@ -44,6 +50,9 @@ elif command -v apt-get >/dev/null 2>&1; then
 	#   * gptfdisk is `gdisk`, dtc is `device-tree-compiler`.
 	# clang/lld/llvm build the kernel with LLVM=1; rustc/rust-src/bindgen are
 	# needed by CONFIG_RUST=y and dwarves by CONFIG_DEBUG_INFO_BTF=y.
+	# The compositor (compositors/swayfx) is a meson project: its own build
+	# needs meson/ninja/scdoc plus the wlroots 0.20 development files, which is
+	# the version in forky and the one the fork is written against.
 	log "Installing host build dependencies (apt)"
 	export DEBIAN_FRONTEND=noninteractive
 	apt-get update
@@ -58,6 +67,13 @@ elif command -v apt-get >/dev/null 2>&1; then
 		git curl wget ca-certificates \
 		device-tree-compiler kmod \
 		make pkgconf \
+		meson ninja-build scdoc \
+		libwlroots-0.20-dev wayland-protocols libwayland-dev \
+		libpixman-1-dev libdrm-dev libegl-dev libgles-dev libgbm-dev liblcms2-dev \
+		libxkbcommon-dev libcairo2-dev libpango1.0-dev libgdk-pixbuf-2.0-dev \
+		libpcre2-dev libjson-c-dev libevdev-dev libinput-dev libsystemd-dev \
+		libxcb1-dev libxcb-icccm4-dev libxcb-composite0-dev libxcb-xkb-dev \
+		libxcb-errors-dev \
 		debootstrap \
 		cgpt vboot-kernel-utils depthcharge-tools \
 		e2fsprogs dosfstools parted gdisk \
@@ -72,3 +88,4 @@ ld.lld --version
 rustc --version 2>/dev/null || true
 bindgen --version 2>/dev/null || true
 debootstrap --version 2>/dev/null || true
+meson --version 2>/dev/null || true

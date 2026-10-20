@@ -76,6 +76,11 @@ kernels/<flavor>/          one directory per kernel
   config.aarch64           kernel config (CONFIG_LOCALVERSION gives the release suffix)
   patches/                 *.patch + a `series` file with the apply order
   APKBUILD.reference       upstream kernel package (reference only)
+compositors/<name>/        one directory per compositor built from source
+  version                  upstream version (e.g. 0.6)
+  scenefx-version          the effects library it links against, when it is a fork
+  SHA256SUMS               checksums of the upstream tarballs, verified on build
+  README.md                what it is, why it is built here, its effects policy
 uis/<ui>/                  one directory per graphical shell
   packages.list            UI packages (Debian names)
   files/                   tree overlaid onto the rootfs; `etc/` is copied as
@@ -114,6 +119,9 @@ uncommitted changes, since those do not travel into the image.
 - Upstream: `pmaports` commit `0e458a2417d6f5ed61c7b70621d5632e30136091` (2026-10-15).
 - `kernels/mediatek-mt81/` — mainline Linux **7.2.7** from `cdn.kernel.org` + patches + config.
   Built with `make LLVM=1` (clang/lld).
+- `compositors/swayfx/` — **swayfx 0.6** (a fork of sway 1.12.0, which is forky's sway) on top of
+  **scenefx 0.5** (tagged `0.5`, meson version `0.5.0`), from `github.com/WillPower3309/swayfx` and
+  `github.com/wlrfx/scenefx`; it needs `wlroots >=0.20 <0.21`, exactly forky's 0.20.2.
 - `devices/google-asurada/` — `deviceinfo`, `kernel-cmdline.conf`, `modules-initfs`.
 
 ## Conventions and gotchas
@@ -179,6 +187,53 @@ uncommitted changes, since those do not travel into the image.
   size, so this is the module being probed after the rootfs, not a missing piece; every function
   this port uses (display, audio, Wi-Fi, Bluetooth, suspend) works with the SCP coming up late.
   `check-system.sh` therefore reports the outcome of the load, not the first attempt.
+
+### Compositor (swayfx)
+
+The session does not run Debian's sway. Plain sway cannot round a window's corners, draw a shadow
+under it or blur what is behind it, and this port keeps the effects Deboma gets from
+Hyprland/Quickshell: `compositors/swayfx/` pins **swayfx 0.6** (a fork of sway 1.12.0, which is
+exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` builds both into
+`$WORK_DIR/swayfx-stage/*.deb`. Nothing in forky provides either, and swayfx needs
+`wlroots >=0.20 <0.21`, which forky's 0.20.2 satisfies - no other package is rebuilt.
+
+- **The packages keep sway's names.** `swayfx` installs `/usr/bin/sway`, `/usr/bin/swaymsg`,
+  `swaymsg`/`swaynag`/`swaybar`, man pages and `/usr/share/wayland-sessions/sway.desktop`, and it is
+  `Provides`/`Conflicts`/`Replaces: sway`. greetd still runs `sway`, `/etc/sway` still holds the
+  configuration, and apt swaps it for Debian's sway (and back) instead of refusing.
+- **`uis/sway/packages.list` does not list `sway`**, because that would install Debian's plain one.
+  A rootfs is therefore useless until `scripts/install-swayfx.sh` has run: the order is
+  `build-rootfs.sh` → `install-kernel.sh` → `install-swayfx.sh` → `make-kpart.sh` (`build.sh` does
+  all four). On a running system `install-swayfx.sh /` is the counterpart of `install-kpart.sh`.
+- **The .deb deliberately does not carry `/etc/sway/config`.** Upstream installs its sample there,
+  and `install-swayfx.sh` runs *after* `rootfs-setup.sh` has overlaid `uis/sway/files/`, so a
+  packaged copy would replace the solarized, tested configuration. The build deletes `etc/` from the
+  staged tree for that reason.
+- **scenefx is linked from the staging tree, not from the host.** Its pkg-config file is copied with
+  `prefix` rewritten to `$WORK_DIR/swayfx-stage/scenefx-root/usr`, so meson finds the headers and the
+  freshly built `.so` without installing anything into the build machine; the soname is unversioned
+  (`libscenefx-0.5.so`) and there is no rpath, so the installed binary uses the packaged copy in
+  `/usr/lib/<triplet>`. That soname also means there is no ABI symlink and no `-dev` package:
+  upgrading scenefx means rebuilding swayfx.
+- Both projects set `werror=true`, and `meson -Dwerror=false` overrides it; `--libdir=lib/<triplet>`
+  is needed because meson's `libdir` is relative to the prefix (a bare `<triplet>` installs into
+  `/usr/<triplet>`, which is where the first build put the `.pc` file and nothing could find it).
+  `meson install --strip` strips the binaries.
+- **`Depends` is generated, not hand-written.** `dpkg-shlibdeps` wants a `debian/` directory, so each
+  `DT_NEEDED` soname is resolved to the real file with `ldconfig -p` and that exact path is asked of
+  `dpkg -S`. Asking dpkg for the bare soname is subtly wrong: `libc.so.6` also matches the linker
+  script of that name in `libc6-dev`, and a `-dev` package would end up as a dependency of the image.
+  `/sbin/ldconfig` is not on a normal user's `PATH`, hence the explicit path in the script.
+- **`config.d/26-swayfx.conf` is swayfx-only** (`corner_radius`, `smart_corner_radius`, `shadows`,
+  `blur`, `default_dim_inactive`): plain sway answers *Unknown/invalid command* and `sway -C` fails,
+  which is the cheapest way to notice that Debian's sway is back. `blur disable` is written out
+  rather than relied on as a default: a Gaussian pass over the whole damaged region every frame is
+  the one effect that costs frames and battery on the Mali-G57, and it also defeats direct scanout
+  for a maximised window. Corners are cut when the buffer is committed and a shadow is a texture, so
+  both are free by comparison.
+- `sway --version` prints `swayfx version 0.6 (based on sway 1.12.0)`; plain sway prints
+  `sway version 1.12.0`. `check-system.sh` FAILs on anything that is not swayfx, and the bar's
+  `sway -C` check then validates the effects drop-in along with the rest.
 
 ### Userspace / UI (Debian forky)
 
@@ -288,8 +343,9 @@ uncommitted changes, since those do not travel into the image.
   `KEY_BRIGHTNESSDOWN` (evdev 224) as keycode 232.
 
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
-  key opens bemenu, waybar, foot). `rootfs-setup.sh` rewrites `/home/brunux` inside the
-  shipped text files to `$USERNAME`, and merges `uis/sway/files/home/` into that home.
+  key opens bemenu, waybar, foot) on top of the compositor described above. `rootfs-setup.sh`
+  rewrites `/home/brunux` inside the shipped text files to `$USERNAME`, and merges
+  `uis/sway/files/home/` into that home.
 - **tuigreet**: Debian ships the *original* tuigreet **0.9.1**, which has no `--config`/TOML
   support and no background animations (Nura runs the fork, which has both). The greeter's
   personalisation is therefore expressed as flags in `/etc/greetd/config.toml`; the `matrix`
@@ -480,8 +536,10 @@ Large artifacts go to `$HOME/.cache/debian-aarch64` (`WORK_DIR`, `SRC_DIR`).
 ```sh
 scripts/00-deps.sh          # install host build deps (apk or apt), re-execs via sudo
 scripts/build-kernel.sh     # mainline 7.2.7 + patches + config  -> $WORK_DIR/kernel-stage
+scripts/build-swayfx.sh     # scenefx + swayfx from source     -> $WORK_DIR/swayfx-stage
 scripts/build-rootfs.sh     # debootstrap Debian forky rootfs    -> $WORK_DIR/rootfs
 scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initramfs
+scripts/install-swayfx.sh   # install the compositor .debs (rootfs by default, `/` for a running system)
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
 scripts/make-image.sh       # distributable disk image from the rootfs (no card needed)
@@ -494,7 +552,7 @@ scripts/wifi.sh export      # saved NetworkManager Wi-Fi profiles -> $WIFI_DIR
 scripts/wifi.sh import      # $WIFI_DIR -> a rootfs (drops interface-name=)
 scripts/check-system.sh     # (on the booted image) hardware + configuration report
 
-scripts/build.sh            # full pipeline (kernel + rootfs + kernel + kpart)
+scripts/build.sh            # full pipeline (kernel + compositor + rootfs + kernel + compositor + kpart)
 ```
 
 `scripts/lib-cgpt.sh` holds the one copy of the ChromeOS GPT layout, used by `write-sd.sh`,
