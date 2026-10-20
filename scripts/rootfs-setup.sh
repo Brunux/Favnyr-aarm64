@@ -157,8 +157,10 @@ EOF
 # runtime choice; see docs/optimization.md.
 install -d /etc/udev/rules.d
 cat >/etc/udev/rules.d/60-io-scheduler.rules <<'EOF'
-# eMMC and microSD: kyber (CONFIG_MQ_IOSCHED_KYBER is built in).
-ACTION=="add|change", KERNEL=="mmcblk[0-9]*", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="kyber"
+# eMMC and microSD: kyber (CONFIG_MQ_IOSCHED_KYBER is built in). The match is the
+# whole device only - "mmcblk[0-9]*" would also match mmcblk0p1 and friends, and
+# a partition has no scheduler to set.
+ACTION=="add|change", KERNEL=="mmcblk[0-9]", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="kyber"
 EOF
 
 log "Enabling services"
