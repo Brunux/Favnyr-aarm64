@@ -8,7 +8,7 @@
 #                   off, with the connected devices in the tooltip
 #
 # Deboma's bluetooth plugin keeps a panel process alive to draw this list.  One
-# short-lived fuzzel + bluetoothctl pair per click gives the same interaction
+# short-lived rofi + bluetoothctl pair per click gives the same interaction
 # for the duration of the click only.  Right click on the indicator opens
 # bluetoothctl in a floating terminal for what a list cannot do (pairing keys,
 # trust, remove, agent).

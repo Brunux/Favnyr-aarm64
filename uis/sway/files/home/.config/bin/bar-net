@@ -3,7 +3,7 @@
 #
 # Deboma's network plugin lists the access points in a Quickshell popup and
 # connects to the one that is clicked.  This reproduces that behaviour with
-# nmcli + fuzzel: everything runs for as long as the popup is open, and nothing
+# nmcli + rofi: everything runs for as long as the popup is open, and nothing
 # stays behind.  Left click on the indicator opens this list; right click opens
 # nmtui in a floating terminal (etc/sway/config.d/25-bar-panels.conf), which is
 # the full editor for saved connections.
@@ -11,7 +11,7 @@
 # The list is what `nmcli device wifi list --rescan yes` returns, strongest
 # first, the active network marked with `*`.  Networks in range are shown with
 # their security and signal; picking a known one activates the saved profile,
-# picking a new secured one asks for the password in a masked fuzzel prompt.
+# picking a new secured one asks for the password in a masked rofi prompt.
 
 set -eu
 
@@ -102,7 +102,7 @@ if nmcli --terse --fields NAME connection show 2>/dev/null | grep -Fxq -- "$ssid
 else
 	pw=
 	if [ -n "$sec" ] && [ "$sec" != "--" ]; then
-		pw=$("$dir/bar-pick" "Password for $ssid" --password) || exit 0
+		pw=$("$dir/bar-pick" "Password for $ssid" -password) || exit 0
 		[ -n "$pw" ] || exit 0
 		out=$(nmcli device wifi connect "$ssid" password "$pw" 2>&1) || { fail "Wi-Fi: $out"; exit 0; }
 	else

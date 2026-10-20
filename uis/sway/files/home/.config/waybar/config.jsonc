@@ -1,7 +1,7 @@
 // Solarized bar, ported from the maintainer's Deboma (Omarchy) session.
 //
 // Every pointer interaction that Deboma answers with a panel is answered here
-// with a short-lived fuzzel popup from ~/.config/bin/bar-*, and nothing stays
+// with a short-lived rofi popup from ~/.config/bin/bar-*, and nothing stays
 // resident: the bar itself is the only process this file keeps alive.  Icons
 // are written as \uXXXX so the codepoints are readable and survive any editor;
 // they come from fonts-font-awesome-legacy (see uis/sway/README.md).

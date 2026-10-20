@@ -26,23 +26,21 @@ wl-clipboard
 
 # what /etc/sway/config and the drop-ins actually invoke
 waybar
-# tofi is the launcher (Search key, $mod+d) and tofi-run the command palette
-# ($mod+Shift+d): a Wayland layer-shell client with no GTK, no daemon and no
-# resident process - it exists while it is on screen, ~23 MB RSS / ~15 MB PSS
-# measured on this machine (docs/optimization.md, uis/sway/README.md). It
-# replaces bemenu, whose palette needed a flag per colour on the command line;
-# tofi reads ~/.config/tofi/config instead.
-tofi
+# rofi is the launcher (Search key, $mod+d), the command palette ($mod+Shift+d)
+# and the window switcher ($mod+Tab, which sway does not provide), and it is also
+# what draws the bar's dmenu popups. That is one picker where the session used to
+# have two (tofi for the launcher, fuzzel for the bar): rofi 2.0 speaks Wayland
+# natively (layer-shell + zwlr_foreign_toplevel), has no daemon, and measured
+# 16.4 MB PSS in drun mode / 15.0 MB in window mode while open, against 40.5 MB
+# for a fuzzel popup. See uis/sway/README.md, "The launcher".
+rofi
 # foot is the session terminal: no GPU renderer and no Rust runtime, so a window
 # costs about half the memory of an alacritty one on a 4 GB machine. The bar's
 # popups run here as well (with --app-id=popup, see bar-panels.conf), and
 # ~/.config/foot/foot.ini carries the solarized palette.
 foot
-# fuzzel draws the bar's click-through menus (Wi-Fi, Bluetooth, audio output,
-# the root menu): one process for as long as the popup is open and nothing
-# afterwards. This is the bar's replacement for Deboma's Quickshell panels;
-# see uis/sway/README.md.
-fuzzel
+# (the bar's click-through menus are rofi's dmenu mode now - see `rofi` above and
+# ~/.config/bin/bar-pick - so fuzzel is not needed.)
 # jq parses `swaymsg -t get_inputs` for the keyboard-layout indicator.
 jq
 grimshot

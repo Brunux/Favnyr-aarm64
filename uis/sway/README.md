@@ -15,7 +15,7 @@ uis/sway/
 configured `USERNAME` inside the text files.
 
 This desktop was ported from the maintainer's Nura (postmarketOS) session, so it
-keeps the solarized theme, the `Alt` modifier + Search-key launcher, the tofi
+keeps the solarized theme, the `Alt` modifier + Search-key launcher, the rofi
 launcher, waybar and the foot terminal.
 
 ## Layout
@@ -26,7 +26,8 @@ launcher, waybar and the foot terminal.
 | `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, idle screensaver. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key launcher binding. |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
-| `home/.config/tofi/config` | The launcher's solarized theme, read by `tofi-drun` (applications) and `tofi-run` (commands) - see **The launcher**. |
+| `home/.config/rofi/config.rasi` | Launcher settings: the three modes, `terminal = foot`, matching. |
+| `home/.config/rofi/solarized.rasi` | The solarized look, shared by the launcher, the window switcher and the bar's dmenu. |
 | `home/.config/foot/foot.ini` | Solarized palette, JetBrains Mono and the Nerd Font fallback for the session terminal and the bar's popups. |
 | `home/.bashrc` | The interactive shell: `ls` is eza, `cat` is bat, `cd` is zoxide, fzf key bindings and the starship prompt (see **The CLI tools**). |
 | `home/.config/starship.toml` | Deboma's prompt: directory and git state in the theme's cyan. |
@@ -66,52 +67,56 @@ The drop-in is swayfx-only, so `sway -C` failing means Debian's plain sway is in
 
 ## The launcher
 
-The Search key and `$mod+d` open **tofi** in drun mode (the `.desktop` entries); `$mod+Shift+d`
-opens the command palette, `tofi-run` behind `~/.config/bin/run-command`. Both read the same
-`~/.config/tofi/config` (`19-launcher.conf`).
+Three jobs, one binary: **rofi** 2.0, themed by `~/.config/rofi/config.rasi` (settings) and
+`~/.config/rofi/solarized.rasi` (the look).
 
-The two modes behave differently in a way that is easy to get wrong:
-
-* **`tofi-drun` launches.** With `drun-launch = true` it runs the entry itself, and it **does**
-  honour `Terminal=true` by prepending the `terminal` command - verified on 0.9.1 with a probe
-  whose parent was `foot` (`ftruncate` on the man page's "no effect if drun-launch" sentence is
-  wrong for this version). So `btop.desktop` and `htop.desktop` work as they are.
-* **`tofi-run` only prints.** It lists every executable in `$PATH` and writes the selection to
-  stdout - the same contract as `dmenu`, verified the same way (the probe's name came back on
-  stdout and nothing was executed). A TUI started without a tty exits at once, so
-  `run-command` runs the selection inside `foot`. That is how the `packages/tools.list` binaries
-  are reached: `btop`, `lazygit`, `tmux`, `ffmpeg` have no `.desktop` entry worth launching.
-
-This port also ships its own entries (`usr/share/applications/org.nureb.*`), because the session
-actions live in scripts that nothing else advertises: **Wi-Fi** (`bar-net`), **Wi-Fi (nmtui)**,
-**Bluetooth**, **Audio output**, **Power menu**, **Lock screen**, **Screensaver**, **Suspend**,
-**Screenshot (area)** (`grimshot save area`), **lazygit** and **tmux**. They are what makes the
-fuzzel panels and the key bindings reachable by typing, and all of the terminal ones are
-`Terminal=true` so tofi starts them in foot.
-
-It replaces **bemenu**, whose palette was fourteen flags on one command line, and it is the cheapest
-launcher with an application list that exists here. Measured on this machine, per process, with the
-same headless compositor the bar was measured in:
-
-| Launcher | RSS | PSS |
+| Binding | Command | What it lists |
 |---|---|---|
-| **tofi** (drun) | 22.8 MB | **14.6 MB** |
-| fuzzel (drun) | 44.8 MB | 40.5 MB |
-| wofi (drun, GTK3) | 70.8 MB | 62.1 MB |
+| Search key, `$mod+d` | `rofi -show drun` | the `.desktop` entries, including the port's own session actions in `usr/share/applications/org.nureb.*` |
+| `$mod+Tab` | `rofi -show window` | the open windows, through wlroots' `zwlr_foreign_toplevel_manager_v1` - sway has no switcher of its own |
+| `$mod+Shift+d` | `rofi -show run` | every executable in `$PATH`; **Enter** runs it, **Shift+Enter** runs it in foot, which is how the TUIs from `packages/tools.list` are started |
+| any bar panel | `bar-pick` → `rofi -dmenu` | the fixed list the bar hands it |
 
-tofi has no GTK, no daemon and nothing resident: it exists while the window is on screen. Deboma's
-launcher (walker) is a GTK4 application that runs as a *service* plus the elephant provider daemon,
-which is the opposite arrangement. The trade-off tofi makes is text only - no icons, no grid - which
-is the price of 14.6 MB instead of 40.
+It replaces **tofi** (launcher) and **fuzzel** (bar popups), so the session runs one picker
+instead of two. Measured on this machine, per process, in the same headless compositor the bar
+was measured in:
 
-The theme is the session's palette: base03 background at 95 %, a cyan 2 px rim, JetBrains Mono 12,
-the typed text in base2, the prompt in cyan, the highlighted row a base02 card around its text
-(`selection-background-padding = 6,12,6,12`; the two-value spelling only pads vertically in 0.9.1),
-the fuzzy match highlighted in cyan, and no pointer (`hide-cursor`). `terminal = foot` is what starts the `Terminal=true` entries in this session's terminal.
+| Launcher | PSS while open | Notes |
+|---|---|---|
+| **rofi**, drun, this theme | **15.7-17.1 MB** | text only |
+| rofi, drun, **icons on** | **57.1 MB** | rofi 2.0 draws icons through glycin, which wants bwrap |
+| rofi, `-dmenu` (a bar click) | 14.2-15.6 MB | |
+| rofi, `-show window` | 16.7 MB | |
+| tofi, drun (before) | 14.6 MB | applications only; its run mode just printed the selection |
+| fuzzel, `--dmenu` (before) | 40.5 MB | what every bar click cost |
+| wofi, drun | 62.1 MB | |
+| walker / Wox | resident | a GTK4 service / a ~150 MB daemon |
 
-Debian's package is `tofi`; it ships `tofi`, `tofi-run` and `tofi-drun`, plus bash completion. The
-config has no `--check`, but a bad key makes `tofi --config <file>` print the option it could not
-parse instead of the compositor error.
+None of these is a daemon: rofi exists while its window is on screen and nothing stays
+afterwards. rofi 2.0 speaks Wayland natively - it is a layer-shell client, and the window
+mode uses the foreign-toplevel protocol - so no Xwayland is involved, even though the
+package still supports X11.
+
+The theme is the session palette: base03 window, a 2 px cyan rim, JetBrains Mono 12, the
+prompt in cyan, entries in base1, the typed text in base2, and the selected row a base02
+card with 6 px corners. The layout drops what rofi shows by default and this session does
+not need (mode switcher, message bar, counter) and the box shrinks to the number of
+entries it has, up to ten, so a three-item bar menu and the eight-application list both
+get a box that fits them. Matching is fzf-style fuzzy.
+
+**Icons are off on purpose.** With `show-icons: true` the same drun launch measured 57.1 MB
+of PSS: rofi 2.0 renders `.desktop` icons through glycin, a sandboxed image loader that
+spawns a helper and wants bwrap (the image has none, so it also logs *Glycin running
+without sandbox*). Text-only rows are the same trade tofi made.
+
+Two behaviours were verified rather than assumed: `rofi -dmenu` exits 1 on Escape, which is
+what `bar-pick`'s callers' `|| exit 0` relies on, and drun honours `Terminal=true` through
+the `terminal` setting (`foot`) - run mode needs Shift+Enter for that, rofi's own "run in
+terminal" binding.
+
+To check the theme after an edit, run `rofi -show drun` in the session: a parse error is a
+dialog naming the file, line and column. `rofi -dump-config` does **not** report theme parse
+errors.
 
 ## The bar
 
@@ -136,13 +141,14 @@ instead, and nothing survives the click:
 | brightness | – | – | backlight, 5% steps |
 | battery | power panel: charge, state, draw, time left, charger, uptime, memory, swap, kernel | root menu | – |
 
-`fuzzel` in dmenu mode draws the menus; `foot --app-id=popup` (floated by
-`etc/sway/config.d/25-bar-panels.conf`) runs what needs a real terminal, `nmtui` and
-`bluetoothctl`; `swaynag` shows the power panel.  All three are already in the image for other
-reasons, so the only package this added is `fuzzel`.  The bar itself is the only resident process.
+`rofi` in dmenu mode draws the menus - the same binary that is the launcher - `foot
+--app-id=popup` (floated by `etc/sway/config.d/25-bar-panels.conf`) runs what needs a real
+terminal, `nmtui` and `bluetoothctl`; `swaynag` shows the power panel.  All of those are already
+in the image for other reasons, so the bar needed no package of its own once rofi replaced the
+launcher.  The bar itself is the only resident process.
 
 The scripts are POSIX `sh`, they live in `home/.config/bin/`, and they share `bar-pick`, which holds
-the palette and geometry of every popup (solarized dark, cyan selection, rounded corners).  Each one
+the look of every popup through `~/.config/rofi/solarized.rasi`.  Each one
 documents at the top of the file which Deboma widget it reproduces.  Icons are written in
 `config.jsonc` as `\uXXXX` escapes so the codepoint is readable and survives any editor; they are
 Font Awesome (see the font table below).
@@ -175,8 +181,8 @@ bar.
   if they are wanted back.
 
 `nmcli`, `bluetoothctl`, `pactl` and `brightnessctl` come with packages that were already listed
-(`network-manager`, `bluez`, `pulseaudio-utils`); the additions are `fuzzel` and `jq` (the latter
-parses `swaymsg -t get_inputs` for the layout indicator).  `scripts/check-system.sh` verifies all of
+(`network-manager`, `bluez`, `pulseaudio-utils`); the additions are `rofi` (also the launcher and
+the window switcher) and `jq` (which parses `swaymsg -t get_inputs` for the layout indicator).  `scripts/check-system.sh` verifies all of
 it on the device: every bar script executable, those tools present, and the backlight device named
 in `config.jsonc` existing under `/sys/class/backlight` (a wrong name leaves waybar's module empty
 with no error anywhere).

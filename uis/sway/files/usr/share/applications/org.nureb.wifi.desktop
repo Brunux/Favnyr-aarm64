@@ -2,7 +2,7 @@
 Type=Application
 Name=Wi-Fi
 GenericName=Wireless network
-Comment=List the networks in range and connect to one (nmcli + fuzzel)
+Comment=List the networks in range and connect to one (nmcli + rofi)
 Exec=/home/brunux/.config/bin/bar-net
 Icon=network-wireless-symbolic
 Terminal=false

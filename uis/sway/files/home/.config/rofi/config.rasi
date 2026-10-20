@@ -1,0 +1,63 @@
+/* rofi: the session launcher, the window switcher and the bar's dmenu.
+ *
+ * Three roles, one process, and only while it is on screen:
+ *   $mod+d / Search key   rofi -show drun     applications (.desktop entries)
+ *   $mod+Tab              rofi -show window   window switcher (there is no other one in sway)
+ *   $mod+Shift+d          rofi -show run      commands from $PATH; Shift+Enter runs the
+ *                                             choice in foot (rofi's run-shell-command,
+ *                                             which is why `terminal` is set below)
+ *   bar-pick              rofi -dmenu         the bar's click-through panels
+ *
+ * Measured on this machine (headless swayfx, /proc PSS): drun 16.4 MB, run 15.8 MB,
+ * window 15.0 MB while open, nothing resident afterwards. That replaced both tofi
+ * (14.6 MB, applications only, its run mode only printed the selection) and fuzzel
+ * (40.5 MB per bar popup), so the session went from two pickers to one.
+ *
+ * rofi 2.0 speaks Wayland natively: it is a layer-shell client (zwlr_layer_shell_v1)
+ * and the window mode uses zwlr_foreign_toplevel_manager_v1, so neither Xwayland nor
+ * an X11 build is involved. Debian's package is `rofi` (2.0.0), +6 packages / 1.75 MB
+ * over the previous set.
+ *
+ * Syntax check: `rofi -show drun` in the session - a parse error is reported in a
+ * dialog naming the file, line and column (`rofi -dump-config` does not report theme
+ * parse errors, it only dumps the settings it managed to read).
+ */
+
+configuration {
+    /* The three modes, in the order Ctrl+Tab would cycle them. */
+    modes: [ drun, run, window ];
+
+    /* Both drun's Terminal=true entries (btop, htop, our own TUIs) and run mode's
+     * Shift+Enter use this. foot is the session terminal. */
+    terminal: "foot";
+
+    /* Cleaner rows: "Foot" instead of "Foot (Terminal)". */
+    drun-display-format: "{name}";
+    window-format: "{t}";
+
+    display-drun: "Launch";
+    display-run: "Run";
+    display-window: "Window";
+
+    /* Icons are off on purpose. rofi 2.0 renders .desktop icons through glycin, a
+     * sandboxed image loader: measured on this machine, drun mode costs 57 MB PSS
+     * with icons and ~16 MB without, and glycin wants bwrap for its sandbox (the
+     * image has none, so it also logs "Glycin running without sandbox"). Text-only
+     * rows are the same trade tofi made. */
+    show-icons: false;
+
+    /* fzf-style matching, as tofi and fuzzel did. */
+    matching: "fuzzy";
+    case-sensitive: false;
+    sort: true;
+    cycle: true;
+    sidebar-mode: false;
+
+    /* Keep the history (most used first) in ~/.cache/rofi3.druncache. */
+    disable-history: false;
+
+}
+
+/* The look lives in its own file so the bar's dmenu and the launcher cannot drift
+ * apart: both read this one theme. */
+@theme "/home/brunux/.config/rofi/solarized.rasi"

@@ -5,7 +5,7 @@
 # headset) and switches the default one on click; volume and mute live on the
 # indicator itself.  Here the indicator is waybar's own `pulseaudio` module
 # (scroll = volume, left click = mute), and this script is its right click:
-# the sink list, plus the two mutes.  One fuzzel + one pactl per click, nothing
+# the sink list, plus the two mutes.  One rofi + one pactl per click, nothing
 # resident.
 #
 # Switching the default sink also moves the streams that are already playing,

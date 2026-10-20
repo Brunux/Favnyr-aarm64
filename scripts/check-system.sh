@@ -635,7 +635,7 @@ if have sway; then
 	fi
 fi
 _missing_cmds=""
-for _c in waybar foot tofi-drun swaylock swaynag swaybg brightnessctl grimshot wlsunset wpctl pactl mako; do
+for _c in waybar foot rofi swaylock swaynag swaybg brightnessctl grimshot wlsunset wpctl pactl mako; do
 	have "$_c" || _missing_cmds="$_missing_cmds $_c"
 done
 if [ -z "$_missing_cmds" ]; then
@@ -663,7 +663,7 @@ fi
 # missing tool does not log anything - the indicator still appears and every
 # click is a silent no-op - so this is a FAIL, not a warning.
 _missing_bar=""
-for _c in fuzzel jq nmcli bluetoothctl pactl brightnessctl foot; do
+for _c in rofi jq nmcli bluetoothctl pactl brightnessctl foot; do
 	have "$_c" || _missing_bar="$_missing_bar $_c"
 done
 for _s in bar-pick bar-menu bar-net bar-bt bar-key bar-audio bar-updates bar-power; do
@@ -717,20 +717,22 @@ case "$_ls_alias" in
 	*) warn "ls is not eza (alias: ${_ls_alias:-none}); ~/.bashrc is not being read" ;;
 esac
 
-# The launcher is tofi, themed by a single config file that both modes read.
-# Without the file tofi still opens, in its own default colours, which looks like
-# a themed launcher that lost its theme rather than a missing file.
-if have tofi && have tofi-drun && have tofi-run && [ -r "$HOME/.config/tofi/config" ] &&
-	[ -x "$HOME/.config/bin/run-command" ]; then
-	ok "launcher complete (tofi, tofi-drun, tofi-run behind run-command, theme)"
+# The launcher is rofi, themed by two files that the launcher, the window
+# switcher and the bar's dmenu all read. Without them rofi still opens, in its
+# default colours, which looks like a themed launcher that lost its theme rather
+# than a missing file.
+if have rofi && [ -r "$HOME/.config/rofi/config.rasi" ] && [ -r "$HOME/.config/rofi/solarized.rasi" ]; then
+	ok "launcher complete (rofi, config.rasi, solarized.rasi)"
 else
-	fail "launcher incomplete: tofi/tofi-drun/tofi-run, ~/.config/tofi/config or bin/run-command missing"
+	fail "launcher incomplete: rofi, ~/.config/rofi/config.rasi or solarized.rasi missing"
 fi
+# rofi is also the bar's dmenu: without it every bar click is a silent no-op.
+[ -x "$HOME/.config/bin/bar-pick" ] && ok "bar-pick (rofi -dmenu) is executable" ||
+	fail "bin/bar-pick is missing or not executable"
 
-# The session's own launcher entries. They are the only way to reach the fuzzel
+# The session's own launcher entries. They are the only way to reach the bar's
 # panels and the session actions by typing, and a missing one is invisible: the
-# list simply has fewer rows and nobody notices. run-command is what makes
-# tofi-run useful (it prints the selection instead of running it).
+# list simply has fewer rows and nobody notices.
 _missing_desktop=""
 for _d in wifi wifi-nmtui bluetooth audio-output power lock screensaver suspend \
 	screenshot-area lazygit tmux; do

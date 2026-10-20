@@ -351,7 +351,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `KEY_BRIGHTNESSDOWN` (evdev 224) as keycode 232.
 
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
-  key opens tofi, waybar, foot) on top of the compositor described above. `rootfs-setup.sh`
+  key opens rofi, waybar, foot) on top of the compositor described above. `rootfs-setup.sh`
   rewrites `/home/brunux` inside the shipped text files to `$USERNAME`, and merges
   `uis/sway/files/home/` into that home.
 - **tuigreet**: Debian ships the *original* tuigreet **0.9.1**, which has no `--config`/TOML
@@ -407,35 +407,36 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
 - **workstyle** (renames workspaces to icons) is not packaged in Debian; Nura ran a cargo build
   linked against musl, which cannot run against glibc. Its drop-in is not shipped, but
   `~/.config/workstyle/config.toml` is kept so `cargo install workstyle` is enough to enable it.
-- **The launcher is `tofi`, and it replaces bemenu.** `tofi-drun` lists the `.desktop` entries
-  (`$mod+d`, the Search key) and *launches* them; `tofi-run` lists `$PATH` (`$mod+Shift+d`) but
-  only *prints* the selection - dmenu's contract - so `$mod+Shift+d` runs
-  `~/.config/bin/run-command`, which starts the choice in foot (everything in
-  `packages/tools.list` is a TUI, and a TUI without a tty exits at once). Both modes read one file,
-  `~/.config/tofi/config`, which is why the bindings in `config.d/19-launcher.conf` are a single
-  word. **`Terminal=true` works with `drun-launch = true`**: tofi prepends the `terminal` command
-  (verified on 0.9.1 with a probe whose parent was foot), so `btop.desktop`/`htop.desktop` and the
-  port's own entries launch in foot - the man page's "no effect if drun-launch is set to true"
-  sentence does not describe this version. This port ships `usr/share/applications/org.nureb.*` for
-  what nothing else advertises: Wi-Fi (`bar-net`), Wi-Fi (nmtui), Bluetooth, audio output, power
-  menu, lock, screensaver, suspend, area screenshot (`grimshot save area`), lazygit and tmux.
-  Measured in this machine's headless compositor: 22.8 MB RSS / **14.6 MB PSS**, against
-  40.5 MB for fuzzel's drun mode and 62.1 MB for wofi's; walker (Deboma's) is a GTK4 service plus
-  the elephant daemon, i.e. resident, which is the thing this port avoids. The theme is the
-  session palette, and one detail is easy to get wrong: `selection-background-padding` only takes
-  effect in the **four-value** spelling (`6,12,6,12`); the two-value `6,10` is accepted but pads
-  only vertically (measured with a red selection background: 45 px of text against 71 px with the
-  padding applied). A `-1` ("as far as possible") does not survive with the real colours, so the
-  highlighted row is a card around its text rather than a full-width band. tofi has no `--check`; a bad key makes `tofi --config <file>` print
-  the option instead of the compositor error. It needs no backend alternative package, unlike
-  bemenu's `libbemenu-wayland`. `grimshot` is a package of its own. `pactl` (the XF86Audio* keys)
-  comes from `pulseaudio-utils`, not from `pipewire-pulse`.
-- **The bar's menus are short-lived `fuzzel` popups, not panels.** Deboma answers a click on the
-  bar with a Quickshell panel, and that shell is 361 MB of PSS - more than half of the Deboma
-  session. `uis/sway/files/home/.config/bin/bar-*` reproduce the same interactions with
-  `fuzzel --dmenu` (`bar-pick` holds the palette), with `nmtui`, `bluetoothctl` and the apt updater
-  in `foot --app-id=popup` (floated by `config.d/25-bar-panels.conf`) and `swaynag` for the
-  power panel, so nothing stays resident; `fuzzel` and `jq` are the only packages this added. Two
+- **The launcher, the window switcher and the bar's dmenu are all `rofi` 2.0** (Debian's `rofi`;
+  +6 packages / 1.75 MB over the previous set). `$mod+d`/Search key = `rofi -show drun` (the
+  `.desktop` entries, including the port's own `usr/share/applications/org.nureb.*`), `$mod+Tab` =
+  `rofi -show window` (wlroots foreign-toplevel; sway has no switcher of its own), `$mod+Shift+d` =
+  `rofi -show run` (`$PATH`; **Shift+Enter** runs the choice in foot - rofi's own binding, and the
+  only way the TUIs from `packages/tools.list` start, since a TUI without a tty exits), and
+  `bar-pick` is `rofi -dmenu`. It replaced tofi (launcher) and fuzzel (bar popups), so the session
+  has one picker instead of two; measured PSS while open: drun 15.7-17.1 MB, dmenu 14.2-15.6 MB,
+  window 16.7 MB, against **40.5 MB for each fuzzel popup** it replaced and 62.1 MB for wofi.
+  **Icons must stay off**: `show-icons: true` took the same drun launch to **57.1 MB** of PSS,
+  because rofi 2.0 renders `.desktop` icons through glycin, a sandboxed image loader that wants
+  bwrap (the image has none, so rofi also logs *Glycin running without sandbox*). rofi 2.0 is a
+  native Wayland layer-shell client - no Xwayland - and, like tofi, not a daemon: nothing stays
+  after the window. Two behaviours the configuration depends on were verified, not assumed:
+  `rofi -dmenu` exits 1 on Escape (`bar-pick`'s callers' `|| exit 0`), and drun honours
+  `Terminal=true` through the `terminal` setting (`foot`). The theme is
+  `~/.config/rofi/{config,solarized}.rasi`, and **a parse error is only reported when a window
+  opens** (a dialog naming file, line and column); `rofi -dump-config` does not report theme parse
+  errors, so the check is `rofi -show drun` in the session. `bar-pick` has two modes because rofi's
+  dmenu has to be told which one it is: a list (`-no-custom`, only the offered lines can be picked)
+  and the Wi-Fi password (`-password`, with stdin from /dev/null - otherwise rofi waits on the tty
+  for EOF and the prompt never appears). `grimshot` is a package of its own. `pactl` (the
+  XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
+- **The bar's menus are short-lived `rofi -dmenu` popups, not panels.** Deboma answers a click on
+  the bar with a Quickshell panel, and that shell is 361 MB of PSS - more than half of the Deboma
+  session. `uis/sway/files/home/.config/bin/bar-*` reproduce the same interactions through
+  `bar-pick` (rofi's dmenu, themed by `~/.config/rofi/solarized.rasi`), with `nmtui`,
+  `bluetoothctl` and the apt updater in `foot --app-id=popup` (floated by
+  `config.d/25-bar-panels.conf`) and `swaynag` for the power panel, so nothing stays resident;
+  `jq` is the only package the bar itself added (rofi came with the launcher). Two
   things follow from that and both are easy to get wrong: `custom` modules only re-run on an
   interval, so every `bar-*` ends with `pkill -RTMIN+8 waybar` and every such module declares
   `"signal": 8`; and a module with nothing to say prints `{"class":"empty"}` so that

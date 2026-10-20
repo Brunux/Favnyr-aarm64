@@ -2,7 +2,7 @@
 # The bar's left-most button: applications and the session in one menu.
 #
 # Deboma's menu plugin lists the applications and the session actions in a
-# Quickshell window.  This is the cheap equivalent: fuzzel over a fixed list,
+# Quickshell window.  This is the cheap equivalent: rofi over a fixed list,
 # one process per click.  `Terminal` is also on the right-click so the common
 # case needs no menu at all (see waybar `custom/menu`).
 #
