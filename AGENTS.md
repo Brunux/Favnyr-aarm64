@@ -472,6 +472,13 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   (U+F00C, U+EA71, U+EBAB, codicons) would all be boxes. waybar gets away without that because it
   is Pango, and a terminal is not. `check-system.sh` fails on each missing binary, on the two
   wiring files, and warns when an interactive `bash -ic 'alias ls'` does not answer `eza`.
+- **`/etc/yt-dlp.conf` names Node as yt-dlp's JS runtime**, for the same reason node is installed at
+  all: yt-dlp 2026 needs a JS runtime for YouTube's JS challenges ("EJS"), enables only `deno` by
+  default and Debian ships none, so a stock install logs `[debug] JS runtimes: none` and warns that
+  *some formats may be missing*. `--js-runtimes node` in the system config takes the debug line to
+  `JS runtimes: node-24.21.0` (and `[jsc:node] Solving JS challenges using node`). The file lives in
+  the UI overlay only because that is the etc/ tree the build stages; it configures a
+  `packages/tools.list` tool, not the session.
 
 ### ChromeOS GPT (`cgpt`)
 

@@ -30,6 +30,7 @@ launcher, waybar and the foot terminal.
 | `home/.bashrc` | The interactive shell: `ls` is eza, `cat` is bat, `cd` is zoxide, fzf key bindings and the starship prompt (see **The CLI tools**). |
 | `home/.config/starship.toml` | Deboma's prompt: directory and git state in the theme's cyan. |
 | `etc/profile.d/90-cli-tools.sh` | The CLI environment (`MANPAGER`, `BAT_THEME`, `PATH`), shared by login shells and `~/.bashrc`. |
+| `etc/yt-dlp.conf` | Names Node as yt-dlp's JS runtime (see **The CLI tools**). |
 | `home/.config/foot/screensaver.ini` | The idle screensaver's terminal: black, no padding, 26 pt. |
 | `home/.config/mako/config` | Solarized theme for the notification daemon (`mako-notifier`). |
 | `home/.config/nureb/screensaver.txt` | The logo the idle screensaver animates and then leaves on screen. |
@@ -190,6 +191,12 @@ environment and `home/.bashrc` for the interactive shell.
 Also present: `fzf` (key bindings only — its completion wrappers cost ~25 ms per shell start), `tldr`
 (`tealdeer`), `fastfetch`, `inxi`, `tmux`, `lazygit`, `gum`, `yt-dlp`, `ffmpeg`, `curl`, `unzip`,
 `whois`, `socat`, `inotify-tools`, `qrencode`, `zbar-tools`, `tesseract-ocr` and `nodejs`/`npm`.
+
+**`/etc/yt-dlp.conf` names Node as yt-dlp's JavaScript runtime.** yt-dlp 2026 needs one to solve
+YouTube's JS challenges and enables only `deno` by default, which Debian does not ship, so a stock
+install logs `JS runtimes: none` and warns that *some formats may be missing*. `nodejs` is already
+installed (for npm), so the config only has to say `--js-runtimes node`. Verify with
+`yt-dlp -v --simulate <url>`: the debug line becomes `JS runtimes: node-24.21.0`.
 
 `ff` and `eff` are the fzf helpers: `ff` previews with bat, `eff` opens the pick. Nothing is a
 service or a daemon — `plocate` is deliberately absent because it is `locate` *plus*

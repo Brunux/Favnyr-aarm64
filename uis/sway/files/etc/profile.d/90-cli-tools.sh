@@ -21,6 +21,18 @@ export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 # ~/.config/foot/foot.ini, so a file previewed by bat matches the session.
 export BAT_THEME=ansi
 
+# /usr/local/bin is where rootfs-setup.sh puts the `bat` and `fd` symlinks, and
+# it is not guaranteed to be on PATH by the time this runs: it comes from
+# /etc/profile for a login shell, but a terminal opened from the session inherits
+# whatever the session manager exported, which can be just
+# /usr/sbin:/usr/bin:/sbin:/bin (measured inside a chroot, where neither the
+# alias nor `command -v bat` saw the binary). Prepending is safe - the directory
+# is root-owned - and it is what Debian's own ENV_PATH/login.defs puts first.
+case ":$PATH:" in
+	*":/usr/local/bin:"*) ;;
+	*) PATH="/usr/local/bin${PATH:+:$PATH}" ;;
+esac
+
 # User-installed binaries (cargo, pipx, a user-level npm prefix) live here.
 # Appended, so a system package always wins over a user copy of the same name.
 # Deboma exports EDITOR=omarchy-launch-editor at this point; there is no launcher
@@ -30,5 +42,5 @@ if [ -n "${HOME:-}" ]; then
 		*":$HOME/.local/bin:"*) ;;
 		*) PATH="${PATH:+$PATH:}$HOME/.local/bin" ;;
 	esac
-	export PATH
 fi
+export PATH
