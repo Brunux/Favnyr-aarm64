@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Dictation
+Comment=Speak, and the text is typed into the focused window (whisper.cpp)
+Exec=/home/brunux/.config/bin/dictate
+Icon=audio-input-microphone
+Terminal=false
+Categories=Utility;
+Keywords=dictate;dictation;speech;transcribe;whisper;microphone;

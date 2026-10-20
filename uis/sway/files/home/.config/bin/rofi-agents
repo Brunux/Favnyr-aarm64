@@ -1,0 +1,230 @@
+#!/bin/bash
+# Agents: launch a coding agent CLI, keep several accounts per agent, and pick a
+# default. One rofi menu, one foot window, nothing resident.
+#
+# Omarchy's version of this is a Quickshell panel with usage meters plus a
+# subsystem of scripts (omarchy-agent, omarchy-agent-account-*, per-provider
+# usage parsers). The parts worth porting here are the two that are local and
+# stable:
+#
+#   * launching: an agent is a terminal program, so foot -e is the whole story;
+#   * accounts: Claude Code honours CLAUDE_CONFIG_DIR and Codex honours
+#     CODEX_HOME, so an account is a directory and switching is one env var.
+#
+# Usage meters (Omarchy's bar panel) are deliberately not here: they read
+# provider APIs and change shape whenever a provider does. If they come back, the
+# right shape is a python3 script (stdlib only, already in the image) printing one
+# line for a waybar `custom` module - not a daemon, and not a new language.
+#
+# Install: the CLIs are npm packages. They are installed with an explicit
+# --prefix so npm never needs root and never writes to /usr/local:
+#
+#   npm install -g --prefix ~/.local <package>
+#
+# and ~/.local/bin is already on PATH (etc/profile.d/90-cli-tools.sh).
+#
+#   rofi-agents                 the menu (also Alt+Ctrl+Shift+A)
+#   rofi-agents --env <a> <acc> print the env assignment for an account
+#   rofi-agents --new <agent>   create an account directory
+set -eu
+
+theme="$HOME/.config/rofi/solarized.rasi"
+
+# sway's own environment has no ~/.local/bin (only login and interactive shells
+# get it from /etc/profile.d/90-cli-tools.sh), and that is where npm puts the
+# agent CLIs. Without this line the menu would offer to install an agent that is
+# already installed.
+PATH="$HOME/.local/bin:$PATH"
+export PATH
+state="${XDG_CONFIG_HOME:-$HOME/.config}/nureb/agents"
+data="${XDG_DATA_HOME:-$HOME/.local/share}/nureb/agents"
+default_file="$state/default"
+
+# name | binary | npm package | config-dir env var (empty = no profiles)
+AGENTS=(
+	"Claude Code|claude|@anthropic-ai/claude-code|CLAUDE_CONFIG_DIR"
+	"Codex|codex|@openai/codex|CODEX_HOME"
+	"OpenCode|opencode|opencode-ai|"
+	"Gemini CLI|gemini|@google/gemini-cli|"
+	"GitHub Copilot|copilot|@github/copilot|"
+)
+SEP=$'\t'
+
+pick() { # prompt, lines on stdin
+	rofi -dmenu -theme "$theme" -p "$1" -lines 12 -i \
+		-theme-str 'window { width: 56%; }' "${@:2}"
+}
+
+notify() { notify-send -a Agents "$@" 2>/dev/null || true; }
+
+installed() { command -v "$1" >/dev/null 2>&1; }
+
+default_agent() { [ -r "$default_file" ] && head -n1 "$default_file" || true; }
+
+launch() { # name, binary, envvar, account
+	local name=$1 bin=$2 envvar=$3 account=${4:-}
+	local workdir="$HOME"
+	[ -d "$HOME/Work" ] && workdir="$HOME/Work"
+
+	# Agents remember trust per directory, and they refuse $HOME, so a launch from
+	# the menu starts in ~/Work when it exists (Omarchy does the same).
+	local pre=""
+	[ -n "$envvar" ] && [ -n "$account" ] && pre="export $envvar='$data/$bin/$account'; "
+	notify "Starting $name" "${account:+account: $account}"
+	exec foot -T "$name${account:+ · $account}" \
+		-e bash -lc "cd '$workdir' 2>/dev/null || cd ~; ${pre}exec $bin"
+}
+
+accounts_menu() { # entry
+	local name bin npm envvar
+	IFS='|' read -r name bin npm envvar <<<"$1"
+	if [ -z "$envvar" ]; then
+		notify "$name has no account profiles" "It has no config-directory variable to switch on"
+		return
+	fi
+	local dir="$data/$bin"
+	mkdir -p "$dir"
+	local rows
+	rows=$(
+		for d in "$dir"/*/; do
+			[ -d "$d" ] || continue
+			a=$(basename "$d")
+			printf '● %s%s\n' "$a" "$([ "$a" = "$(cat "$dir/default" 2>/dev/null)" ] && echo '  (default)')"
+		done
+		printf '%s\n' "New account…" "Remove an account…" "Back"
+	)
+	local choice
+	choice=$(printf '%s\n' "$rows" | pick "Accounts · $name") || return
+	case "$choice" in
+	"New account…") new_account "$name" "$bin" ;;
+	"Remove an account…") remove_account "$name" "$bin" ;;
+	"Back" | "") return ;;
+	*) use_account "$name" "$bin" "${choice#● }" ;;
+	esac
+}
+
+new_account() { # name, binary
+	local name=$1 dir="$data/$2" label
+	mkdir -p "$dir"
+	label=$(printf '' | rofi -dmenu -theme "$theme" -p "Account name" -lines 1 \
+		-theme-str 'entry { placeholder: "work, personal, …"; }') || return
+	label=$(printf '%s' "$label" | tr -c 'A-Za-z0-9._-' '_')
+	[ -n "$label" ] || return
+	mkdir -p "$dir/$label"
+	printf '%s' "$label" >"$dir/default"
+	notify "$name: account $label ready" \
+		"It is empty: the first sign-in there creates the profile. Launch $name to log in."
+}
+
+remove_account() { # name, binary
+	local name=$1 dir="$data/$2" choice
+	choice=$(
+		for d in "$dir"/*/; do [ -d "$d" ] && basename "$d"; done
+	) || return
+	[ -n "$choice" ] || { notify "No accounts to remove"; return; }
+	local pick1
+	pick1=$(printf '%s\n' "$choice" | pick "Remove account · $name") || return
+	[ -n "$pick1" ] || return
+	rm -rf "${dir:?}/$pick1"
+	notify "$name: removed $pick1"
+}
+
+use_account() { # name, binary, account
+	local name=$1 bin=$2 acc=$3
+	printf '%s' "$acc" >"$data/$bin/default"
+	notify "$name" "default account: $acc"
+}
+
+menu() {
+	local rows="" entry name bin npm envvar mark
+	for entry in "${AGENTS[@]}"; do
+		IFS='|' read -r name bin npm envvar <<<"$entry"
+		mark=$([ "$(default_agent)" = "$bin" ] && echo '● ' || echo '  ')
+		if installed "$bin"; then
+			rows+="${mark}${name}${SEP}launch:${entry}"$'\n'
+			[ -n "$envvar" ] && rows+="  ${name} accounts…${SEP}accounts:${entry}"$'\n'
+		else
+			rows+="  ${name} — install ${npm}${SEP}install:${entry}"$'\n'
+		fi
+	done
+	rows+="  Set the default agent…${SEP}default"$'\n'
+	rows+="  Open a terminal in ~/Work${SEP}shell"$'\n'
+
+	local table choice
+	table=$(mktemp "${TMPDIR:-/tmp}/agents.XXXXXX")
+	printf '%s' "$rows" >"$table"
+
+	choice=$(cut -f1 "$table" | pick "Agents") || { rm -f "$table"; return; }
+	[ -n "$choice" ] || { rm -f "$table"; return; }
+	local action
+	action=$(awk -F'\t' -v d="$choice" '$1 == d { print $2; exit }' "$table")
+	rm -f "$table"
+	case "$action" in
+	launch:*)
+		local entry=${action#launch:}
+		IFS='|' read -r name bin npm envvar <<<"$entry"
+		local acc=""
+		[ -n "$envvar" ] && [ -r "$data/$bin/default" ] && acc=$(head -n1 "$data/$bin/default")
+		launch "$name" "$bin" "$envvar" "$acc"
+		;;
+	accounts:*) accounts_menu "${action#accounts:}" ;;
+	install:*)
+		local entry=${action#install:}
+		IFS='|' read -r name bin npm envvar <<<"$entry"
+		notify "Installing $name" "npm install -g --prefix ~/.local $npm"
+		exec foot -T "Install $name" -e bash -lc \
+			"npm install -g --prefix \"\$HOME/.local\" '$npm' && echo; echo \"$name is in ~/.local/bin; the menu finds it now.\"; read -r _"
+		;;
+	default)
+		local list
+		list=$(
+			for entry in "${AGENTS[@]}"; do
+				IFS='|' read -r name bin npm envvar <<<"$entry"
+				installed "$bin" && echo "$bin"
+			done
+		)
+		[ -n "$list" ] || { notify "No agent CLI is installed yet"; return; }
+		local chosen
+		chosen=$(printf '%s\n' "$list" | pick "Default agent") || return
+		[ -n "$chosen" ] || return
+		mkdir -p "$state"
+		printf '%s' "$chosen" >"$default_file"
+		notify "Default agent: $chosen"
+		;;
+	shell) exec foot -T "Work" -e bash -lc 'cd "$HOME/Work" 2>/dev/null || cd ~; exec bash' ;;
+	esac
+}
+
+case "${1:-}" in
+--env)
+	# Print the assignment for one account, for use in a shell:
+	#   eval "$(rofi-agents --env 'Claude Code' work)"
+	# The agent may be named by its display name or by its binary.
+	entry=""
+	for e in "${AGENTS[@]}"; do
+		IFS='|' read -r name bin npm envvar <<<"$e"
+		[ "$name" = "${2:-}" ] || [ "$bin" = "${2:-}" ] && entry=$e
+	done
+	[ -n "$entry" ] || { printf 'unknown agent: %s\n' "${2:-}" >&2; exit 2; }
+	IFS='|' read -r name bin npm envvar <<<"$entry"
+	[ -n "$envvar" ] || { printf 'no account support for %s\n' "$name" >&2; exit 2; }
+	[ -n "${3:-}" ] || { printf 'usage: rofi-agents --env <agent> <account>\n' >&2; exit 2; }
+	printf 'export %s=%q\n' "$envvar" "$data/$bin/$3"
+	;;
+--new)
+	for e in "${AGENTS[@]}"; do
+		IFS='|' read -r name bin npm envvar <<<"$e"
+		[ "$name" = "${2:-}" ] || [ "$bin" = "${2:-}" ] || continue
+		[ -n "$envvar" ] || { printf 'no account support for %s\n' "$name" >&2; exit 2; }
+		new_account "$name" "$bin"
+		exit 0
+	done
+	printf 'usage: rofi-agents --new "Claude Code"\n' >&2
+	exit 2
+	;;
+"") menu ;;
+*)
+	printf 'usage: rofi-agents [--env <agent> <account> | --new <agent>]\n' >&2
+	exit 2
+	;;
+esac

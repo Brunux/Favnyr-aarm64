@@ -1,0 +1,45 @@
+#!/bin/sh
+# Fetch a speech recognition model for the dictation shortcut.
+#
+# whisper-cli needs a ggml model file; they are 78 MB (tiny.en), 148 MB
+# (base.en) and 488 MB (small.en). tiny.en is the default because this machine
+# has four A76 cores and no NPU: bigger models are more accurate and noticeably
+# slower. The download is verified against a pinned SHA256, and the file lands in
+# ~/.local/share/whisper/, so a rebuilt image keeps it.
+#
+# Run it from the dictation shortcut (it opens in a terminal when the model is
+# missing) or by hand: dictate-model [tiny.en|base.en].
+set -eu
+
+dir="${XDG_DATA_HOME:-$HOME/.local/share}/whisper"
+mkdir -p "$dir"
+
+case "${1:-tiny.en}" in
+tiny.en)
+	file=ggml-tiny.en.bin size=77704715
+	hash=921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f
+	;;
+base.en)
+	file=ggml-base.en.bin size=147964211
+	hash=a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002
+	;;
+*)
+	printf 'usage: dictate-model [tiny.en|base.en]\n' >&2
+	exit 2
+	;;
+esac
+
+out="$dir/$file"
+if [ -s "$out" ]; then
+	printf 'already downloaded: %s\n' "$out"
+	exit 0
+fi
+
+url="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$file"
+part="$out.part"
+printf 'Fetching %s (%s MiB) from %s\n\n' "$file" "$((size / 1024 / 1024))" "$url"
+curl -fL --progress-bar -o "$part" "$url"
+printf '%s  %s\n' "$hash" "$part" | sha256sum -c - ||
+	{ rm -f "$part"; printf 'checksum mismatch: not keeping the file\n' >&2; exit 1; }
+mv "$part" "$out"
+printf '\nready: %s\n' "$out"

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Agents
+GenericName=Coding agents
+Comment=Launch a coding agent, manage its accounts, install one
+Exec=/home/brunux/.config/bin/rofi-agents
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;
+Keywords=agent;claude;codex;opencode;gemini;copilot;ai;llm;

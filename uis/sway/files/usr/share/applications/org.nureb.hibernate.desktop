@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Hibernate
+Comment=Suspend to disk, when a swap with resume= is available
+Exec=/home/brunux/.config/bin/sway-hibernate
+Icon=system-suspend-hibernate
+Terminal=false
+Categories=System;
+Keywords=hibernate;suspend;disk;swap;sleep;

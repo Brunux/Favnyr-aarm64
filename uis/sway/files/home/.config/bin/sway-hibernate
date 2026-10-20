@@ -1,0 +1,52 @@
+#!/bin/sh
+# Hibernate, but only when it can actually resume.
+#
+# Three things have to be true, and each one has a different fix, so each says
+# its own message instead of a generic failure:
+#
+#   1. the kernel supports it          (/sys/power/state contains "disk")
+#   2. there is a disk swap big enough  (/proc/swaps, not zram - the image needs
+#      to fit; the kernel's default image_size is 2/5 of RAM)
+#   3. the kernel command line has resume=   (otherwise the machine comes back
+#      from a cold boot and the saved session is lost; initramfs-tools resolves
+#      resume=LABEL=... through udev, so a label is enough)
+#
+# The swap is meant to live on the microSD, labelled "nureb_swap". It has to be a
+# partition (or another block device), not a swap file: resume=LABEL= resolves
+# through udev, and a file has no label of its own.
+#
+#   sudo mkswap -L nureb_swap /dev/mmcblk1p4
+#   echo 'LABEL=nureb_swap none swap sw 0 0' | sudo tee -a /etc/fstab
+#   sudo swapon -a
+#
+# and the kernel command line gets `resume=LABEL=nureb_swap` the next time the
+# kernel partition is built (scripts/make-kpart.sh + scripts/install-kpart.sh).
+set -eu
+
+notify() { notify-send -a Hibernate -i system-suspend "$@" 2>/dev/null || true; }
+refuse() { notify "$1"; printf 'hibernate: %s\n' "$1" >&2; exit 1; }
+
+if ! grep -qw disk /sys/power/state 2>/dev/null; then
+	refuse "This kernel cannot hibernate (no 'disk' in /sys/power/state)."
+fi
+
+swap=$(awk 'NR > 1 && $1 !~ /zram/ { print $4 "\t" $1 }' /proc/swaps | sort -rn | head -n1)
+[ -n "$swap" ] ||
+	refuse "No swap on disk. Hibernation needs a swap partition (2 GB or more) labelled nureb_swap, normally on the microSD."
+
+swap_kb=${swap%%	*}
+swap_dev=${swap#*	}
+mem_kb=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+need_kb=$((mem_kb * 2 / 5))
+[ "$swap_kb" -ge "$need_kb" ] ||
+	refuse "The swap on $swap_dev is $((swap_kb / 1024)) MiB; the hibernation image can need about $((need_kb / 1024)) MiB."
+
+case " $(cat /proc/cmdline) " in
+*" resume="*) ;;
+*)
+	refuse "The kernel command line has no resume=, so a hibernated session could not be restored. Add resume=LABEL=nureb_swap to devices/google-asurada/kernel-cmdline.conf and rebuild the kernel partition once (scripts/make-kpart.sh, then scripts/install-kpart.sh)."
+	;;
+esac
+
+notify "Hibernating to $swap_dev"
+exec sudo -n systemctl hibernate

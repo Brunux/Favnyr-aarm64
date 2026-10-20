@@ -730,6 +730,51 @@ fi
 [ -x "$HOME/.config/bin/bar-pick" ] && ok "bar-pick (rofi -dmenu) is executable" ||
 	fail "bin/bar-pick is missing or not executable"
 
+# The manual, the key view, dictation and hibernate. The first two are pure
+# scripts (a missing one is invisible: the menu entry just does nothing); the
+# last two depend on hardware and packages, so they warn instead of failing.
+_learn_pages=$(ls /usr/share/doc/nureb/*.md 2>/dev/null | wc -l)
+if [ "$_learn_pages" -ge 6 ] && [ -x "$HOME/.config/bin/rofi-learn" ]; then
+	ok "manual installed ($_learn_pages pages) and rofi-learn present"
+else
+	fail "manual incomplete: $_learn_pages page(s) in /usr/share/doc/nureb, rofi-learn $( [ -x "$HOME/.config/bin/rofi-learn" ] && echo present || echo missing)"
+fi
+[ -x "$HOME/.config/bin/rofi-keys" ] && ok "keybindings view (rofi-keys) is executable" ||
+	fail "bin/rofi-keys is missing: the key view has no script"
+
+# Dictation: the shortcut records with parecord and transcribes with whisper-cli.
+# The model is fetched on first use, so its absence is not a failure.
+if have whisper-cli && have wtype && have parecord; then
+	ok "dictation tools present (whisper-cli, wtype, parecord)"
+else
+	warn "dictation incomplete:$(have whisper-cli || echo ' whisper-cli')$(have wtype || echo ' wtype')$(have parecord || echo ' parecord')"
+fi
+_model="$(ls "$HOME"/.local/share/whisper/ggml-*.bin 2>/dev/null | head -1)"
+[ -n "$_model" ] && ok "speech model present ($(basename "$_model"))" ||
+	skip "no speech model yet: the dictation shortcut fetches tiny.en (78 MB) on first use"
+
+# Hibernate needs both a disk swap and resume=; without them the helper explains
+# what is missing, which is the correct behaviour, not a failure.
+_hib_swap=$(awk 'NR > 1 && $1 !~ /zram/ { print $1 }' /proc/swaps 2>/dev/null | head -1)
+if [ -n "$_hib_swap" ]; then
+	case " $(cat /proc/cmdline) " in
+	*" resume="*) ok "hibernation possible (disk swap $_hib_swap, resume= present)" ;;
+	*) warn "disk swap $_hib_swap is active but the kernel command line has no resume=: hibernate would not resume" ;;
+	esac
+else
+	skip "no disk swap: hibernation needs a swap labelled nureb_swap (see sway-hibernate)"
+fi
+[ -x "$HOME/.config/bin/sway-hibernate" ] || fail "bin/sway-hibernate is missing"
+
+# Agents: the menu is a script; whether a CLI is installed is informational,
+# because installing one is the menu's own job.
+[ -x "$HOME/.config/bin/rofi-agents" ] && ok "agents menu (rofi-agents) is executable" ||
+	fail "bin/rofi-agents is missing: Alt+Ctrl+Shift+A does nothing"
+_agent_bins=""
+for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_agent_bins $_a"; done
+[ -n "$_agent_bins" ] && ok "coding agent CLI(s) installed:$_agent_bins" ||
+	skip "no coding-agent CLI installed yet (the Agents menu installs one with npm)"
+
 # The session's own launcher entries. They are the only way to reach the bar's
 # panels and the session actions by typing, and a missing one is invisible: the
 # list simply has fewer rows and nobody notices.

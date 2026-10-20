@@ -1,0 +1,104 @@
+#!/bin/sh
+# All of the session's key bindings, parsed from the configuration itself.
+#
+# The configuration files are the source of truth: this view cannot drift from
+# them, and every binding added anywhere in /etc/sway or ~/.config/sway shows up
+# on the next run. The comment directly above a binding becomes its description
+# (the files are written that way on purpose); otherwise the command is shown.
+#
+# Enter copies the command to the clipboard, Escape closes. $mod is Alt here.
+set -eu
+
+theme="$HOME/.config/rofi/solarized.rasi"
+table=$(mktemp "${TMPDIR:-/tmp}/keys.XXXXXX")
+trap 'rm -f "$table"' EXIT
+
+files="/etc/sway/config $(printf '%s\n' /etc/sway/config.d/*.conf | sort | tr '\n' ' ') $HOME/.config/sway/config"
+
+SWAY_FILES="$files" awk -v out="$table" '
+function expand(s,    i, k) {
+    for (i = 0; i < 4; i++) for (k in vars) gsub("\\$" k, vars[k], s)
+    return s
+}
+function pretty(k) {
+    gsub(/--release|--locked|--no-repeat|--no-warns|--to-code/, "", k)
+    gsub(/^[ \t]+|[ \t]+$/, "", k)
+    gsub(/\$mod/, "Alt", k)
+    gsub(/Mod1/, "Alt", k)
+    gsub(/Mod4|Super_L/, "Super", k)
+    return k
+}
+function category(f) {
+    if (f ~ /config\.d\/19-launcher|config\.d\/24-keys/) return "Launcher and keys"
+    if (f ~ /config\.d\/20-brightness/) return "Brightness"
+    if (f ~ /config\.d\/21-volume/) return "Volume"
+    if (f ~ /config\.d\/2[123]-(lock-screen|sleep|screensaver)/) return "Lock and sleep"
+    if (f ~ /config\.d\/22-workspace-gestures|config\.d\/90-touchpad/) return "Touchpad and gestures"
+    if (f ~ /config\.d\/90-screenshot/) return "Screenshots"
+    if (f ~ /config\.d\/90-solarized/) return "Theme"
+    if (f ~ /config\.d\/26-swayfx/) return "Effects"
+    if (f ~ /config\.d\/(20-waybar|01-status-bar|25-bar-panels)/) return "Bar"
+    if (f ~ /config\.d\/00-logo-key/) return "Keyboard"
+    if (f ~ /config\.d\//) return "Session"
+    return "Windows and workspaces"
+}
+BEGIN {
+    n = split(ENVIRON["SWAY_FILES"], files, " ")
+    for (i = 1; i <= n; i++) {              # pass 1: set $var value
+        while ((getline line < files[i]) > 0) {
+            if (line !~ /^[ \t]*set[ \t]+\$/) continue
+            sub(/^[ \t]*set[ \t]+\$/, "", line)
+            split(line, kv, /[ \t]+/)
+            val = line
+            sub(/^[^ \t]+[ \t]+/, "", val)
+            gsub(/["'"'"']/, "", val)
+            vars[kv[1]] = val
+        }
+        close(files[i])
+    }
+    for (i = 1; i <= n; i++) {              # pass 2: the bindings
+        comment = ""; cat = ""
+        while ((getline line < files[i]) > 0) {
+            if (line ~ /^[ \t]*#/) { sub(/^[ \t]*#[ \t]?/, "", line); comment = line; continue }
+            if (line ~ /^[ \t]*$/) continue
+            if (line !~ /^[ \t]*(bindsym|bindcode|bindswitch|bindgesture)[ \t]/) continue
+            rest = line
+            sub(/^[ \t]*[a-z]+[ \t]+/, "", rest)
+            while (rest ~ /^--/) sub(/^--[a-z-]+[ \t]+/, "", rest)
+            keys = rest
+            sub(/[ \t].*$/, "", keys)
+            cmd = rest
+            sub(/^[^ \t]+[ \t]*/, "", cmd)
+            if (cmd == "") continue
+            keys = pretty(expand(keys))
+            cmd = expand(cmd)
+            shown = cmd
+            sub(/^exec /, "", shown)
+            c = category(files[i])
+            if (c != cat) {
+                printf "<span weight=\"bold\" foreground=\"#2aa198\">%s</span>\t\n", c >> out
+                cat = c
+            }
+            desc = expand(comment != "" ? comment : shown)
+            gsub(/&/, "\\&amp;", desc); gsub(/</, "\\&lt;", desc); gsub(/>/, "\\&gt;", desc)
+            printf "<span weight=\"bold\">%-20s</span> <span foreground=\"#586e75\">%s</span>\t%s\n", keys, desc, cmd >> out
+            comment = ""
+        }
+        close(files[i])
+    }
+}'
+
+rows=$(cut -f1 "$table")
+[ -n "$rows" ] || exit 0
+
+choice=$(printf '%s\n' "$rows" | rofi -dmenu -markup-rows -theme "$theme" \
+	-p "Keys" -lines 22 -i \
+	-theme-str "window { width: 64%; }
+mainbox { children: [ inputbar, message, listview ]; }" \
+	-mesg "Enter copies the command · Escape closes · Alt is the modifier") || exit 0
+
+[ -n "$choice" ] || exit 0
+cmd=$(awk -F'\t' -v d="$choice" '$1 == d { print $2; exit }' "$table")
+[ -n "$cmd" ] || exit 0
+printf '%s' "$cmd" | wl-copy
+notify-send -a Keybindings "Copied" "$cmd"

@@ -1,0 +1,67 @@
+#!/bin/sh
+# Dictation: press the shortcut, speak, press it again, and the text is typed
+# into whatever window has the focus.
+#
+# Omarchy runs voxtype, a Rust daemon that holds the microphone and a state file.
+# This is the same idea without the daemon: one parecord while recording, one
+# whisper-cli to transcribe, one wtype to type the result, and nothing left
+# afterwards. The model is fetched on first use (dictate-model, 78 MB for
+# tiny.en) and kept in ~/.local/share/whisper.
+#
+# Safety: recording stops itself after 60 seconds, and the working files live in
+# the runtime directory so a crash cannot leave a growing wav behind.
+set -eu
+
+dir="${XDG_RUNTIME_DIR:-/tmp}/dictate"
+wav="$dir/rec.wav"
+state="$dir/pid"
+model="${DICTATE_MODEL:-${XDG_DATA_HOME:-$HOME/.local/share}/whisper/ggml-tiny.en.bin}"
+self=$(readlink -f "$0")
+
+notify() { notify-send -a Dictation "$@" 2>/dev/null || true; }
+mkdir -p "$dir"
+
+if [ -f "$state" ]; then
+	# --- stop and transcribe -------------------------------------------------
+	pid=$(cat "$state")
+	rm -f "$state"
+	kill "$pid" 2>/dev/null || true
+	sleep 0.4
+	[ -s "$wav" ] || { notify "Nothing was recorded"; exit 1; }
+	notify "Transcribing… (the first run takes a moment)"
+
+	text=$(whisper-cli -m "$model" -f "$wav" -l en -nt -np 2>/dev/null |
+		tr '\n' ' ' | tr -s ' ' | sed -e 's/^ //' -e 's/ $//' -e 's/\[[^]]*\]//g')
+	rm -f "$wav"
+
+	[ -n "$text" ] || { notify "Nothing recognised"; exit 1; }
+
+	# Paste into the focused window, and keep it on the clipboard as well: wtype
+	# fails when the focused surface refuses the virtual keyboard (rofi, a
+	# fullscreen game), and then the clipboard is the way out.
+	printf '%s' "$text" | wl-copy
+	if command -v wtype >/dev/null 2>&1; then
+		wtype "$text" 2>/dev/null || notify "Copied to the clipboard" "Typing into the focused window failed"
+	else
+		notify "Copied to the clipboard" "wtype is not installed, so nothing was typed"
+	fi
+	exit 0
+fi
+
+# --- start recording --------------------------------------------------------
+[ -r "$model" ] || {
+	notify "Fetching the speech model (78 MB, once)" "Press the shortcut again when it finishes"
+	exec foot -T "Dictation · fetching model" -e "$(dirname "$self")/dictate-model"
+}
+
+command -v parecord >/dev/null 2>&1 ||
+	{ notify "parecord is missing" "It ships in pulseaudio-utils"; exit 1; }
+
+playerctl -a pause >/dev/null 2>&1 || true
+parecord --rate=16000 --channels=1 --format=s16le --file-format=wav "$wav" \
+	>/dev/null 2>&1 &
+printf '%s\n' "$!" >"$state"
+notify "Recording…" "Press the shortcut again to stop (60 s maximum)"
+
+# The safety stop is a single short-lived process, not a watcher.
+( sleep 60; [ -f "$state" ] && "$self" >/dev/null 2>&1 ) &

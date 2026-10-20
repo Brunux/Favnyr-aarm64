@@ -150,6 +150,41 @@ current track (selecting the track copies it).
 - One paragraph in `uis/sway/README.md` per adopted feature, with the measured cost if it is not
   "14-17 MB while open, nothing resident".
 
+## Status
+
+Done in the first batch: **Learn** (seven pages in `usr/share/doc/nureb` + `rofi-learn`, opened with
+bat in foot), the **key view** (`rofi-keys`, generated from the configuration, `Alt+Shift+K` as
+Omarchy's `Super+K`), **dictation** (`dictate` + `dictate-model`, whisper.cpp, `Alt+Ctrl+X` as
+Omarchy's `Super+Ctrl+X`), **hibernate** (`sway-hibernate`, gated on a disk swap and `resume=`) and
+**agents** (`rofi-agents`: launch/install/default/accounts, `Alt+Ctrl+Shift+A` as Omarchy's
+`Super+Shift+Ctrl+A`; its usage meters are deliberately left out).
+The plan's P0 #4 (keybindings) is therefore done, and #1/#2/#3/#5-#10 are still open.
+
+## Ideas from other distros (the review asked for)
+
+What other desktops ship that this port does not have, filtered by "can it be a script plus a rofi
+list, with no daemon". Costs are the transient kind (14-17 MB while open) unless stated.
+
+| Idea | Seen in | Cost | Verdict |
+|---|---|---|---|
+| **System tasks menu** (`ujust`-style: update, backup, restore, reinstall the kpart, check-system, journal errors, disk usage) | Universal Blue/Bazzite `ujust`, MX Tools, Garuda Assistant, CachyOS Hello | none (the scripts exist) | **best next win**: it exposes `check-system.sh`, `backup-system.sh`, `install-kpart.sh` and `ncdu` from the launcher, which is where a first-time user looks |
+| **Snippets** (canned texts: addresses, signatures, commands) | Raycast/Spotlight workflows, Omarchy's clipboard | none (`wtype`, `wl-copy`) | cheap and genuinely useful; a `~/.config/snippets.tsv` + `rofi -dmenu` |
+| **Password manager** (rbw or passmenu) | Omarchy (`Super+Shift+/`, rbw), many tiling setups | `rbw` (1.5 MB) or `pass` (129 kB) | worth it once a vault exists; `rbw` has rofi integration built in |
+| **Screenshot annotation** (`grimshot` → `swappy`) | many sway setups, macOS | `swappy` (179 kB) | small, improves an existing feature |
+| **Screen recording toggle** (`wf-recorder` + `slurp`) | Omarchy (`Alt+Print`), GNOME | `wf-recorder` (220 kB) | already in the P1 plan; no audio capture yet |
+| **Emoji, clipboard history, calculator, file picker, OCR/QR, QR codes, media, timezone, DNS** | Omarchy | see P0/P1 above | already planned |
+| **Touchscreen on/off and screen rotation** | Omarchy `toggle-touchscreen`; tablet distros | none (`swaymsg input`/`output`) | this machine is a detachable: portrait mode and "touchscreen off while typing" are real wins |
+| **On-screen keyboard** for tablet mode | GNOME/Phosh (`squeekboard`), mobile distros | `wvkbd` (826 kB, lighter) + 2-25 MB resident while shown | needs tablet-mode detection (the cros-ec switch) and input-method setup; a project, not a script |
+| **Phone integration** (KDE Connect: files, clipboard, notifications) | KDE, GSConnect | `kdeconnect` (8.6 MB) + a resident `kdeconnectd` | the one daemon here would be justified, but it is a daemon; decide deliberately |
+| **First-run welcome** | CachyOS Hello, EndeavourOS Welcome, Garuda | none | already covered by the Learn page |
+| **Pre-update snapshot** (Btrfs rollback) | Garuda, openSUSE | `backup-system.sh` before `apt full-upgrade` (GBs per run) | the port's backups are tarballs on removable media; automatic pre-update copies are a policy decision, not a feature |
+| **Recent files** | GNOME/Pop!_OS | parse `recently-used.xbel` | low value here: no GUI applications write it |
+| **Weather / world clock / calendar** | Omarchy's bar, GNOME | `curl wttr.in` in foot; waybar's calendar tooltip already exists | nice-to-have, one script |
+| **Unit/currency conversion** | Raycast, GNOME's calculator | needs a rates source for currency | calculator yes (planned), currency no |
+| **Notifications centre / history** | GNOME, KDE, Omarchy | mako's `makoctl` has a history (`makoctl history`), rofi could list it | small, once mako history is enabled |
+| **Container/dev environments** (toolbox/distrobox) | Silverblue, Bazzite | `podman` + `distrobox` | out of scope for 4 GB and one eMMC |
+| **Power profiles** | Pop!_OS, GNOME | `power-profiles-daemon` (a daemon) | the bar's power panel shows the readings; the daemon is not worth its memory |
+
 ## Order of work
 
 1. **Batch A (one rebuild, ~4 h)**: emoji, calculator, keybindings, timezone, QR, OCR, QR-from-region,

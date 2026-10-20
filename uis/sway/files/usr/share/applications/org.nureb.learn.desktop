@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Learn
+GenericName=Manual
+Comment=This image's documentation: the session, rofi, shortcuts, software, the system
+Exec=/home/brunux/.config/bin/rofi-learn
+Icon=help-browser
+Terminal=false
+Categories=System;Documentation;
+Keywords=learn;manual;help;docs;documentation;guide;

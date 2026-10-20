@@ -26,6 +26,12 @@ launcher, waybar and the foot terminal.
 | `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, idle screensaver. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key launcher binding. |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
+| `home/.config/bin/rofi-learn` | **Learn**: the manual, one page at a time. |
+| `home/.config/bin/rofi-keys` | **Keybindings**: every binding, parsed from the configuration. |
+| `home/.config/bin/dictate`, `dictate-model` | Dictation with whisper.cpp; the model is fetched (pinned SHA256) on first use. |
+| `home/.config/bin/sway-hibernate` | Hibernate, gated on a disk swap and `resume=`. |
+| `home/.config/bin/rofi-agents` | **Agents**: launch a coding agent, install one, keep accounts per agent. |
+| `usr/share/doc/nureb/*.md` | The six manual pages the Learn menu opens. |
 | `home/.config/rofi/config.rasi` | Launcher settings: the three modes, `terminal = foot`, matching. |
 | `home/.config/rofi/solarized.rasi` | The solarized look, shared by the launcher, the window switcher and the bar's dmenu. |
 | `home/.config/foot/foot.ini` | Solarized palette, JetBrains Mono and the Nerd Font fallback for the session terminal and the bar's popups. |
@@ -117,6 +123,47 @@ terminal" binding.
 To check the theme after an edit, run `rofi -show drun` in the session: a parse error is a
 dialog naming the file, line and column. `rofi -dump-config` does **not** report theme parse
 errors.
+
+## The manual, the key view, dictation and hibernate
+
+Four features that exist because rofi and the terminal can carry them without a resident process;
+`usr/share/doc/nureb/` holds the manual they are documented in.
+
+**Learn** (`Alt+grave` root menu → Learn, or the launcher entry) lists the six pages in
+`/usr/share/doc/nureb/` and opens the chosen one with `bat --paging=always` inside foot, so the page
+is coloured by the same palette as everything else (`BAT_THEME=ansi`) and nothing is left behind.
+There is no browser in the image, and a terminal page costs 25 MB while it is open.
+
+**Keybindings** (`Alt+Shift+K`, matching Omarchy's `Super+K`) is generated, not written: `rofi-keys`
+parses every `bindsym`/`bindcode`/`bindswitch`/`bindgesture` line from `/etc/sway/config`,
+`/etc/sway/config.d/*.conf` and `~/.config/sway/config`, expands the `set $var` definitions, and
+uses the comment above each binding as its description (the files are written that way). It is shown
+with `rofi -dmenu -markup-rows`, so keys are bold and descriptions are dim; Enter copies the command
+to the clipboard. A binding added anywhere shows up on the next run, which is the point: a separate
+list would drift the first time someone edits the configuration.
+
+**Dictation** (`Alt+Ctrl+X`, matching Omarchy's `Super+Ctrl+X`) is `parecord` at 16 kHz mono while
+it records, then `whisper-cli` for the transcription, then `wtype` into the focused window (and the
+clipboard as a fallback). The model is fetched on first use by `dictate-model` - 78 MB for the
+default `ggml-tiny.en.bin`, 148 MB for `base.en` - verified against a pinned SHA256 and kept in
+`~/.local/share/whisper/`. Recording stops itself after 60 seconds and the state is a pid file in
+`$XDG_RUNTIME_DIR`, so nothing survives a crash. Omarchy uses voxtype (a Rust daemon with a state
+file); this is the same interaction without the daemon.
+
+**Agents** (`Alt+Ctrl+Shift+A`, Omarchy's `Super+Shift+Ctrl+A`) is `rofi-agents`: it lists the
+coding-agent CLIs it knows (Claude Code, Codex, OpenCode, Gemini, Copilot), launches the installed
+one in foot from `~/Work`, offers `npm install -g --prefix ~/.local <package>` for the rest (so npm
+never wants root), and keeps **accounts** for the two that support an alternative config directory -
+Claude Code (`CLAUDE_CONFIG_DIR`) and Codex (`CODEX_HOME`) - as one directory per account under
+`~/.local/share/nureb/agents/`. Omarchy's usage meters are deliberately absent: they read provider
+APIs that change shape, and a broken meter is worse than none; if they return, the fitting shape is a
+`python3` script printing one line for a waybar `custom` module, not a daemon.
+
+**Hibernate** is only offered when it can resume: `/sys/power/state` must contain `disk`, a swap on
+disk (not zram) must be at least ~2/5 of RAM, and the kernel command line must carry `resume=`
+(`resume=LABEL=nureb_swap`, resolved through udev, so a labelled SD swap partition is enough). Each
+missing condition gets its own message; it never hibernates into a swap the machine cannot come back
+from. There is no disk swap in the default image.
 
 ## The bar
 

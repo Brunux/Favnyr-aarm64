@@ -71,6 +71,16 @@ zbar-tools
 tesseract-ocr
 tesseract-ocr-eng
 
+# --- dictation -------------------------------------------------------------
+# whisper.cpp: the dictation shortcut records with parecord and transcribes with
+# whisper-cli. The package ships the CLI tools only; the model (78 MB for the
+# default tiny.en) is fetched on first use by ~/.config/bin/dictate-model and
+# verified against a pinned SHA256.
+whisper.cpp-tools
+# wtype: types the transcription into the focused window. It is also what an
+# emoji picker needs to insert its glyph, so it is not dictation-only.
+wtype
+
 # --- media ------------------------------------------------------------------
 yt-dlp
 # ffmpeg is what yt-dlp uses to merge a video stream and an audio stream; without
@@ -105,8 +115,6 @@ npm
 #   tree-sitter-cli, lua5.4
 #                  editor and Keybindings-view tooling for Omarchy's own
 #                  components; nothing in this session parses a grammar or Lua.
-#   wtype          types text into Wayland windows for Omarchy's shell; this
-#                  session has no on-screen keyboard.
 #   gawk           installed upstream because omarchy's theme renderer needs
 #                  awk's RT variable; the solarized theme here is a static file,
 #                  and Debian's mawk is the faster default.

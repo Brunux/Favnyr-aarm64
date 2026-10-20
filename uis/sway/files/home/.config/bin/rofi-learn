@@ -1,0 +1,41 @@
+#!/bin/sh
+# The manual: this image's documentation, one page at a time.
+#
+# The pages are plain markdown in /usr/share/doc/nureb, and they are the same
+# text the repository carries (uis/sway/files/usr/share/doc/nureb). They open in
+# foot with bat, so they are paged and coloured by the same palette as everything
+# else (BAT_THEME=ansi, from /etc/profile.d/90-cli-tools.sh).
+#
+# There is no browser in this image on purpose: a terminal page costs 25 MB while
+# it is open, and there is nothing to phoned home to.
+set -eu
+
+docs=/usr/share/doc/nureb
+theme="$HOME/.config/rofi/solarized.rasi"
+table=$(mktemp "${TMPDIR:-/tmp}/learn.XXXXXX")
+trap 'rm -f "$table"' EXIT
+
+[ -d "$docs" ] || {
+	notify-send -a Learn "The documentation is not installed" "$docs is missing"
+	exit 1
+}
+
+for f in "$docs"/*.md; do
+	[ -r "$f" ] || continue
+	title=$(sed -n '1s/^# *//p' "$f")
+	[ -n "$title" ] || title=$(basename "$f" .md)
+	summary=$(awk 'NR > 1 && /^[A-Za-z]/ { print; exit }' "$f" | cut -c1-68)
+	printf '<span weight="bold">%s</span> <span foreground="#586e75">%s</span>\t%s\n' \
+		"$title" "$summary" "$f" >>"$table"
+done
+
+choice=$(cut -f1 "$table" | rofi -dmenu -markup-rows -theme "$theme" \
+	-p "Learn" -lines 12 -i \
+	-theme-str 'window { width: 64%; }' \
+	-mesg "Enter opens the page in a terminal · Escape closes") || exit 0
+[ -n "$choice" ] || exit 0
+
+page=$(awk -F'\t' -v d="$choice" '$1 == d { print $2; exit }' "$table")
+[ -n "$page" ] || exit 0
+exec foot -T "Nureb · $(basename "$page" .md)" \
+	-e bat --paging=always --style=plain --theme=ansi "$page"

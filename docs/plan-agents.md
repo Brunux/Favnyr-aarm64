@@ -1,7 +1,7 @@
 # Plan: agents (Omarchy's "agents" feature, ported)
 
-Nothing here is committed. The Launch/Install/Default half sketched in
-`~/.config/bin/rofi-agents` (untracked, in the working tree) is the starting point, not a decision.
+**P1 (launch/install/default) and P2 (accounts) are committed** as the first cut, in
+`~/.config/bin/rofi-agents`. P3-P5 are the plan: nothing of those exists yet.
 
 ## What Omarchy actually ships
 
@@ -112,10 +112,14 @@ still no daemon, and no new toolchain to build and carry.
    non-npm installers?
 4. **Language**: stay with `sh` + `jq` + `python3` (recommended), or allow one small compiled helper?
 
-## State of the working tree (uncommitted)
+## Status
 
-The four features requested before this plan - **Learn** (six pages + `rofi-learn`), the **key view**
-(`rofi-keys`), **hibernate** (`sway-hibernate`), **dictation** (`dictate`, `dictate-model`) - plus
-the **agents P1/P2 sketch** (`rofi-agents`, its manual page, entry and binding) are written and were
-verified visually in the headless compositor, but **none of it is committed**. The kernel rebuild
-finished (`HZ=1000`, MGLRU); the rootfs/card pipeline has not run, so nothing has reached an image.
+Committed: **Learn** (seven manual pages + `rofi-learn`), the **key view** (`rofi-keys`),
+**hibernate** (`sway-hibernate`), **dictation** (`dictate`, `dictate-model`) and the **agents
+P1/P2** (`rofi-agents`, its manual page, launcher entry and binding). Each was verified in the
+headless compositor (screenshots of the key list, the manual list, the agents menu) and the session
+configuration validates with `sway -C`.
+
+The kernel rebuild finished (`HZ=1000`, MGLRU enabled). The rootfs/card pipeline has **not** run:
+the current image is older than all of this, so a `scripts/build-rootfs.sh` + `install-kernel.sh` +
+`install-swayfx.sh` + `make-kpart.sh` + `write-sd.sh` cycle is still needed before any of it boots.

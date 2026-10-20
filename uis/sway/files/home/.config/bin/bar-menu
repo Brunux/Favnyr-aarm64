@@ -16,12 +16,17 @@ dir=$(dirname "$0")
 choice=$(
 	printf '%s\n' \
 		Terminal \
+		Agents \
+		Learn \
+		Keybindings \
 		'Wi-Fi' \
 		Bluetooth \
 		'Audio output' \
+		Dictation \
 		Lock \
 		Screensaver \
 		Suspend \
+		Hibernate \
 		'Log out' \
 		Reboot \
 		'Power off' |
@@ -31,6 +36,11 @@ choice=$(
 case $choice in
 	'') exit 0 ;;
 	Terminal) exec foot ;;
+	# The manual, the key view and the agent launcher: the same scripts the
+	# launcher entries call.
+	Agents) exec "$dir/rofi-agents" ;;
+	Learn) exec "$dir/rofi-learn" ;;
+	Keybindings) exec "$dir/rofi-keys" ;;
 	'Wi-Fi') exec "$dir/bar-net" ;;
 	Bluetooth) exec "$dir/bar-bt" ;;
 	'Audio output') exec "$dir/bar-audio" ;;
@@ -39,6 +49,10 @@ case $choice in
 	Lock) exec swaylock -c 002b36 ;;
 	# Deboma's menu has the same entry; it is the idle screen on demand.
 	Screensaver) exec "$dir/sway-screensaver" ;;
+	# Both of these explain themselves when they cannot run (no microphone, no
+	# disk swap with resume=), so the menu can list them unconditionally.
+	Dictation) exec "$dir/dictate" ;;
+	Hibernate) exec "$dir/sway-hibernate" ;;
 	Suspend) exec "$dir/sway-suspend" ;;
 	'Log out') exec swaymsg exit ;;
 	Reboot) exec systemctl reboot ;;

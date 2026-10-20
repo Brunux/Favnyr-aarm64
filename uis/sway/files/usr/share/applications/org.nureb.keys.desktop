@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Keybindings
+Comment=Every key binding this session defines, searchable
+Exec=/home/brunux/.config/bin/rofi-keys
+Icon=preferences-desktop-keyboard
+Terminal=false
+Categories=System;
+Keywords=keys;keybindings;shortcuts;bindings;

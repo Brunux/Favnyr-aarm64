@@ -1,0 +1,132 @@
+# When something is wrong
+
+Start with the report; it is faster than reading logs:
+
+```sh
+check-system.sh ~/Dev/debian-aarch64
+journalctl -b -p err --no-pager | tail -50
+```
+
+`FAIL` is a regression of something this port already fixed. `WARN` is usually
+information (a regulatory domain, a battery gauge that reports "unknown"). Keep
+the whole output when you ask for help: it contains the kernel, the firmware
+state, the partitions, the session and the package check in one file.
+
+## No sound, or a "Dummy Output" sink
+
+The MT8192 sound card (`mt8192_mt6359_rt1015p_rt5682`) only works after its
+**UCM boot sequence** has run: it connects the front-end and back-end DAIs, and
+alsa-lib never runs it by itself. `alsactl restore` does, from udev on card
+insert. Check:
+
+```sh
+pactl list cards short        # the card must show profile HiFi
+wpctl status                  # a "Built-in Audio Speaker" sink, not "Dummy Output"
+sudo alsactl restore          # run the boot sequence by hand
+```
+
+If the card is there but the profile is off, something removed `alsa-utils` or
+`alsa-ucm-conf`; `apt install` them back.
+
+**ALSA-only programs** (aplay without `-D`, emulators, some Java games) need
+`pipewire-alsa`; without it they fail with *audio open error: No such file or
+directory* while everything else works.
+
+## Wi-Fi
+
+```sh
+nmcli device wifi list
+nmtui                     # the full editor
+```
+
+`country 00` (world regulatory domain) is normal until NetworkManager or the
+access point sets one; it is not a failure. A saved profile that never connects
+is usually bound to an interface name (`interface-name=wlan0`) - the profiles
+this image imports have that line stripped on purpose.
+
+## Bluetooth
+
+```sh
+bluetoothctl show         # Powered: yes
+btmgmt info
+```
+
+The controller (`hci0`) is attached to `serial0-0` and needs its RTL8822CS
+firmware; if `bluetoothctl show` says *Powered: no*, check
+`journalctl -u bluetooth` and that the `bluez` package is installed.
+
+## The screen stays black after a kernel update
+
+The firmware boots `p1`, not `/boot`. If the machine comes back to the firmware
+menu, or boots the old kernel, the kernel partition was not rewritten:
+
+```sh
+sudo ~/Dev/debian-aarch64/scripts/install-kpart.sh
+```
+
+To see the boot messages (they are quiet by default), build a verbose kpart once:
+
+```sh
+KERNEL_CMDLINE_OVERRIDE="console=tty0 ignore_loglevel loglevel=7" \
+  sudo -E ~/Dev/debian-aarch64/scripts/make-kpart.sh
+```
+
+Never append a bare `debug`: initramfs-tools then sends its own output to a file
+inside the initramfs, and the messages that explain a failure never reach the
+screen.
+
+## The launcher opens empty, or shows an error dialog
+
+* An error dialog naming a file, line and column is a **rofi theme parse error**;
+  run `rofi -show drun` in a terminal after editing `~/.config/rofi/*.rasi`.
+* An empty window means the list was empty - check that `/usr/share/applications`
+  has entries and that `~/.config/rofi/config.rasi` exists.
+* A bar click that does nothing: `~/.config/bin/bar-pick` must be executable.
+
+## No notifications
+
+mako owns `org.freedesktop.Notifications`. If it is not running, notifications
+disappear with no log line:
+
+```sh
+busctl --user list | grep Notifications
+pgrep -a mako || exec mako
+```
+
+## Icons render as boxes
+
+Terminals do not use fontconfig fallback: foot lists its fonts explicitly. The
+shipped `~/.config/foot/foot.ini` names `Symbols Nerd Font Mono` after JetBrains
+Mono, which is what makes eza's icons, faststart and the starship glyphs render.
+If you replace the font line, keep a symbol font in the list.
+
+## The brightness keys do nothing
+
+`brightnessctl` needs write access to `/sys/class/backlight/*/brightness`. The
+image ships a udev rule (group `video`, `g+w`); after changing it,
+`sudo udevadm control --reload && sudo udevadm trigger`.
+
+## A key does nothing at all
+
+keyd grabs the keyboard, and it reads its configuration only at start:
+
+```sh
+sudo keyd.rvaiya reload       # after editing /etc/keyd/default.conf
+```
+
+`backspace+escape+enter` makes keyd quit and release the keyboard if a mapping
+goes wrong, which is the way back to a working top row.
+
+## Nothing responds, the machine is thrashing
+
+4 GB and a compressed swap: a runaway process can make everything crawl before
+the kernel kills it. `systemd-oomd` is the guard (it kills a hog at 50 % memory
+pressure). To see who is responsible:
+
+```sh
+ps -eo pid,rss,comm --sort=-rss | head
+cat /proc/pressure/memory
+```
+
+`Alt+Shift+E` (exit the session) or a VT (Ctrl+Alt+top row with keyd) is the way
+out when the session itself is stuck.
