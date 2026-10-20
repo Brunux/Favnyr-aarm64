@@ -123,9 +123,51 @@ fi
 echo "%sudo ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/99-$USERNAME
 chmod 440 /etc/sudoers.d/99-$USERNAME
 
+log "System tuning for this device (see docs/optimization.md)"
+# zram: swap in compressed RAM. systemd-zram-generator reads this file (the
+# package's own /usr/lib/systemd/zram-generator.conf already creates a zram0 at
+# min(ram/2, 4096); these are the values written out so they are visible and
+# deliberate). zram-size and swap-priority repeat the defaults; the algorithm is
+# the choice: lz4 compresses and decompresses fast, which is what matters when
+# the machine is already under pressure, and zstd is the alternative to measure
+# if the ratio turns out to matter more than the CPU (docs/optimization.md).
+install -d /etc/systemd
+cat >/etc/systemd/zram-generator.conf <<'EOF'
+[zram0]
+zram-size = min(ram / 2, 4096)
+compression-algorithm = lz4
+swap-priority = 100
+EOF
+
+# Memory and writeback policy. Debian's swappiness default is 60, which prefers
+# dropping page cache over swapping: wrong when swap is compressed RAM, where a
+# swapped page costs a few hundred microseconds and buys real memory back. The
+# dirty limits are deliberately the opposite of Deboma's 256/64 MB - on eMMC a
+# large dirty window is where multi-second stalls come from when copying files.
+install -d /etc/sysctl.d
+cat >/etc/sysctl.d/90-zram-emmc.conf <<'EOF'
+vm.swappiness = 150
+vm.vfs_cache_pressure = 50
+vm.dirty_bytes = 67108864
+vm.dirty_background_bytes = 16777216
+EOF
+
+# I/O scheduler: kyber, which is built for flash (low latency under mixed load)
+# instead of the kernel's default mq-deadline. Both are compiled in, so this is a
+# runtime choice; see docs/optimization.md.
+install -d /etc/udev/rules.d
+cat >/etc/udev/rules.d/60-io-scheduler.rules <<'EOF'
+# eMMC and microSD: kyber (CONFIG_MQ_IOSCHED_KYBER is built in).
+ACTION=="add|change", KERNEL=="mmcblk[0-9]*", ATTR{queue/rotational}=="0", ATTR{queue/scheduler}="kyber"
+EOF
+
 log "Enabling services"
 systemctl enable NetworkManager ssh 2>/dev/null || true
-systemctl enable zramswap 2>/dev/null || true
+# systemd-oomd (PSI-based; Debian's defaults configure it) and the zram swap the
+# generator creates. systemd-zram-generator needs no enabling - it is a systemd
+# generator, and dev-zram0.swap exists from the moment the unit files are
+# generated at boot. zramswap is zram-tools' unit and is gone with the package.
+systemctl enable systemd-oomd 2>/dev/null || true
 systemctl set-default graphical.target 2>/dev/null || true
 
 log "Generating ssh host keys whenever they are missing"

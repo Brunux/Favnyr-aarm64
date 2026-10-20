@@ -26,8 +26,13 @@ wl-clipboard
 
 # what /etc/sway/config and the drop-ins actually invoke
 waybar
-bemenu
-libbemenu-wayland
+# tofi is the launcher (Search key, $mod+d) and tofi-run the command palette
+# ($mod+Shift+d): a Wayland layer-shell client with no GTK, no daemon and no
+# resident process - it exists while it is on screen, ~23 MB RSS / ~15 MB PSS
+# measured on this machine (docs/optimization.md, uis/sway/README.md). It
+# replaces bemenu, whose palette needed a flag per colour on the command line;
+# tofi reads ~/.config/tofi/config instead.
+tofi
 # foot is the session terminal: no GPU renderer and no Rust runtime, so a window
 # costs about half the memory of an alacritty one on a 4 GB machine. The bar's
 # popups run here as well (with --app-id=popup, see bar-panels.conf), and

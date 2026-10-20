@@ -507,6 +507,77 @@ _susp="$(asroot journalctl -b --no-pager | grep -c 'PM: suspend entry')"
 	warn "no suspend recorded in this boot: press the Lock key to test it"
 
 # ---------------------------------------------------------------------------
+section "System tuning"
+# ---------------------------------------------------------------------------
+# Everything below is a deliberate choice documented in docs/optimization.md, and
+# the failure mode is always the same: something silently takes it back (a
+# package resets the governor, an overlay stops being installed) and the machine
+# is slower or hungrier with no message anywhere.
+
+_govs="$(cat /sys/devices/system/cpu/cpufreq/policy*/scaling_governor 2>/dev/null | sort -u | tr '\n' ' ')"
+case "$_govs" in
+	"schedutil ") ok "cpufreq governor is schedutil on every policy" ;;
+	*) warn "cpufreq governor is '${_govs% }', not schedutil (ondemand pins both clusters at max)" ;;
+esac
+
+# MGLRU (CONFIG_LRU_GEN + CONFIG_LRU_GEN_ENABLED): reclaim by generation instead
+# of a full scan, which is what a 4 GB machine under zram pressure needs.
+if [ -r /sys/kernel/mm/lru_gen/enabled ]; then
+	_lru="$(cat /sys/kernel/mm/lru_gen/enabled)"
+	case "$_lru" in
+		0x0000) fail "MGLRU is built in but disabled (lru_gen/enabled=$_lru)" ;;
+		*) ok "MGLRU enabled ($_lru)" ;;
+	esac
+else
+	fail "no /sys/kernel/mm/lru_gen: the kernel was built without CONFIG_LRU_GEN"
+fi
+
+# THP=madvise comes from the kernel command line: with 4 GB and zram, 'always'
+# both wastes memory and adds latency spikes.
+_thp="$(cat /sys/kernel/mm/transparent_hugepage/enabled 2>/dev/null)"
+case "$_thp" in
+	*'[madvise]'*) ok "transparent hugepages: madvise" ;;
+	*) warn "transparent hugepages: ${_thp:-unknown} (expected [madvise] from the cmdline)" ;;
+esac
+
+# Swap has to be zram, and it has to be a unit: systemd-oomd's ManagedOOMSwap
+# only sees units, and the generator (not a swapon in a script) is what creates
+# dev-zram0.swap.
+case "$(cat /proc/swaps 2>/dev/null)" in
+	*/dev/zram0*) ok "swap is zram ($(awk '/zram0/ { print $4 " kB" }' /proc/swaps | head -1))" ;;
+	*) fail "no zram swap: memory pressure has nowhere to go" ;;
+esac
+case "$(systemctl list-units --all --no-legend 'dev-zram0.swap' 2>/dev/null)" in
+	*dev-zram0.swap*) ok "zram swap is a systemd unit (systemd-oomd can manage it)" ;;
+	*) warn "zram swap is not a dev-zram0.swap unit: systemd-oomd cannot manage it" ;;
+esac
+check_svc systemd-oomd "systemd-oomd is active (kills a hog on memory pressure)"
+
+[ "$(cat /proc/sys/vm/swappiness 2>/dev/null || echo 0)" -ge 100 ] &&
+	ok "vm.swappiness=$(cat /proc/sys/vm/swappiness) (swapping to compressed RAM is cheap)" ||
+	warn "vm.swappiness=$(cat /proc/sys/vm/swappiness): too low for a zram-only system"
+
+case "$(cat /sys/block/mmcblk0/queue/scheduler 2>/dev/null)" in
+	*'[kyber]'*) ok "eMMC I/O scheduler: kyber" ;;
+	*) warn "eMMC I/O scheduler: $(cat /sys/block/mmcblk0/queue/scheduler 2>/dev/null) (expected [kyber])" ;;
+esac
+
+# The kernel options the tuning depends on, read from the config the image ships
+# in /boot rather than assumed: a kernel built from a different config (or the
+# stock one after a bad install) is invisible otherwise.
+_cfg="$(ls -1 /boot/config-* 2>/dev/null | head -1)"
+if [ -r "$_cfg" ]; then
+	_missing_cfg=""
+	[ -n "$(grep -x 'CONFIG_HZ=1000' "$_cfg" 2>/dev/null)" ] || _missing_cfg="$_missing_cfg HZ=1000"
+	[ -n "$(grep -x 'CONFIG_LRU_GEN=y' "$_cfg" 2>/dev/null)" ] || _missing_cfg="$_missing_cfg LRU_GEN"
+	[ -n "$(grep -x 'CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y' "$_cfg" 2>/dev/null)" ] || _missing_cfg="$_missing_cfg governor=schedutil"
+	[ -z "$_missing_cfg" ] && ok "kernel config carries the tuning ($(basename "$_cfg"))" ||
+		warn "kernel config lacks:$_missing_cfg"
+else
+	skip "no /boot/config-* to check the kernel options against"
+fi
+
+# ---------------------------------------------------------------------------
 section "Clock"
 # ---------------------------------------------------------------------------
 if have timedatectl; then
@@ -564,7 +635,7 @@ if have sway; then
 	fi
 fi
 _missing_cmds=""
-for _c in waybar foot bemenu swaylock swaynag swaybg brightnessctl grimshot wlsunset wpctl pactl mako; do
+for _c in waybar foot tofi-drun swaylock swaynag swaybg brightnessctl grimshot wlsunset wpctl pactl mako; do
 	have "$_c" || _missing_cmds="$_missing_cmds $_c"
 done
 if [ -z "$_missing_cmds" ]; then
@@ -645,6 +716,15 @@ case "$_ls_alias" in
 	*eza*) ok "ls is eza in an interactive shell" ;;
 	*) warn "ls is not eza (alias: ${_ls_alias:-none}); ~/.bashrc is not being read" ;;
 esac
+
+# The launcher is tofi, themed by a single config file that both modes read.
+# Without the file tofi still opens, in its own default colours, which looks like
+# a themed launcher that lost its theme rather than a missing file.
+if have tofi && have tofi-drun && [ -r "$HOME/.config/tofi/config" ]; then
+	ok "launcher complete (tofi, tofi-drun, ~/.config/tofi/config)"
+else
+	fail "launcher incomplete: tofi/tofi-drun missing or ~/.config/tofi/config absent"
+fi
 
 # waybar reads the backlight by device name and shows an empty module (with no
 # error anywhere) when the name does not exist.  Read it with bash's own regex

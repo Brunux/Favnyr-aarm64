@@ -12,7 +12,24 @@ host differs from what `uis/sway` ships (the host is an older Omarchy-era
 install), that is said explicitly — it is the difference between "this device"
 and "this image".
 
-Nothing here is done yet. Items are ordered by (effect × safety) / effort.
+Items are ordered by (effect × safety) / effort.
+
+## Status
+
+**In this batch**: 1 (MGLRU), 2 (`schedutil`), 3 (`HZ=1000`), 4 (`PREEMPT_DYNAMIC`),
+11a (sysctl drop-in, written by `rootfs-setup.sh`), 11b (`systemd-zram-generator`
+replaces `zram-tools`; the swap is now a `dev-zram0.swap` unit), 11c
+(`systemd-oomd`), 11d (the algorithm is written down as `lz4`, with `zstd` the
+alternative to measure), 12 (`transparent_hugepage=madvise` on the command line),
+13 (kyber udev rule). `check-system.sh` grew a "System tuning" section that fails
+or warns on each of them, because the failure mode here is silent:
+
+**Next**: 5 (kernel zstd), 6 (thin LTO), 9 (dead options) — one card test.
+**Optional**: 7 (zswap needs `ZPOOL`/`FRONTSWAP` first), 8 (sched_ext).
+**Left out on purpose**: 14 (IRQ affinity). Pinning every IRQ to CPU0 may be the
+deliberate low-power choice on this SoC — it is what ChromeOS does — so it needs a
+before/after measurement of both latency and idle drain, not an assumption. It
+stays in the list as something to measure, not something to ship.
 
 ## 1. What the device does today
 

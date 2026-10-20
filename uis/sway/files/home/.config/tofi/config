@@ -1,0 +1,102 @@
+# tofi: the session launcher, and the solarized theme every tofi mode draws.
+#
+# It replaces bemenu, which was the launcher before this. tofi is a Wayland
+# layer-shell client with no GTK and no daemon: it exists while it is on screen
+# and nothing of it is left afterwards. Measured on this machine (headless
+# swayfx, per-process numbers from /proc), one drun-mode instance is 23 MB RSS /
+# 15 MB PSS - PSS splits the fontconfig, pango and Wayland pages it shares with
+# everything else - against 45 MB / 40 MB for fuzzel's drun mode and 71 MB /
+# 62 MB for wofi's. Deboma's launcher, walker, is a GTK4 application run as a
+# *service* plus the elephant provider daemon, which is the opposite of this.
+#
+# Three modes read this same file; $XDG_CONFIG_HOME/tofi/config is the location
+# tofi looks at, so no binding passes --config:
+#
+#   tofi-drun   applications from .desktop entries   ($mod+d, the Search key)
+#   tofi-run    executables in $PATH                ($mod+Shift+d)
+#   tofi        dmenu: stdin in, the selection out  (available, unused here)
+#
+# Reference: `man 5 tofi`. Syntax check: `tofi --config <this file>`, which
+# reports a bad key and otherwise gets as far as connecting to the compositor.
+
+### Fonts
+#
+# A Pango font name and not a path: a path makes tofi skip fontconfig, which is
+# faster, but a character the file does not have then renders as nothing, and
+# application names are not all ASCII. 12 pt is the bar's size.
+font = "JetBrains Mono"
+font-size = 12
+
+### Text
+#
+# base1 for results, base2 for what has been typed, cyan for the prompt: the
+# same roles those three have in style.css and mako's config.
+text-color = #93a1a1
+input-color = #eee8d5
+prompt-text = "Launch  "
+prompt-color = #2aa198
+prompt-padding = 2
+placeholder-text = "Search"
+placeholder-color = #586e75
+
+### Window
+#
+# 45% wide, centred: the proportion `bemenu --width-factor 0.45` used. The
+# height is what the list can fill - tofi does not shrink to fit, so the box has
+# to be sized for the rows it shows.
+width = 45%
+height = 25%
+anchor = center
+exclusive-zone = 0
+background-color = #002b36f2
+corner-radius = 8
+outline-width = 2
+outline-color = #2aa198
+# tofi's inner border defaults to 12 px of pink; the padding below does the
+# spacing instead.
+border-width = 0
+padding-top = 10
+padding-bottom = 10
+padding-left = 12
+padding-right = 12
+
+### Results
+#
+# num-results = 0 draws as many as the height holds, which is what makes the box
+# look full instead of leaving a gap under eight entries.
+num-results = 0
+result-spacing = 0
+# The highlighted row is a card, like the bar's own modules and fuzzel's
+# selection: base02 behind base3 text, with the characters that matched in cyan.
+selection-background = #073642
+selection-color = #fdf6e3
+selection-match-color = #2aa198
+# The highlighted row is a card around its text, not a full-width bar: 6 px above
+# and below, 12 px on each side. The four-value spelling is the one tofi 0.9.1
+# honours - the two-value form ("6,10") is accepted but only the vertical value
+# takes effect, measured by filling the selection with red and reading the pixel
+# extent from a screenshot (45 px of text vs 71 px with the padding applied).
+# A "-1" (as far as possible) does not survive with the real colours, so the card
+# stays around the text; it reads as a highlight without drawing a band.
+selection-background-padding = 6,12,6,12
+selection-background-corner-radius = 6
+
+### Behaviour
+hide-cursor = true
+text-cursor = true
+text-cursor-style = bar
+text-cursor-color = #2aa198
+# Fuzzy search, as walker and fuzzel do; tofi's default is substring matching.
+fuzzy-match = true
+require-match = true
+auto-accept-single = false
+# Sort by how often an entry was picked (tofi keeps the counts in
+# $XDG_STATE_HOME/tofi-drun-history).
+history = true
+# In drun mode, run the entry instead of printing its Exec line.
+drun-launch = true
+# Used for the entries with Terminal=true; foot is this session's terminal.
+terminal = foot
+# One launcher at a time (tofi's lock file), and scale with the output.
+multi-instance = false
+scale = true

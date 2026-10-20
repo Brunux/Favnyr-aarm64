@@ -167,6 +167,12 @@ uncommitted changes, since those do not travel into the image.
 
 - `make zinstall` installs the image as **`vmlinuz-<release>`** only; there is no plain `vmlinuz`
   in the staged tree.
+- **`build-kernel.sh` syncs the config on every run.** `kernels/<flavor>/config.aarch64` is copied
+  into the source tree unconditionally (kbuild only reads `.config`, and the extracted tree is
+  reused), so editing the shipped config cannot be silently ignored - the same class of bug as a
+  working tree that never reached the image. The `.prepared` marker holds a hash of
+  `patches/series` + every `*.patch` instead of being an empty flag: editing a patch re-extracts,
+  while a config-only change rebuilds in place.
 - `CONFIG_MMC_MTK`, `CONFIG_DRM_MEDIATEK` and `CONFIG_EXT4_FS` are built-in (`=y`), so the root
   filesystem and the display work without any initramfs module.
 - `CONFIG_DRM_PANFROST` (the driver this MT8192 uses) and `CONFIG_DRM_PANTHOR` (newer Mali) are both
@@ -345,7 +351,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `KEY_BRIGHTNESSDOWN` (evdev 224) as keycode 232.
 
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
-  key opens bemenu, waybar, foot) on top of the compositor described above. `rootfs-setup.sh`
+  key opens tofi, waybar, foot) on top of the compositor described above. `rootfs-setup.sh`
   rewrites `/home/brunux` inside the shipped text files to `$USERNAME`, and merges
   `uis/sway/files/home/` into that home.
 - **tuigreet**: Debian ships the *original* tuigreet **0.9.1**, which has no `--config`/TOML
@@ -401,9 +407,21 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
 - **workstyle** (renames workspaces to icons) is not packaged in Debian; Nura ran a cargo build
   linked against musl, which cannot run against glibc. Its drop-in is not shipped, but
   `~/.config/workstyle/config.toml` is kept so `cargo install workstyle` is enough to enable it.
-- `bemenu` in Debian pulls one backend through an alternative dependency; add
-  **`libbemenu-wayland`** explicitly for the Wayland session. `grimshot` is a package of its own.
-  `pactl` (the XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
+- **The launcher is `tofi`, and it replaces bemenu.** `tofi-drun` lists the `.desktop` entries
+  (`$mod+d`, the Search key), `tofi-run` lists `$PATH` (`$mod+Shift+d`, the way to reach the tools
+  from `packages/tools.list` that have no `.desktop` file), and both read one file,
+  `~/.config/tofi/config` - which is why the bindings in `config.d/19-launcher.conf` are a single
+  word. Measured in this machine's headless compositor: 22.8 MB RSS / **14.6 MB PSS**, against
+  40.5 MB for fuzzel's drun mode and 62.1 MB for wofi's; walker (Deboma's) is a GTK4 service plus
+  the elephant daemon, i.e. resident, which is the thing this port avoids. The theme is the
+  session palette, and one detail is easy to get wrong: `selection-background-padding` only takes
+  effect in the **four-value** spelling (`6,12,6,12`); the two-value `6,10` is accepted but pads
+  only vertically (measured with a red selection background: 45 px of text against 71 px with the
+  padding applied). A `-1` ("as far as possible") does not survive with the real colours, so the
+  highlighted row is a card around its text rather than a full-width band. tofi has no `--check`; a bad key makes `tofi --config <file>` print
+  the option instead of the compositor error. It needs no backend alternative package, unlike
+  bemenu's `libbemenu-wayland`. `grimshot` is a package of its own. `pactl` (the XF86Audio* keys)
+  comes from `pulseaudio-utils`, not from `pipewire-pulse`.
 - **The bar's menus are short-lived `fuzzel` popups, not panels.** Deboma answers a click on the
   bar with a Quickshell panel, and that shell is 361 MB of PSS - more than half of the Deboma
   session. `uis/sway/files/home/.config/bin/bar-*` reproduce the same interactions with

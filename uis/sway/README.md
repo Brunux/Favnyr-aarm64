@@ -15,7 +15,7 @@ uis/sway/
 configured `USERNAME` inside the text files.
 
 This desktop was ported from the maintainer's Nura (postmarketOS) session, so it
-keeps the solarized theme, the `Alt` modifier + Search-key launcher, the bemenu
+keeps the solarized theme, the `Alt` modifier + Search-key launcher, the tofi
 launcher, waybar and the foot terminal.
 
 ## Layout
@@ -26,6 +26,7 @@ launcher, waybar and the foot terminal.
 | `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, idle screensaver. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key launcher binding. |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
+| `home/.config/tofi/config` | The launcher's solarized theme, read by `tofi-drun` (applications) and `tofi-run` (commands) - see **The launcher**. |
 | `home/.config/foot/foot.ini` | Solarized palette, JetBrains Mono and the Nerd Font fallback for the session terminal and the bar's popups. |
 | `home/.bashrc` | The interactive shell: `ls` is eza, `cat` is bat, `cd` is zoxide, fzf key bindings and the starship prompt (see **The CLI tools**). |
 | `home/.config/starship.toml` | Deboma's prompt: directory and git state in the theme's cyan. |
@@ -62,6 +63,37 @@ binary, `/etc/sway` and the greeter's `sway` command are the same either way, bu
 
 The drop-in is swayfx-only, so `sway -C` failing means Debian's plain sway is installed again
 (`scripts/check-system.sh` fails on that, and on a `sway --version` that does not say `swayfx`).
+
+## The launcher
+
+The Search key and `$mod+d` open **tofi** in drun mode (the `.desktop` entries), `$mod+Shift+d`
+opens `tofi-run` (every executable in `$PATH`, which is how the tools from `packages/tools.list` -
+`btop`, `lazygit`, `ffmpeg` - are reached: they have no `.desktop` file). Both read the same
+`~/.config/tofi/config`, so the bindings are one word each (`19-launcher.conf`).
+
+It replaces **bemenu**, whose palette was fourteen flags on one command line, and it is the cheapest
+launcher with an application list that exists here. Measured on this machine, per process, with the
+same headless compositor the bar was measured in:
+
+| Launcher | RSS | PSS |
+|---|---|---|
+| **tofi** (drun) | 22.8 MB | **14.6 MB** |
+| fuzzel (drun) | 44.8 MB | 40.5 MB |
+| wofi (drun, GTK3) | 70.8 MB | 62.1 MB |
+
+tofi has no GTK, no daemon and nothing resident: it exists while the window is on screen. Deboma's
+launcher (walker) is a GTK4 application that runs as a *service* plus the elephant provider daemon,
+which is the opposite arrangement. The trade-off tofi makes is text only - no icons, no grid - which
+is the price of 14.6 MB instead of 40.
+
+The theme is the session's palette: base03 background at 95 %, a cyan 2 px rim, JetBrains Mono 12,
+the typed text in base2, the prompt in cyan, the highlighted row a base02 card around its text
+(`selection-background-padding = 6,12,6,12`; the two-value spelling only pads vertically in 0.9.1),
+the fuzzy match highlighted in cyan, and no pointer (`hide-cursor`). `terminal = foot` runs the entries that need a terminal (`btop`, `htop`) in foot.
+
+Debian's package is `tofi`; it ships `tofi`, `tofi-run` and `tofi-drun`, plus bash completion. The
+config has no `--check`, but a bad key makes `tofi --config <file>` print the option it could not
+parse instead of the compositor error.
 
 ## The bar
 

@@ -10,29 +10,50 @@ STAGE="$KERNEL_STAGE"
 JOBS="${JOBS:-$(nproc)}"
 SERIES="$KERNEL_PATCH_DIR/series"
 
+# What the extracted tree was built from: the patch list and every patch file.
+# The marker holds this hash, so editing a patch re-extracts instead of silently
+# building the previous ones (the config is not part of it - that is synced on
+# every run, below).
+patches_hash() {
+	{
+		cat "$SERIES" 2>/dev/null
+		cat "$KERNEL_PATCH_DIR"/*.patch 2>/dev/null
+	} | sha256sum | cut -d' ' -f1
+}
+
 fetch_and_prepare() {
 	mkdir -p "$SRC_DIR"
 	if [ ! -f "$SRC_DIR/$KERNEL_TARBALL" ]; then
 		log "Downloading $KERNEL_URL"
 		curl -fSL -o "$SRC_DIR/$KERNEL_TARBALL" "$KERNEL_URL"
 	fi
-	if [ -f "$KERNEL_SRC/.prepared" ]; then
-		return 0
-	fi
-	log "Extracting $KERNEL_TARBALL"
-	rm -rf "$KERNEL_SRC"
-	tar xf "$SRC_DIR/$KERNEL_TARBALL" -C "$SRC_DIR"
+	_want="$(patches_hash)"
+	if [ -f "$KERNEL_SRC/.prepared" ] && [ "$(cat "$KERNEL_SRC/.prepared")" = "$_want" ]; then
+		# Already extracted and patched; the config is still synced (below),
+		# because kbuild only picks it up from .config.
+		log "Kernel source already prepared (same patches)"
+	else
+		log "Extracting $KERNEL_TARBALL"
+		rm -rf "$KERNEL_SRC"
+		tar xf "$SRC_DIR/$KERNEL_TARBALL" -C "$SRC_DIR"
 
-	log "Applying patches"
-	if [ -f "$SERIES" ]; then
-		while read -r p; do
-			case "$p" in '' | '#'*) continue ;; esac
-			log "  $p"
-			patch -d "$KERNEL_SRC" -p1 --no-backup-if-mismatch <"$KERNEL_PATCH_DIR/$p"
-		done <"$SERIES"
+		log "Applying patches"
+		if [ -f "$SERIES" ]; then
+			while read -r p; do
+				case "$p" in '' | '#'*) continue ;; esac
+				log "  $p"
+				patch -d "$KERNEL_SRC" -p1 --no-backup-if-mismatch <"$KERNEL_PATCH_DIR/$p"
+			done <"$SERIES"
+		fi
+		printf '%s\n' "$_want" >"$KERNEL_SRC/.prepared"
+	fi
+	# Always: kernels/<flavor>/config.aarch64 is the source of truth, and a
+	# build that silently ignored an edited config is the same class of bug as a
+	# working tree that never reached the image.
+	if ! cmp -s "$KERNEL_CONFIG" "$KERNEL_SRC/.config"; then
+		log "Syncing kernel config (kernels/$KERNEL_FLAVOR/config.aarch64)"
 	fi
 	cp "$KERNEL_CONFIG" "$KERNEL_SRC/.config"
-	touch "$KERNEL_SRC/.prepared"
 }
 
 build_kernel() {

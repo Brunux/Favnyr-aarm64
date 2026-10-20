@@ -11,7 +11,19 @@ initramfs-tools
 # present, otherwise it falls back to gzip and warns.
 zstd
 kmod
-zram-tools
+# zram: swap in compressed RAM, which is the right first line on a 4 GB machine
+# (see docs/optimization.md). systemd-zram-generator, not zram-tools, because the
+# generator creates a real `dev-zram0.swap` unit: systemd-oomd's ManagedOOMSwap
+# and `systemctl status` only see units, and this port wants one mechanism - the
+# omarchy-era install shipped both and zramswap.service failed on every boot with
+# "Device or resource busy" while the generator did the work. The device itself is
+# configured in /etc/systemd/zram-generator.conf (written by rootfs-setup.sh).
+systemd-zram-generator
+# systemd-oomd: PSI-based OOM handling. On 4 GB the failure mode is a frozen
+# machine rather than a killed process, and Debian's own defaults need no
+# configuration from us (user services are killed at 50 % memory pressure, and
+# `-.slice` sets ManagedOOMSwap=auto so the generated zram swap is managed too).
+systemd-oomd
 # NTP client. Debian ships no enabled one by default, and without it the clock
 # is never synchronised (`timedatectl` reports "System clock synchronized: no"
 # and "NTP service: n/a"); the RTC alone drifts.
