@@ -415,6 +415,36 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   otherwise leave an empty card on the bar. waybar's `backlight` module names its device
   (`backlight-lcd0`, not `backlight`); a wrong name shows nothing and logs nothing, so
   `check-system.sh` compares it with `/sys/class/backlight`.
+- **Notifications are `mako`, and Debian's package is `mako-notifier`.** The name `mako` belongs to
+  a Python template library (`apt install mako` fails with *Unable to locate package*), while the
+  binary is still `/usr/bin/mako`; `uis/sway/packages.list` and the drop-in must use the package
+  name. `config.d/20-notifications.conf` runs `exec mako` once per session and the theme is
+  `~/.config/mako/config` (base03/base1/cyan, `outer-margin=40,10,10,10` so nothing covers the 30 px
+  bar, `layer=overlay` so a critical one still shows over a fullscreen app). The config has no
+  `--check`, but `mako -c <file>` parses it before connecting: a bad key prints
+  `Failed to parse option '<key>'`, a good file gets as far as
+  `Failed to acquire service name: File exists`. A daemon that is not running loses notifications
+  with no log line at all, so `check-system.sh` asks the session bus for
+  `org.freedesktop.Notifications` (`busctl --user list`) instead of trusting the package.
+- **The idle screensaver is Deboma's, made cheap.** Deboma runs `omarchy-screensaver` 150 s after the
+  last input and locks at 300 s (`shell.json`); the screensaver is a fullscreen terminal looping
+  `ttfx` (terminaltexteffects) at 120 fps. Measured on this machine that loop is 78 MB of Python and
+  74-86 % of one core on a 200x60 canvas - and 120 full 1920x1200 repaints per second through
+  panfrost, which is what the battery notices. `~/.config/bin/sway-screensaver` therefore plays
+  `tte` **once** (`timeout 25`, no `--reuse-canvas`), then clears and prints the static logo centred
+  and waits for one byte: the animation is kept and what stays on screen is one foot window (~25 MB,
+  no CPU). Deboma's launcher (`hyprctl monitors`, a special workspace per monitor, its socket2 event
+  stream) has no sway equivalent worth building: there is one output, and
+  `config.d/23-screensaver.conf` fullscreens `[app_id="org.nureb.screensaver"]` on the current
+  workspace. That drop-in also starts `swayidle -w` (150 s screensaver, 300 s
+  `pkill -f org.nureb.screensaver; swaylock`, `before-sleep` locks, `after-resume` kills a leftover
+  logo), and the lock kills the screensaver first so unlocking does not land on a logo. Two details
+  are not obvious: a terminal allocates an 80x24 pty and resizes it only after the compositor maps
+  the window, so `tte` (which measures the terminal once) has to wait for `stty size` to change -
+  otherwise it paints an 80x24 canvas into the corner; and any-key dismissal needs
+  `stty -icanon min 1` before `dd bs=1`, because canonical mode would wait for Enter. Deboma's
+  `ttfx` shim exists only because Omarchy's scripts call the Rust port by that name: this script
+  calls Debian's `tte` directly, so no shim is shipped.
 
 ### ChromeOS GPT (`cgpt`)
 

@@ -1,0 +1,91 @@
+#!/bin/sh
+# The idle screensaver: a fullscreen terminal that plays the logo animation once
+# and leaves the last frame on screen.
+#
+#   sway-screensaver          launch it (idempotent; also the bar menu entry)
+#   sway-screensaver --run    what runs *inside* the terminal (do not call)
+#
+# Deboma draws this with Quickshell and a looping ttfx at 120 fps. Quickshell's
+# shell process alone is 361 MB of PSS, and a 120 fps loop repaints 1920x1200
+# 120 times a second on the Mali-G57 - that is the part the battery notices, not
+# the picture. Here the effect plays once (terminaltexteffects, measured 78 MB
+# while it runs), exits, and what stays on screen is one foot window (~25 MB)
+# with a static frame: no CPU, no redraws, until a key is pressed.
+#
+# The window is placed and made fullscreen by etc/sway/config.d/23-screensaver.conf,
+# which also starts swayidle: 150 s to the screensaver, 300 s to the lock.
+
+set -eu
+
+APP_ID="org.nureb.screensaver"
+LOGO="${XDG_CONFIG_HOME:-$HOME/.config}/nureb/screensaver.txt"
+FOOT_INI="${XDG_CONFIG_HOME:-$HOME/.config}/foot/screensaver.ini"
+
+have_tte() {
+	command -v tte >/dev/null 2>&1
+}
+
+center_logo() {
+	# Print the logo centred in the terminal. tte centres its own canvas, but
+	# this also has to work when tte is missing or the effect is interrupted.
+	rows=$(stty size 2>/dev/null | cut -d' ' -f1)
+	cols=$(stty size 2>/dev/null | cut -d' ' -f2)
+	awk -v rows="${rows:-24}" -v cols="${cols:-80}" '
+		{ line[NR] = $0; if (length($0) > width) width = length($0) }
+		END {
+			pad = int((cols - width) / 2); if (pad < 0) pad = 0
+			top = int((rows - NR) / 2); if (top < 0) top = 0
+			for (i = 0; i < top; i++) print ""
+			for (i = 1; i <= NR; i++) printf "%*s%s\n", pad, "", line[i]
+		}' "$LOGO"
+}
+
+case "${1:-}" in
+--run)
+	[ -t 0 ] || exit 1
+	# Nothing is going to move for a while; let sway hide the pointer.
+	swaymsg seat - hide_cursor 1 >/dev/null 2>&1 || true
+
+	# Terminals allocate an 80x24 pty and only resize it once the compositor has
+	# told the window how big it is; tte measures the terminal once, at startup,
+	# so starting it earlier paints an 80x24 canvas into the corner
+	# (omarchy-screensaver waits the same way).
+	deadline=$(( $(date +%s) + 2 ))
+	while [ "$(date +%s)" -lt "$deadline" ] && [ "$(stty size 2>/dev/null)" = "24 80" ]; do
+		sleep 0.02
+	done
+
+	# One shot: no --reuse-canvas, so the effect ends instead of repainting
+	# forever. `timeout` is the safety net for an effect that does not end on
+	# its own; the static frame below covers that case.
+	if have_tte && [ -r "$LOGO" ]; then
+		timeout 25 tte -i "$LOGO" --frame-rate 120 \
+			--canvas-width 0 --canvas-height 0 \
+			--anchor-canvas c --anchor-text c \
+			--random-effect --no-eol --no-restore-cursor >/dev/null 2>&1 || true
+	fi
+
+	clear
+	# No cursor, and the art in solarized cyan (#2aa198).
+	printf '\033[?25l\033[38;2;42;161;152m'
+	center_logo
+	# Any key ends it. The terminal is in canonical mode, where a read waits for
+	# Enter, so switch to one byte at a time first.
+	stty -icanon -echo min 1 time 0 2>/dev/null || true
+	dd bs=1 count=1 of=/dev/null 2>/dev/null || true
+	exit 0
+	;;
+esac
+
+# Launcher: one screensaver, no stacking.
+if pgrep -f "$APP_ID" >/dev/null 2>&1; then
+	exit 0
+fi
+
+if [ ! -r "$LOGO" ]; then
+	printf 'sway-screensaver: %s is missing\n' "$LOGO" >&2
+	exit 1
+fi
+
+exec foot --app-id="$APP_ID" --config="$FOOT_INI" --title screensaver \
+	"$(readlink -f "$0")" --run

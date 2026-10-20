@@ -564,13 +564,27 @@ if have sway; then
 	fi
 fi
 _missing_cmds=""
-for _c in waybar foot bemenu swaylock swaynag swaybg brightnessctl grimshot wlsunset wpctl pactl; do
+for _c in waybar foot bemenu swaylock swaynag swaybg brightnessctl grimshot wlsunset wpctl pactl mako; do
 	have "$_c" || _missing_cmds="$_missing_cmds $_c"
 done
 if [ -z "$_missing_cmds" ]; then
 	ok "every command the sway configuration invokes is installed"
 else
 	warn "commands referenced by the sway configuration are missing:$_missing_cmds"
+fi
+
+# Notifications: mako owns org.freedesktop.Notifications on the session bus. If
+# the daemon is not running (crashed, or never started) nothing logs it and
+# every application's notifications silently disappear, so ask the bus.
+if have busctl; then
+	_notify_name="$(busctl --user list --no-legend 2>/dev/null | awk '$1 == "org.freedesktop.Notifications" { print $1 }')"
+	if [ -n "$_notify_name" ]; then
+		ok "a notification daemon owns org.freedesktop.Notifications (mako)"
+	else
+		warn "no notification daemon on the session bus: mako is not running, notifications are lost"
+	fi
+else
+	skip "busctl is not installed"
 fi
 
 # The bar's menus are the whole port of Deboma's panels: each indicator draws
@@ -588,6 +602,20 @@ if [ -z "$_missing_bar" ]; then
 	ok "bar menus complete (scripts plus fuzzel, nmcli, bluetoothctl, jq)"
 else
 	fail "bar menus broken:$_missing_bar (clicking those indicators does nothing)"
+fi
+
+# The idle screensaver is a foot window running ~/.config/bin/sway-screensaver:
+# without tte or the logo it still shows the static frame, but the animation
+# (the point of the entry) is silently missing.
+_saver=""
+have tte || _saver="$_saver tte"
+[ -r "$HOME/.config/nureb/screensaver.txt" ] || _saver="$_saver .config/nureb/screensaver.txt"
+[ -x "$HOME/.config/bin/sway-screensaver" ] || _saver="$_saver bin/sway-screensaver"
+[ -r "$HOME/.config/foot/screensaver.ini" ] || _saver="$_saver .config/foot/screensaver.ini"
+if [ -z "$_saver" ]; then
+	ok "idle screensaver complete (tte, logo, launcher, terminal profile)"
+else
+	fail "idle screensaver incomplete:$_saver (the idle screen is blank)"
 fi
 
 # waybar reads the backlight by device name and shows an empty module (with no

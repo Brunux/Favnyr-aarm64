@@ -20,6 +20,7 @@ choice=$(
 		Bluetooth \
 		'Audio output' \
 		Lock \
+		Screensaver \
 		Suspend \
 		'Log out' \
 		Reboot \
@@ -36,6 +37,8 @@ case $choice in
 	# Same commands as the key bindings in etc/sway/config.d, so the locked
 	# screen and the suspend path behave identically from the bar.
 	Lock) exec swaylock -c 002b36 ;;
+	# Deboma's menu has the same entry; it is the idle screen on demand.
+	Screensaver) exec "$dir/sway-screensaver" ;;
 	Suspend) exec "$dir/sway-suspend" ;;
 	'Log out') exec swaymsg exit ;;
 	Reboot) exec systemctl reboot ;;

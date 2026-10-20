@@ -48,6 +48,21 @@ brightnessctl
 # pactl(1) for the XF86Audio* keys; pipewire-pulse provides the server only.
 pulseaudio-utils
 
+# screensaver
+# The idle screensaver paints the logo with terminaltexteffects, which Debian
+# ships as python3-terminaltexteffects (binary `tte`; the effect plays once,
+# see ~/.config/bin/sway-screensaver). Deboma needs its `ttfx` shim only
+# because Omarchy's scripts call the Rust port by that name; this port calls
+# `tte` directly, so no shim is involved.
+python3-terminaltexteffects
+
+# notifications
+# Debian's package is mako-notifier: the name `mako` belongs to a Python
+# template library, and the binary it installs is still /usr/bin/mako. sway
+# starts it once per session (etc/sway/config.d/20-notifications.conf) and the
+# solarized theme lives in ~/.config/mako/config.
+mako-notifier
+
 # login manager
 greetd
 tuigreet

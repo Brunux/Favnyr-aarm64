@@ -23,10 +23,14 @@ launcher, waybar and the foot terminal.
 | Path | What it is |
 |---|---|
 | `etc/sway/config` | System half of the session (replaces Debian's default file). Includes `config.d/*` at the end. |
-| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects. |
+| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, idle screensaver. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key launcher binding. |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
 | `home/.config/foot/foot.ini` | Solarized palette and JetBrains Mono for the session terminal and the bar's popups. |
+| `home/.config/foot/screensaver.ini` | The idle screensaver's terminal: black, no padding, 26 pt. |
+| `home/.config/mako/config` | Solarized theme for the notification daemon (`mako-notifier`). |
+| `home/.config/nureb/screensaver.txt` | The logo the idle screensaver animates and then leaves on screen. |
+| `home/.config/bin/sway-screensaver` | Launches the idle screensaver and is also the program that runs inside it (see **The idle screen**). |
 | `home/.config/bin/bar-*` | The menus the bar opens on click: `bar-menu`, `bar-net`, `bar-bt`, `bar-key`, `bar-audio`, `bar-updates`, `bar-power`, plus the shared `bar-pick`. |
 | `home/.config/workstyle/config.toml` | Icon map for workstyle (see below). |
 | `home/Pictures/Wallpapers/mountains.jpg` | Wallpaper referenced by `etc/sway/config`. |
@@ -122,6 +126,45 @@ parses `swaymsg -t get_inputs` for the layout indicator).  `scripts/check-system
 it on the device: every bar script executable, those tools present, and the backlight device named
 in `config.jsonc` existing under `/sys/class/backlight` (a wrong name leaves waybar's module empty
 with no error anywhere).
+
+## Notifications
+
+Deboma's notifications are a Quickshell panel; here they are **mako** — the daemon sway starts from
+`config.d/20-notifications.conf`, themed in `home/.config/mako/config` with the bar's palette (base03
+background, base1 text, cyan border, 8 px radius, hanging 40 px from the top so it never covers the
+30 px bar). `group-by=app-name` and `sort=-time` keep the stack readable, critical notifications stay
+until dismissed and turn red, and icons are capped at 48 px.
+
+Debian's package is **`mako-notifier`**, not `mako`: the name `mako` belongs to a Python template
+library, while the binary is still `/usr/bin/mako`. The config parses with `mako -c <file>` — a bad
+key prints `Failed to parse option '<key>'`, a good file goes on to fail on acquiring the bus name
+when another daemon is already running.
+
+`check-system.sh` asks the session bus for `org.freedesktop.Notifications`: a daemon that died
+leaves every application's notifications silently lost, with nothing in the journal.
+
+## The idle screen
+
+Deboma runs a screensaver 150 s after the last input and locks at 300 s
+(`shell.json`: `"idle": {"screensaver": 150, "lock": 300}`). The same chain runs here on `swayidle`
+(`config.d/23-screensaver.conf`), with two differences, both about cost:
+
+* **The effect plays once.** Deboma's `omarchy-screensaver` loops `ttfx` at 120 fps; measured here,
+  that is 78 MB of Python plus a full 1920x1200 repaint 120 times a second on the Mali-G57, for as
+  long as the screen is idle. `sway-screensaver` runs `tte` once, then prints the static logo and
+  waits for one keypress: the effect keeps its (~10 s) animation, and what stays on screen is a
+  single foot window, about 25 MB and no CPU.
+* **No per-monitor launcher.** Deboma's launcher walks `hyprctl monitors`, opens a terminal per
+  monitor in a special workspace and listens on Hyprland's socket; here the session has one output
+  and the window rule in `23-screensaver.conf` fullscreens `[app_id="org.nureb.screensaver"]` on the
+  current workspace.
+
+Any key dismisses it and the next keypress goes to whatever is underneath. At 300 s `swayidle` kills
+the screensaver *and* locks, so unlocking does not land back on a logo; `before-sleep` locks before a
+suspend for the same reason. The bar menu has a **Screensaver** entry that starts it on demand.
+
+The logo is `~/.config/nureb/screensaver.txt`, 7 rows of block art invented here (Deboma's is ASCII
+art of the Omarchy mark), printed in solarized cyan at 26 pt.
 
 ## Deviations from the Nura original
 
