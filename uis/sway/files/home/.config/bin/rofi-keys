@@ -3,8 +3,10 @@
 #
 # The configuration files are the source of truth: this view cannot drift from
 # them, and every binding added anywhere in /etc/sway or ~/.config/sway shows up
-# on the next run. The comment directly above a binding becomes its description
-# (the files are written that way on purpose); otherwise the command is shown.
+# on the next run. The comment above a binding becomes its description, and it
+# applies to the bindings that follow it until a blank line or another comment,
+# so a group header is written with a blank line after it and a description with
+# the bindings right below it. Bindings inside a `mode` block say which mode.
 #
 # Enter copies the command to the clipboard, Escape closes. $mod is Alt here.
 set -eu
@@ -29,10 +31,12 @@ function pretty(k) {
     return k
 }
 function category(f) {
-    if (f ~ /config\.d\/19-launcher|config\.d\/24-keys/) return "Launcher and keys"
+    if (f ~ /config\.d\/19-launcher/) return "Launcher"
+    if (f ~ /config\.d\/24-keys/) return "Menu, panels and session"
+    if (f ~ /config\.d\/21-lock-screen/) return "Lock and system"
     if (f ~ /config\.d\/20-brightness/) return "Brightness"
     if (f ~ /config\.d\/21-volume/) return "Volume"
-    if (f ~ /config\.d\/2[123]-(lock-screen|sleep|screensaver)/) return "Lock and sleep"
+    if (f ~ /config\.d\/2[23]-(sleep|screensaver)/) return "Lock and sleep"
     if (f ~ /config\.d\/22-workspace-gestures|config\.d\/90-touchpad/) return "Touchpad and gestures"
     if (f ~ /config\.d\/90-screenshot/) return "Screenshots"
     if (f ~ /config\.d\/90-solarized/) return "Theme"
@@ -57,10 +61,17 @@ BEGIN {
         close(files[i])
     }
     for (i = 1; i <= n; i++) {              # pass 2: the bindings
-        comment = ""; cat = ""
+        comment = ""; cat = ""; mode = ""
         while ((getline line < files[i]) > 0) {
             if (line ~ /^[ \t]*#/) { sub(/^[ \t]*#[ \t]?/, "", line); comment = line; continue }
-            if (line ~ /^[ \t]*$/) continue
+            if (line ~ /^[ \t]*$/) { comment = ""; continue }
+            if (line ~ /^[ \t]*mode[ \t]+"/) {
+                mode = line
+                sub(/^[ \t]*mode[ \t]+"/, "", mode)
+                sub(/".*$/, "", mode)
+                continue
+            }
+            if (line ~ /^[ \t]*}[ \t]*$/) { mode = ""; continue }
             if (line !~ /^[ \t]*(bindsym|bindcode|bindswitch|bindgesture)[ \t]/) continue
             rest = line
             sub(/^[ \t]*[a-z]+[ \t]+/, "", rest)
@@ -80,9 +91,9 @@ BEGIN {
                 cat = c
             }
             desc = expand(comment != "" ? comment : shown)
+            if (mode != "") desc = mode ": " desc
             gsub(/&/, "\\&amp;", desc); gsub(/</, "\\&lt;", desc); gsub(/>/, "\\&gt;", desc)
             printf "<span weight=\"bold\">%-20s</span> <span foreground=\"#586e75\">%s</span>\t%s\n", keys, desc, cmd >> out
-            comment = ""
         }
         close(files[i])
     }

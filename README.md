@@ -109,12 +109,18 @@ User `brunux` (or the one the image was built with), password `debian`, password
 | Keys | Does |
 |---|---|
 | **Search** (or Alt+D) | launcher |
+| Alt+Space | root menu (the bar's menu button on the keyboard) |
 | Alt+Tab | window switcher (sway has none of its own) |
 | Alt+Shift+D | command palette (`$PATH`; Shift+Enter runs it in foot) |
 | **Alt+Shift+K** | every key binding, searchable, generated from the configuration |
-| Alt+Return | terminal · Alt+grave: the root menu · Alt+Shift+Q: close a window |
-| **Lock key** | locks, and logind suspends a moment later |
+| Alt+Return | terminal · Alt+Q: close a window · Alt+grave: scratchpad |
+| Alt+Ctrl+A / B / W / P | audio, Bluetooth, network and power panels |
+| **Lock key** (or Alt+Ctrl+L) | locks, and logind suspends a moment later |
+| Alt+Escape | system panel (lock, suspend, log out, reboot, power off) |
 | Alt+Ctrl+X | dictation · Alt+Ctrl+Shift+A: agents · Alt+Shift+E: exit the session (asks first) |
+
+The letters are Omarchy's, with `Alt` where Omarchy uses `Super`; the manual's
+*Shortcuts* page lists the three deliberate deviations and the whole mapping.
 
 The full tour is the manual's *Shortcuts* page, and the live list is Alt+Shift+K.
 

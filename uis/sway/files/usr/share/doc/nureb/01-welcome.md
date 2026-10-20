@@ -15,9 +15,9 @@ everything above the kernel.
 * Open a terminal: **Alt+Return** (or the bar's menu → Terminal).
 * Open the launcher: the **Search key** (the magnifier, left of Tab) or
   **Alt+D**. Type part of a name, Enter.
-* See every key binding: **Alt+Shift+/**.
-* This manual: the **Learn** entry in the bar menu, or `rofi-learn` in a
-  terminal.
+* See every key binding: **Alt+Shift+K**.
+* This manual: the **Learn** entry in the bar menu (**Alt+Space**), or
+  `rofi-learn` in a terminal.
 
 ## What is on the screen
 
@@ -63,11 +63,14 @@ after a boot that behaved strangely, and keep the output when you ask for help.
 
 * **Lock key** (top row, right-most): locks the screen, and systemd-logind
   suspends the machine a moment later. That path needs no polkit and no session
-  state, which is why it always works.
+  state, which is why it always works. **Alt+Ctrl+L** locks without suspending
+  (Omarchy's `Super+Ctrl+L`).
+* **Alt+Escape** opens the same system panel as the battery module (Omarchy's
+  `Super+Escape` system menu): lock, suspend, log out, reboot and power off.
 * **Alt+Shift+Escape**: lock, then suspend. **Alt+Ctrl+Escape**: suspend without
   locking.
 * The bar's battery module opens the power panel (charge, draw, time left,
-  charger, uptime, memory and swap), and its **root menu** has log out, reboot and
-  power off.
+  charger, uptime, memory and swap), and its **root menu** (**Alt+Space**) has log
+  out, reboot and power off.
 * Hibernate is offered only when a disk swap and `resume=` are both present; see
   **The system** page.

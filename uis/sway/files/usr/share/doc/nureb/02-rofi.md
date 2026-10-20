@@ -8,7 +8,7 @@ stays afterwards (14-17 MB of memory while open; there is no daemon).
 | **Search** or **Alt+D** | `rofi -show drun` | the applications: the `.desktop` entries, including this image's own (Wi-Fi, Bluetooth, audio, power, lock, screensaver, suspend, screenshot, lazygit, tmux, Learn, Keys, Dictate, Hibernate) |
 | **Alt+Tab** | `rofi -show window` | the open windows (sway has no switcher of its own; this uses wlroots' foreign-toplevel protocol) |
 | **Alt+Shift+D** | `rofi -show run` | every executable in `$PATH`. **Enter** runs it, **Shift+Enter** runs it in foot |
-| **Alt+Shift+/** | `rofi-keys` | every key binding this session defines, parsed from `/etc/sway` and `~/.config/sway`. Enter copies the command |
+| **Alt+Shift+K** | `rofi-keys` | every key binding this session defines, parsed from `/etc/sway` and `~/.config/sway`. Enter copies the command |
 | any bar module click | `bar-pick` → `rofi -dmenu` | the fixed list that module hands it (Wi-Fi networks, sinks, devices, power actions, …) |
 | **Learn** (bar menu) | `rofi-learn` | these pages, opened in foot |
 

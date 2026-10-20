@@ -442,6 +442,20 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   and the Wi-Fi password (`-password`, with stdin from /dev/null - otherwise rofi waits on the tty
   for EOF and the prompt never appears). `grimshot` is a package of its own. `pactl` (the
   XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
+- **The key scheme mirrors Omarchy's**, with `Alt` where Omarchy uses `Super`: the panels are
+  `Alt+Ctrl+A/B/W/P` (audio, Bluetooth, network, power - the same scripts the bar's indicators run),
+  the root menu is `Alt+Space` (Omarchy's `Super+Space`; sway's `focus mode_toggle` had that key and
+  was dropped), the scratchpad is `Alt+grave` (`Alt+minus` stays as an alias), lock is
+  `Alt+Ctrl+L`, and `Alt+Escape` opens the **power** panel (Omarchy's system menu). Three deliberate
+  deviations, each because a sway default owns Omarchy's letter: close is `Alt+Q` (`Alt+W` is
+  tabbed), the key view is `Alt+Shift+K` (`Alt+K` is vim focus up), and there is no "cycle layout"
+  key (sway's layouts are stacking/tabbed/split, not dwindle/master/scrolling).
+  `bindswitch`/`wtype`/`iio` facts for the tablet work are in the sensor bullet above; the full
+  mapping is `usr/share/doc/nureb/03-shortcuts.md`. **Every binding carries its description on a
+  comment line above**, and it covers the bindings below it until a blank line or another comment,
+  because `rofi-keys` shows those comments - a binding without one appears as its raw command in the
+  key view, and a group header with no blank line after it would label the first binding instead.
+  Bindings inside a `mode "..."` block are shown with the mode's name.
 - **Learn, the key view, dictation and hibernate are four rofi/terminal features with no resident
   process.** `usr/share/doc/nureb/*.md` is the manual (six pages: welcome, rofi, shortcuts, software,
   the system, troubleshooting); `rofi-learn` lists them and opens the choice with

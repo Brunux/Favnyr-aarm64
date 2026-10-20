@@ -124,12 +124,43 @@ To check the theme after an edit, run `rofi -show drun` in the session: a parse 
 dialog naming the file, line and column. `rofi -dump-config` does **not** report theme parse
 errors.
 
+## The key scheme
+
+The session speaks Omarchy's keys with `Alt` in place of `Super`, so an action keeps the
+same letter and the same Ctrl/Shift combination wherever a sway default does not already
+own it. The whole set is the *Shortcuts* page of the manual
+(`usr/share/doc/nureb/03-shortcuts.md`) and, generated from the configuration,
+`rofi-keys`; this is the shape of it:
+
+| Group | Keys | Where it lives |
+|---|---|---|
+| launcher, switcher, commands | `Search`/`Alt+D`, `Alt+Tab`, `Alt+Shift+D` | `19-launcher.conf` |
+| root menu | `Alt+Space` (Omarchy: `Super+Space`) | `24-keys.conf` |
+| panels | `Alt+Ctrl+A/B/W/P` → audio, Bluetooth, network, power (Omarchy: `Super+Ctrl+A/B/W/P`) | `24-keys.conf` |
+| system | `Alt+Escape` power panel, `Alt+Ctrl+L` lock, `Alt+Shift+Escape` lock+sleep, `Alt+Ctrl+Escape` sleep | `21-lock-screen.conf`, `22-sleep.conf` |
+| windows | `Alt+Q` close, `Alt+T` float, `Alt+F` fullscreen, `Alt+grave` scratchpad, `Alt+R` resize | `config`, `24-keys.conf` |
+| views | `Alt+Shift+K` every binding, `Alt+Ctrl+X` dictation, `Alt+Ctrl+Shift+A` agents | `24-keys.conf` |
+
+The three places where the letter differs are deviations with a reason, and each is written
+next to the binding: close is `Alt+Q` because `Alt+W` is sway's tabbed layout, the key view is
+`Alt+Shift+K` because `Alt+K` is vim focus up, and there is no "cycle layout" key because
+sway's layouts are stacking/tabbed/split rather than Hyprland's dwindle/master/scrolling.
+The panel keys run the very scripts the bar's indicators run (`bar-audio`, `bar-bt`,
+`bar-net`, `bar-power`), so a panel has one implementation and two ways to reach it.
+
+**Every binding carries its description on a comment line above**, and the description
+covers the bindings below it until a blank line or another comment, because `rofi-keys` reads
+those comments as the text it shows; a binding without one appears as its raw command in the
+key view. The `Alt+minus`/`Alt+Shift+minus` pair stays as the sway-default alias of the two
+scratchpad actions, and sway's `focus mode_toggle` was dropped from `Alt+Space` in favour of
+the menu (floating itself is still `Alt+Shift+Space`).
+
 ## The manual, the key view, dictation and hibernate
 
 Four features that exist because rofi and the terminal can carry them without a resident process;
 `usr/share/doc/nureb/` holds the manual they are documented in.
 
-**Learn** (`Alt+grave` root menu → Learn, or the launcher entry) lists the six pages in
+**Learn** (`Alt+Space` root menu → Learn, or the launcher entry) lists the six pages in
 `/usr/share/doc/nureb/` and opens the chosen one with `bat --paging=always` inside foot, so the page
 is coloured by the same palette as everything else (`BAT_THEME=ansi`) and nothing is left behind.
 There is no browser in the image, and a terminal page costs 25 MB while it is open.
