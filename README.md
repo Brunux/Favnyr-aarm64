@@ -10,12 +10,11 @@ First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada
   booted image comes back clean (kept in [`reports/`](reports/)). The eMMC install works and is
   validated on hardware, and the running installation can be backed up and restored
   (`scripts/backup-system.sh`, `scripts/restore-system.sh`).
-- **Release:** [`v0.1.1`](docs/releases/v0.1.1.md) — the precompiled image, with the eMMC install
-  validated on hardware (see [Download and flash](#download-and-flash-a-precompiled-image)).
-  `main` is ahead of it: the session now runs **rofi** for the launcher, the window switcher and the
-  bar's menus, ships a **manual**, **dictation**, an **agents** menu and **hibernate**, and the
-  kernel is tuned for this SoC (see [Using the system](#using-the-system)). The next release
-  carries them.
+- **Release:** [`v0.2.0`](docs/releases/v0.2.0.md) — the precompiled image, with the session this
+  repository documents: **swayfx** with blur, **rofi** for the launcher, the window switcher and
+  the bar's menus, the file browser and its viewers, the manual, **capture**, **download**,
+  **dictation**, **agents**, tablet mode, and the **LazyOS** idle screen and lock (see
+  [Using the system](#using-the-system)).
 - **Using it:** [Using the system](#using-the-system) below, and the manual that ships in the image
   (`/usr/share/doc/nureb/`, or **Learn** in the launcher) - its sources are
   [`uis/sway/files/usr/share/doc/nureb/`](uis/sway/files/usr/share/doc/nureb/).
@@ -43,7 +42,7 @@ Bluetooth, network, volume, brightness, battery).*
 
 ## Download and flash a precompiled image
 
-The [`v0.1.1`](docs/releases/v0.1.1.md) release publishes the image built from this repository:
+The [`v0.2.0`](docs/releases/v0.2.0.md) release publishes the image built from this repository:
 
 | asset | what it is |
 |---|---|
@@ -62,7 +61,7 @@ card and pick **external disk** in the firmware menu. It comes up silently to a 
 user `brunux`, password `debian`, passwordless sudo. **Change the password** (`passwd`) before using
 it for anything real.
 
-The image is 4 GiB, so a larger card keeps the space after `p3` unused. To use the whole card,
+The image is 6 GiB, so a larger card keeps the space after `p3` unused. To use the whole card,
 write the tarball instead: `write-sd.sh` sizes `p3` to the device it is given.
 
 ```sh
@@ -81,8 +80,7 @@ from the on-image copy of the repository: it writes `/dev/mmcblk0` and destroys 
 
 ## Using the system
 
-What an image built from `main` boots into (the published `v0.1.1` predates the launcher, the manual,
-dictation and the agents menu), and how to learn the rest without leaving the machine. Everything
+What the image boots into, and how to learn the rest without leaving the machine. Everything
 here is also in the manual the image carries: **Learn** in the launcher, or `/usr/share/doc/nureb/` on
 the machine, or the same files under
 [`uis/sway/files/usr/share/doc/nureb/`](uis/sway/files/usr/share/doc/nureb/) here.
