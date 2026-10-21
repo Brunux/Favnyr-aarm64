@@ -1,0 +1,17 @@
+Alt+Shift+D -> no icons
+Alt+Ctrl+O -> very slow to load: no notification notification may not be needed if slow response is fixed
+Alt+Ctrl+P -> does not work
+Alt+Escape -> does not work
+Alt+Ctrl+X -> Dictation is a little bit as low see if we can improve performance also keep updated the user about the process with notifications also it would be nice to have some kind of signal to stop dictation? what you think is there a better way to solve this?
+Alt+Ctrl+O -> night light switching does not work.
+
+lets include notifications for:
+Alt+Shift+F / Alt+Ctrl+S  -> full screen / copy area
+
+
+Other:
+- No shortcut for open the browser alt+shit+enter
+- the screen saver does not work, nothing moves the letter are not ok
+- time zone does not work from menu
+- rendered manuals look ugly with the current them for glow
+- I think we can increas the translucitity effets

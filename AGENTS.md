@@ -93,7 +93,9 @@ scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
                            published artifact must not carry) + build/install
                            scripts, including make-image.sh / make-release.sh
 reports/                   check-system.sh output captured on real hardware, kept
-                           as evidence for the checks (see reports/README.md)
+                           as evidence for the checks, plus the maintainer's
+                           own session feedback from a booted card (see
+                           reports/README.md)
 docs/                      plan.md, recon.md, optimization.md (measured device
                            and kernel-config findings), plan-rofi.md (what of
                            Omarchy's menus can move onto rofi), plan-agents.md
