@@ -46,7 +46,7 @@ usage() {
 # A notification, because the key starts the window from the compositor: there
 # is no terminal to print to, and a search that cannot run has to say why.
 # `-a Files` groups it with the rest of the file feature and `-i system-search`
-# is a name the Nureb theme draws (so mako's icon-path resolves it).
+# is a name the LazyOS theme draws (so mako's icon-path resolves it).
 fail() {
 	printf '%s: %s%s\n' "$prog" "$1" "${2:+: $2}" >&2
 	if [ $# -gt 1 ]; then

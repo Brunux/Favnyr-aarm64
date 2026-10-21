@@ -16,7 +16,7 @@
 # behaviour below. The browsing is therefore a shell script over rofi's dmenu:
 # the entries as markup rows, directories first, and an icon on *every* row - a
 # 32 px `thumbnail://` picture where lazyos-thumbnail can make one, a glyph from
-# the Nureb icon theme (folder, text-x-generic, application-pdf, ...) everywhere
+# the LazyOS icon theme (folder, text-x-generic, application-pdf, ...) everywhere
 # else, chosen from the extension alone. Every row having one is the point: a
 # row without an icon loses the icon column and its name starts further left, so
 # a directory of text files used to be a bare, unstyled list. rofi renders a

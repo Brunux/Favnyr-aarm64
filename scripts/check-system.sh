@@ -692,7 +692,7 @@ if [ -r "$HOME/.config/bin/lib-rofi.sh" ] && [ -d /usr/share/icons/LazyOS ]; the
 			_missing_icon="$_missing_icon $_n"
 	done
 	[ -z "$_missing_icon" ] &&
-		ok "notification icons resolve in the Nureb theme" ||
+		ok "notification icons resolve in the LazyOS theme" ||
 		warn "notification icon(s) missing from /usr/share/icons/LazyOS:$_missing_icon (scripts/make-icons.sh)"
 fi
 
@@ -947,7 +947,7 @@ fi
 # Its notifications carry the search glyph, and a name mako cannot resolve draws
 # no picture at all: the card is text-only with no log line.
 [ -r /usr/share/icons/LazyOS/48x48/apps/system-search.png ] ||
-	warn "the Nureb theme has no system-search icon: lazyos-find's notifications are text-only"
+	warn "the LazyOS theme has no system-search icon: lazyos-find's notifications are text-only"
 
 # Search inside files (Alt+Ctrl+G) is the other half of the Search key: rofi-files
 # finds a file by its name, rofi-grep by what is written in it. Two things take it
@@ -1044,11 +1044,11 @@ fi
 # The manual, the key view, dictation and hibernate. The first two are pure
 # scripts (a missing one is invisible: the menu entry just does nothing); the
 # last two depend on hardware and packages, so they warn instead of failing.
-_learn_pages=$(ls /usr/share/doc/nureb/*.md 2>/dev/null | wc -l)
+_learn_pages=$(ls /usr/share/doc/lazyos/*.md 2>/dev/null | wc -l)
 if [ "$_learn_pages" -ge 6 ] && [ -x "$HOME/.config/bin/rofi-learn" ]; then
 	ok "manual installed ($_learn_pages pages) and rofi-learn present"
 else
-	fail "manual incomplete: $_learn_pages page(s) in /usr/share/doc/nureb, rofi-learn $( [ -x "$HOME/.config/bin/rofi-learn" ] && echo present || echo missing)"
+	fail "manual incomplete: $_learn_pages page(s) in /usr/share/doc/lazyos, rofi-learn $( [ -x "$HOME/.config/bin/rofi-learn" ] && echo present || echo missing)"
 fi
 [ -x "$HOME/.config/bin/rofi-keys" ] && ok "keybindings view (rofi-keys) is executable" ||
 	fail "bin/rofi-keys is missing: the key view has no script"
@@ -1156,7 +1156,7 @@ fi
 if [ -r "$HOME/.config/bin/rofi-keys" ] &&
 	grep -qs -- '-show-icons' "$HOME/.config/bin/rofi-keys" &&
 	grep -qs -- '-icon-theme LazyOS' "$HOME/.config/bin/rofi-keys"; then
-	ok "rofi-keys asks the theme for a picture per section (-show-icons, Nureb)"
+	ok "rofi-keys asks the theme for a picture per section (-show-icons, LazyOS)"
 else
 	warn "rofi-keys no longer passes -show-icons/-icon-theme LazyOS: the key view shows no pictures"
 fi
@@ -1434,7 +1434,7 @@ else
 	warn "papers is missing: a PDF opens in Firefox instead of the reader (the fallback works, it is just the browser)"
 fi
 
-# Every row of the file browser carries an icon *name* the Nureb theme has to
+# Every row of the file browser carries an icon *name* the LazyOS theme has to
 # resolve; a missing PNG is a blank 32 px column with no log line anywhere.
 _missing_row_icons=""
 for _i in folder go-up view-hidden dialog-warning text-x-generic text-html \
@@ -1443,9 +1443,9 @@ for _i in folder go-up view-hidden dialog-warning text-x-generic text-html \
 	[ -r "/usr/share/icons/LazyOS/48x48/apps/$_i.png" ] || _missing_row_icons="$_missing_row_icons $_i"
 done
 if [ -z "$_missing_row_icons" ]; then
-	ok "file browser icons present (the Nureb theme has every row name)"
+	ok "file browser icons present (the LazyOS theme has every row name)"
 else
-	warn "Nureb theme is missing row icons:$_missing_row_icons (those rows lose the icon column)"
+	warn "LazyOS theme is missing row icons:$_missing_row_icons (those rows lose the icon column)"
 fi
 
 # The GTK3 half of the palette. One window in this image is GTK3 (pcmanfm), and
@@ -1458,11 +1458,11 @@ if [ -r "$HOME/.config/gtk-3.0/gtk.css" ]; then
 else
 	warn "$HOME/.config/gtk-3.0/gtk.css is missing: pcmanfm renders in Adwaita's light grey"
 fi
-if grep -qs '^gtk-icon-theme-name=Nureb' "$HOME/.config/gtk-3.0/settings.ini" &&
+if grep -qs '^gtk-icon-theme-name=LazyOS' "$HOME/.config/gtk-3.0/settings.ini" &&
 	grep -qs '^gtk-application-prefer-dark-theme=1' "$HOME/.config/gtk-3.0/settings.ini"; then
-	ok "GTK3 windows use the Nureb icons on a dark base (gtk-3.0/settings.ini)"
+	ok "GTK3 windows use the LazyOS icons on a dark base (gtk-3.0/settings.ini)"
 else
-	warn "gtk-3.0/settings.ini does not select Nureb + dark: pcmanfm looks like a foreign program"
+	warn "gtk-3.0/settings.ini does not select LazyOS + dark: pcmanfm looks like a foreign program"
 fi
 
 # The windowed file manager is pcmanfm (the Files menu stays rofi-files, and the
@@ -1510,9 +1510,9 @@ for _icon in folder user-home user-trash text-x-generic application-pdf \
 	[ -r /usr/share/icons/LazyOS/48x48/apps/"$_icon".png ] || _missing="$_missing $_icon"
 done
 if [ -z "$_missing" ]; then
-	ok "the Nureb theme carries every icon the file manager asks for"
+	ok "the LazyOS theme carries every icon the file manager asks for"
 else
-	warn "the Nureb theme has no icon for:$_missing (holes in pcmanfm's sidebar and icon view)"
+	warn "the LazyOS theme has no icon for:$_missing (holes in pcmanfm's sidebar and icon view)"
 fi
 if [ -x "$HOME/.config/bin/lazyos-view" ]; then
 	ok "open-with handler installed (lazyos-view: bat, imv, papers, mpv, firefox-esr)"
@@ -1612,9 +1612,8 @@ for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_
 
 # The session's own launcher entries. They are the only way to reach the bar's
 # panels and the session actions by typing, and a missing one is invisible: the
-# list simply has fewer rows and nobody notices. The idle screen's entry is the
-# one that is not org.lazyos.*: its name is LazyOS's (the rest of the distro is
-# still Nureb until the rename lands).
+# list simply has fewer rows and nobody notices. The idle screen's entry is
+# checked apart because it is the one the brand owns: its name is the mark's.
 _missing_desktop=""
 for _d in wifi wifi-nmtui bluetooth audio-output power lock suspend \
 	screenshot-area capture lazygit tmux files emoji clipboard; do
@@ -1723,7 +1722,7 @@ if have fc-list && [ -r "$_alphabet" ]; then
 fi
 
 # The launcher shows application *images*, and Debian's Adwaita has none of this
-# session's names, so the image ships the small Nureb theme (48x48 PNGs rendered
+# session's names, so the image ships the small LazyOS theme (48x48 PNGs rendered
 # from the Font Awesome codepoints). Without it every org.lazyos.* row is a hole.
 _icons=""
 [ -d /usr/share/icons/LazyOS ] || _icons="$_icons /usr/share/icons/LazyOS"
@@ -1748,7 +1747,7 @@ for _d in /usr/share/applications/org.lazyos.*.desktop \
 	_iconless="$_iconless $(basename "$_d" .desktop)=$_icon"
 done
 if [ -z "$_icons" ] && [ -z "$_iconless" ]; then
-	ok "launcher icons complete (Nureb theme, every session entry resolves)"
+	ok "launcher icons complete (LazyOS theme, every session entry resolves)"
 elif [ -z "$_icons" ]; then
 	fail "launcher entries without an icon:$_iconless (a hole in the launcher row)"
 else
@@ -1774,9 +1773,9 @@ if have grep; then
 		_show=$(grep -c 'show-icons: *true' "$_cfg_rasi" 2>/dev/null || true)
 		_theme=$(grep -c 'icon-theme: *"LazyOS"' "$_cfg_rasi" 2>/dev/null || true)
 		if [ "${_show:-0}" -ge 1 ] && [ "${_theme:-0}" -ge 1 ]; then
-			ok "rofi shows icons from the Nureb theme (show-icons, icon-theme)"
+			ok "rofi shows icons from the LazyOS theme (show-icons, icon-theme)"
 		else
-			warn "rofi/config.rasi does not enable show-icons and icon-theme \"Nureb\""
+			warn "rofi/config.rasi does not enable show-icons and icon-theme \"LazyOS\""
 		fi
 	fi
 fi

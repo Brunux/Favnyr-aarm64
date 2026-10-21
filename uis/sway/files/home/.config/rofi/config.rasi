@@ -59,7 +59,7 @@ configuration {
      * bar-pick passes -no-show-icons, so the bar's popups keep the tighter
      * text-only layout.
      *
-     * The theme is Nureb, not Adwaita: Debian's Adwaita 51 ships only monochrome
+     * The theme is LazyOS, not Adwaita: Debian's Adwaita 51 ships only monochrome
      * *symbolic* icons and not one of the application names this session uses,
      * so the launcher showed a hole where an icon should be. The overlay ships
      * a solarized line icon per session entry (terminal, folder, gear, bell,

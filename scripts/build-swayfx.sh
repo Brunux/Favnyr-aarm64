@@ -149,7 +149,7 @@ build_deb() {
 		printf 'Package: %s\n' "$name"
 		printf 'Version: %s\n' "$version"
 		printf 'Architecture: %s\n' "$ARCH"
-		printf 'Maintainer: %s\n' "Nureb builder <builder@localhost>"
+		printf 'Maintainer: %s\n' "LazyOS builder <builder@localhost>"
 		printf 'Installed-Size: %s\n' "$size"
 		if [ -n "$depends" ]; then printf 'Depends: %s\n' "$depends"; fi
 		printf 'Section: x11\n'

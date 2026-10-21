@@ -22,7 +22,7 @@ yet present in `scripts/` as not implemented.
 - **Icons first, never forced.** Icons and readable TUI tools are the house taste, not a garnish:
   a menu row gets its `UI_I_*` glyph from `~/.config/bin/lib-rofi.sh`, a notification its name from
   the same constants, a `rofi-files` row a `thumbnail://` or a name from the file-browser table, a
-  `.desktop` entry an `Icon=` the **Nureb** theme actually draws, and a terminal tool is picked for
+  `.desktop` entry an `Icon=` the **LazyOS** theme actually draws, and a terminal tool is picked for
   the same taste (`eza --icons`, `bat`, `glow`, fzf's preview pane, `btop`, `lazygit`) when a
   plainer one only prints the same facts. The order is fixed so the choice is testable: **a glyph
   already in the alphabet, then a name already in a `scripts/make-icons.sh` table, then a new table
@@ -40,7 +40,7 @@ yet present in `scripts/` as not implemented.
   on the row, a text-only card) and logs nothing. The tables and the mako `icon-path` trap are in
   the UI section, under *The launcher* and *The file browser*.
 - **A feature ships with its three witnesses**: a `check-system.sh` line that fails when its
-  dependency disappears, a paragraph in `usr/share/doc/nureb/` (the manual is what a person
+  dependency disappears, a paragraph in `usr/share/doc/lazyos/` (the manual is what a person
   reads on the device), and a bullet in this file that says why it is built this way.
 - **Nothing resident.** Menus are one-shot rofi scripts and a viewer is the viewer's own window,
   so the session starts nothing that stays (`cliphist`'s watcher is the one agreed exception: no
@@ -568,7 +568,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   **Adwaita 51 ships no application icons** - only monochrome `-symbolic` files,
   and not one of this session's names - so the launcher showed a hole where an icon should be, and
   `papirus-icon-theme` is 190 MB installed. `scripts/make-icons.sh` renders the same Font Awesome
-  codepoints into 48x48 PNGs that ship as the small **Nureb** theme
+  codepoints into 48x48 PNGs that ship as the small **LazyOS** theme
   (`uis/sway/files/usr/share/icons/LazyOS`), whose `index.theme` inherits Adwaita and hicolor, so an
   application that brings its own icon still shows it in colour. The theme carries **three**
   tables now, not two: the launcher's `.desktop` names, the command palette's binary names, and
@@ -662,7 +662,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   tsv/json/yml/yaml/toml/ini/cfg/conf/env/lock/list/xml/rasi/desktop/service/rules/sql/diff/
   patch and for the common source extensions, and for a name with no extension the executable
   bit decides (`application-x-executable` for a program, `text-x-generic` for a README). Every
-  one of those names is a PNG in the Nureb theme (`scripts/make-icons.sh`, third table). dmenu
+  one of those names is a PNG in the LazyOS theme (`scripts/make-icons.sh`, third table). dmenu
   matches the **markup-stripped** text, so the dim size/date do not get in the way of typing
   (verified: `-filter span` matches nothing); `-L` makes a symlink to a directory navigate and
   leaves only broken links as `l`; the name column is padded to the longest name because the
@@ -830,7 +830,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   and `mkfs.ext4` are already in the image (`parted` in `packages/base.list`), so the menu adds
   no package; `check-system.sh` FAILs when any of the three or the script is missing.
 - **The GTK3 half of the palette is two files** in `uis/sway/files/home/.config/gtk-3.0/`:
-  `settings.ini` (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `Nureb`,
+  `settings.ini` (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `LazyOS`,
   `JetBrains Mono 10`, animations off) and `gtk.css`, which repaints the surfaces with explicit
   selectors of the same specificity Adwaita uses and is parsed after it. The fills are **opaque**
   base03 - a translucent window shows the wallpaper through its own text - and pcmanfm is the
@@ -997,7 +997,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   tabbed), the key view is `Alt+Ctrl+K` (`Alt+K` is vim focus up, `Alt+Shift+K` moves the window), and there is no "cycle layout"
   key (sway's layouts are stacking/tabbed/split, not dwindle/master/scrolling).
   `bindswitch`/`wtype`/`iio` facts for the tablet work are in the sensor bullet above; the full
-  mapping is `usr/share/doc/nureb/03-shortcuts.md`. **Every binding carries its description on a
+  mapping is `usr/share/doc/lazyos/03-shortcuts.md`. **Every binding carries its description on a
   comment line above**, and it covers the bindings below it until a blank line or another comment,
   because `rofi-keys` shows those comments - a binding without one appears as its raw command in the
   key view, and a group header with no blank line after it would label the first binding instead.
@@ -1079,7 +1079,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `TimersCalendar` before claiming anything. The bar's `sbs-8-000b` gauge is the
   battery there; a `hid-*` power supply belongs to the touchpad and reads 0%.
 
-- **The manual is rendered, not printed.** `usr/share/doc/nureb/*.md` (seven pages: welcome, rofi,
+- **The manual is rendered, not printed.** `usr/share/doc/lazyos/*.md` (seven pages: welcome, rofi,
   shortcuts, software, the system, troubleshooting, agents) is opened by `rofi-learn` with **glow**
   (`packages/tools.list`), styled by `~/.config/glow/solarized.json` - a *glamour* style, unrelated
   to the rofi theme; glow lives in `~/.config/glow/glow.yml`, whose `style:` must be an absolute
@@ -1178,16 +1178,18 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
   design ::` and the arcade continue line `» press any key to continue «` - the lazy-tools idea
   (lazygit/lazydocker: the tool does the boring part, the thing to press is on the screen) plus the
-  arcade screen an idle machine deserves. It is the **one surface that says LazyOS** for now: the
-  script is `~/.config/bin/lazyos-screensaver`, the app id `org.lazyos.screensaver`, its drop-in and
-  its launcher entry are named after it, and the rest of the distribution stays Nureb until the later
-  rename. **The frame rate is the whole cost.** Measured on this host with a pty and the real art, one
-  complete cycle of the seven effects is **70 s of wall time and 8.5 s of CPU (~12 % of one core)**,
-  peaking at **49 MB** in `tte` on top of foot's ~25 MB, and costing nothing after it ends; the same
-  cycle at 120 fps takes 20 s and ~6.4 s of CPU, i.e. ~32 % of a core, for an animation three times
-  faster than a screensaver needs. `tte` has no global foreground flag, so the colour lives in
-  the terminal profile (`~/.config/foot/screensaver.ini`, `foreground=cb4b16`, solarized orange) for
-  the effects that paint in the terminal's foreground, and the static frame prints its own SGR.
+  arcade screen an idle machine deserves. It is the surface that carries the **wordmark**: the art
+  is `~/.config/lazyos/screensaver.txt`, the script is `~/.config/bin/lazyos-screensaver`, the app
+  id `org.lazyos.screensaver`, and its drop-in and launcher entry are named after it. The mark and
+  the wallpaper are `scripts/make-brand.sh`'s; the terminal gets the text art because that is what
+  a terminal can draw. **The frame rate is the whole cost.** Measured on this host with a pty and
+  the real art, one complete cycle of the seven effects is **70 s of wall time and 8.5 s of CPU
+  (~12 % of one core)**, peaking at **49 MB** in `tte` on top of foot's ~25 MB, and costing nothing
+  after it ends; the same cycle at 120 fps takes 20 s and ~6.4 s of CPU, i.e. ~32 % of a core, for
+  an animation three times faster than a screensaver needs. `tte` has no global foreground flag,
+  so the colour lives in the terminal profile (`~/.config/foot/screensaver.ini`,
+  `foreground=cb4b16`, solarized orange) for the effects that paint in the terminal's foreground,
+  and the static frame prints its own SGR.
   Four things are not obvious. **`tte`'s stdout is the animation** - the first version redirected it
   to `/dev/null` while silencing the log and the screen stayed black for the whole run ("the
   screensaver does not work, nothing moves"). **A terminal allocates an 80x24 pty and resizes it only
@@ -1414,7 +1416,7 @@ scripts/build-rootfs.sh     # debootstrap Debian forky rootfs    -> $WORK_DIR/ro
 scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initramfs
 scripts/install-swayfx.sh   # install the compositor .debs (rootfs by default, `/` for a running system)
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
-scripts/make-icons.sh       # Font Awesome glyphs -> the Nureb icon theme PNGs (host tool, committed output)
+scripts/make-icons.sh       # Font Awesome glyphs -> the LazyOS icon theme PNGs (host tool, committed output)
 scripts/make-emojis.sh      # Python's Unicode database -> ~/.config/emojis.tsv (host tool, committed output)
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
 scripts/make-image.sh       # distributable disk image from the rootfs (no card needed)

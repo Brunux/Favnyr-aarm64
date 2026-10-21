@@ -14,11 +14,11 @@ question: every one of its checks maps to a bug this port has already hit.
 
 ```sh
 cat /etc/debian-aarch64-revision      # commit, device, UI, kernel, build date
-/usr/local/sbin/check-system.sh ~/Dev/Nureb
+/usr/local/sbin/check-system.sh ~/Dev/LazyOS
 ```
 
 * the revision must be the build you meant to test. The tree at
-  `~/Dev/Nureb` is a snapshot (`git archive HEAD`), not a checkout, so compare
+  `~/Dev/LazyOS` is a snapshot (`git archive HEAD`), not a checkout, so compare
   that hash with `git log --oneline -1` on the machine that wrote the card;
 * `check-system.sh` must end with **0 FAIL**. WARN and SKIP lines are expected
   and explained in `reports/README.md`; anything else stops the run here.
@@ -125,7 +125,7 @@ the reason, and the menu shows it instead of claiming success.
 | Enter on an HTML file | `bat` (it is text), not Firefox |
 | Enter on a `.deb` | Firefox, as a download prompt: the browser is what a package is for here |
 | Enter on a text file | `bat` in the popup window (`BAT_THEME=ansi`, solarized) |
-| open a deep path (`~/Dev/Nureb/uis/sway/files/home/.config/bin`) | the window is drawn wide enough that the **end** of the name is readable: rofi cannot scroll a row sideways, so `lib-rofi.sh`'s `ui_width` sizes the list instead of letting rofi cut it with `…` |
+| open a deep path (`~/Dev/LazyOS/uis/sway/files/home/.config/bin`) | the window is drawn wide enough that the **end** of the name is readable: rofi cannot scroll a row sideways, so `lib-rofi.sh`'s `ui_width` sizes the list instead of letting rofi cut it with `…` |
 | spam `Alt+Ctrl+F` on a directory of large photos | the application keeps responding while the rows fill in (four decoders at a time) |
 | **Alt+1** on a directory | the actions for it: disk usage, compress, copy the path, a terminal here. Enter still *opens* the row; only Alt+1 asks |
 | **Alt+1** → **Compress** on a folder | a `busy` card, then `folder.tar.xz` beside it, and the bar spinner while it packs (click the spinner to stop it) |
@@ -216,7 +216,7 @@ correctly absent.
 
 | Step | Expected |
 |---|---|
-| hold **Shift**, tap **Search**, release Search then Shift | pcmanfm opens on `$HOME`, in the solarized palette (base03 window, cyan selection), JetBrains Mono, Nureb icons |
+| hold **Shift**, tap **Search**, release Search then Shift | pcmanfm opens on `$HOME`, in the solarized palette (base03 window, cyan selection), JetBrains Mono, LazyOS icons |
 | tap **Search** on its own | the file search, not the window (`rofi-files --search`) |
 | hold **Search**, tap a top-row key | an F-key reaches the focused window; no menu opens on the way |
 | right-click a file -> **Open With** | the first entry is what a double click does: text in `bat`, a document in `papers`, a picture in `imv` (or `chafa`), a video in `mpv`. Two deliberate exceptions: an HTML page is text to the Files list (`bat`) and a page to a double click (**Firefox**), and an EPUB goes to Firefox because `papers` reads none |
@@ -227,7 +227,7 @@ correctly absent.
 | `dpkg -l pcmanfm gvfs` | both installed; `gvfs-backends` absent on purpose |
 
 A window that looks like Adwaita's light grey means `~/.config/gtk-3.0/gtk.css` is
-missing; icons that are empty squares mean a name the Nureb theme does not carry
+missing; icons that are empty squares mean a name the LazyOS theme does not carry
 (`check-system.sh` warns with the list). A double click that does nothing means
 `~/.config/bin/lazyos-view` is not executable: `gio mime image/png` then answers
 "no default application" instead of naming `org.lazyos.view.desktop`.

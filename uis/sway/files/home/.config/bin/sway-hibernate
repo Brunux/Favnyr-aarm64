@@ -25,7 +25,7 @@ set -eu
 
 # Every message here is a refusal, so one icon names the subject: the card in
 # mako's history then reads as "hibernation" before the text is read. It is a
-# name scripts/make-icons.sh renders into the Nureb theme, which is on mako's
+# name scripts/make-icons.sh renders into the LazyOS theme, which is on mako's
 # icon-path (see lib-rofi.sh); a name that does not resolve draws nothing.
 notify() { notify-send -a Hibernate -i system-suspend-hibernate "$@" 2>/dev/null || true; }
 refuse() { notify "$1"; printf 'hibernate: %s\n' "$1" >&2; exit 1; }

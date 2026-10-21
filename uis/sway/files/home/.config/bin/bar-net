@@ -26,7 +26,7 @@ tab=$(printf '\t')
 # The error icon is named here rather than left to the task's own: the card
 # morphs from "Looking for networks…" (network-wireless) into the failure, and
 # the glyph changing is what makes it read as a different kind of message at a
-# glance.  dialog-error falls back to Adwaita if the Nureb theme has no match.
+# glance.  dialog-error falls back to Adwaita if the LazyOS theme has no match.
 fail() { "$dir/busy" fail wifi "$*" dialog-error; }
 
 if [ "$(nmcli radio wifi 2>/dev/null)" != "enabled" ]; then

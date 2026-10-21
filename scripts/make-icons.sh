@@ -13,7 +13,7 @@
 # \u escape to turn a codepoint into a character, and dash does not have one.
 #
 # So the same codepoints are rendered once into 48x48 PNGs and installed as the
-# Nureb icon theme.  Its index.theme inherits Adwaita and hicolor, so an
+# LazyOS icon theme.  Its index.theme inherits Adwaita and hicolor, so an
 # application that brings its own icon (foot, btop, htop, anything installed
 # later) still shows that one in colour, and only the session's own entries fall
 # back to these.

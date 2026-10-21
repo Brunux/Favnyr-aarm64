@@ -3,7 +3,7 @@
 Start with the report; it is faster than reading logs:
 
 ```sh
-check-system.sh ~/Dev/Nureb
+check-system.sh ~/Dev/LazyOS
 journalctl -b -p err --no-pager | tail -50
 ```
 
@@ -78,14 +78,14 @@ The firmware boots `p1`, not `/boot`. If the machine comes back to the firmware
 menu, or boots the old kernel, the kernel partition was not rewritten:
 
 ```sh
-sudo ~/Dev/Nureb/scripts/install-kpart.sh
+sudo ~/Dev/LazyOS/scripts/install-kpart.sh
 ```
 
 To see the boot messages (they are quiet by default), build a verbose kpart once:
 
 ```sh
 KERNEL_CMDLINE_OVERRIDE="console=tty0 ignore_loglevel loglevel=7" \
-  sudo -E ~/Dev/Nureb/scripts/make-kpart.sh
+  sudo -E ~/Dev/LazyOS/scripts/make-kpart.sh
 ```
 
 Never append a bare `debug`: initramfs-tools then sends its own output to a file
@@ -103,9 +103,9 @@ screen.
   `~/.config/bin/`, and a missing script is a row that silently does nothing.
   `check-system.sh` fails for each one.
 * **A hole where an icon should be.** The launcher draws application *images*,
-  and the session's own entries take theirs from the small **Nureb** theme
+  and the session's own entries take theirs from the small **LazyOS** theme
   (`/usr/share/icons/LazyOS`, 48x48 PNGs rendered from the icon fonts). If the
-  theme is missing, rebuild it with `sudo ~/Dev/Nureb/scripts/make-icons.sh` - it
+  theme is missing, rebuild it with `sudo ~/Dev/LazyOS/scripts/make-icons.sh` - it
   needs ImageMagick - or reinstall the image. An application you installed that
   shows no icon is a packaging problem of that application, not this one.
 
@@ -117,7 +117,7 @@ is missing or unparsable. The style is named by **absolute path** in
 the file it points at is `~/.config/glow/solarized.json`. To see the error:
 
 ```sh
-glow /usr/share/doc/nureb/01-welcome.md    # the message names the problem
+glow /usr/share/doc/lazyos/01-welcome.md    # the message names the problem
 ```
 
 ## A file does not open, or opens in the wrong place

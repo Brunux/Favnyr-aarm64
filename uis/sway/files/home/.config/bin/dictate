@@ -35,7 +35,7 @@ model="${DICTATE_MODEL:-${XDG_DATA_HOME:-$HOME/.local/share}/whisper/ggml-tiny.e
 self=$(readlink -f "$0")
 busy="$(dirname "$self")/busy"
 
-# notify ICON TITLE [BODY]: the icon names are the ones the Nureb icon theme
+# notify ICON TITLE [BODY]: the icon names are the ones the LazyOS icon theme
 # draws (audio-input-microphone for the recording, dialog-error for a failure,
 # dialog-information for a note); an unknown name falls back through hicolor and
 # Adwaita, so a missing one costs a generic glyph and nothing else.

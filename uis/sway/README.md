@@ -32,10 +32,10 @@ launcher, waybar and the foot terminal.
 | `home/.config/bin/sway-hibernate` | Hibernate, gated on a disk swap and `resume=`. |
 | `home/.config/bin/rofi-agents` | **Agents**: launch a coding agent, install one, keep accounts per agent. |
 | `home/.config/bin/rofi-capture`, `rofi-qr`, `screenshot` | **Capture** (screenshot, annotate, OCR, QR, record), the Wi-Fi QR code, and the one place a screenshot's folder is decided (`~/Pictures/Screenshots/<today>/`). |
-| `home/.config/bin/rofi-files`, `lazyos-thumbnail`, `lazyos-view` | The file browser, the thumbnail generator it calls, and the "open with Nureb" rule (text/bat, document/papers, image/imv, video/mpv, the rest/Firefox). |
+| `home/.config/bin/rofi-files`, `lazyos-thumbnail`, `lazyos-view` | The file browser, the thumbnail generator it calls, and the "open with LazyOS" rule (text/bat, document/papers, image/imv, video/mpv, the rest/Firefox). |
 | `home/.config/bin/lazyos-find` | **Alt+Search**: `fd` streamed into `fzf` over the whole home, with a preview pane (see **Files in a terminal**). |
 | `home/.config/bin/rofi-power` | **Power** menu: lock, suspend, hibernate, log out, reboot, shut down (the last three ask first). |
-| `usr/share/doc/nureb/*.md` | The seven manual pages the Learn menu opens. |
+| `usr/share/doc/lazyos/*.md` | The seven manual pages the Learn menu opens. |
 | `home/.config/rofi/config.rasi` | Launcher settings: the three modes, `terminal = foot`, matching. |
 | `home/.config/rofi/solarized.rasi` | The solarized look, shared by the launcher, the window switcher and the bar's dmenu. |
 | `home/.config/foot/foot.ini` | Solarized palette, JetBrains Mono and the Nerd Font fallback for the session terminal and the bar's popups. |
@@ -114,7 +114,7 @@ was measured in:
 | Launcher | PSS while open | Notes |
 |---|---|---|
 | **rofi**, drun, this theme | **15.7-17.1 MB** | text only |
-| rofi, drun, **icons on**, ten rows | **13.2 MB** | measured again with the Nureb icon theme: only the visible rows are decoded, and the 57 MB figure came from a run that decoded far more |
+| rofi, drun, **icons on**, ten rows | **13.2 MB** | measured again with the LazyOS icon theme: only the visible rows are decoded, and the 57 MB figure came from a run that decoded far more |
 | rofi, `-dmenu` (a bar click) | 14.2-15.6 MB | |
 | rofi, `-show window` | 16.7 MB | |
 | tofi, drun (before) | 14.6 MB | applications only; its run mode just printed the selection |
@@ -147,7 +147,7 @@ Notifications are a fourth consumer of the same theme, through mako's `icon-path
 Debian's Adwaita 51 ships only monochrome *symbolic* icons and not one of this session's
 names - a drun row for "Files" had a hole where its icon should be - and the one full-colour
 theme in the archive (`papirus-icon-theme`) is 190 MB installed. So `scripts/make-icons.sh`
-renders the same Font Awesome codepoints into 48x48 PNGs and they ship as a small **Nureb**
+renders the same Font Awesome codepoints into 48x48 PNGs and they ship as a small **LazyOS**
 icon theme (`usr/share/icons/LazyOS`), whose `index.theme` inherits Adwaita and hicolor: an
 application that brings its own icon (foot, btop, htop, anything installed later) still shows
 it in colour. The bar's popups pass `-no-show-icons` because they draw their own glyph.
@@ -183,7 +183,7 @@ empty spans, which is what the check for an empty canvas in the script now preve
 has to offer the icons through a *scalable* directory: a theme that shipped only `26x26` resolved
 nothing in rofi, while `48x48` plus a scalable entry does.
 
-![The launcher: the session's entries with Nureb icons, and foot's own hicolor icon](../../docs/screenshots/hayato-r1-launcher.png)
+![The launcher: the session's entries with LazyOS icons, and foot's own hicolor icon](../../docs/screenshots/hayato-r1-launcher.png)
 
 Two behaviours were verified rather than assumed: `rofi -dmenu` exits 1 on Escape, which is
 what `bar-pick`'s callers' `|| exit 0` relies on, and drun honours `Terminal=true` through
@@ -411,7 +411,7 @@ launcher carries both rows (**Files**, **Files (window)**) and so does the root 
   error - which is why `check-system.sh` asks `gio mime image/png` *and* checks the mode. No
   `mimeinfo.cache` regeneration is needed for the associations to resolve (verified).
 * **The GTK3 half of the palette** is two files in `home/.config/gtk-3.0/`: `settings.ini`
-  (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `Nureb`, `JetBrains Mono 10`, animations
+  (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `LazyOS`, `JetBrains Mono 10`, animations
   off) and `gtk.css`, which repaints the surfaces with explicit selectors at the same specificity
   Adwaita uses and is parsed last. The colours are **opaque**: a translucent window would show the
   wallpaper through its own text. pcmanfm is the only window whose look comes from the GTK theme
@@ -419,7 +419,7 @@ launcher carries both rows (**Files**, **Files (window)**) and so does the root 
   its own surfaces), so this is a stylesheet, not a theme.
 * **The icon names came with it**: Adwaita 51 ships no full-colour `folder`, `user-home` or
   `drive-harddisk` at all, so `scripts/make-icons.sh` gained a **fourth table** (the places, the
-  actions and the mimetypes the sidebar and the icon view ask for by name) and the Nureb theme now
+  actions and the mimetypes the sidebar and the icon view ask for by name) and the LazyOS theme now
   carries 219 PNGs in `48x48/apps` + `scalable/apps`.
 * **The settings live in `etc/xdg/pcmanfm/default/pcmanfm.conf`**: `terminal=foot` (under
   `[config]`, which is where libfm reads it, not the `[ui]` section the dialog suggests - the
@@ -505,7 +505,7 @@ not an error message.
 The session speaks Omarchy's keys with `Alt` in place of `Super`, so an action keeps the
 same letter and the same Ctrl/Shift combination wherever a sway default does not already
 own it. The whole set is the *Shortcuts* page of the manual
-(`usr/share/doc/nureb/03-shortcuts.md`) and, generated from the configuration,
+(`usr/share/doc/lazyos/03-shortcuts.md`) and, generated from the configuration,
 `rofi-keys`; this is the shape of it:
 
 | Group | Keys | Where it lives |
@@ -542,10 +542,10 @@ the menu (floating itself is still `Alt+Shift+Space`).
 ## The manual, the key view, dictation and hibernate
 
 Four features that exist because rofi and the terminal can carry them without a resident process;
-`usr/share/doc/nureb/` holds the manual they are documented in.
+`usr/share/doc/lazyos/` holds the manual they are documented in.
 
 **Learn** (`Alt+Space` root menu → Learn, or the launcher entry) lists the pages in
-`/usr/share/doc/nureb/` and opens the chosen one with **glow** inside foot, so the markdown is
+`/usr/share/doc/lazyos/` and opens the chosen one with **glow** inside foot, so the markdown is
 *rendered* (headings, tables, inline code, lists) instead of shown as source, in the palette of
 `~/.config/glow/solarized.json`. The first row is a search: ripgrep over every page, one row per
 match, Enter opens the page that contains it. There is no browser in the image, and a terminal page
@@ -604,7 +604,7 @@ clock, **busy**, updates, tray, layout, bluetooth, network, volume, brightness, 
 interactions.  The busy card only exists while an action runs (see *Something is happening*); it is
 one shell per second while it is on screen, and a zero-width module the rest of the time.  What differs is what happens on a click.  Deboma answers with a Quickshell panel, and
 the shell process that draws those panels costs **361 MB** of PSS: more than half of the whole
-Deboma session and several times a booted Nureb.  Here every click runs a short-lived process
+Deboma session and several times a booted LazyOS.  Here every click runs a short-lived process
 instead, and nothing survives the click:
 
 | Indicator | Left click | Right click | Scroll |
@@ -705,8 +705,8 @@ Deboma runs a screensaver 150 s after the last input and locks at 300 s
 The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
 design ::` and the arcade continue line `» press any key to continue «`, drawn in solarized orange
 (`foreground=cb4b16` in `screensaver.ini`, and its own SGR in the static frame). It is the one
-surface that carries the LazyOS name for now — the script, the app id and the launcher entry are
-named after it, and the rest of the distribution still says Nureb.
+surface that carries the block art: the script, the app id and the launcher entry are named after
+it, and the mark on the wallpaper and the launcher icon come from `scripts/make-brand.sh`.
 
 Any key dismisses it (`read -rsn1 -t 1` polls while the effect runs, so the dismissal does not wait
 for the effect to end; `tte` gets stdin on `/dev/null`, or it would swallow the key). Three details

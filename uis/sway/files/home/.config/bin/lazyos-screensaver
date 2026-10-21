@@ -5,12 +5,12 @@
 #   lazyos-screensaver          launch it (idempotent; also the bar menu entry)
 #   lazyos-screensaver --run    what runs *inside* the terminal (do not call)
 #
-# The idle screen is the one surface that carries the LazyOS name and art; the
-# rest of the distribution still calls itself Nureb until the rename lands. The
-# idea behind it is the lazy-tools family (lazygit, lazydocker and friends): the
-# tool does the boring part, the thing you can press is on the screen, and the
-# machine is allowed to look like it is having fun while it waits. Hence the
-# wordmark and the arcade continue line underneath it.
+# The idle screen is where the wordmark lives: the terminal draws the text art,
+# and the mark itself (the launcher icon, the wallpaper) comes from
+# scripts/make-brand.sh. The idea behind it is the lazy-tools family (lazygit,
+# lazydocker and friends): the tool does the boring part, the thing you can press
+# is on the screen, and the machine is allowed to look like it is having fun
+# while it waits. Hence the wordmark and the arcade continue line underneath it.
 #
 # The chain lives in etc/sway/config.d/23-lazyos-screensaver.conf: swayidle runs
 # this at 150 s and ~/.config/bin/sway-lock at 300 s.

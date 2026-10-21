@@ -87,7 +87,7 @@ state="${XDG_RUNTIME_DIR:-/tmp}/lazyos-tablet"
 kbd_bin=wvkbd-mobintl
 
 # The rotation reference `calibrate` writes, and the icon the mode's own
-# notifications carry (the Nureb theme has the name, Adwaita is the fallback).
+# notifications carry (the LazyOS theme has the name, Adwaita is the fallback).
 conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lazyos"
 conf_file=$conf_dir/tablet.conf
 

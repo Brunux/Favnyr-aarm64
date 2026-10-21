@@ -1,8 +1,8 @@
 #!/bin/sh
 # The manual: this image's documentation, rendered and searchable.
 #
-# The pages are markdown in /usr/share/doc/nureb, and they are the same text the
-# repository carries (uis/sway/files/usr/share/doc/nureb).  They are opened with
+# The pages are markdown in /usr/share/doc/lazyos, and they are the same text the
+# repository carries (uis/sway/files/usr/share/doc/lazyos).  They are opened with
 # glow, which renders the markdown instead of showing it (headings, code blocks,
 # tables, links), using ~/.config/glow/solarized.json so the page has the same
 # palette as everything else.  One foot window for as long as a page is open.
@@ -13,7 +13,7 @@
 # manual of the programs the image ships rather than of the image itself.
 set -eu
 
-docs=/usr/share/doc/nureb
+docs=/usr/share/doc/lazyos
 theme="$HOME/.config/rofi/solarized.rasi"
 dir=$(dirname "$0")
 . "$dir/lib-rofi.sh"
@@ -28,7 +28,7 @@ trap 'rm -f "$table" "$table.matches"' EXIT
 
 
 open_page() { # FILE
-	exec foot -T "Nureb · $(basename "$1" .md)" -e glow -p "$1"
+	exec foot -T "LazyOS · $(basename "$1" .md)" -e glow -p "$1"
 }
 
 # --- search ----------------------------------------------------------------

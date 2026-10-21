@@ -22,7 +22,7 @@ repository.
 ## What is installed, and where the lists are
 
 The image is built from four package lists in the repository, copied on the
-machine at `~/Dev/Nureb/`:
+machine at `~/Dev/LazyOS/`:
 
 | List | Holds |
 |---|---|
@@ -170,7 +170,7 @@ one: tile it, move it to another workspace, close it with **Alt+Q**.
   `udisks2` mounts it, and `autorun` is off so a card never runs its own
   contents.
 * **Its colours are the session's.** `~/.config/gtk-3.0/settings.ini` loads
-  Adwaita dark with the **Nureb** icons on JetBrains Mono 10, and `gtk.css` next
+  Adwaita dark with the **LazyOS** icons on JetBrains Mono 10, and `gtk.css` next
   to it repaints the surfaces in the solarized palette: base03 windows, base1
   text, the cyan selection the menus use, and no animations of its own (swayfx
   already animates the window). It is the only window whose look comes from the

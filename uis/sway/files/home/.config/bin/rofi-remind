@@ -41,7 +41,7 @@
 #
 # notify-send runs as the transient unit's own process, in the user manager's
 # environment - the same session bus mako listens on.  It carries an icon name
-# from the Nureb theme (which inherits Adwaita and hicolor), so a reminder is a
+# from the LazyOS theme (which inherits Adwaita and hicolor), so a reminder is a
 # clock in the notification history instead of a grey square.
 
 set -eu
@@ -52,7 +52,7 @@ dir=$(dirname "$0")
 prefix=lazyos-reminder-
 tab=$(printf '\t')
 
-# The notification icon is a name the icon theme resolves (the Nureb theme
+# The notification icon is a name the icon theme resolves (the LazyOS theme
 # inherits Adwaita and hicolor).  It is ui_say's fourth argument: on an image
 # whose lib-rofi.sh predates that argument the extra one is ignored, and the
 # notification is then simply iconless.

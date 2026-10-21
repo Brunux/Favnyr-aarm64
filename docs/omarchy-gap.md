@@ -15,7 +15,7 @@ deserve a checked answer instead of a feeling.
   names (`hyprpicker`, `yaru-theme-icon`, `libqalculate23`) are standalone tools that are
   reclassified in the tables below.
 * **Features**: the inventory in [`plan-rofi.md`](plan-rofi.md) and the manual's own "not built yet"
-  list (`uis/sway/files/usr/share/doc/nureb/03-shortcuts.md`).
+  list (`uis/sway/files/usr/share/doc/lazyos/03-shortcuts.md`).
 * **Section 5 is not Omarchy parity**: it is what this port's own plans (`plan-rofi.md`'s batches B
   and C, its tablet section, `plan-agents.md`) already specify and has not been built. It is here so
   the two questions - "what does Omarchy have that we do not" and "what have we planned and not
@@ -78,7 +78,7 @@ image already has.
 |---|---|
 | `chromium` (280 MB) | `firefox-esr` (in `uis/sway/packages.list`), the image's one browser: documents, pictures and video have viewers of their own now (`papers`, `imv`, `mpv`) |
 | `alacritty`, `kitty` | `foot` - half the memory of an alacritty window on a 4 GB machine |
-| `yaru-theme-icon` | the **Nureb** icon theme, rendered by `scripts/make-icons.sh` from the Font Awesome codepoints used in the menus |
+| `yaru-theme-icon` | the **LazyOS** icon theme, rendered by `scripts/make-icons.sh` from the Font Awesome codepoints used in the menus |
 | `libxkbcommon-tools` (`xkbcli list`) | `keyd` for the keymap and `swaymsg -t get_inputs` + `jq` for the layout indicator |
 | `libqalculate23` | `rofi-calc` (an `awk` expression, no library) |
 | `hyprsunset` | `wlsunset` + the night-light row in `rofi-quick` |

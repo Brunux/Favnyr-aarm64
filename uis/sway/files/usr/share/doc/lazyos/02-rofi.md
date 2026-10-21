@@ -326,7 +326,7 @@ They are all scripts in `~/.config/bin/`, they all use the shared row style from
 
 ## The manual, rendered
 
-`rofi-learn` lists `usr/share/doc/nureb/*.md` and opens the chosen page with
+`rofi-learn` lists `usr/share/doc/lazyos/*.md` and opens the chosen page with
 **glow**, so it is a document (headings, tables, inline code, lists) instead of
 markdown source. The style is `~/.config/glow/solarized.json`, the same palette
 as everything else: headings carry a cyan/blue bar, inline code and fenced
@@ -373,7 +373,7 @@ Three kinds of picture, because rofi has three:
   anywhere.
 
 Debian's Adwaita ships only monochrome symbolic icons and none of this session's
-names, so the image carries a small **Nureb** icon theme: the same Font Awesome
+names, so the image carries a small **LazyOS** icon theme: the same Font Awesome
 codepoints, rendered once to 48×48 PNGs by `scripts/make-icons.sh`. Its
 `index.theme` inherits Adwaita and hicolor, so an application that brings its own
 icon (foot, btop, htop, anything installed later) still shows it in colour.
@@ -417,7 +417,7 @@ need an icon column.
 * **The window opens empty**: the list handed to it was empty. An empty menu is
   indistinguishable from a hang; the scripts are written to exit instead.
 * **A row of empty space where an icon should be**: the `.desktop` names an icon
-  that no installed theme has. `check-system.sh` verifies the Nureb theme and
+  that no installed theme has. `check-system.sh` verifies the LazyOS theme and
   every `org.lazyos.*` icon.
 * **A list opens no window at all, and the journal has a line about a binding**:
   the menu was given an `Alt+1` action whose value was a sentence.

@@ -82,7 +82,7 @@ if [ "${1:-}" = stop ] || [ "${1:-}" = --stop ]; then
 		# Plain notify-send, not the card's own tag: replacing the toast would
 		# take away the only sign that the task is still going.
 		notify-send -a LazyOS -i dialog-information -u low -t 4000 \
-			Nureb "$label cannot be stopped from here" 2>/dev/null || true
+			LazyOS "$label cannot be stopped from here" 2>/dev/null || true
 		exit 0
 	fi
 	# Read above, before end removes the file.  The card becomes the result

@@ -1,6 +1,6 @@
 # glow: how the manual pages are rendered.
 #
-# rofi-learn opens /usr/share/doc/nureb/*.md with `glow -p`, so a page shows as
+# rofi-learn opens /usr/share/doc/lazyos/*.md with `glow -p`, so a page shows as
 # a document (headings, lists, tables, code with syntax highlighting) instead of
 # as source.  The style is solarized, in the same palette as rofi, foot and the
 # bar; the file next to this one is the glamour description of it.  Every colour
