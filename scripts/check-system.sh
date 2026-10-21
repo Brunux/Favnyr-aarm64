@@ -1509,7 +1509,14 @@ fi
 # the same variable: the desktop id, nothing else.
 _mime_default() { # MIME-TYPE
 	if have gio; then
-		LC_ALL=C gio mime "$1" 2>/dev/null | sed -n 's/^Default application: //p' | head -1
+		# gio's line is `Default application for “image/png”: org.nureb.view.desktop`
+		# (typographic quotes, and the type before the colon), or
+		# `No default applications for “...”` when there is none - the field
+		# after the last `: ` is the answer in the first shape and absent in
+		# the second, which is why the old `^Default application: ` prefix
+		# matched nothing at all.
+		LC_ALL=C gio mime "$1" 2>/dev/null |
+			awk 'NR == 1 && /: / { sub(/^.*: /, ""); print; exit }'
 	else
 		sed -n "s|^$1=||p" "${_pcm_dirs%%:*}/mimeapps.list" 2>/dev/null | head -1
 	fi
@@ -1622,6 +1629,62 @@ if have fc-list; then
 	done
 else
 	skip "fc-list is not installed"
+fi
+
+# The menus draw a Font Awesome codepoint from the alphabet in lib-rofi.sh, and a
+# name is only a picture while some installed font still carries that codepoint:
+# a name nobody renders draws nothing at all (a hole on the row, a text-only
+# card) and logs nothing.  One fontconfig call answers for every glyph at once
+# (the union of the charsets installed fonts cover), because a call per glyph
+# cost two seconds of the report on a 4 GB device.
+_alphabet="$HOME/.config/bin/lib-rofi.sh"
+if have fc-list && [ -r "$_alphabet" ]; then
+	_glyphs="$(sed -n 's/^\(UI_I_[A-Z_]*\)=.*#[[:space:]]*\([0-9a-f][0-9a-f]*\)$/\1 \2/p' "$_alphabet")"
+	_glyph_total="$(printf '%s\n' "$_glyphs" | awk 'NF { n++ } END { print n + 0 }')"
+	if [ "$_glyph_total" -eq 0 ]; then
+		fail "no UI_I_* glyphs parsed from $_alphabet (the menus would draw empty spans)"
+	else
+		_missing_glyph="$(fc-list -f '%{charset}\n' 2>/dev/null | tr ' ' '\n' | sort -u |
+			awk -v glyphs="$_glyphs" '
+			function dec(h,   i, v) {
+				v = 0
+				for (i = 1; i <= length(h); i++)
+					v = v * 16 + index("0123456789abcdef", substr(h, i, 1)) - 1
+				return v
+			}
+			BEGIN {
+				n = split(glyphs, line, "\n")
+				for (i = 1; i <= n; i++) {
+					if (line[i] == "") continue
+					split(line[i], f, " ")
+					want[i] = dec(f[2])
+					name[i] = f[1]
+					hex[i] = f[2]
+				}
+			}
+			{
+				lo = $1
+				if (index(lo, "-")) {
+					split(lo, r, "-")
+					a = dec(r[1])
+					b = dec(r[2])
+				} else {
+					a = b = dec(lo)
+				}
+				for (i = 1; i <= n; i++)
+					if (!seen[i] && want[i] >= a && want[i] <= b) seen[i] = 1
+			}
+			END {
+				for (i = 1; i <= n; i++)
+					if (want[i] && !seen[i]) out = out " " name[i] "(U+" hex[i] ")"
+				print out
+			}')"
+		if [ -z "$_missing_glyph" ]; then
+			ok "menu alphabet renders ($_glyph_total glyphs, every codepoint covered by a font)"
+		else
+			fail "no installed font renders:$_missing_glyph (a hole on every row that uses it, and nothing logs it)"
+		fi
+	fi
 fi
 
 # The launcher shows application *images*, and Debian's Adwaita has none of this
