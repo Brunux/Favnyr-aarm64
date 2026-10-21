@@ -52,21 +52,31 @@ launcher, waybar and the foot terminal.
 ## The compositor
 
 The session runs **swayfx**, the wlroots fork that draws the effects Deboma gets from Hyprland:
-rounded corners, shadows under windows, and (unused here) a blurred backdrop. Debian only packages
+rounded corners, shadows under windows, and a blurred backdrop under the three translucent
+surfaces (the terminal, the launcher and the bar). Debian only packages
 plain sway, so both the fork and its effects library are built from source
 (`compositors/swayfx/`, `scripts/build-swayfx.sh`) and installed as `swayfx` + `libscenefx-0.5`,
 which replace Debian's `sway` package. That is why `packages.list` does not mention `sway`: the
 binary, `/etc/sway` and the greeter's `sway` command are the same either way, but
 `scripts/install-swayfx.sh` has to put the fork in place.
 
-`etc/sway/config.d/26-swayfx.conf` enables the cheap effects and switches blur off explicitly:
+`etc/sway/config.d/26-swayfx.conf` enables the effects and tunes the one that is not free:
 
 | Effect | State | Why |
 |---|---|---|
 | `corner_radius 6` + `smart_corner_radius` | on | The corner is cut out of the window's buffer when it is committed; with the 8 px inner gap the radius is visible and nothing is done per frame. |
 | `shadows` | on | One blurred texture per window, drawn once per frame. |
 | `default_dim_inactive 0.0` | off | The solarized palette already dims unfocused borders; dimming a terminal turns its text grey. |
-| `blur` | **off** | A Gaussian pass over the whole damaged region on every frame, and it defeats direct scanout for a maximised window. On the Mali-G57 that is the one effect that costs frames and battery, so it is disabled with `blur disable` rather than left to the default. |
+| `blur` | on | A tiled window samples a buffer blurred once from the wallpaper (one bilinear tap, 0.07-0.11 ms full screen); only a floating window is re-blurred live from what is behind it (2.1-2.2 ms, scaling with its area). |
+| `blur_xray` | off | On, every surface would sample the cached wallpaper, including a floating window - cheapest, but the wallpaper shows through it instead of the window behind. |
+| `blur_passes 2` / `blur_radius 4` | | A 32 px sample instead of the shipped 80 px, and the distance a live blur grows its damage by. |
+| `blur_noise 0`, neutral brightness/contrast/saturation | | SceneFX skips its second full-screen pass when nothing is tinted; noise would also be visible grain. |
+| `layer_effects` | bar + launcher | The bar only has the wallpaper behind it and takes the cached path; rofi floats over windows and takes the live one. |
+
+Blur is drawn *behind* a surface, so it only exists under one with alpha < 1: the terminal
+(`foot.ini`, `alpha=0.92`), the launcher (`solarized.rasi`, 0.88) and the bar (`style.css`, 0.78 for
+the bar and 0.86 for its cards) are the three carriers. `docs/optimization.md` §7 has the
+measurements, the method, and why the renderer question has only one answer here.
 
 The drop-in is swayfx-only, so `sway -C` failing means Debian's plain sway is installed again
 (`scripts/check-system.sh` fails on that, and on a `sway --version` that does not say `swayfx`).
@@ -90,7 +100,7 @@ was measured in:
 | Launcher | PSS while open | Notes |
 |---|---|---|
 | **rofi**, drun, this theme | **15.7-17.1 MB** | text only |
-| rofi, drun, **icons on** | **57.1 MB** | rofi 2.0 draws icons through glycin, which wants bwrap |
+| rofi, drun, **icons on**, ten rows | **13.2 MB** | measured again with the Nureb icon theme: only the visible rows are decoded, and the 57 MB figure came from a run that decoded far more |
 | rofi, `-dmenu` (a bar click) | 14.2-15.6 MB | |
 | rofi, `-show window` | 16.7 MB | |
 | tofi, drun (before) | 14.6 MB | applications only; its run mode just printed the selection |
@@ -110,10 +120,29 @@ not need (mode switcher, message bar, counter) and the box shrinks to the number
 entries it has, up to ten, so a three-item bar menu and the eight-application list both
 get a box that fits them. Matching is fzf-style fuzzy.
 
-**Icons are off on purpose.** With `show-icons: true` the same drun launch measured 57.1 MB
-of PSS: rofi 2.0 renders `.desktop` icons through glycin, a sandboxed image loader that
-spawns a helper and wants bwrap (the image has none, so it also logs *Glycin running
-without sandbox*). Text-only rows are the same trade tofi made.
+**Icons: font glyphs in the lists, images in the launcher.** Every list this port draws itself
+puts a Font Awesome codepoint in the row text (`~/.config/bin/lib-rofi.sh`), the same alphabet
+the bar uses: it costs nothing, follows the palette and is filtered away by typing. The
+launcher and the window switcher show the application's real icon, which rofi resolves through
+glycin - about 13 MB while ten rows are on screen and nothing afterwards, with `bubblewrap` in
+`uis/sway/packages.list` so glycin can sandbox the decoder.
+
+Debian's Adwaita 51 ships only monochrome *symbolic* icons and not one of this session's
+names - a drun row for "Files" had a hole where its icon should be - and the one full-colour
+theme in the archive (`papirus-icon-theme`) is 190 MB installed. So `scripts/make-icons.sh`
+renders the same Font Awesome codepoints into 48x48 PNGs and they ship as a small **Nureb**
+icon theme (`usr/share/icons/Nureb`), whose `index.theme` inherits Adwaita and hicolor: an
+application that brings its own icon (foot, btop, htop, anything installed later) still shows
+it in colour. The bar's popups pass `-no-show-icons` because they draw their own glyph.
+
+That was measured, not assumed: the first attempt at this theme shipped SVGs with a literal
+private-use character, which does not survive every editor or transport, and the first
+`make-icons.sh` ran `printf` under dash, which has no `\u` escape - both produced a row of
+empty spans, which is what the check for an empty canvas in the script now prevents. The theme also
+has to offer the icons through a *scalable* directory: a theme that shipped only `26x26` resolved
+nothing in rofi, while `48x48` plus a scalable entry does.
+
+![The launcher: the session's entries with Nureb icons, and foot's own hicolor icon](../../docs/screenshots/hayato-r1-launcher.png)
 
 Two behaviours were verified rather than assumed: `rofi -dmenu` exits 1 on Escape, which is
 what `bar-pick`'s callers' `|| exit 0` relies on, and drun honours `Terminal=true` through
@@ -124,11 +153,67 @@ To check the theme after an edit, run `rofi -show drun` in the session: a parse 
 dialog naming the file, line and column. `rofi -dump-config` does **not** report theme parse
 errors.
 
+## The menus
+
+Everything that is not the launcher or a bar panel is a `rofi-*` script in
+`~/.config/bin/`, built on three helpers in `lib-rofi.sh` (`ui_row` for the one row style,
+`ui_pick` for the table-and-key round trip, `ui_say` for the result):
+
+| Script | Key / entry | What it does |
+|---|---|---|
+| `rofi-quick` | `Alt+Ctrl+O`, Settings | the switches of the session in one list: Wi-Fi and Bluetooth radios (with the pickers one row below), night light, do-not-disturb, touchpad, rotation, keyboard layout, audio, media, battery. It redraws after every switch, so the state it shows is never stale |
+| `rofi-notify` | `Alt+Ctrl+N`, Notifications | mako's history (`makoctl history -j`), Enter copies one, plus restore, dismiss-all and do-not-disturb |
+| `rofi-clean` | Free space | `df` plus what grows (trash, thumbnails, apt cache, journal, `~/.cache`), one action per row, re-measured afterwards |
+| `rofi-kill` | End a process | the heaviest twenty by resident memory; SIGTERM, then an explicit offer of SIGKILL |
+| `rofi-tz` | Time zone | `timedatectl list-timezones` with the current one marked, and the network-clock switch |
+| `rofi-places` | Places | home, documents, downloads, pictures, the mounted filesystems; Enter browses there with `rofi-files` |
+| `rofi-media` | Media | the current track and play/pause/next/previous through `playerctl` |
+| `rofi-calc` | `Alt+Ctrl+Q`, Calculator | awk, one prompt; Enter copies the result |
+| `rofi-layout` | Settings → Keyboard layout | every layout in `evdev.lst`, applied to all keyboards and kept in `~/.config/sway/config.d/90-keyboard-layout.conf` |
+| `rofi-learn` | Learn | the manual, rendered with glow, with a search across every page |
+| `rofi-files`, `rofi-keys`, `rofi-agents` | see below | the file browser, the key view, the agents menu |
+
+![Settings: the session's switches in one list, each row with its state](../../docs/screenshots/hayato-r1-settings.png)
+
+Each one is a single process while its window is open and nothing afterwards. They all end in
+`ui_pick`, which is `bar-pick` (rofi's dmenu) over a table: rofi hands back the *rendered* row,
+so the key of the chosen row travels in a second column that markup cannot be parsed out of.
+
+## Something is happening
+
+A scan or a connection takes seconds; a menu that answers only when it is done reads as a
+click that was never registered. `~/.config/bin/busy` is the one place that says otherwise, and
+it says it twice:
+
+* a **mako toast** that does not expire while the action runs and then *becomes* the result -
+  the same card reads "Looking for networks…", "9 networks in range", "Connected to Home", or
+  the error in red. Every message carries the same `x-canonical-private-synchronous` tag, so
+  mako replaces the card instead of stacking one per step;
+* a **spinner on the bar** (`custom/busy` → `bar-busy`), a braille frame with the task name in
+  yellow, left of the updates indicator.
+
+`busy start|update|stop|end|fail TAG LABEL MESSAGE [ICON]` writes one file per task in
+`$XDG_RUNTIME_DIR/nureb-busy` and signals waybar (signal 8, the same mechanism the other `bar-*`
+modules use). `bar-busy` prints `{"class":"empty"}` when there is nothing to show, which
+`style.css` collapses to zero width, and it drops a state file older than five minutes so a
+script killed mid-action cannot leave a spinner on the bar forever.
+
+![A Wi-Fi scan in progress: the mako card and the bar spinner](../../docs/screenshots/hayato-r1-busy.png)
+
+Wired into: the Wi-Fi rescan, connect, disconnect and radio switch; the Bluetooth scan (three
+seconds), connect, disconnect and radio; the `du` walk in Free space. Two lines per action:
+
+```sh
+busy start wifi Wi-Fi 'Looking for networks…' network-wireless
+scan=$(nmcli --terse --fields IN-USE,SSID,SECURITY,SIGNAL device wifi list --rescan yes)
+busy stop wifi
+```
+
 ## The file browser
 
 `rofi-files` (`Alt+Ctrl+F`, "Files" in the root menu and the launcher) exists because rofi 2.0
-has no `filebrowser` mode - its modes are `drun`, `run`, `window` and `ssh` - and this image
-carries no `xdg-open`. It is a shell script around `rofi -dmenu`:
+has no `filebrowser` mode - its modes are `drun`, `run`, `window` and `ssh`. It is a shell script
+around `rofi -dmenu`:
 
 * the rows are Pango markup, directories first (cyan, trailing `/`), then files with the size
   and the date dimmed; `find -L` decides the type, so a symlink to a directory navigates and a
@@ -136,17 +221,23 @@ carries no `xdg-open`. It is a shell script around `rofi -dmenu`:
 * the name column is padded to the longest name in the listing, which works because the theme
   is monospace, and dmenu matches the text **with the markup stripped** (verified: a filter on
   a tag name finds no row), so typing a name is not disturbed by the styling;
-* Enter opens a directory or, for a text file, `bat --paging=always` with `BAT_THEME=ansi`
-  inside the floated `popup` foot window; the first ten bytes are checked for a NUL before that,
-  because bat would show a binary as an empty page and there is no image or PDF viewer here;
+* Enter opens a directory, reads a text file with `bat --paging=always` (`BAT_THEME=ansi`) inside
+  the floated `popup` foot window, and hands everything else to **firefox-esr** - an image, a
+  PDF, an SVG, the HTML file. The first 4 kB are checked for a NUL to tell the two apart, because
+  bat would show a binary as an empty page. Firefox is the only viewer the image carries: it
+  renders its own PDFs, costs 280 MB of disk once, and nothing while it is closed;
 * `↑ parent directory` is the first row (and the one that is *not* preselected), the dotfiles
   are toggled by the last row, and a typed path that matches nothing is taken literally, which is
   what makes Ctrl+Return useful;
 * the line under the prompt carries the path, the counts and the free space.
 
-Nothing is cached or resident: the listing is built per run, and the viewer is foot's own
-window. `check-system.sh` fails when the script is missing, because Alt+Ctrl+F and the menu
-entry would silently do nothing.
+Nothing is cached or resident: the listing is built per run, and the viewer is foot's or
+Firefox's own window. `check-system.sh` fails when the script or the browser is missing, because
+Alt+Ctrl+F and the menu entry would silently do nothing (or answer "no browser is installed").
+
+`usr/local/bin/xdg-open` is two dozen lines around the same binary: a URL goes to Firefox as it
+is and a path becomes a `file://` URL, which is what foot's ctrl+click, `yt-dlp --print-trailer`
+and any script that shells out to `xdg-open` expect. There is no desktop portal in this image.
 
 ![rofi-files over ~/Documents, with the sizes and dates dimmed](../../docs/screenshots/hayato-r1-files.png)
 
@@ -165,12 +256,12 @@ own it. The whole set is the *Shortcuts* page of the manual
 | panels | `Alt+Ctrl+A/B/W/P` → audio, Bluetooth, network, power (Omarchy: `Super+Ctrl+A/B/W/P`) | `24-keys.conf` |
 | system | `Alt+Escape` power panel, `Alt+Ctrl+L` lock, `Alt+Shift+Escape` lock+sleep, `Alt+Ctrl+Escape` sleep | `21-lock-screen.conf`, `22-sleep.conf` |
 | windows | `Alt+Q` close, `Alt+T` float, `Alt+F` fullscreen, `Alt+grave` scratchpad, `Alt+R` resize | `config`, `24-keys.conf` |
-| views | `Alt+Shift+K` every binding, `Alt+Ctrl+X` dictation, `Alt+Ctrl+Shift+A` agents | `24-keys.conf` |
+| views | `Alt+Ctrl+K` every binding, `Alt+Ctrl+X` dictation, `Alt+Ctrl+Shift+A` agents | `24-keys.conf` |
 | files | `Alt+Ctrl+F` (`rofi-files`) | `24-keys.conf` |
 
 The three places where the letter differs are deviations with a reason, and each is written
 next to the binding: close is `Alt+Q` because `Alt+W` is sway's tabbed layout, the key view is
-`Alt+Shift+K` because `Alt+K` is vim focus up, and there is no "cycle layout" key because
+`Alt+Ctrl+K` because `Alt+K` is vim focus up and `Alt+Shift+K` moves the window, and there is no "cycle layout" key because
 sway's layouts are stacking/tabbed/split rather than Hyprland's dwindle/master/scrolling.
 The panel keys run the very scripts the bar's indicators run (`bar-audio`, `bar-bt`,
 `bar-net`, `bar-power`), so a panel has one implementation and two ways to reach it.
@@ -189,12 +280,21 @@ the menu (floating itself is still `Alt+Shift+Space`).
 Four features that exist because rofi and the terminal can carry them without a resident process;
 `usr/share/doc/nureb/` holds the manual they are documented in.
 
-**Learn** (`Alt+Space` root menu → Learn, or the launcher entry) lists the six pages in
-`/usr/share/doc/nureb/` and opens the chosen one with `bat --paging=always` inside foot, so the page
-is coloured by the same palette as everything else (`BAT_THEME=ansi`) and nothing is left behind.
-There is no browser in the image, and a terminal page costs 25 MB while it is open.
+**Learn** (`Alt+Space` root menu → Learn, or the launcher entry) lists the pages in
+`/usr/share/doc/nureb/` and opens the chosen one with **glow** inside foot, so the markdown is
+*rendered* (headings, tables, inline code, lists) instead of shown as source, in the palette of
+`~/.config/glow/solarized.json`. The first row is a search: ripgrep over every page, one row per
+match, Enter opens the page that contains it. There is no browser in the image, and a terminal page
+costs 25 MB while it is open.
 
-**Keybindings** (`Alt+Shift+K`, matching Omarchy's `Super+K`) is generated, not written: `rofi-keys`
+![A manual page rendered by glow in foot](../../docs/screenshots/hayato-r1-manual.png)
+
+`glow` is `packages/tools.list` (a single binary, no runtime); its style is a glamour description,
+which is why it lives next to `glow.yml` and not in the rofi theme - the two formats are unrelated.
+`glow.yml` has to name the style by **absolute path**: a bare name is looked up among glow's
+built-ins, and `-s solarized` fails with *specified style does not exist*.
+
+**Keybindings** (`Alt+Ctrl+K`, matching Omarchy's `Super+K`) is generated, not written: `rofi-keys`
 parses every `bindsym`/`bindcode`/`bindswitch`/`bindgesture` line from `/etc/sway/config`,
 `/etc/sway/config.d/*.conf` and `~/.config/sway/config`, expands the `set $var` definitions, and
 uses the comment above each binding as its description (the files are written that way). It is shown
@@ -228,8 +328,9 @@ from. There is no disk swap in the default image.
 ## The bar
 
 The bar is the Deboma (Omarchy) bar, ported: the same left-to-right reading (menu, workspaces,
-clock, updates, tray, layout, bluetooth, network, volume, brightness, battery) and the same
-interactions.  What differs is what happens on a click.  Deboma answers with a Quickshell panel, and
+clock, **busy**, updates, tray, layout, bluetooth, network, volume, brightness, battery) and the same
+interactions.  The busy card only exists while an action runs (see *Something is happening*); it is
+one shell per second while it is on screen, and a zero-width module the rest of the time.  What differs is what happens on a click.  Deboma answers with a Quickshell panel, and
 the shell process that draws those panels costs **361 MB** of PSS: more than half of the whole
 Deboma session and several times a booted Nureb.  Here every click runs a short-lived process
 instead, and nothing survives the click:

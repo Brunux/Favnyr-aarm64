@@ -23,7 +23,8 @@ bat
 # /usr/local/bin/fd, which is also what FZF_DEFAULT_COMMAND uses.
 fd-find
 # grep, as rg. Nothing aliases `grep`: rg is not a drop-in for every flag, and
-# a silently different grep in an interactive shell is a trap.
+# a silently different grep in an interactive shell is a trap.  rg is also what
+# "Search the manual" in rofi-learn uses.
 ripgrep
 # Fuzzy finder, for the Ctrl-R/Ctrl-T/Alt-C bindings (~/.bashrc sources
 # /usr/share/fzf/key-bindings.bash) and the `ff` preview picker.
@@ -92,6 +93,11 @@ ffmpeg
 # man itself: the image ships `--help` and nothing else without it, and the
 # MANPAGER below only exists to make it pretty.
 man-db
+# The manual pages themselves, rendered: glow (a markdown reader) is what
+# rofi-learn opens them with, and its own style is ~/.config/glow/solarized.json.
+# It is a single binary with no runtime, and it only runs while a page is on
+# screen.
+glow
 # col(1), which MANPAGER pipes through to strip overstrike; it comes from the
 # util-linux extras, not from a package named "col".
 bsdextrautils

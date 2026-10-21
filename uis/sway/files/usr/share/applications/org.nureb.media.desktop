@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Media
+GenericName=Media controls
+Comment=What is playing, and play, pause, next, previous
+Exec=/home/brunux/.config/bin/rofi-media
+Icon=multimedia-player
+Terminal=false
+Categories=AudioVideo;Player;
+Keywords=media;music;play;pause;next;player;

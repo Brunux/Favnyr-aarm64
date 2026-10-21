@@ -194,9 +194,14 @@ case $action in
 				env BAT_THEME=ansi bat --paging=always --style=numbers \
 				--file-name="$(basename -- "$payload")" -- "$payload" \
 				>/dev/null 2>&1 &
+		elif command -v firefox-esr >/dev/null 2>&1; then
+			# Everything else is the browser's job: an image, a PDF, an SVG, a
+			# video, the HTML file, and a .deb is a download prompt, which is
+			# still an answer. setsid keeps it alive after this script exits.
+			setsid firefox-esr "file://$payload" >/dev/null 2>&1 &
 		else
 			notify-send -a Files "$(basename -- "$payload")" \
-				"Not a text file, and this image has no viewer for it"
+				"Not a text file, and no browser is installed to open it"
 		fi
 		;;
 esac

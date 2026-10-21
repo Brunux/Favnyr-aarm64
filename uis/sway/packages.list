@@ -34,6 +34,20 @@ waybar
 # 16.4 MB PSS in drun mode / 15.0 MB in window mode while open, against 40.5 MB
 # for a fuzzel popup. See uis/sway/README.md, "The launcher".
 rofi
+# glycin (rofi 2.0's image loader, used for the launcher's application icons)
+# sandboxes its decoder with bubblewrap; without it rofi logs "Glycin running
+# without sandbox" and decodes icons in-process. 300 kB for the launcher's icons
+# to be decoded the way upstream intends.
+bubblewrap
+# The browser, and the answer to "open this file": rofi-files reads text with
+# bat, and hands everything else (images, PDFs, SVG, HTML) to Firefox, which is
+# the only viewer an image this size can afford - one binary, GTK, and its own
+# PDF renderer. It is also what the minimal /usr/local/bin/xdg-open opens, so
+# foot's ctrl+click and any CLI that shells out to xdg-open (yt-dlp's
+# --print-trailer, a script printing a URL) reach a browser instead of failing.
+# 280 MB installed is the largest single addition in this list, and it is the
+# one application a 4 GB machine without a viewer cannot do without.
+firefox-esr
 # foot is the session terminal: no GPU renderer and no Rust runtime, so a window
 # costs about half the memory of an alacritty one on a 4 GB machine. The bar's
 # popups run here as well (with --app-id=popup, see bar-panels.conf), and

@@ -615,8 +615,8 @@ case "${LANG:-}" in
 esac
 if have sway; then
 	# The session runs the wlroots fork built by scripts/build-swayfx.sh, not
-	# Debian's plain sway: 26-swayfx.conf needs it (corners, shadows, and blur
-	# switched off explicitly).  The version string is the only cheap way to
+	# Debian's plain sway: 26-swayfx.conf needs it (corners, shadows, the blur
+	# tuning and the layer_effects).  The version string is the only cheap way to
 	# tell the two /usr/bin/sway binaries apart, and plain sway would start but
 	# silently ignore the effects.
 	_sway_version="$(sway --version 2>/dev/null | head -n1)"
@@ -624,6 +624,23 @@ if have sway; then
 	*swayfx*) ok "compositor is $_sway_version" ;;
 	*) fail "compositor is '${_sway_version:-unknown}', not swayfx: rounded corners and shadows are missing (run scripts/install-swayfx.sh)" ;;
 	esac
+	# The renderer the session actually got. PanVK has no Mali-G57 support
+	# ("vulkaninfo: Mali-G57 not supported") and SceneFX only implements a GLES
+	# renderer, so panfrost through EGL is the whole stack. A forced
+	# LIBGL_ALWAYS_SOFTWARE, a broken firmware load or a Mesa regression would
+	# silently drop the session onto llvmpipe/swrast, where every frame and the
+	# blur are drawn on the CPU - eglinfo reports the renderer without needing a
+	# display, and it ships in mesa-utils (already a package here).
+	if have eglinfo; then
+		_gpu_renderer="$(eglinfo -B 2>/dev/null | awk -F': ' '/OpenGL ES profile renderer/ { print $2; exit }')"
+		case "$_gpu_renderer" in
+		*Panfrost*) ok "GPU renderer is $_gpu_renderer" ;;
+		"") warn "eglinfo reported no renderer: cannot confirm the GPU driver" ;;
+		*) fail "GPU renderer is '$_gpu_renderer', not Panfrost: the session is drawing on software (check LIBGL_ALWAYS_SOFTWARE and the GPU firmware)" ;;
+		esac
+	else
+		skip "eglinfo is missing (mesa-utils): cannot confirm the GPU driver"
+	fi
 	if XDG_RUNTIME_DIR="$RUNTIME" WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 \
 		sway -C -c /etc/sway/config >/dev/null 2>&1; then
 		ok "sway configuration is valid"
@@ -673,11 +690,12 @@ _missing_bar=""
 for _c in rofi jq nmcli bluetoothctl pactl brightnessctl foot; do
 	have "$_c" || _missing_bar="$_missing_bar $_c"
 done
-for _s in bar-pick bar-menu bar-net bar-bt bar-key bar-audio bar-updates bar-power; do
-	[ -x "$HOME/.config/bin/$_s" ] || _missing_bar="$_missing_bar bin/$_s"
+for _s in bar-pick bar-menu bar-net bar-bt bar-key bar-audio bar-updates bar-power \
+	bar-busy busy lib-rofi.sh; do
+	[ -r "$HOME/.config/bin/$_s" ] || _missing_bar="$_missing_bar bin/$_s"
 done
 if [ -z "$_missing_bar" ]; then
-	ok "bar menus complete (scripts plus fuzzel, nmcli, bluetoothctl, jq)"
+	ok "bar menus complete (scripts plus rofi, nmcli, bluetoothctl, jq)"
 else
 	fail "bar menus broken:$_missing_bar (clicking those indicators does nothing)"
 fi
@@ -750,6 +768,47 @@ fi
 	fail "bin/rofi-keys is missing: the key view has no script"
 [ -x "$HOME/.config/bin/rofi-files" ] && ok "file browser (rofi-files) is executable" ||
 	fail "bin/rofi-files is missing: Alt+Ctrl+F and the Files menu entry do nothing"
+
+# Every menu behind the root menu is a rofi-* script. A missing one is the
+# quietest failure in the session: the row is still listed (bar-menu draws it
+# from a static list) and choosing it does nothing at all.
+_missing_menus=""
+for _s in rofi-quick rofi-notify rofi-clean rofi-kill rofi-tz rofi-places \
+	rofi-media rofi-calc rofi-layout lib-rofi.sh; do
+	[ -r "$HOME/.config/bin/$_s" ] || _missing_menus="$_missing_menus bin/$_s"
+done
+if [ -z "$_missing_menus" ]; then
+	ok "session menus complete (settings, notifications, free space, processes, time zone, places, media, calculator, layout)"
+else
+	fail "session menus missing:$_missing_menus (those root-menu rows do nothing)"
+fi
+
+# The manual is rendered with glow, and both the binary and the glamour style
+# are needed: without the style glow prints an error and exits, and rofi-learn
+# opens a foot window that closes immediately, which reads as "nothing happened".
+_glow=""
+have glow || _glow="$_glow glow"
+[ -r "$HOME/.config/glow/solarized.json" ] || _glow="$_glow .config/glow/solarized.json"
+[ -r "$HOME/.config/glow/glow.yml" ] || _glow="$_glow .config/glow/glow.yml"
+if [ -z "$_glow" ]; then
+	ok "manual renderer complete (glow with the solarized glamour style)"
+else
+	fail "manual renderer incomplete:$_glow (Learn opens a window that closes at once)"
+fi
+
+# The browser is the image's only viewer: rofi-files hands it anything that is
+# not text and /usr/local/bin/xdg-open is a shim around it. Without it those two
+# answer with a notification instead, which is easy to miss.
+if have firefox-esr; then
+	ok "browser installed (firefox-esr), used by rofi-files and xdg-open"
+else
+	fail "firefox-esr is missing: Files cannot open an image or a PDF and xdg-open fails"
+fi
+if [ -x /usr/local/bin/xdg-open ]; then
+	ok "xdg-open shim is installed (URLs and paths go to the browser)"
+else
+	fail "/usr/local/bin/xdg-open is missing: ctrl+click in foot and URL-printing tools fail"
+fi
 
 # Dictation: the shortcut records with parecord and transcribes with whisper-cli.
 # The model is fetched on first use, so its absence is not a failure.
@@ -834,6 +893,45 @@ if have fc-list; then
 	done
 else
 	skip "fc-list is not installed"
+fi
+
+# The launcher shows application *images*, and Debian's Adwaita has none of this
+# session's names, so the image ships the small Nureb theme (48x48 PNGs rendered
+# from the Font Awesome codepoints). Without it every org.nureb.* row is a hole.
+_icons=""
+[ -d /usr/share/icons/Nureb ] || _icons="$_icons /usr/share/icons/Nureb"
+[ -r /usr/share/icons/Nureb/index.theme ] || _icons="$_icons Nureb/index.theme"
+_iconless=""
+for _d in /usr/share/applications/org.nureb.*.desktop; do
+	[ -r "$_d" ] || continue
+	_icon=""
+	while IFS= read -r _line; do
+		case $_line in Icon=*) _icon=${_line#Icon=}; break ;; esac
+	done <"$_d"
+	[ -n "$_icon" ] || continue
+	[ -r "/usr/share/icons/Nureb/48x48/apps/$_icon.png" ] && continue
+	# An application's own icon (hicolor, pixmaps) is fine too.
+	[ -n "$(find /usr/share/icons /usr/share/pixmaps -name "$_icon.*" 2>/dev/null | head -1)" ] && continue
+	_iconless="$_iconless $(basename "$_d" .desktop)=$_icon"
+done
+if [ -z "$_icons" ] && [ -z "$_iconless" ]; then
+	ok "launcher icons complete (Nureb theme, every session entry resolves)"
+elif [ -z "$_icons" ]; then
+	fail "launcher entries without an icon:$_iconless (a hole in the launcher row)"
+else
+	fail "icon theme incomplete:$_icons (the launcher shows empty spaces)"
+fi
+if have grep; then
+	_cfg_rasi="$HOME/.config/rofi/config.rasi"
+	if [ -r "$_cfg_rasi" ]; then
+		_show=$(grep -c 'show-icons: *true' "$_cfg_rasi" 2>/dev/null || true)
+		_theme=$(grep -c 'icon-theme: *"Nureb"' "$_cfg_rasi" 2>/dev/null || true)
+		if [ "${_show:-0}" -ge 1 ] && [ "${_theme:-0}" -ge 1 ]; then
+			ok "rofi shows icons from the Nureb theme (show-icons, icon-theme)"
+		else
+			warn "rofi/config.rasi does not enable show-icons and icon-theme \"Nureb\""
+		fi
+	fi
 fi
 
 # ---------------------------------------------------------------------------

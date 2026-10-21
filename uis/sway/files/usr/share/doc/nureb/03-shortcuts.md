@@ -4,7 +4,7 @@
 uses Super, so the same actions usually keep the same letter and change the
 modifier; the table at the end says so where it matters.
 
-The live list is **Alt+Shift+K** (`rofi-keys`): it is parsed from the
+The live list is **Alt+Ctrl+K** (`rofi-keys`): it is parsed from the
 configuration files, so it is never stale, it can be searched, and Enter copies
 the command. This page is the tour.
 
@@ -16,8 +16,11 @@ the command. This page is the tour.
 | Alt+Space | the root menu (the bar's menu button, on the keyboard) |
 | Alt+Tab | window switcher |
 | Alt+Shift+D | command palette (`$PATH`; Shift+Enter runs it in foot) |
-| Alt+Shift+K | every key binding, searchable, Enter copies the command |
+| Alt+Ctrl+K | every key binding, searchable, Enter copies the command |
 | Alt+Ctrl+F | files: browse a directory, Enter reads a text file in foot |
+| Alt+Ctrl+O | settings: the radio switches, night light, touchpad, rotation |
+| Alt+Ctrl+N | notifications: the history, do-not-disturb, copy one |
+| Alt+Ctrl+Q | calculator: type it, Enter copies the result |
 | Alt+Return | terminal (foot) |
 | Alt+Q (or Alt+Shift+Q) | close the focused window |
 | Alt+Shift+C | reload the configuration |
@@ -40,6 +43,9 @@ with `Super+Ctrl`:
 | Alt+Ctrl+L | lock the screen (the Lock key does the same and then suspends) |
 | Alt+Ctrl+X | dictation on/off |
 | Alt+Ctrl+Shift+A | agents (launch, accounts, install) |
+| Alt+Ctrl+O | settings: Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, rotation |
+| Alt+Ctrl+N | notifications: history, do-not-disturb, copy |
+| Alt+Ctrl+Q | calculator |
 | Alt+Shift+Escape / Alt+Ctrl+Escape | lock then suspend / suspend |
 
 ## Windows
@@ -82,7 +88,10 @@ wherever sway does not already own the key.
 | apps | Super+Alt+Space | Search key / Alt+D |
 | root menu | Super+Space | **Alt+Space** |
 | window switcher | Alt+Tab | **Alt+Tab** (rofi's window mode) |
-| keybindings | Super+K | **Alt+Shift+K** (Alt+K is vim focus up) |
+| keybindings | Super+K | **Alt+Ctrl+K** (Alt+K is vim focus up, Alt+Shift+K moves the window) |
+| settings / control centre | Super+Ctrl+O | **Alt+Ctrl+O** (one list of switches and panels) |
+| calculator | Super+Ctrl+Q | **Alt+Ctrl+Q** |
+| notifications | bar panel | **Alt+Ctrl+N** |
 | dictation | Super+Ctrl+X | Alt+Ctrl+X |
 | agents | Super+Shift+Ctrl+A | Alt+Ctrl+Shift+A |
 | floating | Super+T | Alt+T |
@@ -99,11 +108,18 @@ wherever sway does not already own the key.
 | layouts | Super+L cycles | Alt+S/W/E (sway's three layouts) |
 
 **Three deliberate deviations**, all because sway's defaults own the key Omarchy
-uses: the key view is `Alt+Shift+K` (not `Alt+K`, which is vim focus up), closing
+uses: the key view is `Alt+Ctrl+K` (not `Alt+K`, which is vim focus up, nor `Alt+Shift+K`, which moves the window), closing
 is `Alt+Q` (not `Alt+W`, which is the tabbed layout), and there is no single
 "cycle layout" key because sway's layouts are stacking/tabbed/split rather than
 dwindle/master/scrolling.
 
-Planned, not built yet: clipboard manager `Alt+Ctrl+V`, emoji `Alt+Ctrl+E`,
-calculator `Alt+Ctrl+Q`, capture menu `Alt+Ctrl+C` and the notification keys
-(`Alt+comma` family) - the same letters as Omarchy.
+Not built yet: clipboard manager `Alt+Ctrl+V`, emoji `Alt+Ctrl+E` and the
+capture menu `Alt+Ctrl+C` - the same letters as Omarchy. The capture menu is
+only wiring (`tesseract`, `zbar-tools` and `qrencode` are already installed);
+clipboard history needs `cliphist`, and the emoji picker needs
+`fonts-noto-color-emoji` to draw a glyph at all. `docs/omarchy-gap.md` has the
+full list.
+
+Everything else lives in the root menu instead of on a key: Places, Media, Time
+zone, Free space, End a process, SSH and the manual. `Alt+Space` then the first
+letter is usually enough.

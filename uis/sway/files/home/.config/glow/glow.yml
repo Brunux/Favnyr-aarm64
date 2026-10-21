@@ -1,0 +1,15 @@
+# glow: how the manual pages are rendered.
+#
+# rofi-learn opens /usr/share/doc/nureb/*.md with `glow -p`, so a page shows as
+# a document (headings, lists, tables, code with syntax highlighting) instead of
+# as source.  The style is solarized, in the same palette as rofi, foot and the
+# bar; the file next to this one is the glamour description of it.
+#
+# width: 0 means "as wide as the terminal", so a page reflows with the window.
+# An absolute path, because glow treats a bare name as one of its built-ins and
+# only looks at a path for anything else (rofi-learn passes the same file with -s).
+style: /home/brunux/.config/glow/solarized.json
+pager: true
+mouse: false
+width: 0
+preserveNewLines: false

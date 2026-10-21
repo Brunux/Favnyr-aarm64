@@ -1,0 +1,35 @@
+#!/bin/sh
+# xdg-open, the one operation this image needs from a desktop portal.
+#
+# This session ships no xdg-desktop-portal (it is a GTK/D-Bus daemon with
+# nothing else here to talk to it), but "open this" is still asked for: foot
+# ctrl+clicks a URL, `yt-dlp --print-trailer` prints one, a script opens a
+# downloaded file. Without an xdg-open those all fail with "command not found".
+#
+# The browser is the answer to all of it: URLs go to it as they are, and a path
+# becomes a file:// URL (absolute, so Firefox does not have to guess a working
+# directory). The NUL-separated form (`xdg-open` with no arguments, reading
+# paths from stdin) is deliberately not supported - nothing in this image uses
+# it, and guessing would be worse than saying so.
+#
+# rofi-files does not call this: it calls firefox-esr directly, so the file
+# browser works even if this script is removed.
+
+set -eu
+
+case ${1:-} in
+'')
+	printf 'usage: xdg-open URL|FILE\n' >&2
+	exit 2
+	;;
+*://* | mailto:*)
+	exec firefox-esr "$1"
+	;;
+*)
+	case $1 in
+	/*) path=$1 ;;
+	*) path=$PWD/$1 ;;
+	esac
+	exec firefox-esr "file://$path"
+	;;
+esac

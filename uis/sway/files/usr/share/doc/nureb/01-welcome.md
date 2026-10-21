@@ -15,7 +15,7 @@ everything above the kernel.
 * Open a terminal: **Alt+Return** (or the bar's menu → Terminal).
 * Open the launcher: the **Search key** (the magnifier, left of Tab) or
   **Alt+D**. Type part of a name, Enter.
-* See every key binding: **Alt+Shift+K**.
+* See every key binding: **Alt+Ctrl+K**.
 * This manual: the **Learn** entry in the bar menu (**Alt+Space**), or
   `rofi-learn` in a terminal.
 
@@ -24,7 +24,7 @@ everything above the kernel.
 | Piece | What it is |
 |---|---|
 | the bar (top) | waybar: menu, workspaces, clock, updates, tray, keyboard layout, Bluetooth, network, volume, brightness, battery. Left/right click and scroll do different things on each |
-| the compositor | **swayfx**, a fork of sway that draws rounded corners and shadows (blur is off on purpose - it is the one effect that costs frames on this GPU) |
+| compositor | **swayfx**, a fork of sway that draws rounded corners, shadows and a blurred backdrop under the translucent terminal, launcher and bar |
 | the terminal | **foot**: solarized palette, no GPU renderer, about half the memory of an Alacritty window |
 | the launcher | **rofi**: applications, windows, commands, and the bar's own menus |
 | notifications | **mako**, bottom of the top-right corner, under the bar |

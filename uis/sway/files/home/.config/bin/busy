@@ -1,0 +1,112 @@
+#!/bin/sh
+# "Working on it": the one way this session says that something is happening.
+#
+# The bar's indicators and the menus run one blocking command per action
+# (`nmcli` scanning for networks, `bluetoothctl` scanning for devices, `du`
+# walking the cache), and some of those take long enough to look like a click
+# that was never registered.  Deboma answers that with a spinner inside a
+# resident QML panel; here the answer is a mako notification that *morphs* into
+# the result, plus a spinner card on the bar - nothing stays behind.
+#
+#   busy start  TAG LABEL MESSAGE [ICON]   begin; the toast does not expire
+#   busy update TAG MESSAGE                same toast, new text
+#   busy stop   TAG                        dismiss quietly (the menu is the answer)
+#   busy end    TAG MESSAGE                replace with the result (4 s)
+#   busy fail   TAG MESSAGE                replace with an error (critical, 6 s)
+#
+# The notification is replaced rather than stacked because every message carries
+# the same mako tag (`string:x-canonical-private-synchronous:nureb-<tag>`), so a
+# scan reads "Looking for networks…" and then the same card reads "9 networks
+# in range".  The bar side is bar-busy, which reads the state written here; both
+# ends are signalled through waybar's signal 8, so the card appears and
+# disappears at the same moment as the toast.
+#
+# Nothing here fails the caller: a session without mako gets no toast, and the
+# action itself still runs.
+#
+# State lives in $XDG_RUNTIME_DIR/nureb-busy (<tag>.id, .label, .icon), so it
+# dies with the session rather than surviving in the home directory.
+
+set -u
+
+dir=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
+mkdir -p "$dir" 2>/dev/null || true
+
+cmd=${1:-}
+tag=${2:-}
+[ -n "$tag" ] || exit 0
+
+id=$(cat "$dir/$tag.id" 2>/dev/null || true)
+label=$(cat "$dir/$tag.label" 2>/dev/null || true)
+icon=$(cat "$dir/$tag.icon" 2>/dev/null || true)
+
+# One toast per tag: notify-send's -p prints the id mako assigned, -r replaces
+# that exact notification, and the synchronous hint is what makes mako treat a
+# new one with the same tag as a replacement even without the id.
+send() { # TIMEOUT URGENCY MESSAGE
+	if [ -n "$id" ]; then
+		notify-send -a Nureb -i "${icon:-dialog-information}" -u "$2" -t "$1" \
+			-r "$id" -h "string:x-canonical-private-synchronous:nureb-$tag" \
+			"$label" "$3" 2>/dev/null || true
+	else
+		notify-send -a Nureb -i "${icon:-dialog-information}" -u "$2" -t "$1" \
+			-h "string:x-canonical-private-synchronous:nureb-$tag" \
+			"$label" "$3" 2>/dev/null || true
+	fi
+}
+
+forget() { rm -f "$dir/$tag.id" "$dir/$tag.label" "$dir/$tag.icon"; }
+
+case $cmd in
+start)
+	label=${3:-Working}
+	[ -n "$label" ] || label=Working
+	printf '%s\n' "$label" >"$dir/$tag.label"
+	if [ -n "${5:-}" ]; then
+		printf '%s\n' "$5" >"$dir/$tag.icon"
+	else
+		rm -f "$dir/$tag.icon"
+	fi
+	icon=${5:-}
+	# -p prints the id; a session without a notification daemon prints nothing,
+	# which is why the id is optional everywhere below.
+	id=$(notify-send -p -a Nureb -i "${5:-dialog-information}" -u low -t 0 \
+		-h "string:x-canonical-private-synchronous:nureb-$tag" \
+		"$label" "${4:-}" 2>/dev/null || true)
+	if [ -n "$id" ]; then
+		printf '%s\n' "$id" >"$dir/$tag.id"
+	else
+		rm -f "$dir/$tag.id"
+	fi
+	pkill -RTMIN+8 waybar 2>/dev/null || true
+	;;
+update)
+	[ -n "$label" ] || exit 0
+	send 0 low "${3:-}"
+	;;
+stop)
+	# mako can drop a notification by id; older versions only know "-a", which
+	# would take unrelated notifications with it, hence the explicit id first.
+	if [ -n "$id" ]; then
+		makoctl dismiss -n "$id" >/dev/null 2>&1 || true
+	fi
+	forget
+	pkill -RTMIN+8 waybar 2>/dev/null || true
+	;;
+end)
+	[ -n "$label" ] || label=Done
+	send 4000 normal "${3:-}"
+	forget
+	pkill -RTMIN+8 waybar 2>/dev/null || true
+	;;
+fail)
+	[ -n "$label" ] || label=Error
+	send 6000 critical "${3:-}"
+	forget
+	pkill -RTMIN+8 waybar 2>/dev/null || true
+	;;
+*)
+	printf 'usage: busy start|update|stop|end|fail TAG ...\n' >&2
+	exit 2
+	;;
+esac

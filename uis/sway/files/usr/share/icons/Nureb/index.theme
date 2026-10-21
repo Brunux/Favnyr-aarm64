@@ -1,0 +1,17 @@
+[Icon Theme]
+Name=Nureb
+Comment=Solarized Font Awesome icons for the session's own launcher entries
+Inherits=Adwaita,hicolor
+Directories=48x48/apps,scalable/apps
+
+[48x48/apps]
+Size=48
+Type=Fixed
+Context=Applications
+
+[scalable/apps]
+Size=24
+MinSize=8
+MaxSize=512
+Type=Scalable
+Context=Applications

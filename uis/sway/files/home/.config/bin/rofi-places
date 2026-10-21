@@ -1,0 +1,60 @@
+#!/bin/sh
+# Places: the directories and the disks, one list.
+#
+# rofi-files walks one directory at a time; this is the way in.  Deboma's
+# launcher has the same set (home, documents, downloads, pictures, the mounted
+# disks).  Only places that exist are listed, so a system without ~/Videos does
+# not show an empty folder - the list is the filesystem, not an assumption.
+
+set -eu
+
+dir=$(dirname "$0")
+. "$dir/lib-rofi.sh"
+
+
+tmp=$(mktemp "${TMPDIR:-/tmp}/places.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+
+# ui_place ICON NAME PATH
+ui_place() {
+	[ -d "$3" ] || return 0
+	_shown=$3
+	case $3 in
+	"$HOME") _shown='~' ;;
+	"$HOME"/*) _shown="~${3#"$HOME"}" ;;
+	esac
+	ui_row "$1" "$2" "$_shown" "open:$3"
+}
+
+{
+	ui_place "$UI_I_HOME" Home "$HOME"
+	ui_place "$UI_I_FILE" Documents "$HOME/Documents"
+	ui_place "$UI_I_FILES" Downloads "$HOME/Downloads"
+	ui_place "$UI_I_IMAGE" Pictures "$HOME/Pictures"
+	ui_place "$UI_I_MUSIC" Music "$HOME/Music"
+	ui_place "$UI_I_VIDEO" Videos "$HOME/Videos"
+	ui_place "$UI_I_CODE" Dev "$HOME/Dev"
+	ui_place "$UI_I_COG" 'Sway configuration' /etc/sway
+	ui_place "$UI_I_GLOBE" 'Root filesystem' /
+
+	# Removable media and any other mounted real filesystem, minus the ones a
+	# file browser should not start in.
+	findmnt -rn -o TARGET,FSTYPE 2>/dev/null |
+		while read -r target fstype; do
+			case $fstype in
+			ext2 | ext3 | ext4 | vfat | exfat | btrfs | xfs | f2fs) ;;
+			*) continue ;;
+			esac
+			case $target in
+			/ | /boot | /boot/*) continue ;;
+			esac
+			ui_place "$UI_I_DISK" "$(basename -- "$target")" "$target"
+		done
+	ui_row "$UI_I_FILES" 'Open a terminal' "$HOME" "term:$HOME"
+} >"$tmp"
+
+key=$(ui_pick 'Places' 'Enter browses there · Escape closes' <"$tmp") || exit 0
+case $key in
+open:*) exec "$dir/rofi-files" "${key#open:}" ;;
+term:*) exec foot --working-directory="${key#term:}" ;;
+esac

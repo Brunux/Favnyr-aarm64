@@ -2,6 +2,11 @@
 # per-user bits. Ported from the maintainer's Nura session.
 include /etc/sway/config
 
+# Per-user drop-ins, read last so they win over the system configuration. The
+# session writes here (rofi-layout keeps the keyboard layout it was given); an
+# empty directory is fine, a glob that matches nothing is not an error.
+include ~/.config/sway/config.d/*.conf
+
 # Faster key repeat for every keyboard.
 input type:keyboard {
     repeat_delay 300

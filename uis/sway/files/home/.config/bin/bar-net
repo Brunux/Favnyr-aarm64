@@ -18,12 +18,21 @@ set -eu
 dir=$(dirname "$0")
 tab=$(printf '\t')
 
-fail() { swaynag -t warning -m "$*" -b Close >/dev/null 2>&1 & }
+# One error channel: the same mako card the progress toast used, left behind as
+# a critical notification. A scan or a connection attempt takes long enough that
+# a click with no visible answer reads as a broken menu, which is what busy
+# answers (see busy and bar-busy).
+fail() { "$dir/busy" fail wifi "$*"; }
 
 if [ "$(nmcli radio wifi 2>/dev/null)" != "enabled" ]; then
 	choice=$(printf '%s\n' 'Turn Wi-Fi on' | "$dir/bar-pick" 'Wi-Fi is off') || exit 0
 	if [ "$choice" = 'Turn Wi-Fi on' ]; then
-		nmcli radio wifi on >/dev/null 2>&1 || fail 'Wi-Fi: could not turn the radio on'
+		"$dir/busy" start wifi Wi-Fi 'Turning the radio on…' network-wireless
+		if nmcli radio wifi on >/dev/null 2>&1; then
+			"$dir/busy" end wifi 'Wi-Fi on'
+		else
+			fail 'Wi-Fi: could not turn the radio on'
+		fi
 	fi
 	exit 0
 fi
@@ -32,6 +41,9 @@ fi
 # literal ':' in an SSID as '\:', which still splits into its own field; the
 # loop below joins those fields back into the name.  Duplicate SSIDs (mesh and
 # multi-band) collapse to the strongest one, active networks sort first.
+# The rescan is the first thing here that can take a couple of seconds; the
+# toast says so, and the list replaces it as soon as it is ready.
+"$dir/busy" start wifi Wi-Fi 'Looking for networks…' network-wireless
 scan=$(
 	nmcli --terse --fields IN-USE,SSID,SECURITY,SIGNAL \
 		device wifi list --rescan yes 2>/dev/null |
@@ -70,6 +82,7 @@ menu=$(
 )
 [ -n "$menu" ] || menu='No networks in range'
 
+"$dir/busy" stop wifi
 choice=$(
 	printf '%s\n' "$menu" 'Turn Wi-Fi off' 'Network settings (nmtui)' |
 		"$dir/bar-pick" 'Wi-Fi'
@@ -79,8 +92,12 @@ case $choice in
 	'') exit 0 ;;
 	'No networks in range') exit 0 ;;
 	'Turn Wi-Fi off')
-		nmcli radio wifi off >/dev/null 2>&1 || fail 'Wi-Fi: could not turn the radio off'
-		pkill -RTMIN+8 waybar 2>/dev/null || true
+		"$dir/busy" start wifi Wi-Fi 'Turning the radio off…' network-wireless
+		if nmcli radio wifi off >/dev/null 2>&1; then
+			"$dir/busy" end wifi 'Wi-Fi off'
+		else
+			fail 'Wi-Fi: could not turn the radio off'
+		fi
 		exit 0
 		;;
 	'Network settings (nmtui)') exec foot --app-id=popup nmtui ;;
@@ -95,6 +112,10 @@ sec=$(
 		awk -F"$tab" -v want="$ssid" '$3 == want { print $4; exit }'
 )
 
+# Joining takes seconds (DHCP, the handshake), which is the longest wait in this
+# script; the toast stays until the outcome is known and then becomes it.
+"$dir/busy" start wifi Wi-Fi "Connecting to $ssid…" network-wireless
+
 if nmcli --terse --fields NAME connection show 2>/dev/null | grep -Fxq -- "$ssid"; then
 	out=$(nmcli device wifi connect "$ssid" 2>&1) ||
 		out=$(nmcli connection up id "$ssid" 2>&1) ||
@@ -102,12 +123,14 @@ if nmcli --terse --fields NAME connection show 2>/dev/null | grep -Fxq -- "$ssid
 else
 	pw=
 	if [ -n "$sec" ] && [ "$sec" != "--" ]; then
+		"$dir/busy" stop wifi
 		pw=$("$dir/bar-pick" "Password for $ssid" -password) || exit 0
 		[ -n "$pw" ] || exit 0
+		"$dir/busy" start wifi Wi-Fi "Connecting to $ssid…" network-wireless
 		out=$(nmcli device wifi connect "$ssid" password "$pw" 2>&1) || { fail "Wi-Fi: $out"; exit 0; }
 	else
 		out=$(nmcli device wifi connect "$ssid" 2>&1) || { fail "Wi-Fi: $out"; exit 0; }
 	fi
 fi
 
-pkill -RTMIN+8 waybar 2>/dev/null || true
+"$dir/busy" end wifi "Connected to $ssid"

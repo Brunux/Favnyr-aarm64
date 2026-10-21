@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Calculator
+GenericName=Calculator
+Comment=Type an expression; Enter copies the result
+Exec=/home/brunux/.config/bin/rofi-calc
+Icon=accessories-calculator
+Terminal=false
+Categories=Utility;Calculator;
+Keywords=calc;calculator;math;sum;arithmetic;

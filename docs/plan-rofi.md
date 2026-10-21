@@ -55,21 +55,21 @@ Grouped by verdict. "Effort" is implementation + test on the card, not reading.
 |---|---|---|---|---|---|
 | 1 | **Emoji picker** (`omarchy.emojis`) | none | emoji TSV → `rofi -dmenu` → `wl-copy` + `wtype -M shift -k Insert` (Omarchy's exact insertion trick) | `wtype` | 1 h |
 | 2 | **Clipboard history** (`omarchy.clipboard`) | none | `cliphist list \| rofi -dmenu \| cliphist decode \| wl-copy`; images too (`cliphist decode > file`) | `cliphist` | 1-2 h |
-| 3 | **Calculator** (rofi-calc role) | none | script mode `-modi "calc:rofi-calc"`: `awk "BEGIN{print <input>}"`, recomputed per keystroke | none | 1 h |
-| 4 | **Keybindings viewer** (`omarchy-menu-keybindings`) | none | parse `bindsym`/`bindcode` from `/etc/sway/config`, `config.d/*`, `~/.config/sway/config` → `rofi -dmenu`, `-kb-custom-1` copies the command | none | 2 h |
-| 5 | **Timezone** (`omarchy-menu-timezone`) | none | `timedatectl list-timezones \| rofi -dmenu` → `timedatectl set-timezone` (+ mako notification), `-filter` on the current zone | none | 30 min |
+| 3 | **Calculator** (rofi-calc role) | none | ~~script mode recomputed per keystroke~~ **done as a one-shot prompt**: a script mode is called only at startup and on selection (verified), so `rofi-calc` asks once, evaluates with `awk`, copies the result | none | done |
+| 4 | **Keybindings viewer** (`omarchy-menu-keybindings`) | none | **done** (`rofi-keys`): parsed from `/etc/sway/config`, `config.d/*`, `~/.config/sway/config` → `rofi -dmenu -markup-rows`, Enter copies the command | none | done |
+| 5 | **Timezone** (`omarchy-menu-timezone`) | none | **done** (`rofi-tz`): `timedatectl list-timezones` → `rofi -dmenu` → `timedatectl set-timezone`, plus the network-clock switch | none | done |
 | 6 | **QR code** (Wi-Fi QR, `omarchy.wifiqr`) | none | `qrencode -t ANSIUTF8` in foot for the current SSID/PSK; a generic "text → QR" dmenu entry | `qrencode` | 1 h |
 | 7 | **OCR from a region** (`omarchy-capture-text`) | none | `grim -g "$(slurp)" - \| tesseract - - \| wl-copy` + notification | `tesseract-ocr`, `tesseract-ocr-eng` | 30 min |
 | 8 | **QR/barcode from a region** (`omarchy-capture-qr`) | none | `grim -g "$(slurp)" - \| zbarimg -q --raw - \| wl-copy` | `zbar-tools` | 30 min |
 | 9 | **About / system** (`About`, `omarchy-launch-about`) | none | `fastfetch` in foot, plus a read-only `rofi -dmenu` of the same fields | `fastfetch` | 30 min |
-| 10 | **Media control** | keys only (`XF86Audio*`) | `playerctl` list: play/pause, next, previous, and the current track as `-mesg` | `playerctl` | 1 h |
+| 10 | **Media control** | keys only (`XF86Audio*`) | **done** (`rofi-media`): play/pause, next, previous and the current track as the message line | `playerctl` | done |
 
 ### P1 - medium, still one-shot processes
 
 | # | Feature | Route | Notes / cost |
 |---|---|---|---|
 | 11 | **Root menu tree** (`bar-menu` → Omarchy's System / Appearance / Capture / Share / Setup) | nested `bar-pick` menus, one rofi per level | design work, not code: the tree must only list what exists here |
-| 12 | **File picker** (`omarchy-menu-file`) | script mode over `fd` in a nav state (a temp file holds the cwd), Enter opens with `xdg-open`/`foot` | needs a file opener: no browser, no GUI editor here yet |
+| 12 | **File picker** (`omarchy-menu-file`) | **done** (`rofi-files`, `Alt+Ctrl+F`): one directory per run, reopened in the chosen one; text in foot with bat, everything else in `firefox-esr` | |
 | 13 | **DNS switcher** (`omarchy-dns`) | `nmcli connection modify <active> ipv4.dns ...` + `nmcli con up` | needs the active connection name; test on the card |
 | 14 | **Screen recording** (`omarchy-capture-screenrecording`) | `wf-recorder` + `slurp` region, start/stop toggle via a pid file | `wf-recorder`; no audio capture (no PipeWire monitor source wired yet) |
 | 15 | **Clipboard images/files** | `cliphist list` + decode to `~/Pictures/clipboard/` and open | depends on #2 |
@@ -87,7 +87,7 @@ Grouped by verdict. "Effort" is implementation + test on the card, not reading.
 | **Bar** customisation (position, background, indicators, clock formats, dock) | waybar's config is a different format; the port's bar is deliberately one fixed solarized layout |
 | **Theme switcher / theme install / font install** | a real cross-cutting project in this port: waybar `style.css`, `foot.ini`, `rofi/*.rasi`, mako, fuzzel-style popups and `swaybg` all carry the palette. That is a feature of its own, not a rofi mode |
 | **OSD** (volume/brightness overlay) | not a menu: it is a transient overlay that must not take keyboard focus. mako/waybar already show the values |
-| **Learn** links (Omarchy/Hyprland/Arch/Neovim docs) | they open a browser; this image has none |
+| **Learn** links (Omarchy/Hyprland/Arch/Neovim docs) | they point at web pages; the manual here is local and rendered by glow, and a *link* from a page would need a portal or a `xdg-open` (which now exists, so this is only unfinished) |
 | **Plugins, dock, polkit agent, agents panel, image picker, dev-gallery** | Quickshell/QML plugins; rofi has no plugin API beyond script modes |
 | **Hibernate** | needs a disk swap (see `docs/optimization.md`); not available today |
 | **Fingerprint, FIDO2, NVIDIA, hybrid GPU, touchpad haptics** | no such hardware on this Chromebook |
@@ -152,8 +152,25 @@ current track (selecting the track copies it).
 
 ## Status
 
+**The menus are done.** `rofi-quick` (settings: radios, night light, DND, touchpad, rotation,
+layout), `rofi-notify` (history), `rofi-clean` (free space), `rofi-kill`, `rofi-tz`, `rofi-places`,
+`rofi-media`, `rofi-calc`, `rofi-layout` and `rofi-learn`, all on `lib-rofi.sh` (row style, palette,
+glyphs) and all reachable from `bar-menu` and the launcher; new keys `Alt+Ctrl+O/N/Q` and
+`Alt+Ctrl+K` for the key view. Slow actions report through `busy` (a mako toast that becomes the
+result) and `bar-busy` (a spinner on the bar), which is the new convention for anything that takes
+seconds: the Wi-Fi scan, the Bluetooth scan, connecting, and the `du` walk in Free space.
+
+The manual is rendered by **glow** instead of shown as bat source, the launcher shows real icons
+(the **Nureb** theme, rendered from the same Font Awesome codepoints by `scripts/make-icons.sh`),
+and the image now carries **firefox-esr** as its one viewer, which is what `rofi-files` hands
+anything that is not text to, plus a two-dozen-line `xdg-open`.
+
+Still open from this plan: emoji (#1), clipboard history (#2), QR (#6), OCR (#7), QR capture (#8),
+about (#9), DNS (#13), screen recording (#14), reminders (#16), package search (#17), colour picker
+(#18) - and the tablet work in its own section below.
+
 Done in the first batch: **Learn** (seven pages in `usr/share/doc/nureb` + `rofi-learn`, opened with
-bat in foot), the **key view** (`rofi-keys`, generated from the configuration, `Alt+Shift+K` as
+bat in foot), the **key view** (`rofi-keys`, generated from the configuration, `Alt+Ctrl+K` as
 Omarchy's `Super+K`), **dictation** (`dictate` + `dictate-model`, whisper.cpp, `Alt+Ctrl+X` as
 Omarchy's `Super+Ctrl+X`), **hibernate** (`sway-hibernate`, gated on a disk swap and `resume=`) and
 **agents** (`rofi-agents`: launch/install/default/accounts, `Alt+Ctrl+Shift+A` as Omarchy's

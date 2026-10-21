@@ -24,8 +24,13 @@
  */
 
 configuration {
-    /* The three modes, in the order Ctrl+Tab would cycle them. */
+    /* The three modes, in the order Ctrl+Tab would cycle them, plus the one
+     * that is only reached by name: `ssh` lists ~/.ssh/config with rofi's own
+     * parser (`rofi -show ssh`).  The calculator is not a mode: rofi calls a
+     * script mode once at startup and again on selection, never while the query
+     * changes, so ~/.config/bin/rofi-calc is a one-shot dmenu instead. */
     modes: [ drun, run, window ];
+    modi: "drun,run,window,ssh";
 
     /* Both drun's Terminal=true entries (btop, htop, our own TUIs) and run mode's
      * Shift+Enter use this. foot is the session terminal. */
@@ -38,13 +43,30 @@ configuration {
     display-drun: "Launch";
     display-run: "Run";
     display-window: "Window";
+    display-ssh: "SSH";
 
-    /* Icons are off on purpose. rofi 2.0 renders .desktop icons through glycin, a
-     * sandboxed image loader: measured on this machine, drun mode costs 57 MB PSS
-     * with icons and ~16 MB without, and glycin wants bwrap for its sandbox (the
-     * image has none, so it also logs "Glycin running without sandbox"). Text-only
-     * rows are the same trade tofi made. */
-    show-icons: false;
+    /* Application icons, where the data has them: the launcher and the window
+     * switcher.  rofi 2.0 resolves .desktop icons through glycin, a sandboxed
+     * image loader; measured in the headless session, drun costs 13 MB of PSS
+     * with ten rows of icons, and nothing stays after the window closes.  The
+     * launcher is where an icon earns that; every list this port draws itself
+     * carries a font glyph instead (lib-rofi.sh), which costs nothing, follows
+     * the palette and is already how the bar is drawn.
+     *
+     * bar-pick passes -no-show-icons, so the bar's popups keep the tighter
+     * text-only layout. bubblewrap is in uis/sway/packages.list because glycin
+     * sandboxes the decoder with it; without bwrap it logs "Glycin running
+     * without sandbox" and decodes in-process.
+     *
+     * The theme is Nureb, not Adwaita: Debian's Adwaita 51 ships only monochrome
+     * *symbolic* icons and not one of the application names this session uses,
+     * so the launcher showed a hole where an icon should be. The overlay ships
+     * a solarized line icon per session entry (terminal, folder, gear, bell,
+     * power...) in usr/share/icons/Nureb, and its index.theme inherits Adwaita
+     * and hicolor, so an application that brings its own icon (foot, btop,
+     * htop) still gets it in colour. */
+    show-icons: true;
+    icon-theme: "Nureb";
 
     /* fzf-style matching, as tofi and fuzzel did. */
     matching: "fuzzy";

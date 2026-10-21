@@ -1,0 +1,115 @@
+#!/bin/sh
+# Free space: what is using it, and one action per row to get it back.
+#
+# The map of the machine is small (58 GB eMMC, a 4 GB root filesystem), so the
+# things that grow are known: the apt archive, the journal, thumbnails, the
+# trash and the browser/build caches.  This measures them (du is the slow part,
+# hence the spinner on the bar), lists them with their size, and runs the one
+# command that empties each.
+#
+# Nothing is deleted without being chosen: there is no "clean everything" row.
+
+set -eu
+
+dir=$(dirname "$0")
+. "$dir/lib-rofi.sh"
+
+
+# du -sk, in MB, and "-" when the path does not exist or cannot be read.
+size_mb() {
+	_k=$(du -skx "$1" 2>/dev/null | awk '{ print $1 }' || true)
+	[ -n "$_k" ] || {
+		printf -- '-'
+		return 0
+	}
+	awk -v k="$_k" 'BEGIN { printf "%.0f MB", k / 1024 }'
+}
+
+journal_mb() {
+	_out=$(sudo -n journalctl --disk-usage 2>/dev/null || true)
+	case $_out in
+	*'take up'*)
+		_num=$(printf '%s' "$_out" | sed -n 's/.*take up \([0-9.]*\)\([KMG]\).*/\1 \2/p')
+		awk -v v="${_num% *}" -v u="${_num#* }" 'BEGIN {
+			mult = (u == "K") ? 1 : (u == "M") ? 1024 : 1048576
+			printf "%.0f MB", v * mult / 1024
+		}'
+		;;
+	*) printf -- '-' ;;
+	esac
+}
+
+apt_mb() { size_mb /var/cache/apt/archives; }
+thumb_mb() { size_mb "$HOME/.cache/thumbnails"; }
+trash_mb() { size_mb "$HOME/.local/share/Trash"; }
+cache_mb() { size_mb "$HOME/.cache"; }
+
+measure() {
+	trash=$(trash_mb)
+	thumb=$(thumb_mb)
+	apt=$(apt_mb)
+	journal=$(journal_mb)
+	cache=$(cache_mb)
+	# A path that does not exist or is not readable reads as "nothing" rather
+	# than a dash: the row is an action, and "-" looks like a failed measurement.
+	for _v in trash thumb; do
+		eval "_x=\$$_v"
+		[ "$_x" = '-' ] && eval "$_v='nothing'"
+	done
+}
+
+render() {
+	_free=$(df -h --output=avail / 2>/dev/null | tail -n 1 | tr -d ' ')
+	_total=$(df -h --output=size / 2>/dev/null | tail -n 1 | tr -d ' ')
+	{
+		ui_row "$UI_I_DISK" 'Free space' "${_free:-?} of ${_total:-?}" none "$UI_GREEN"
+		ui_row "$UI_I_TRASH" 'Empty the trash' "$trash" trash "$(if [ "$trash" = '0 MB' ] || [ "$trash" = '-' ]; then printf '%s' "$UI_DIM"; else printf '%s' "$UI_YELLOW"; fi)"
+		ui_row "$UI_I_IMAGE" 'Remove the thumbnails' "$thumb" thumbnails "$UI_DIM"
+		ui_row "$UI_I_BOX" 'Clean the package cache' "$apt" apt "$UI_DIM"
+		ui_row "$UI_I_BOOK" 'Shrink the journal to 100 MB' "$journal" journal "$UI_DIM"
+		ui_row "$UI_I_GLOBE" 'Your cache (~/.cache)' "$cache" cache "$UI_DIM"
+	} >"$1"
+}
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/clean.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+
+while :; do
+	"$dir/busy" start clean 'Free space' 'Measuring the caches…' user-trash
+	measure
+	"$dir/busy" stop clean
+	render "$tmp/rows"
+	key=$(ui_pick 'Free space' 'Enter cleans that one · Escape closes' <"$tmp/rows") || exit 0
+	case $key in
+	none) : ;;
+	trash)
+		rm -rf "${HOME:?}/.local/share/Trash/files" "${HOME:?}/.local/share/Trash/info" 2>/dev/null || true
+		ui_say 'Free space' 'Trash emptied'
+		;;
+	thumbnails)
+		rm -rf "${HOME:?}/.cache/thumbnails" 2>/dev/null || true
+		ui_say 'Free space' 'Thumbnails removed'
+		;;
+	apt)
+		if sudo -n apt-get clean >/dev/null 2>&1; then
+			ui_say 'Free space' 'Package cache cleaned'
+		else
+			ui_say 'Free space' 'Could not clean the package cache' critical
+		fi
+		;;
+	journal)
+		if sudo -n journalctl --vacuum-size=100M >/dev/null 2>&1; then
+			ui_say 'Free space' 'Journal shrunk to 100 MB'
+		else
+			ui_say 'Free space' 'Could not vacuum the journal' critical
+		fi
+		;;
+	cache)
+		printf '%s\n' 'Show what is inside' 'Cancel' >"$tmp/again"
+		again=$(ui_pick "$HOME/.cache" "$cache · Enter browses, nothing is deleted" <"$tmp/again") || continue
+		[ "$again" = 'Show what is inside' ] && exec "$dir/rofi-files" "$HOME/.cache"
+		continue
+		;;
+	*) exit 0 ;;
+	esac
+done

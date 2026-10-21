@@ -1,62 +1,91 @@
 #!/bin/sh
-# The bar's left-most button: applications and the session in one menu.
+# The bar's left-most button: applications, system settings and the session.
 #
 # Deboma's menu plugin lists the applications and the session actions in a
-# Quickshell window.  This is the cheap equivalent: rofi over a fixed list,
-# one process per click.  `Terminal` is also on the right-click so the common
-# case needs no menu at all (see waybar `custom/menu`).
+# Quickshell window.  This is the cheap equivalent: rofi over one table, one
+# process per click.  `Terminal` is also on the right-click so the common case
+# needs no menu at all (see waybar `custom/menu`).
 #
-# Wi-Fi, Bluetooth and the audio output are entries here as well as on their
-# own indicators: the power-menu habit ("everything is one menu") survives.
+# The list is grouped the way the rest of the session is: what opens something,
+# the switches and panels, the tools that answer a question about the machine,
+# and the session actions.  Every row carries a glyph (lib-rofi.sh), and the
+# rows that open a picker are the same scripts the bar's indicators run, so
+# there is one implementation per action.
+#
+# Alt+Space (and the menu button) open this; Alt+Ctrl+O opens Settings, which is
+# the switch panel without the session actions.
 
 set -eu
 
 dir=$(dirname "$0")
+. "$dir/lib-rofi.sh"
 
-choice=$(
-	printf '%s\n' \
-		Terminal \
-		Files \
-		Agents \
-		Learn \
-		Keybindings \
-		'Wi-Fi' \
-		Bluetooth \
-		'Audio output' \
-		Dictation \
-		Lock \
-		Screensaver \
-		Suspend \
-		Hibernate \
-		'Log out' \
-		Reboot \
-		'Power off' |
-		"$dir/bar-pick" Menu
-) || exit 0
 
-case $choice in
-	'') exit 0 ;;
-	Terminal) exec foot ;;
-	Files) exec "$dir/rofi-files" ;;
-	# The manual, the key view and the agent launcher: the same scripts the
-	# launcher entries call.
-	Agents) exec "$dir/rofi-agents" ;;
-	Learn) exec "$dir/rofi-learn" ;;
-	Keybindings) exec "$dir/rofi-keys" ;;
-	'Wi-Fi') exec "$dir/bar-net" ;;
-	Bluetooth) exec "$dir/bar-bt" ;;
-	'Audio output') exec "$dir/bar-audio" ;;
-	# Same commands as the key bindings in etc/sway/config.d, so the locked
-	# screen and the suspend path behave identically from the bar.
-	Lock) exec swaylock -c 002b36 ;;
-	# Deboma's menu has the same entry; it is the idle screen on demand.
-	Screensaver) exec "$dir/sway-screensaver" ;;
-	# Both of these explain themselves when they cannot run (no microphone, no
-	# disk swap with resume=), so the menu can list them unconditionally.
-	Dictation) exec "$dir/dictate" ;;
-	Hibernate) exec "$dir/sway-hibernate" ;;
-	Suspend) exec "$dir/sway-suspend" ;;
-	'Log out') exec swaymsg exit ;;
-	Reboot) exec systemctl reboot ;;
-	'Power off') exec systemctl poweroff ;;
-esac
+tmp=$(mktemp "${TMPDIR:-/tmp}/menu.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+
+while :; do
+	{
+		ui_row "$UI_I_TERM" 'Terminal' 'foot' terminal
+		ui_row "$UI_I_FILES" 'Files' 'browse the filesystem' files
+		ui_row "$UI_I_DISK" 'Places' 'home, disks, the configuration' places
+		ui_row "$UI_I_COG" 'Settings' 'Wi-Fi, Bluetooth, night light, rotation' settings
+		ui_row "$UI_I_BOOK" 'Learn' 'the manual, with search' learn
+		ui_row "$UI_I_KEYBOARD" 'Keybindings' 'every binding, from the configuration' keys
+		ui_row "$UI_I_USERS" 'Agents' 'Claude Code, Codex and the others' agents
+		ui_row "$UI_I_CALC" 'Calculator' 'type it, Enter copies the result' calc
+		ui_row "$UI_I_TERM" 'SSH' 'hosts from ~/.ssh/config' ssh
+
+		ui_heading 'system'
+		ui_row "$UI_I_WIFI" 'Wi-Fi' 'pick a network' wifi
+		ui_row "$UI_I_BT" 'Bluetooth' 'pick a device' bt
+		ui_row "$UI_I_VOLUME" 'Audio output' 'sinks and volume' audio
+		ui_row "$UI_I_MUSIC" 'Media' 'play, pause, next' media
+		ui_row "$UI_I_BELL" 'Notifications' 'history and do-not-disturb' notify
+		ui_row "$UI_I_CLOCK" 'Time zone' 'and network time' tz
+		ui_row "$UI_I_TRASH" 'Free space' 'what is using it, and clean up' clean
+		ui_row "$UI_I_BUG" 'End a process' 'the heaviest twenty' kill
+
+		ui_heading 'session'
+		ui_row "$UI_I_MIC" 'Dictation' 'speak, and it is typed' dictate
+		ui_row "$UI_I_LOCK" 'Lock' 'swaylock' lock
+		ui_row "$UI_I_EYE" 'Screensaver' 'the idle screen, now' screensaver
+		ui_row "$UI_I_PAUSE" 'Suspend' 'sleep until asked' suspend
+		ui_row "$UI_I_MOON" 'Hibernate' 'needs a disk swap and resume=' hibernate
+		ui_row "$UI_I_OUT" 'Log out' 'back to the greeter' logout "$UI_DIM"
+		ui_row "$UI_I_REBOOT" 'Reboot' '' reboot "$UI_DIM"
+		ui_row "$UI_I_POWER" 'Power off' '' poweroff "$UI_RED"
+	} >"$tmp"
+
+	key=$(ui_pick 'Menu' 'Enter opens · Escape closes' <"$tmp") || exit 0
+
+	case $key in
+	terminal) exec foot ;;
+	files) exec "$dir/rofi-files" ;;
+	places) exec "$dir/rofi-places" ;;
+	settings) exec "$dir/rofi-quick" ;;
+	learn) exec "$dir/rofi-learn" ;;
+	keys) exec "$dir/rofi-keys" ;;
+	agents) exec "$dir/rofi-agents" ;;
+	calc) exec "$dir/rofi-calc" ;;
+	ssh) exec rofi -show ssh ;;
+	wifi) exec "$dir/bar-net" ;;
+	bt) exec "$dir/bar-bt" ;;
+	audio) exec "$dir/bar-audio" ;;
+	media) exec "$dir/rofi-media" ;;
+	notify) exec "$dir/rofi-notify" ;;
+	tz) exec "$dir/rofi-tz" ;;
+	clean) exec "$dir/rofi-clean" ;;
+	kill) exec "$dir/rofi-kill" ;;
+	dictate) exec "$dir/dictate" ;;
+	lock) exec swaylock -c 002b36 ;;
+	screensaver) exec "$dir/sway-screensaver" ;;
+	suspend) exec "$dir/sway-suspend" ;;
+	hibernate) exec "$dir/sway-hibernate" ;;
+	logout) exec swaymsg exit ;;
+	reboot) exec systemctl reboot ;;
+	poweroff) exec systemctl poweroff ;;
+	none) continue ;;
+	*) exit 0 ;;
+	esac
+done

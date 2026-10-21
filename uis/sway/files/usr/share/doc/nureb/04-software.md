@@ -77,9 +77,25 @@ and `npm`, `tesseract` (OCR), `zbarimg` (QR/barcode), `qrencode`, `socat`,
 * `journalctl -b -p err` shows this boot's errors; `dmesg` the kernel's.
 * `/usr/share/doc/<package>/` and `man` are local; `tldr` is the shortcut.
 
+## The browser
+
+**firefox-esr** is the one application outside the session that this image
+installs on purpose (280 MB on disk, none of it resident while it is closed). It
+is not a convenience: without a viewer, the file browser can only read text, and
+a PDF, a photo or a downloaded page had no way to open at all.
+
+* **Files** (Alt+Ctrl+F) hands it anything that is not text: images, PDFs, SVG,
+  HTML. It renders PDFs itself, so no separate reader is needed.
+* `xdg-open` exists (`/usr/local/bin/xdg-open`, two dozen lines): a URL goes to
+  Firefox and a path becomes a `file://` URL. That is what foot's ctrl+click and
+  the command-line tools that print a URL call - there is no desktop portal in
+  this image.
+* It is a normal Wayland client here (no Xwayland needed), and its icon is its
+  own: the launcher shows Firefox's icon, not a substitute.
+
 ## What is deliberately not installed
 
-A browser, a GUI editor, a file manager and any Electron-style application. The
-image is 2.6 GB and every one of those would add hundreds of megabytes and a
+A GUI editor, a file manager, an office suite and any Electron-style application.
+The image is 2.9 GB and every one of those would add hundreds of megabytes and a
 resident process to a machine with 4 GB of RAM. If you want one, `apt search` it
 - the session is a normal Wayland desktop and any GTK/Qt application works.

@@ -34,6 +34,7 @@
         "clock"
     ],
     "modules-right": [
+        "custom/busy",
         "custom/updates",
         "tray",
         "custom/keyboard-layout",
@@ -78,6 +79,18 @@
             "on-scroll": 1
         },
         "interval": 30
+    },
+    // What busy is doing, as a spinner: only there while an action runs
+    // (nmcli scanning or joining, bluetoothctl scanning, du measuring), so the
+    // bar is unchanged in the common case.  One shell per second is the price
+    // of the frame; the module prints {"class":"empty"} when idle and
+    // style.css collapses it.
+    "custom/busy": {
+        "exec": "~/.config/bin/bar-busy",
+        "return-type": "json",
+        "interval": 1,
+        "signal": 8,
+        "tooltip": true
     },
     "custom/updates": {
         "exec": "~/.config/bin/bar-updates",

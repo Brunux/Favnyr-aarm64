@@ -33,13 +33,23 @@ prompt=${1:-Choose}
 theme="$HOME/.config/rofi/solarized.rasi"
 
 case " $* " in
+*" -free "*)
+	# Free text, no list: the typed line is the answer (a search term). Like
+	# the password mode, stdin must not be the terminal - dmenu reads it until
+	# EOF - so it comes from /dev/null.
+	exec rofi -dmenu -theme "$theme" -p "$prompt" -lines 1 -no-show-icons \
+		"$@" </dev/null
+	;;
 *" -password "*)
 	# Masked input, no list, and nothing to pick: the answer is what is typed.
 	# The entry's placeholder ("Search", from the theme) makes no sense next to a
 	# password prompt, so it is dropped for this case only.
-	exec rofi -dmenu -theme "$theme" -p "$prompt" -password -lines 1 \
+	exec rofi -dmenu -theme "$theme" -p "$prompt" -password -lines 1 -no-show-icons \
 		-theme-str 'entry { placeholder: ""; }' "$@" </dev/null
 	;;
 esac
 
-exec rofi -dmenu -theme "$theme" -p "$prompt" -lines 10 -no-custom "$@"
+# -no-show-icons: the panels draw their own glyphs in the row text (lib-rofi.sh),
+# and an icon column would only shift them right.  The launcher and the window
+# switcher, which have real .desktop icons, are the other way round.
+exec rofi -dmenu -theme "$theme" -p "$prompt" -lines 10 -no-custom -no-show-icons "$@"

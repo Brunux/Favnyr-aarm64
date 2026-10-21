@@ -10,8 +10,13 @@
 }
 
 /* Solarized Dark base colors */
+/* The bar is a layer-shell surface with alpha < 1 so that swayfx can blur the
+   wallpaper behind it (layer_effects "waybar" in
+   /etc/sway/config.d/26-swayfx.conf). The cards below keep enough opacity for
+   base1 text to stay readable over any wallpaper; the blur shows through the
+   bar itself and between the cards. */
 window#waybar {
-    background: #002b36; /* base03 */
+    background: rgba(0, 43, 54, 0.78); /* base03 */
     color: #93a1a1;      /* base1 */
     border-bottom: 1px solid #073642; /* base02 */
 }
@@ -31,6 +36,7 @@ tooltip label {
 /* Every indicator is the same card, whether it is a built-in module or one of
    the bar-* scripts: equal padding, height and background. */
 #custom-menu,
+#custom-busy,
 #custom-updates,
 #tray,
 #custom-keyboard-layout,
@@ -41,12 +47,13 @@ tooltip label {
 #battery {
     margin: 4px 0;
     padding: 0 9px;
-    background: #073642; /* base02 */
-    border: 1px solid #09404c;
+    background: rgba(7, 54, 66, 0.86); /* base02, translucent for the blur */
+    border: 1px solid rgba(9, 64, 76, 0.9);
     border-radius: 5px;
 }
 
 #custom-menu          { color: #2aa198; } /* cyan */
+#custom-busy          { color: #b58900; } /* yellow: something is happening */
 #custom-updates       { color: #b58900; } /* yellow */
 #custom-keyboard-layout { color: #839496; } /* base0 */
 #custom-bluetooth     { color: #586e75; } /* base01, i.e. off */
@@ -70,6 +77,7 @@ tooltip label {
 #battery.plugged { color: #2aa198; }
 
 #custom-menu:hover,
+#custom-busy:hover,
 #custom-updates:hover,
 #custom-keyboard-layout:hover,
 #custom-bluetooth:hover,
@@ -77,7 +85,7 @@ tooltip label {
 #pulseaudio:hover,
 #backlight:hover,
 #battery:hover {
-    background: #0b4652;
+    background: rgba(11, 70, 82, 0.92);
 }
 
 /* The StatusNotifier icons keep their own colours; only the slot is themed. */
@@ -99,6 +107,7 @@ tooltip label {
    layout) collapses to zero width instead of leaving an empty card on the
    bar.  The class comes from the JSON the script prints. */
 #custom-updates.empty,
+#custom-busy.empty,
 #custom-keyboard-layout.empty {
     padding: 0;
     margin: 0;
@@ -127,9 +136,9 @@ tooltip label {
     min-width: 22px;
     padding: 0 7px;
     margin: 0 2px;
-    background: #073642; /* base02 */
+    background: rgba(7, 54, 66, 0.86); /* base02, translucent for the blur */
     color: #93a1a1;      /* base1 */
-    border: 1px solid #09404c;
+    border: 1px solid rgba(9, 64, 76, 0.9);
     border-radius: 5px;
     box-shadow: none;
 }

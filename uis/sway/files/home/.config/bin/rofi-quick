@@ -1,0 +1,248 @@
+#!/bin/sh
+# Quick settings: the switches and panels of the session in one list.
+#
+# Deboma has a Quickshell control-centre panel (Wi-Fi, Bluetooth, night light,
+# do-not-disturb, media and the battery drawn as tiles).  This is the same set
+# of controls as a rofi list: every row states what is on and what pressing it
+# does, and it is one process for as long as the list is open.
+#
+# It re-draws itself after a switch, so the state in the list is never stale,
+# and it leaves for the pickers and panels that already exist (bar-net,
+# bar-bt, bar-audio, bar-power) instead of duplicating them.  The two radio
+# switches live here as well because that is the one thing the pickers do not
+# answer at a glance.
+#
+# Nothing here is a daemon: every draw reads the state from nmcli,
+# bluetoothctl, swaymsg, makoctl and sysfs.
+
+set -eu
+
+dir=$(dirname "$0")
+. "$dir/lib-rofi.sh"
+
+# Font Awesome 4.7 (fonts-font-awesome-legacy), the same set the bar uses; the
+# codepoint is in the comment so a missing glyph is easy to trace.
+
+# --- state -----------------------------------------------------------------
+
+wifi_on() { [ "$(nmcli radio wifi 2>/dev/null || true)" = enabled ]; }
+
+ssid() {
+	nmcli -t -f ACTIVE,SSID device wifi 2>/dev/null |
+		awk -F: '$1 == "yes" { print $2; exit }'
+}
+
+wifi_detail() {
+	if ! wifi_on; then
+		printf 'off'
+		return 0
+	fi
+	_s=$(ssid)
+	if [ -n "$_s" ]; then
+		printf '%s' "$_s"
+	else
+		printf 'not connected'
+	fi
+}
+
+bt_on() {
+	[ "$(bluetoothctl show 2>/dev/null |
+		sed -n 's/^[[:space:]]*Powered:[[:space:]]*//p' | head -1)" = yes ]
+}
+
+bt_detail() {
+	if ! bt_on; then
+		printf 'off'
+		return 0
+	fi
+	_n=$(bluetoothctl devices Connected 2>/dev/null | grep -c . || true)
+	case ${_n:-0} in
+	0) printf 'on, nothing connected' ;;
+	1) printf '1 device connected' ;;
+	*) printf '%s devices connected' "$_n" ;;
+	esac
+}
+
+night_on() { pgrep -x wlsunset >/dev/null 2>&1; }
+
+dnd_on() { makoctl mode 2>/dev/null | grep -qx do-not-disturb; }
+
+touchpad_on() {
+	_v=$(swaymsg -t get_inputs -r 2>/dev/null |
+		jq -r '[ .[] | select(.type == "touchpad") | .libinput.send_events ] | unique | join(" ")' 2>/dev/null || true)
+	case $_v in
+	*disabled*) return 1 ;;
+	*) return 0 ;;
+	esac
+}
+
+layout_name() {
+	swaymsg -t get_inputs -r 2>/dev/null |
+		jq -r '[ .[] | select(.type == "keyboard") ][0].xkb_active_layout_name // empty' 2>/dev/null |
+		head -1
+}
+
+rotation_name() {
+	swaymsg -t get_outputs -r 2>/dev/null |
+		jq -r '[ .[] | select(.focused) ][0].transform // "normal"' 2>/dev/null |
+		head -1
+}
+
+audio_detail() {
+	_sink=$(pactl get-default-sink 2>/dev/null || true)
+	if pactl get-sink-mute "$_sink" 2>/dev/null | grep -q 'yes'; then
+		printf 'muted'
+		return 0
+	fi
+	_vol=$(pactl get-sink-volume "$_sink" 2>/dev/null |
+		sed -n 's/.* \([0-9]*\)%.*/\1/p' | head -1)
+	printf '%s%%' "${_vol:-?}"
+}
+
+media_detail() {
+	_t=$(playerctl metadata --format '{{artist}} — {{title}}' 2>/dev/null || true)
+	if [ -n "$_t" ]; then printf '%s' "$_t"; else printf 'nothing playing'; fi
+}
+
+battery_detail() {
+	_c=$(cat /sys/class/power_supply/sbs-8-000b/capacity 2>/dev/null || true)
+	[ -n "$_c" ] || return 0
+	_s=$(cat /sys/class/power_supply/sbs-8-000b/status 2>/dev/null || true)
+	printf '%s%% · %s' "$_c" "$(printf '%s' "${_s:-unknown}" | tr 'A-Z' 'a-z')"
+}
+
+# The night light is whatever /etc/sway/config starts at login, so turning it
+# back on reuses that exact command line instead of a second copy of the
+# coordinates.
+night_start() {
+	_cmd=$(sed -n 's/^exec \(wlsunset .*\)$/\1/p' /etc/sway/config 2>/dev/null | head -1)
+	[ -n "$_cmd" ] || _cmd='wlsunset -t 5500'
+	setsid $_cmd >/dev/null 2>&1 &
+}
+
+# --- rotation --------------------------------------------------------------
+
+if [ "${1:-}" = "--rotation-menu" ]; then
+	_out=$(swaymsg -t get_outputs -r 2>/dev/null |
+		jq -r '[ .[] | select(.focused) ][0].name // empty' 2>/dev/null | head -1)
+	[ -n "$_out" ] || exit 0
+	_now=$(rotation_name)
+	tmp=$(mktemp "${TMPDIR:-/tmp}/rotation.XXXXXX")
+	trap 'rm -f "$tmp"' EXIT
+	{
+		for _t in normal 90 180 270; do
+			if [ "$_t" = "$_now" ]; then
+				ui_row "$UI_ON" "Rotation $_t" "current · applies to $_out" "rot:$_t"
+			else
+				ui_row "$UI_OFF" "Rotation $_t" "applies to $_out" "rot:$_t"
+			fi
+		done
+	} >"$tmp"
+	_cmd=$(ui_pick 'Rotation' "Turn the screen: $_out" <"$tmp") || exit 0
+	case $_cmd in
+	rot:*) swaymsg output "$_out" transform "${_cmd#rot:}" >/dev/null 2>&1 || true ;;
+	esac
+	exit 0
+fi
+
+# --- the list --------------------------------------------------------------
+
+render() {
+	{
+		if wifi_on; then
+			ui_row "$UI_I_WIFI" 'Wi-Fi radio' on wifi-radio "$UI_CYAN"
+			ui_row "$UI_I_GLOBE" 'Wi-Fi networks' "$(wifi_detail)" wifi
+		else
+			ui_row "$UI_I_WIFI" 'Wi-Fi radio' off wifi-radio "$UI_DIM"
+			ui_row "$UI_I_GLOBE" 'Wi-Fi networks' "$(wifi_detail)" wifi "$UI_DIM"
+		fi
+		if bt_on; then
+			ui_row "$UI_I_BT" 'Bluetooth radio' on bt-radio "$UI_BLUE"
+			ui_row "$UI_I_LINK" 'Bluetooth devices' "$(bt_detail)" bt
+		else
+			ui_row "$UI_I_BT" 'Bluetooth radio' off bt-radio "$UI_DIM"
+			ui_row "$UI_I_LINK" 'Bluetooth devices' "$(bt_detail)" bt "$UI_DIM"
+		fi
+		if night_on; then
+			ui_row "$UI_I_MOON" 'Night light' on night "$UI_YELLOW"
+		else
+			ui_row "$UI_I_MOON" 'Night light' off night "$UI_DIM"
+		fi
+		if dnd_on; then
+			ui_row "$UI_I_BELL_OFF" 'Notifications' 'do not disturb' notify "$UI_YELLOW"
+			ui_row "$UI_I_BELL_OFF" 'Do not disturb' on dnd "$UI_YELLOW"
+		else
+			ui_row "$UI_I_BELL" 'Notifications' allowed notify
+			ui_row "$UI_I_BELL" 'Do not disturb' off dnd "$UI_DIM"
+		fi
+		ui_row "$UI_I_MOUSE" 'Touchpad' "$(touchpad_on && printf enabled || printf disabled)" touchpad \
+			"$(touchpad_on && printf '%s' "$UI_CYAN" || printf '%s' "$UI_DIM")"
+		ui_row "$UI_I_ROTATE" 'Rotation' "$(rotation_name)" rotation
+		ui_row "$UI_I_KEYBOARD" 'Keyboard layout' "$(layout_name)" layout
+		ui_row "$UI_I_VOLUME" 'Audio output' "$(audio_detail)" audio
+		ui_row "$UI_I_MUSIC" 'Media' "$(media_detail)" media
+		ui_row "$UI_I_BATTERY" 'Battery' "$(battery_detail)" power
+	} >"$1"
+}
+
+tmp=$(mktemp "${TMPDIR:-/tmp}/quick.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+
+while :; do
+	render "$tmp"
+	key=$(ui_pick 'Settings' 'Enter switches or opens · Escape closes' <"$tmp") || exit 0
+	case $key in
+	wifi-radio)
+		if wifi_on; then
+			"$dir/busy" start wifi Wi-Fi 'Turning the radio off…' network-wireless
+			if nmcli radio wifi off >/dev/null 2>&1; then
+				"$dir/busy" end wifi 'Wi-Fi off'
+			else
+				"$dir/busy" fail wifi 'Could not turn the radio off'
+			fi
+		else
+			"$dir/busy" start wifi Wi-Fi 'Turning the radio on…' network-wireless
+			if nmcli radio wifi on >/dev/null 2>&1; then
+				"$dir/busy" end wifi 'Wi-Fi on'
+			else
+				"$dir/busy" fail wifi 'Could not turn the radio on'
+			fi
+		fi
+		;;
+	bt-radio)
+		if bt_on; then
+			"$dir/busy" start bt Bluetooth 'Powering the controller off…' bluetooth
+			if bluetoothctl power off >/dev/null 2>&1; then
+				"$dir/busy" end bt 'Bluetooth off'
+			else
+				"$dir/busy" fail bt 'Could not power the controller off'
+			fi
+		else
+			"$dir/busy" start bt Bluetooth 'Powering the controller on…' bluetooth
+			if bluetoothctl power on >/dev/null 2>&1; then
+				"$dir/busy" end bt 'Bluetooth on'
+			else
+				"$dir/busy" fail bt 'Could not power the controller on'
+			fi
+		fi
+		;;
+	wifi) exec "$dir/bar-net" ;;
+	bt) exec "$dir/bar-bt" ;;
+	night)
+		if night_on; then
+			pkill -x wlsunset 2>/dev/null || true
+		else
+			night_start
+		fi
+		;;
+	dnd) makoctl mode -t do-not-disturb >/dev/null 2>&1 || true ;;
+	notify) exec "$dir/rofi-notify" ;;
+	touchpad) swaymsg input type:touchpad events toggle >/dev/null 2>&1 || true ;;
+	rotation) exec "$dir/rofi-quick" --rotation-menu ;;
+	layout) exec "$dir/rofi-layout" ;;
+	audio) exec "$dir/bar-audio" ;;
+	media) exec "$dir/rofi-media" ;;
+	power) exec "$dir/bar-power" ;;
+	*) exit 0 ;;
+	esac
+done

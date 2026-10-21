@@ -235,12 +235,24 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   script of that name in `libc6-dev`, and a `-dev` package would end up as a dependency of the image.
   `/sbin/ldconfig` is not on a normal user's `PATH`, hence the explicit path in the script.
 - **`config.d/26-swayfx.conf` is swayfx-only** (`corner_radius`, `smart_corner_radius`, `shadows`,
-  `blur`, `default_dim_inactive`): plain sway answers *Unknown/invalid command* and `sway -C` fails,
-  which is the cheapest way to notice that Debian's sway is back. `blur disable` is written out
-  rather than relied on as a default: a Gaussian pass over the whole damaged region every frame is
-  the one effect that costs frames and battery on the Mali-G57, and it also defeats direct scanout
-  for a maximised window. Corners are cut when the buffer is committed and a shadow is a texture, so
-  both are free by comparison.
+  `blur`, `layer_effects`, `default_dim_inactive`): plain sway answers *Unknown/invalid command* and
+  `sway -C` fails, which is the cheapest way to notice that Debian's sway is back. **Blur is on**,
+  and what makes it affordable is which of SceneFX's two paths a window takes: a tiled window that
+  cannot overlap samples a buffer blurred once from the wallpaper (one bilinear tap per pixel,
+  0.07-0.11 ms full screen on the Mali-G57), while a floating one is re-blurred from what is behind
+  it (2.1-2.2 ms full screen at radius 4 / 2 passes, scaling with its area, only while visible).
+  `blur_xray disable` keeps that difference - enabled, every surface samples the cached wallpaper
+  and a floating window shows the wallpaper through itself instead of the window behind (verified
+  with screenshots). `blur_passes 2`/`blur_radius 4` is a 32 px sample instead of the shipped 80 px
+  and is also how far a live blur grows its damage; `blur_noise 0` with neutral
+  brightness/contrast/saturation skips SceneFX's second full-screen pass (0.6 ms/frame, and the
+  visible grain). Blur is drawn *behind* a surface, so the effect only exists under one with
+  alpha < 1: foot 0.92, rofi 0.88 and waybar 0.78/0.86 are the three carriers, and
+  `layer_effects` gives the bar the cached path (only the wallpaper is behind it) and the launcher
+  the live one (it floats over windows). Numbers, method and the renderer facts are in
+  `docs/optimization.md` §7: PanVK answers *Mali-G57 not supported*, and SceneFX creates its own
+  GLES renderer (`fx_renderer_create`), so `WLR_RENDERER` never applies. Corners are cut when the
+  buffer is committed and a shadow is a texture.
 - `sway --version` prints `swayfx version 0.6 (based on sway 1.12.0)`; plain sway prints
   `sway version 1.12.0`. `check-system.sh` FAILs on anything that is not swayfx, and the bar's
   `sway -C` check then validates the effects drop-in along with the rest.
@@ -437,9 +449,22 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `bar-pick` is `rofi -dmenu`. It replaced tofi (launcher) and fuzzel (bar popups), so the session
   has one picker instead of two; measured PSS while open: drun 15.7-17.1 MB, dmenu 14.2-15.6 MB,
   window 16.7 MB, against **40.5 MB for each fuzzel popup** it replaced and 62.1 MB for wofi.
-  **Icons must stay off**: `show-icons: true` took the same drun launch to **57.1 MB** of PSS,
-  because rofi 2.0 renders `.desktop` icons through glycin, a sandboxed image loader that wants
-  bwrap (the image has none, so rofi also logs *Glycin running without sandbox*). rofi 2.0 is a
+  **Icons: a font glyph in the lists, an image in the launcher.** The lists this port draws put a
+  Font Awesome codepoint in the row text (`~/.config/bin/lib-rofi.sh`), so they cost nothing, follow
+  the palette and are filtered away by typing; the launcher and the window switcher show the real
+  `.desktop` icon through glycin, **13.2 MB of PSS for ten rows** when measured again (the earlier
+  57.1 MB figure came from a run that decoded far more, and `bubblewrap` is now in
+  `uis/sway/packages.list` so glycin can sandbox the decoder instead of logging *Glycin running
+  without sandbox*). **Adwaita 51 ships no application icons** - only monochrome `-symbolic` files,
+  and not one of this session's names - so the launcher showed a hole where an icon should be, and
+  `papirus-icon-theme` is 190 MB installed. `scripts/make-icons.sh` renders the same Font Awesome
+  codepoints into 48x48 PNGs that ship as the small **Nureb** theme
+  (`uis/sway/files/usr/share/icons/Nureb`), whose `index.theme` inherits Adwaita and hicolor, so an
+  application that brings its own icon still shows it in colour. Two traps that cost a round each:
+  a literal private-use character does not survive every editor or transport (the first attempt
+  shipped a row of empty spans), and `printf '\uXXXX'` needs bash - dash has no `\u`, so the first
+  `make-icons.sh` under `#!/bin/sh` rendered nothing; the script is bash and now fails loudly on an
+  empty canvas. `bar-pick` passes `-no-show-icons`. rofi 2.0 is a
   native Wayland layer-shell client - no Xwayland - and, like tofi, not a daemon: nothing stays
   after the window. Two behaviours the configuration depends on were verified, not assumed:
   `rofi -dmenu` exits 1 on Escape (`bar-pick`'s callers' `|| exit 0`), and drun honours
@@ -447,12 +472,15 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `~/.config/rofi/{config,solarized}.rasi`, and **a parse error is only reported when a window
   opens** (a dialog naming file, line and column); `rofi -dump-config` does not report theme parse
   errors, so the check is `rofi -show drun` in the session. `bar-pick` has two modes because rofi's
-  dmenu has to be told which one it is: a list (`-no-custom`, only the offered lines can be picked)
-  and the Wi-Fi password (`-password`, with stdin from /dev/null - otherwise rofi waits on the tty
-  for EOF and the prompt never appears). `grimshot` is a package of its own. `pactl` (the
+  dmenu has to be told which one it is: a list (`-no-custom`, only the offered lines can be picked),
+  free text (`-free`, a search term) and the Wi-Fi password (`-password`, with stdin from /dev/null -
+  otherwise rofi waits on the tty for EOF and the prompt never appears). **A rofi script mode is
+  called once at startup and again on selection, never while the query changes** (verified with a
+  script that logged its calls), which is why the calculator is a one-shot prompt and not a live
+  preview; the plan that assumed otherwise is corrected in `docs/plan-rofi.md`. `grimshot` is a package of its own. `pactl` (the
   XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
 - **The file browser is a script, because rofi 2.0 has no `filebrowser` mode** (its modes are
-  `drun`, `run`, `window`, `ssh`) **and the image has no `xdg-open`**. `rofi-files` (`Alt+Ctrl+F`,
+  `drun`, `run`, `window`, `ssh`). `rofi-files` (`Alt+Ctrl+F`,
   "Files" in the root menu and the launcher) lists one directory per run with `find -L ... -printf`
   as `rofi -dmenu -markup-rows`, and Enter reopens the script in the chosen directory or reads the
   file with `bat --paging=always` in the floated `popup` foot window (`BAT_THEME=ansi`, since
@@ -460,15 +488,22 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   dmenu matches the **markup-stripped** text, so the dim size/date do not get in the way of
   typing (verified: `-filter span` matches nothing); `-L` makes a symlink to a directory navigate
   and leaves only broken links as `l`; the name column is padded to the longest name because the
-  theme is monospace; and anything that is not text is refused with a notification, because bat
-  would render a binary as an empty page and there is no image or PDF viewer in the image.
+  theme is monospace; and anything that is not text goes to **`firefox-esr`** (`file://` URL,
+  `setsid` so it outlives the script), because bat would render a binary as an empty page.
+  Firefox is the image's one viewer - 280 MB installed, nothing while closed - and it is what
+  `uis/sway/files/usr/local/bin/xdg-open` opens for URLs and paths, the two dozen lines that foot's
+  ctrl+click and the CLI tools expect (there is no desktop portal here). `check-system.sh` fails
+  when the browser or the shim is missing.
 - **The key scheme mirrors Omarchy's**, with `Alt` where Omarchy uses `Super`: the panels are
   `Alt+Ctrl+A/B/W/P` (audio, Bluetooth, network, power - the same scripts the bar's indicators run),
+  `Alt+Ctrl+O` is **Settings** (`rofi-quick`: the radio switches, night light, do-not-disturb,
+  touchpad, rotation), `Alt+Ctrl+N` the **Notifications** history and `Alt+Ctrl+Q` the
+  **calculator**,
   the root menu is `Alt+Space` (Omarchy's `Super+Space`; sway's `focus mode_toggle` had that key and
   was dropped), the scratchpad is `Alt+grave` (`Alt+minus` stays as an alias), lock is
   `Alt+Ctrl+L`, and `Alt+Escape` opens the **power** panel (Omarchy's system menu). Three deliberate
   deviations, each because a sway default owns Omarchy's letter: close is `Alt+Q` (`Alt+W` is
-  tabbed), the key view is `Alt+Shift+K` (`Alt+K` is vim focus up), and there is no "cycle layout"
+  tabbed), the key view is `Alt+Ctrl+K` (`Alt+K` is vim focus up, `Alt+Shift+K` moves the window), and there is no "cycle layout"
   key (sway's layouts are stacking/tabbed/split, not dwindle/master/scrolling).
   `bindswitch`/`wtype`/`iio` facts for the tablet work are in the sensor bullet above; the full
   mapping is `usr/share/doc/nureb/03-shortcuts.md`. **Every binding carries its description on a
@@ -476,10 +511,25 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   because `rofi-keys` shows those comments - a binding without one appears as its raw command in the
   key view, and a group header with no blank line after it would label the first binding instead.
   Bindings inside a `mode "..."` block are shown with the mode's name.
-- **Learn, the key view, dictation and hibernate are four rofi/terminal features with no resident
-  process.** `usr/share/doc/nureb/*.md` is the manual (six pages: welcome, rofi, shortcuts, software,
-  the system, troubleshooting); `rofi-learn` lists them and opens the choice with
-  `bat --paging=always` in foot, so the page is solarized and nothing stays. `rofi-keys` (Alt+Shift+K,
+- **The menus are one-shot rofi scripts, and slow actions say so twice.** `~/.config/bin/rofi-*`
+  are the menus behind the root menu (`rofi-quick`, `rofi-notify`, `rofi-clean`, `rofi-kill`,
+  `rofi-tz`, `rofi-places`, `rofi-media`, `rofi-calc`, `rofi-layout`, `rofi-learn`); they share
+  `lib-rofi.sh` (`ui_row` glyph+bold+dim row, `ui_pick` table-and-key round trip because rofi hands
+  back the rendered row, `ui_say` for results) and each is one process while open. **A slow action
+  needs visible progress**: `busy start TAG LABEL MESSAGE [ICON]` opens a mako toast that does not
+  expire, `busy end`/`fail` turn the same card into the result (same
+  `x-canonical-private-synchronous` tag, so mako replaces instead of stacking), and `bar-busy` is
+  the waybar `custom/busy` module that shows a braille spinner plus the label in yellow while a
+  state file exists in `$XDG_RUNTIME_DIR/nureb-busy` - zero width when idle, and a state file older
+  than five minutes is dropped so a killed script cannot leave a spinner forever. Wired into the
+  Wi-Fi scan/connect/radio, the Bluetooth scan/connect/radio and the `du` walk in Free space; a new
+  slow action gets the same two lines.
+- **The manual is rendered, not printed.** `usr/share/doc/nureb/*.md` (seven pages: welcome, rofi,
+  shortcuts, software, the system, troubleshooting, agents) is opened by `rofi-learn` with **glow**
+  (`packages/tools.list`), styled by `~/.config/glow/solarized.json` - a *glamour* style, unrelated
+  to the rofi theme; glow lives in `~/.config/glow/glow.yml`, whose `style:` must be an absolute
+  path because glow treats a bare name as one of its built-ins. The first row of the menu searches
+  every page with `rg`. Nothing stays after the page closes. `rofi-keys` (Alt+Ctrl+K,
   Omarchy's Super+K) is *generated* from `/etc/sway/config`, `config.d/*.conf` and
   `~/.config/sway/config`: it expands `set $var`, takes the comment above each binding as its
   description, and shows the list with `rofi -dmenu -markup-rows` (bold keys, dim descriptions); the
@@ -722,6 +772,7 @@ scripts/build-rootfs.sh     # debootstrap Debian forky rootfs    -> $WORK_DIR/ro
 scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initramfs
 scripts/install-swayfx.sh   # install the compositor .debs (rootfs by default, `/` for a running system)
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
+scripts/make-icons.sh       # Font Awesome glyphs -> the Nureb icon theme PNGs (host tool, committed output)
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
 scripts/make-image.sh       # distributable disk image from the rootfs (no card needed)
 scripts/make-release.sh     # every release asset + SHA256SUMS -> $WORK_DIR/release-<device>

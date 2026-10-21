@@ -9,8 +9,13 @@
  */
 
 * {
-    bg: #002b36;
-    bg-alt: #073642;
+    /* 0.88/0.94 rather than opaque: rofi is a layer-shell client and swayfx
+     * draws the blur behind it (layer_effects "rofi" in
+     * /etc/sway/config.d/26-swayfx.conf). The selected row stays darker and
+     * more opaque than the list so the choice is unambiguous over any
+     * wallpaper, and the accent rim is unchanged. */
+    bg: rgba(0, 43, 54, 0.88);
+    bg-alt: rgba(7, 54, 66, 0.94);
     fg: #93a1a1;
     fg-strong: #eee8d5;
     accent: #2aa198;
@@ -71,16 +76,18 @@ listview {
 }
 
 element {
-    padding: 6px 10px;
+    padding: 8px 10px;
     spacing: 10px;
     border-radius: 6px;
 }
 
-/* Only used if `show-icons` is turned back on in config.rasi (which costs ~43 MB
- * of PSS through glycin - see the comment there). */
+/* Used by the two modes that show application icons (drun and window, see
+ * show-icons in config.rasi).  The lists this port draws itself pass
+ * -no-show-icons and put a font glyph in the text instead, so they never
+ * reserve this column. */
 element-icon {
-    size: 20px;
-    padding: 0 2px 0 0;
+    size: 26px;
+    padding: 0 6px 0 0;
 }
 
 element-text {

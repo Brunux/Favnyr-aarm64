@@ -96,13 +96,14 @@ User `brunux` (or the one the image was built with), password `debian`, password
 
 | Piece | What it is |
 |---|---|
-| compositor | **swayfx** (a sway fork) with rounded corners and shadows, blur off |
+| compositor | **swayfx** (a sway fork) with rounded corners, shadows and a blurred backdrop under the translucent terminal, launcher and bar |
 | bar | **waybar**: menu, workspaces, clock, updates, tray, keyboard layout, Bluetooth, network, volume, brightness, battery - each click opens a short-lived **rofi** list |
 | terminal | **foot** (solarized) |
-| launcher | **rofi**: applications (`-show drun`), windows (`-show window`), commands (`-show run`), and the bar's own menus (`-dmenu`) |
+| launcher | **rofi**: applications (`-show drun`, with the icons of a small theme rendered from the icon fonts), windows (`-show window`), commands (`-show run`), and the bar's own menus (`-dmenu`) |
 | notifications | **mako**, under the bar |
 | idle | the screensaver at 150 s, the lock at 300 s |
-| manual | **Learn**, seven pages opened with `bat` in foot |
+| manual | **Learn**, seven pages rendered with **glow** in foot |
+| browser | **firefox-esr**, the image's one viewer: the file browser hands it anything that is not text |
 
 ### The keys worth knowing on day one
 
@@ -112,10 +113,11 @@ User `brunux` (or the one the image was built with), password `debian`, password
 | Alt+Space | root menu (the bar's menu button on the keyboard) |
 | Alt+Tab | window switcher (sway has none of its own) |
 | Alt+Shift+D | command palette (`$PATH`; Shift+Enter runs it in foot) |
-| **Alt+Shift+K** | every key binding, searchable, generated from the configuration |
+| **Alt+Ctrl+K** | every key binding, searchable, generated from the configuration |
 | Alt+Return | terminal · Alt+Q: close a window · Alt+grave: scratchpad |
 | Alt+Ctrl+A / B / W / P | audio, Bluetooth, network and power panels |
-| Alt+Ctrl+F | files: browse a directory, read a text file in foot |
+| Alt+Ctrl+F | files: browse a directory, read a text file in foot, anything else in Firefox |
+| Alt+Ctrl+O / N / Q | settings (radios, night light, touchpad, rotation) · notifications · calculator |
 | **Lock key** (or Alt+Ctrl+L) | locks, and logind suspends a moment later |
 | Alt+Escape | system panel (lock, suspend, log out, reboot, power off) |
 | Alt+Ctrl+X | dictation · Alt+Ctrl+Shift+A: agents · Alt+Shift+E: exit the session (asks first) |
@@ -125,9 +127,26 @@ The letters are Omarchy's, with `Alt` where Omarchy uses `Super`; the manual's
 
 ![The key view, generated from the configuration](docs/screenshots/hayato-r1-keys.png)
 
-*Alt+Shift+K: every binding, parsed from the session's own files, Enter copies the command.*
+*Alt+Ctrl+K: every binding, parsed from the session's own files, Enter copies the command.*
 
-The full tour is the manual's *Shortcuts* page, and the live list is Alt+Shift+K.
+The full tour is the manual's *Shortcuts* page, and the live list is Alt+Ctrl+K.
+
+![The launcher, with the icons rendered from the icon fonts](docs/screenshots/hayato-r1-launcher.png)
+
+*The launcher. Debian's Adwaita has no application icons, so the session ships a small **Nureb**
+theme: the same Font Awesome codepoints the bar and the menus draw, rendered once to 48x48 PNGs by
+`scripts/make-icons.sh`. Applications that bring their own icon still show theirs.*
+
+### Slow actions say so twice
+
+A scan, a connection, a `du` walk: anything that takes seconds opens a **mako card** that does not
+expire and *becomes* the result, and puts a **spinner on the bar** with the name of the task. Both
+disappear when the action ends; nothing stays resident.
+
+![A Wi-Fi scan: the mako card and the spinner on the bar](docs/screenshots/hayato-r1-busy.png)
+
+*`busy start wifi Wi-Fi 'Looking for networks…'` while `nmcli` rescans; `busy end wifi "9 networks
+in range"` turns the card into the answer.*
 
 ### Features that are one script each
 
@@ -169,6 +188,7 @@ manual's *The system* page explains the layout, suspend, hibernate, backups and 
 | the compositor: why swayfx, its effects policy, the packaging | [`compositors/swayfx/README.md`](compositors/swayfx/README.md) |
 | why the device is tuned the way it is (MGLRU, schedutil, HZ, zram, THP) | [`docs/optimization.md`](docs/optimization.md) |
 | what of Omarchy's desktop can move onto rofi, and ideas from other distros | [`docs/plan-rofi.md`](docs/plan-rofi.md) |
+| what Omarchy has and this port does not (packages, sizes, features, verdicts) | [`docs/omarchy-gap.md`](docs/omarchy-gap.md) |
 | the agents feature, phased, and the "thin layer" decision | [`docs/plan-agents.md`](docs/plan-agents.md) |
 | every engineering gotcha (boot chain, keyd, audio, suspend, fonts, packages) | [`AGENTS.md`](AGENTS.md) |
 | hardware validation evidence | [`reports/`](reports/) |
@@ -237,8 +257,8 @@ picked automatically).
 The graphical shell is a separate axis: `uis/<name>/` holds its package list and a file tree that
 `build-rootfs.sh` stages and `rootfs-setup.sh` installs. Select it with `UI=<name>` (default
 `sway`). `uis/sway/` ports the maintainer's Nura session on top of **swayfx** (the wlroots fork
-built from [`compositors/swayfx/`](compositors/swayfx/README.md), with rounded corners and shadows
-and blur disabled) — see [`uis/sway/README.md`](uis/sway/README.md) for the layout and the
+built from [`compositors/swayfx/`](compositors/swayfx/README.md), with rounded corners, shadows and
+blur behind the translucent terminal, launcher and bar) — see [`uis/sway/README.md`](uis/sway/README.md) for the layout and the
 deliberate deviations.
 
 ### What comes from Nura and what is Debian

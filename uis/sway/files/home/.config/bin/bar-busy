@@ -1,0 +1,41 @@
+#!/bin/sh
+# The bar's "working on it" card: what busy is doing, as a spinner.
+#
+# busy writes one file per running task in $XDG_RUNTIME_DIR/nureb-busy; this
+# script is the waybar module that reads them.  It prints nothing (an empty
+# module, which style.css collapses) when there is no task, so the bar is
+# unchanged in the common case.
+#
+# The spinner is a braille frame picked from the clock: waybar re-runs the
+# module once a second, and a ten-frame cycle is slow enough to read and fast
+# enough to look alive.  Braille is used rather than a Nerd Font glyph because
+# it is one character wide in every monospace font, including the ones the bar
+# falls back to.
+
+set -u
+
+dir=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
+
+label=
+for f in "$dir"/*.label; do
+	[ -r "$f" ] || continue
+	# A script that died between start and end would leave a spinner forever;
+	# five minutes is longer than any action here and short enough to heal.
+	if [ -n "$(find "$f" -mmin +5 2>/dev/null)" ]; then
+		rm -f "$f" "${f%.label}.id" "${f%.label}.icon"
+		continue
+	fi
+	label=$(head -n 1 "$f" 2>/dev/null)
+	[ -n "$label" ] && break
+done
+
+if [ -z "$label" ]; then
+	printf '{"class":"empty"}\n'
+	exit 0
+fi
+
+i=$(( $(date +%s) % 10 + 1 ))
+glyph=$(printf '%s\n' ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏ | sed -n "${i}p")
+
+printf '{"text":"<span font_desc=%s>%s</span>  %s","class":"busy","tooltip":"%s"}\n' \
+	"'JetBrains Mono 13'" "$glyph" "$label" "$label"

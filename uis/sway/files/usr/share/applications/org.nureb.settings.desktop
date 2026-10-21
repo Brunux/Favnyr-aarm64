@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Settings
+GenericName=Quick settings
+Comment=Wi-Fi, Bluetooth, night light, touchpad, rotation, audio and media in one list
+Exec=/home/brunux/.config/bin/rofi-quick
+Icon=preferences-system
+Terminal=false
+Categories=System;Settings;
+Keywords=settings;switches;wifi;bluetooth;night;light;rotation;touchpad;dnd;
