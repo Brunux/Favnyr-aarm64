@@ -818,17 +818,67 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   (`fe3a2a5d-4f32-41a7-b725-accc3285a309`, p1 of the layout in `scripts/lib-cgpt.sh`). Those two
   rules are what exclude the eMMC, the card that wrote the system and the card the system is
   running from - however they are named, and with no device name hardcoded - and they also exclude
-  every stick udisks already mounted, which would fail halfway anyway. zram, loop and optical
-  devices are not disks a person formats. What is left has nothing this system needs, and the
-  confirmation still names the device, its model and its size, with **Cancel as the first row**
-  so a stray Enter does nothing; the filesystem is FAT32 (label `LAZYOS`) or ext4, and the whole
-  disk becomes one partition (`parted -s mktable gpt` + `mkpart primary`, then `mkfs`). **It is
-  not stoppable on purpose**, like the apt install: a killed `mkfs` leaves a disk that looks
-  formatted and is not, which is worse than a wait. The step chain is linear (`rc`/`step`) rather
-  than nested `if`s because `set -e` exits from inside an `if` *body* on a failed command - a
-  failing `mkfs` would leave the `busy` card spinning with no reason in it. `parted`, `mkfs.vfat`
-  and `mkfs.ext4` are already in the image (`parted` in `packages/base.list`), so the menu adds
-  no package; `check-system.sh` FAILs when any of the three or the script is missing.
+  every stick udisks already mounted, which would fail halfway anyway. The candidate list is
+  **`ui_disks` in `lib-rofi.sh`**, shared with `rofi-swap`, and it also skips zram, loop, ram,
+  optical, pseudo devices, **`mtd*`** (the SPI flash this port must never write) and
+  **`mmcblk*boot*`** (the eMMC's 4 MB hardware boot partitions, which `lsblk -d` lists as disks of
+  their own) - see the next bullet for the hardware that made those two necessary. What is left has
+  nothing this system needs, and the confirmation still names the device, its model and its size,
+  with **Cancel as the first row** so a stray Enter does nothing; the filesystem is FAT32 (label
+  `LAZYOS`) or ext4, and the whole disk becomes one partition (`parted -s mktable gpt` +
+  `mkpart primary`, then `mkfs`). **It is not stoppable on purpose**, like the apt install: a killed
+  `mkfs` leaves a disk that looks formatted and is not, which is worse than a wait. The step chain
+  is linear (`rc`/`step`) rather than nested `if`s because `set -e` exits from inside an `if` *body*
+  on a failed command - a failing `mkfs` would leave the `busy` card spinning with no reason in it.
+  `parted`, `mkfs.vfat` and `mkfs.ext4` are already in the image (`parted` in `packages/base.list`),
+  so the menu adds no package; `check-system.sh` FAILs when any of the three or the script is
+  missing.
+- **Auxiliary swap turns a card into extra memory, and it shares Format's list on purpose.**
+  `rofi-swap` (Places, the row before Format a disk, and the root menu's *system* section) picks a
+  disk, then how much of it - the whole card first, then 2/4/8 GiB only when they fit with 64 MiB of
+  margin - then confirms with **Cancel first**. The candidates are the same `ui_disks` function as
+  Format (`PREFIX` per caller, `UI_KERN_TYPE` beside it), so the two menus cannot disagree about
+  which disk is a system disk. **Sharing it fixed two holes the card's own `lsblk` shows**: `-d`
+  lists the SPI flash as `mtdblock0` (8 MB) and the eMMC's hardware boot partitions as
+  `mmcblk0boot0`/`mmcblk0boot1` (4 MB each), none mounted and none carrying a kernel partition, so
+  Format used to offer all three - and writing `mtdblock0` is the one thing this port must never do.
+  `ui_disks` excludes `mtd*` and `mmcblk*boot*`/`mmcblk*rpmb` by name (plus `dm-*`, `md*`, `nbd*`,
+  `rbd*`), so both menus are fixed at once and no device name is hardcoded.
+  Setup is `parted -s mktable gpt` + `mkpart primary linux-swap 1MiB <end>` (the partition type is
+  Linux swap, so Places skips it instead of offering it as a Mount), then
+  `mkswap -f -L lazyos_swap` - `-f` because the new partition starts where an old filesystem's
+  signature may still be - and one marked block in `/etc/fstab`:
+  `LABEL=lazyos_swap none swap sw,nofail,x-systemd.device-timeout=15s,pri=10 0 0`. `nofail` keeps a
+  boot without the card from failing, the 15 s timeout keeps it from waiting the default 90 s, and
+  `pri=10` is **below zram's 100** (`rootfs-setup.sh`) so compressed RAM is used first and the card
+  is the spillover it is good for; equal priorities would round-robin between RAM and a card. The
+  label is the one `resume=LABEL=lazyos_swap` already names, so hibernate and this menu talk about
+  one card; the menu does not add `resume=`, which is a kernel command line change and a rebuilt
+  kpart.
+  The block is **replaced, not appended** (markers `# LazyOS auxiliary swap` / `# end LazyOS
+  auxiliary swap`), and removal drops any non-comment line whose source is `LABEL=lazyos_swap`, so
+  the manual recipe in `sway-hibernate` is undoable from the menu too. The write is `install` to
+  `/etc/.fstab.lazyos-swap` then `mv` over `/etc/fstab`: a `cat >` in place would truncate the file
+  first. Activation is `swapon -p 10 <part>` (not `swapon -a`, whose exit status another fstab entry
+  can spoil) followed by a read of `swapon --show=NAME --noheadings` **joined with `tr '\n' ' '`**:
+  the list is one line per device and **zram is always first**, so `case " $list " in *" $part "*)`
+  looked for a space where the card's own line began with a newline, and the read-back called every
+  successful setup a failure while the swap was on (`check-system.sh` had the same line and WARNed
+  that a configured card was inactive). **A failed activation removes the fstab block again**,
+  because a card that is not doing anything should not be configured at boot either, and turns the
+  partition back off when `swapon` itself answered 0 but the read-back could not see it: a swap that
+  is on with no fstab entry is a state nothing explains. Both modes refuse an unreadable
+  `/etc/fstab` up front, since both rewrite it. **Undo is the state surface**: when a block or an
+  active labelled swap exists, the menu opens on the status (device, size, priority) with *Turn it
+  off* - `swapoff` first (if that fails the fstab block stays, which is the state that was there),
+  then the block and `systemctl daemon-reload`. The partition is left labelled and inactive, and
+  Format a disk is how it is erased. **One label has to mean one card** (fstab and `resume=` both
+  resolve `LABEL=` to whichever device carries it), so setup refuses a disk while a different
+  device already carries the label. Not stoppable, like Format: a killed `parted`/`mkswap` leaves
+  half a card. `parted`, `mkswap`/`swapon` (util-linux) and `blkid` are already in the image, so the
+  menu adds no package. `check-system.sh` FAILs on a missing tool or script and when Places loses
+  the row; when the fstab block exists it WARNs if `nofail`, the device timeout or a priority below
+  100 went away, SKIPs when the card is not inserted, and WARNs when it is inserted but not active.
 - **The GTK3 half of the palette is two files** in `uis/sway/files/home/.config/gtk-3.0/`:
   `settings.ini` (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `LazyOS`,
   `JetBrains Mono 10`, animations off) and `gtk.css`, which repaints the surfaces with explicit
@@ -1006,7 +1056,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   are the menus behind the root menu (`rofi-quick`, `rofi-notify`, `rofi-clean`, `rofi-kill`,
   `rofi-tz`, `rofi-places`, `rofi-media`, `rofi-calc`, `rofi-layout`, `rofi-learn`, `rofi-emoji`,
   `rofi-clip`, `rofi-about`, `rofi-dns`, `rofi-pkg`, `rofi-color`, `rofi-remind`, `rofi-download`,
-  `rofi-grep`, `rofi-format`, `rofi-file-actions`); they share
+  `rofi-grep`, `rofi-format`, `rofi-swap`, `rofi-file-actions`); they share
   `lib-rofi.sh` (`ui_row` glyph+bold+dim row, `ui_pick` table-and-key round trip because rofi hands
   back the rendered row, `ui_pick_alt` when a second action sits on Alt+1 - it returns `alt:KEY` and
   rofi exits 10 for that, `ui_say` for results) and each is one process while open. **A slow action
@@ -1126,7 +1176,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   wiring (initramfs-tools resolves the label through udev, so an SD swap partition labelled
   `lazyos_swap` is enough) - a swap *file* cannot be used for resume because it has no label. The
   default image has no disk swap, so the menu entry explains instead of hibernating into a swap the
-  machine cannot resume from. `check-system.sh` checks the manual, `rofi-keys`, the dictation tools,
+  machine cannot resume from. **Auxiliary swap** (Places and the root menu) prepares that partition
+  and the fstab line that activates it at every boot; `resume=LABEL=lazyos_swap` still has to be
+  added to the kernel command line and needs the kpart rebuilt. `check-system.sh` checks the manual,
+  `rofi-keys`, the dictation tools,
   the model (SKIP when absent) and the hibernate conditions (SKIP/WARN, never FAIL).
 - **Agents** (`rofi-agents`, Alt+Ctrl+Shift+A = Omarchy's Super+Shift+Ctrl+A) is the local half of
   Omarchy's agents feature: launch (in foot, from `~/Work`, because the agents refuse to remember

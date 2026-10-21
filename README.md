@@ -158,6 +158,10 @@ in range"` turns the card into the answer.*
 * **Hibernate** - refused unless a **disk** swap (not zram) of at least 2/5 of RAM exists *and* the
   kernel command line carries `resume=` (a swap partition labelled `lazyos_swap` is the intended
   wiring). Each missing condition says what to do.
+* **Auxiliary swap** - Places → **Auxiliary swap** (also the root menu): pick a card, confirm, and it
+  becomes a `lazyos_swap` partition that is active now and on every boot, with priority 10 so zram
+  (100) is used first. The same disk list as Format a disk; `nofail` and a 15 s device timeout keep
+  a boot without the card clean. The **Turn it off** row undoes it.
 * **Screenshots** - region, full screen, or region to the clipboard.
 
 ### The terminal

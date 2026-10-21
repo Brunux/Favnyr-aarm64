@@ -209,6 +209,7 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 | `rofi-kill` | End a process | the heaviest twenty by resident memory; SIGTERM, then an explicit offer of SIGKILL |
 | `rofi-tz` | Time zone | `timedatectl list-timezones` with the current one marked, and the network-clock switch. It restarts waybar afterwards: `timedatectl` only rewrites `/etc/localtime`, and a running process keeps the zone glibc cached the first time it called `localtime()` |
 | `rofi-places` | Places | home, documents, downloads, pictures, every mounted filesystem, and a **Mount** row for each unmounted one (a USB stick, an SD card) through `udisks2`; Enter browses there with `rofi-files`, Alt+1 unmounts the disk under the row |
+| `rofi-swap`, `rofi-format` | Places (swap is also in the root menu) | the two disk actions, both drawn from `ui_disks` in `lib-rofi.sh` (nothing mounted, no ChromeOS kernel partition, no SPI flash or eMMC boot partition): **swap** turns a card into a `lazyos_swap` partition and the fstab block that activates it on every boot (priority 10, below zram; `nofail` and a 15 s timeout), with **Turn it off** as the undo; **format** wipes a disk clean as FAT32 or ext4 |
 | `rofi-media` | Media | the current track and play/pause/next/previous through `playerctl` |
 | `rofi-calc` | `Alt+Ctrl+Q`, Calculator | awk, one prompt; Enter copies the result |
 | `rofi-layout` | Settings → Keyboard layout | every layout in `evdev.lst`, applied to all keyboards and kept in `~/.config/sway/config.d/90-keyboard-layout.conf` |
@@ -595,7 +596,9 @@ APIs that change shape, and a broken meter is worse than none; if they return, t
 disk (not zram) must be at least ~2/5 of RAM, and the kernel command line must carry `resume=`
 (`resume=LABEL=lazyos_swap`, resolved through udev, so a labelled SD swap partition is enough). Each
 missing condition gets its own message; it never hibernates into a swap the machine cannot come back
-from. There is no disk swap in the default image.
+from. The default image has no disk swap, but **Auxiliary swap** (Places and the root menu) prepares
+the partition and the fstab entry that activates it on every boot; it does not add `resume=`, which
+is a kernel command line change and a rebuilt kpart.
 
 ## The bar
 

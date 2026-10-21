@@ -192,6 +192,17 @@ gets corrupted.
   up there as soon as it is mounted.
 * `vfat`, `exFAT` and `NTFS` all work - the kernel has those drivers - so a
   stick from a camera or from Windows needs no extra package.
+* **Auxiliary swap** is the row above it: it takes a card that is not a system card
+  and turns the whole thing - or 2, 4 or 8 GiB of it - into a swap partition
+  labelled `lazyos_swap`, adds the `/etc/fstab` line that activates it at every
+  boot, and turns it on now. The priority is 10 against zram's 100, so the
+  compressed RAM is used first and the card is the spillover; `nofail` plus a 15 s
+  device timeout keep a boot without the card from waiting or failing. It is a
+  dedicated swap card, not a filesystem, so it never appears as a Mount row.
+  Pulling it while it is active loses whatever pages live there: open the same row
+  and choose **Turn it off** first (`swapoff`, then the fstab entry is removed; the
+  partition stays, and **Format a disk** erases it). `resume=LABEL=lazyos_swap` is
+  the extra piece hibernate needs - see **The system** page.
 * **Format a disk** is the last row of Places: it offers only disks with nothing
   mounted on them and no ChromeOS kernel partition, so the eMMC and the card this
   system boots from are never candidates, and it asks twice with Cancel first.

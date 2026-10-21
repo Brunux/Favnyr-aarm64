@@ -94,6 +94,11 @@ lock instead of a flat colour.
   **label** is enough: a swap partition labelled `lazyos_swap` plus
   `resume=LABEL=lazyos_swap` in `devices/google-asurada/kernel-cmdline.conf`.
 
+The **Auxiliary swap** row in Places (and in the root menu) writes that partition
+and the `/etc/fstab` line that activates it on every boot, with priority 10 so
+zram keeps being used first. It does not add `resume=`: that is a kernel command
+line change and needs the kernel partition rebuilt.
+
 `sway-hibernate` (in the root menu, and as a launcher entry) checks both and says
 which one is missing. It never hibernates into a swap the machine cannot resume
 from.

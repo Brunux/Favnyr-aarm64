@@ -59,6 +59,7 @@ while :; do
 		ui_row "$UI_I_BELL" 'Notifications' 'history and do-not-disturb' notify
 		ui_row "$UI_I_CLOCK" 'Time zone' 'and network time' tz
 		ui_row "$UI_I_TRASH" 'Free space' 'what is using it, and clean up' clean
+		ui_row "$UI_I_CHIP" 'Auxiliary swap' 'a card as more memory, on every boot' swap
 		ui_row "$UI_I_BUG" 'End a process' 'the heaviest twenty' kill
 		ui_row "$UI_I_BOX" 'Packages' 'search, then install one' pkg
 		ui_row "$UI_I_BRUSH" 'Colour' 'the hex of a pixel, and the palette' colour
@@ -127,6 +128,7 @@ while :; do
 	notify) exec "$dir/rofi-notify" ;;
 	tz) exec "$dir/rofi-tz" ;;
 	clean) exec "$dir/rofi-clean" ;;
+	swap) exec "$dir/rofi-swap" ;;
 	kill) exec "$dir/rofi-kill" ;;
 	dictate) exec "$dir/dictate" ;;
 	lock) exec "$dir/sway-lock" ;;

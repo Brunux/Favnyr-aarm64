@@ -177,6 +177,30 @@ missing that name (`check-system.sh` checks the table against the PNGs).
 | pick it → **FAT32** → the confirmation | a card, then "is empty (fat32, label LAZYOS)"; the stick mounts again from Places |
 | the same with **ext4** | `mkfs.ext4`, and the disk mounts on a Linux machine |
 
+Neither menu may ever list `mtdblock0` (the SPI flash) or `mmcblk0boot0`/`mmcblk0boot1`
+(the eMMC's hardware boot partitions): `lsblk -d` shows all three as small disks,
+none mounted and none carrying a kernel partition, and writing any of them is how
+this machine gets bricked or loses its boot blocks.
+
+## Auxiliary swap - root menu -> **Auxiliary swap**, or **Places** -> **Auxiliary swap**
+
+| Step | Expected |
+|---|---|
+| open it with only the eMMC and the boot card attached | "Nothing to offer: every disk here is mounted or is a system disk" |
+| open it with the boot card and a spare, unmounted card/SD | the spare card only, with model and size |
+| pick it → **Cancel** | no partition table is written |
+| pick it → **The whole card** → the confirmation | a busy card, then a notification with the partition and "priority 10"; `swapon --show` lists it, `blkid -L lazyos_swap` resolves it |
+| `grep lazyos_swap /etc/fstab` | one marked block: `LABEL=lazyos_swap none swap sw,nofail,x-systemd.device-timeout=15s,pri=10 0 0` |
+| reboot with the card in | `swapon --show` lists it again without touching the menu (priority 10, below zram's 100) |
+| remove the card and reboot | the boot still reaches the session (a swap unit may show as failed only if `nofail` was lost); it waits at most 15 s for the card |
+| run the menu again | the status row (device, size, priority) and **Turn it off**, not the disk picker |
+| **Turn it off** → confirm | the partition is swapped off, the fstab block is gone, the partition is still in `lsblk` with `FSTYPE=swap`, and the next boot does not try to use it |
+| after turning it off, open **Format a disk** | the card is offered again (it is no longer active swap), and formatting erases the old swap partition |
+
+Never pull the card while the swap is active: the pages living on it are lost. Turn
+it off from the same menu first. Hibernate additionally needs `resume=` on the
+kernel command line; the swap row does not edit the kernel partition.
+
 ## Search key - the file search
 
 | Step | Expected |

@@ -27,10 +27,12 @@ daemon).
 The rest of the menus live in the root menu and the launcher: **Places**
 (home, documents, downloads, pictures, every mounted disk, and a **Mount** row
 for each unmounted one - a USB stick or an SD card - where Enter mounts it and
-opens it in Files and **Alt+1** unmounts a disk; its last row, **Format a disk**,
-lists only disks with nothing mounted on them and no ChromeOS kernel partition, so
-the eMMC and the card this system boots from are never candidates, and it asks
-twice with Cancel as the first answer), **Media** (what is
+opens it in Files and **Alt+1** unmounts a disk; its last two rows are the disk
+actions, **Auxiliary swap** (a card as more memory, activated on every boot) and
+**Format a disk**, and both list only disks with nothing mounted on them and no
+ChromeOS kernel partition, so the eMMC and the card this system boots from are
+never candidates - and Format asks twice with Cancel as the first answer),
+**Media** (what is
 playing, play/pause/next/previous), **Time zone** (with network time),
 **Free space** (what is using the disk, one action per row), **End a process**
 (the heaviest twenty), **Calculator**, **Password** (32 random characters from

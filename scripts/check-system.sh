@@ -1018,6 +1018,74 @@ else
 	fail "format a disk incomplete:$_missing_fmt (the Places row does nothing)"
 fi
 
+# Auxiliary swap (rofi-swap) writes a swap partition and the fstab block that
+# activates it at boot. parted, mkswap, swapon/swapoff and blkid are the commands
+# it runs; a missing one is a menu that fails halfway, and the two rows that reach
+# it (Places and the root menu) are plain text that would still be drawn.
+_missing_aux=""
+for _c in parted mkswap swapon swapoff blkid; do
+	have "$_c" || _missing_aux="$_missing_aux $_c"
+done
+[ -x "$HOME/.config/bin/rofi-swap" ] || _missing_aux="$_missing_aux bin/rofi-swap"
+if [ -z "$_missing_aux" ]; then
+	ok "auxiliary swap complete (parted, mkswap, swapon, blkid, rofi-swap)"
+else
+	fail "auxiliary swap incomplete:$_missing_aux (the menu cannot prepare or activate a card)"
+fi
+
+# The card is optional, so no block is OK, not a FAIL. When there is one, the
+# options that keep a missing card from holding the boot are witnessed here:
+# nofail and a device timeout. The priority has to stay below zram's 100, or the
+# kernel round-robins between compressed RAM and the much slower card.
+_aux_opts=$(awk '$1 == "LABEL=lazyos_swap" && $3 == "swap" { print $4; exit }' /etc/fstab 2>/dev/null)
+if [ -z "$_aux_opts" ]; then
+	ok "no auxiliary swap configured"
+else
+	_aux_bad=""
+	case ",$_aux_opts," in *,nofail,*) ;; *) _aux_bad="$_aux_bad nofail" ;; esac
+	case ",$_aux_opts," in
+	*,x-systemd.device-timeout=*) ;;
+	*) _aux_bad="$_aux_bad x-systemd.device-timeout" ;;
+	esac
+	_aux_pri=
+	case ",$_aux_opts," in
+	*,pri=*)
+		_aux_pri=${_aux_opts#*pri=}
+		_aux_pri=${_aux_pri%%,*}
+		;;
+	esac
+	case ${_aux_pri:-} in
+	'' | *[!0-9]*) _aux_bad="$_aux_bad pri=" ;;
+	*) [ "$_aux_pri" -lt 100 ] || _aux_bad="$_aux_bad pri<100" ;;
+	esac
+	if [ -z "$_aux_bad" ]; then
+		ok "auxiliary swap fstab block is safe for a missing card (nofail, device timeout, priority $_aux_pri < 100)"
+	else
+		warn "auxiliary swap fstab options unsafe:$_aux_bad (a boot without the card waits, or zram stops winning)"
+	fi
+	_aux_dev=$(asroot blkid -L lazyos_swap 2>/dev/null)
+	if [ -z "$_aux_dev" ]; then
+		skip "auxiliary swap configured, card not inserted (nofail keeps the boot clean)"
+	else
+		# One line per device and zram comes first, so join them before `case`:
+		# a newline is not the space the pattern needs (this reported an active
+		# card as inactive).
+		_aux_swaps=$(swapon --show=NAME --noheadings 2>/dev/null | tr '\n' ' ' || true)
+		case " $_aux_swaps " in
+		*" $_aux_dev "*) ok "auxiliary swap active on $_aux_dev" ;;
+		*) warn "auxiliary swap configured on $_aux_dev but not active: open Auxiliary swap and set it up again" ;;
+		esac
+	fi
+fi
+
+# The two entry points are static rows, so they can outlive the script. Places is
+# the documented way in (the root menu's row is the second copy).
+if [ -r "$HOME/.config/bin/rofi-places" ]; then
+	grep -qs 'rofi-swap' "$HOME/.config/bin/rofi-places" &&
+		ok "Places lists the Auxiliary swap row" ||
+		fail "bin/rofi-places has no Auxiliary swap row: the disk menu is unreachable from Places"
+fi
+
 # The Learn menu's second row is the machine's own documentation: apropos searches
 # the whatis database man-db builds, and man renders the page. Without man-db both
 # are absent and the row reports a search that found nothing.
@@ -1122,11 +1190,11 @@ fi
 # nothing - Colour was the one that had neither the row nor the `case` arm.
 if [ -r "$HOME/.config/bin/bar-menu" ]; then
 	_root_missing=
-	for _m in rofi-dns rofi-pkg rofi-color rofi-about rofi-remind; do
+	for _m in rofi-dns rofi-pkg rofi-color rofi-about rofi-remind rofi-swap; do
 		grep -qs "$_m" "$HOME/.config/bin/bar-menu" || _root_missing="$_root_missing ${_m#rofi-}"
 	done
 	[ -z "$_root_missing" ] &&
-		ok "root menu reaches DNS, Packages, Colour, About and Reminders" ||
+		ok "root menu reaches DNS, Packages, Colour, About, Reminders and Auxiliary swap" ||
 		fail "root menu has no entry for:$_root_missing (bar-menu)"
 fi
 
