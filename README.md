@@ -1,6 +1,7 @@
-# Debian aarch64 for Nura-supported devices
+# LazyOS
 
-A **device-agnostic** Debian port framework that reuses Nura's (postmarketOS') hardware
+**LazyOS** (`lazy by design`) is a Debian (**forky**, arm64) system for Nura-supported devices.
+It is built by a **device-agnostic** port framework that reuses Nura's (postmarketOS') hardware
 support — kernel, device tree, patches, modules and boot flow — instead of Alpine.
 
 First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada`).
