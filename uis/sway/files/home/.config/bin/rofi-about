@@ -3,10 +3,12 @@
 #
 # Deboma has an "About" window from its shell; the honest version here is the
 # same facts as a rofi list (`fastfetch` in a terminal is one row away, and it is
-# what paints the logo).  Everything is read, nothing is changed - the rows have
-# no action, so Enter closes the list.  The fastfetch window is the exception to
-# "nothing stays": it is a terminal, held open until it is closed, because a
-# program that draws one picture and exits takes the window with it.
+# what paints the logo).  Everything is read, nothing is changed.  Three rows go
+# one step further and open the log they summarise - the errors since this boot,
+# the blame of the boot, the devices on the bus - because a count is what fits on
+# a row and the output is what a bug report needs.  The fastfetch window is the
+# exception to "nothing stays": it is a terminal, held open until it is closed,
+# because a program that draws one picture and exits takes the window with it.
 #
 # The values come from the kernel and from procfs/sysfs, not from a package: a
 # system that answers "which kernel am I running" without inxi is a system that
@@ -64,6 +66,17 @@ fi
 
 compositor=$(sway --version 2>/dev/null | head -1) || compositor=unknown
 
+# The three questions a bug report starts with: what failed since this boot, how
+# long the boot took, and what is attached to the machine.  The number is what
+# fits on a row and the log is one Enter away, because the answer is small and
+# the output is not.
+errs=$(sudo -n journalctl -q -p err -b --no-pager 2>/dev/null | wc -l) || errs=0
+case ${errs:-0} in '' | *[!0-9]*) errs=0 ;; esac
+boot_time=$(systemd-analyze 2>/dev/null |
+	sed -n 's/^Startup finished in \(.*\) = .*$/\1/p' | head -1) || true
+pci=$(lspci 2>/dev/null | wc -l) || pci=0
+usb=$(lsusb 2>/dev/null | wc -l) || usb=0
+
 summary="$model
 Host: ${HOSTNAME:-$(uname -n)}
 Revision: ${revision:-unknown}
@@ -89,15 +102,34 @@ trap 'rm -f "$tmp"' EXIT
 	ui_row "$UI_I_WIFI" 'Network' "${ssid:-not connected}${ip:+ · $ip}" -
 	ui_row "$UI_I_EYE" 'Session' "${compositor:-unknown}" -
 	ui_row "$UI_I_CODE" 'Processes' "$(ps -e --no-headers 2>/dev/null | wc -l) processes" -
+	ui_heading 'diagnostics'
+	ui_row "$UI_I_BUG" 'Errors this boot' \
+		"$errs line$(if [ "$errs" -eq 1 ]; then :; else printf s; fi) at priority err" errors
+	ui_row "$UI_I_CLOCK" 'Boot time' "${boot_time:-unknown}" boot
+	ui_row "$UI_I_CHIP" 'Devices' "${pci:-0} PCI · ${usb:-0} USB" devices
 	ui_heading 'more'
 	ui_row "$UI_I_CLIPBOARD" 'Copy this summary' 'the same lines as text' copy
 	ui_row "$UI_I_TERM" 'The full picture' 'fastfetch, until you close it' fastfetch
 } >"$tmp"
 
-key=$(ui_pick 'About' 'Enter closes · the last two rows copy or open' <"$tmp") || exit 0
+key=$(ui_pick 'About' 'Enter closes · the rows that act say so' <"$tmp") || exit 0
 
 case ${key:-} in
 copy) ui_copy "$summary" 'System summary copied' ;;
+errors)
+	# journalctl's own pager, in a terminal: the log is long, and a window that
+	# holds a page of it is not the place to read the whole boot.
+	exec foot --app-id=popup -T 'journalctl -p err -b' -e \
+		sudo -n journalctl -p err -b
+	;;
+boot)
+	exec foot --app-id=popup --hold -e sh -c \
+		'systemd-analyze blame; printf "\n  systemd-analyze blame · close this window with Ctrl+Shift+W\n"'
+	;;
+devices)
+	exec foot --app-id=popup --hold -e sh -c \
+		'lspci; printf "\n"; lsusb; printf "\n  close this window with Ctrl+Shift+W\n"'
+	;;
 fastfetch)
 	if have fastfetch; then
 		# --hold: fastfetch draws once and exits, and without this the window it

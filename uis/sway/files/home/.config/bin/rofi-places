@@ -89,6 +89,11 @@ ui_place() {
 	fi
 
 	ui_row "$UI_I_FILES" 'Open a terminal' "$HOME" "term:$HOME"
+	# The last row is the one destructive action in Places, and it lives here
+	# because this is where the disks are.  rofi-format lists only disks with
+	# nothing mounted and no ChromeOS kernel partition - a system disk is never a
+	# candidate - and asks twice before it writes.
+	ui_row "$UI_I_WARN" 'Format a disk' 'a stick or a card, wiped clean' format "$UI_YELLOW"
 } >"$tmp"
 
 key=$(ui_pick_alt 'Places' 'Enter opens · Alt+1 unmounts a disk · Escape closes' \
@@ -130,4 +135,5 @@ alt:*)
 	exit 0
 	;;
 term:*) exec foot --working-directory="${key#term:}" ;;
+format) exec "$dir/rofi-format" ;;
 esac

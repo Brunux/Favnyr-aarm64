@@ -104,6 +104,9 @@ the reason, and the menu shows it instead of claiming success.
 | open it | model, revision, kernel, uptime, memory, disk, battery, network, session, processes |
 | **Copy this summary** | the same lines are on the clipboard |
 | **The full picture** | fastfetch in a foot window |
+| **Errors this boot** | `journalctl -p err -b` in a foot window (the same lines the report calls a problem) |
+| **Boot time** | `systemd-analyze blame` in a foot window, longest first |
+| **Devices** | `lspci` then `lsusb` in a foot window |
 
 ## Files and thumbnails - `Alt+Ctrl+F`
 
@@ -120,11 +123,55 @@ the reason, and the menu shows it instead of claiming success.
 | Enter on an HTML file | `bat` (it is text), not Firefox |
 | Enter on a text file | `bat` in the popup window (`BAT_THEME=ansi`, solarized) |
 | spam `Alt+Ctrl+F` on a directory of large photos | the application keeps responding while the rows fill in (four decoders at a time) |
+| **Alt+1** on a directory | the actions for it: disk usage, compress, copy the path, a terminal here. Enter still *opens* the row; only Alt+1 asks |
+| **Alt+1** → **Compress** on a folder | a `busy` card, then `folder.tar.xz` beside it, and the bar spinner while it packs (click the spinner to stop it) |
+| **Alt+1** → **Extract** on that archive | a folder named after the archive. Run it again: it refuses ("already exists") instead of merging into it |
+| **Alt+1** on a video → **Convert** → MP3 | `name.mp3` beside it, with a card. On an `.mp4` → MP4 the output is `name-converted.mp4`, never the source |
+| **Alt+1** on an `.iso` | it mounts through `udisksctl` and the browser opens where it landed |
+| **Alt+1** on the dotfiles row | a notification saying it has nothing to act on, and nothing else happens |
+
+An Alt+1 that switches to workspace 1 means rofi is not inhibiting the
+compositor's keys (`global-kb: true` in `~/.config/rofi/config.rasi`); an Alt+1
+that opens the row means `-kb-custom-1 Alt+1` was dropped from `rofi-files`.
+`check-system.sh` warns about both.
 
 A list with no pictures at all means `-show-icons`/`thumbnail://` was dropped from
 `rofi-files`, or `nureb-thumbnail` is not executable; `check-system.sh` warns
 about both. A row with **no** icon in a text-only directory means the theme is
 missing that name (`check-system.sh` checks the table against the PNGs).
+
+## Search inside the files - `Alt+Ctrl+G`
+
+| Step | Expected |
+|---|---|
+| press **Alt+Ctrl+G**, type a word you know is in a file | a `busy` card ("Looking for …") and then a menu of matches, the matching **text** on each row and `path:line` dimmed |
+| Enter on a match | the file in `bat`, scrolled to that line and with the line highlighted |
+| a word that appears 40 times in one file | at most three rows from that file |
+| a word inside `~/.cache` or `node_modules` | not listed (the same four excludes as the other searches) |
+| type `a(b` (a broken regex) | a critical card quoting ripgrep's own parse error, not an empty list |
+| a word that is nowhere | "Nothing matches" |
+| press it again while it is searching | the first card's spinner in the bar can be clicked to stop the run |
+
+## Download - root menu -> **Download**
+
+| Step | Expected |
+|---|---|
+| Alt+Space → Download → **Paste a link**, a short video URL, **Video** | a `busy` card, then "Saved `<name>.mp4`", and the file in `~/Downloads` |
+| the same with **Audio only** | a `.m4a` in `~/Downloads`, no video stream |
+| copy a URL first, then open Download | a second row, **the link in the clipboard**, which uses it without a prompt |
+| a link to a video inside a playlist | one file, not the playlist |
+| a link to something unavailable | a critical card with yt-dlp's own words ("Video unavailable"), not a traceback |
+| click the bar's spinner mid-download | the card says the `.part` file is still there, and no half file is presented as finished |
+
+## Format a disk - root menu -> **Places** -> **Format a disk**
+
+| Step | Expected |
+|---|---|
+| open it with only the eMMC and the boot card attached | "Nothing to format": both carry a ChromeOS kernel partition, so neither is offered |
+| insert a USB stick, leave it unmounted | the stick, with its model and size |
+| pick it → **Cancel** | nothing at all is written |
+| pick it → **FAT32** → the confirmation | a card, then "is empty (fat32, label NUREB)"; the stick mounts again from Places |
+| the same with **ext4** | `mkfs.ext4`, and the disk mounts on a Linux machine |
 
 ## Search key - the file search
 
@@ -275,7 +322,9 @@ What a failure means:
 | click the spinner during an apt install | it says the task cannot be stopped, and the install finishes |
 | any notification that has one (`sudo`, a file copy) | its picture is drawn; a text-only card means mako's `icon-path` |
 | `Alt+Ctrl+V` and press `Alt+1` | the entry is deleted (the second action still works after the `-kb-custom-1` fix) |
-| root menu (`Alt+Space`) | **Colour**, **DNS**, **Packages**, **Reminders** and **About** are all there |
+| root menu (`Alt+Space`) | **Colour**, **DNS**, **Packages**, **Reminders**, **About**, **Download**, **Password** and **Search inside files** are all there |
+| `Alt+Ctrl+G` and then `Alt+1` inside that menu | nothing is taken by sway: the menu answers, the workspace does not change |
+| `Alt+Ctrl+F`, then `Alt+1` | the actions menu, not workspace 1 (the `global-kb` fix reached both menus) |
 | lock (`Alt+Ctrl+L`) and unlock | swaylock, then back to the session, no leftover screensaver |
 | shut down from the power menu | the machine powers off (the question is asked once) |
 

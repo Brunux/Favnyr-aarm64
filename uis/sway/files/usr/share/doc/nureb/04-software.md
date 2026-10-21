@@ -191,8 +191,13 @@ gets corrupted.
 * The same disks are in pcmanfm's sidebar (**Search+Shift**), and a stick shows
   up there as soon as it is mounted.
 * `vfat`, `exFAT` and `NTFS` all work - the kernel has those drivers - so a
-  stick from a camera or from Windows needs no extra package. Formatting is not
-  here: that is `parted`/`mkfs` in a terminal.
+  stick from a camera or from Windows needs no extra package.
+* **Format a disk** is the last row of Places: it offers only disks with nothing
+  mounted on them and no ChromeOS kernel partition, so the eMMC and the card this
+  system boots from are never candidates, and it asks twice with Cancel first.
+  The filesystem is FAT32 (`NUREB`, for a camera, a TV or a car) or ext4 (for a
+  Linux machine), and the whole disk becomes one partition. It is not stoppable:
+  a killed `mkfs` leaves a disk that looks formatted and is not.
 * A failed mount says why in the notification, in udisks' own words: "not
   authorized" is a policy problem, "already mounted" means it is already in the
   list above.

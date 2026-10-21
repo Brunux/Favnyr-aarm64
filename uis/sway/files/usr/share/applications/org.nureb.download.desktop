@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Download
+GenericName=Video and audio download
+Comment=Paste a link and keep the file in ~/Downloads, with yt-dlp
+Exec=/home/brunux/.config/bin/rofi-download
+Icon=folder-download
+Terminal=false
+Categories=Network;FileTransfer;
+Keywords=download;video;audio;youtube;yt-dlp;music;clip;

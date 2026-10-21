@@ -20,7 +20,8 @@ the command. This page is the tour.
 | Alt+Tab | window switcher |
 | Alt+Shift+D | command palette (`$PATH`; Shift+Enter runs it in foot) |
 | Alt+Ctrl+K | every key binding, searchable, Enter copies the command |
-| Alt+Ctrl+F | files: browse a directory, Enter reads a text file in foot |
+| Alt+Ctrl+F | files: browse a directory, Enter reads a text file in foot, Alt+1 acts on the row |
+| Alt+Ctrl+G | search inside the files: ripgrep over your home, Enter opens the file at the matching line |
 | Alt+Ctrl+O | settings: the radio switches, night light, touchpad, rotation |
 | Alt+Ctrl+N | notifications: the history, do-not-disturb, copy one |
 | Alt+Ctrl+Q | calculator: type it, Enter copies the result |

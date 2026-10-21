@@ -8,7 +8,9 @@
 # palette as everything else.  One foot window for as long as a page is open.
 #
 # The first row searches: ripgrep over the same pages, one row per match, and the
-# page containing it opens where the match is.
+# page containing it opens where the match is.  The second row is the other kind
+# of documentation on this machine - `man`, searched with apropos, which is the
+# manual of the programs the image ships rather than of the image itself.
 set -eu
 
 docs=/usr/share/doc/nureb
@@ -58,9 +60,59 @@ if [ "${1:-}" = "--search" ]; then
 	search
 fi
 
+# --- a program's own manual -------------------------------------------------
+
+# apropos reads the whatis database of the installed packages, which is what
+# "which page documents this" means: one free-text prompt, one row per page, and
+# man in a terminal - where MANPAGER (col -bx | bat -l man -p, set by
+# etc/profile.d/90-cli-tools.sh) does the rendering with the same palette as the
+# rest of this menu. man-db is in packages/base.list and its own timer rebuilds
+# the database after an install, so the list is what is installed now.
+manpage() {
+	q=$("$dir/bar-pick" 'Manual page' -free) || exit 0
+	[ -n "$q" ] || exit 0
+	# sed reads to the end so apropos is never killed by a closed pipe: with
+	# pipefail, `apropos | head` reports 141 as a failure on a big result.
+	rc=0
+	apropos -- "$q" 2>/dev/null | sed -n '1,60p' >"$table.pages" || rc=$?
+	if [ ! -s "$table.pages" ]; then
+		ui_say 'Manual page' "No page mentions \"$q\"" normal "$UI_ICON_INFO"
+		exit 0
+	fi
+	[ "$rc" -eq 0 ] || {
+		ui_say 'Manual page' "apropos failed on \"$q\"" critical "$UI_ICON_ERROR"
+		exit 1
+	}
+	: >"$table"
+	# "name (section) - description": the name and the section are the key (the
+	# same name exists in several sections, and man needs to be told which), the
+	# description is the dim detail.
+	while IFS= read -r line; do
+		_page=${line%% *}
+		_rest=${line#*\(}
+		_section=${_rest%%\)*}
+		_desc=${line#* - }
+		[ -n "$_page" ] || continue
+		[ "$_section" != "$_rest" ] || continue
+		ui_row "$UI_I_BOOK" "$_page ($_section)" "$_desc" "man:$_page:$_section"
+	done <"$table.pages"
+	_choice=$(ui_pick "Manual pages for $q" \
+		'Enter opens the page in a terminal · Escape closes' <"$table") || exit 0
+	case $_choice in
+	man:*)
+		_rest=${_choice#man:}
+		_page=${_rest%:*}
+		_section=${_rest##*:}
+		exec foot -T "man $_page ($_section)" -e man "$_section" "$_page"
+		;;
+	esac
+	exit 0
+}
+
 # --- the list --------------------------------------------------------------
 
 ui_row "$UI_I_SEARCH" 'Search the manual' 'ripgrep over every page' search >"$table"
+ui_row "$UI_I_BOOK" "A program's manual" 'apropos, then man in a terminal' man >>"$table"
 
 for f in "$docs"/*.md; do
 	[ -r "$f" ] || continue
@@ -75,5 +127,6 @@ choice=$(ui_pick 'Learn' 'Enter opens the page in a terminal · Escape closes' <
 
 case $choice in
 search) search ;;
+man) manpage ;;
 open:*) open_page "${choice#open:}" ;;
 esac

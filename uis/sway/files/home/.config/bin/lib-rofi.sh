@@ -103,6 +103,8 @@ UI_I_INFO=$(printf '\357\201\232')   # f05a
 UI_I_CLOUD=$(printf '\357\203\202')   # f0c2
 UI_I_BRUSH=$(printf '\357\207\274')   # f1fc
 UI_I_TAG=$(printf '\357\200\253')   # f02b
+UI_I_DOWNLOAD=$(printf '\357\200\231')   # f019
+UI_I_KEY=$(printf '\357\202\204')   # f084
 UI_I_DESKTOP=$(printf '\357\204\210')   # f108
 UI_I_CHIP=$(printf '\357\213\233')   # f2db
 
@@ -120,6 +122,18 @@ UI_ICON_KEYS=preferences-desktop-keyboard
 UI_ICON_TRASH=user-trash
 UI_ICON_IMAGE=image-x-generic
 UI_ICON_FOLDER=folder
+# A download and a disk: both names are already in the theme for the windowed
+# file manager (scripts/make-icons.sh, fourth table), so a new feature asks for a
+# picture that exists instead of adding a name nobody renders.
+UI_ICON_DOWNLOAD=folder-download
+UI_ICON_DISK=drive-harddisk
+# The three the file actions and the two searches ask for: an archive, a match
+# and a film.  All three are already in the theme's third table (the file
+# browser draws them on its rows), which is why the constants name them instead
+# of adding a picture.
+UI_ICON_BOX=package-x-generic
+UI_ICON_SEARCH=system-search
+UI_ICON_VIDEO=video-x-generic
 
 # The third column of a row is the one that grows: a path, a revision string, a
 # package description.  Past this many characters it is cut (ui_trim).  The number

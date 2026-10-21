@@ -12,6 +12,8 @@ daemon).
 | **Alt+Space** | `bar-menu` | the root menu: what opens something, the system panels, and the session actions |
 | **Alt+Ctrl+K** | `rofi-keys` | every key binding this session defines, parsed from `/etc/sway` and `~/.config/sway`. Enter copies the command |
 | **Alt+Ctrl+F** | `rofi-files` | the filesystem: directories first, sizes and dates dimmed. Enter opens a directory or reads a text file in foot; the dotfiles are one row away |
+| **Alt+Ctrl+G** | `rofi-grep` | **search inside the files**: ripgrep over your home, one row per match; Enter opens the file at that line |
+| **Download** (root menu, launcher) | `rofi-download` | a link - or the one in the clipboard - kept in `~/Downloads`, as a video or as audio |
 | **Alt+Ctrl+C** | `rofi-capture` | **capture**: a screenshot (screen, area or window), annotate it, read the text or a QR code out of a region, and start or stop a recording |
 | **Alt+Ctrl+O** | `rofi-quick` | **Settings**: the switches (Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation) and the panels, in one list |
 | **Alt+Ctrl+P** or **Alt+Escape** | `rofi-power` | **power**: lock, suspend, hibernate, log out, reboot, shut down - the last three ask once more |
@@ -25,14 +27,22 @@ daemon).
 The rest of the menus live in the root menu and the launcher: **Places**
 (home, documents, downloads, pictures, every mounted disk, and a **Mount** row
 for each unmounted one - a USB stick or an SD card - where Enter mounts it and
-opens it in Files and **Alt+1** unmounts a disk), **Media** (what is
+opens it in Files and **Alt+1** unmounts a disk; its last row, **Format a disk**,
+lists only disks with nothing mounted on them and no ChromeOS kernel partition, so
+the eMMC and the card this system boots from are never candidates, and it asks
+twice with Cancel as the first answer), **Media** (what is
 playing, play/pause/next/previous), **Time zone** (with network time),
 **Free space** (what is using the disk, one action per row), **End a process**
-(the heaviest twenty), **Calculator**, **SSH** (hosts from `~/.ssh/config`),
+(the heaviest twenty), **Calculator**, **Password** (32 random characters from
+`openssl`, straight into the clipboard: hex, so there is no shift key and no `+`,
+`/` or `=` to re-quote when it is pasted into a file or a URL, and the value never
+appears in a notification - mako keeps a history, and a password in it is a
+password on disk), **SSH** (hosts from `~/.ssh/config`),
 **DNS** (which resolver this connection uses), **Packages** (search the archive
 and install one), **Colour** (the hex of any pixel, and the palette this session
 is drawn with), **Reminders** (be told later), **About** (kernel, uptime,
-memory, battery, the revision this image was built from).
+memory, battery, the revision this image was built from, and the errors since
+this boot).
 
 ## Something is happening
 
@@ -107,6 +117,17 @@ script over `rofi -dmenu`, because rofi 2.0 has no filebrowser mode:
 * the line under the prompt says where you are, how many directories and files
   are there and how much space is left.
 
+**Alt+1 acts on the row instead of opening it.** Enter *opens* what is under the
+cursor; Alt+1 asks what else can be done with it, and the list offers only what
+fits: a directory can be measured (`du -sh`, as a card with the stop button) and
+packed into `name.tar.xz` next to itself, an archive unpacked into a folder named
+after it, a disk image mounted through `udisksctl` and opened in the browser, a
+video or a song converted with ffmpeg (MP4, or MP3 for the sound alone), and any
+row can be copied as a path or opened in a terminal. Nothing is touched until you
+pick something, an existing name is refused rather than overwritten, and every
+long action is a `busy` card with the bar's spinner - with the stop button where
+stopping is safe (a killed `mkfs` would leave a disk that looks formatted).
+
 **Search key: the files, not the launcher.** The Search key (and
 `rofi-files --search`) opens one list of every file under your home directory,
 newest first, filtered as you type: type `notes` and the row list narrows to the
@@ -128,6 +149,18 @@ to the same opener a double click in the window uses. Nothing is capped, the
 prompt is up before the walk is finished, **Ctrl+Y** copies the chosen path, and
 Escape closes it. Both keys are one process while their window is open and
 nothing afterwards.
+
+**Alt+Ctrl+G: the text inside the files.** The two keys above answer "which file
+was it" from the name. `rofi-grep` answers the other question - "where did I write
+this" - by running `ripgrep` over the same home directory and listing a row per
+match: the matching **text** on the row (which is what tells two matches apart),
+`path:line` in the dim colour, and Enter opening the file in `bat` scrolled to
+that line (bat's own pager cannot start anywhere but the top, so its output goes
+through `less -R +N`, which keeps the colours bat wrote). It is bounded like the
+list: three matches per file, the same four trees left out, binaries dropped by
+ripgrep itself, and 400 rows - type one more word to narrow it. A pattern ripgrep
+cannot read says so in ripgrep's own words, and the walk is a `busy` card with the
+stop button.
 
 `xdg-open` exists too (`/usr/local/bin/xdg-open`, two dozen lines): a URL goes to
 Firefox, and a path goes to the same rule table a double click in the window uses
@@ -190,6 +223,26 @@ Every screenshot this menu takes - like every one the keys take - lands in
 `~/Pictures/Screenshots/<the date>/`, one folder per day, under grimshot's own
 file name; the last row opens that folder (or `~/Pictures` before the first
 screenshot).
+
+## Download
+
+**Download** (`rofi-download`, in the root menu and the launcher) takes a link and
+leaves the file in `~/Downloads`: paste it, or pick **the link in the clipboard**
+when the clipboard holds one. Then choose **video** (the best picture and sound it
+can merge) or **audio only** (an `.m4a`, without the picture). It is `yt-dlp`,
+which needs no daemon and no configuration: one process per link, and it exits
+when the file is on disk.
+
+Three things it does not do. It does not take a playlist (`--no-playlist`), so a
+shared link to a video inside a list downloads that video and not the thousand
+next to it. It does not date the file by the upload (`--no-mtime`), so the newest
+download is the newest file. And it does not pretend: the notification names the
+file it wrote, and a failure is the last lines of yt-dlp's own message
+("Video unavailable"), not a traceback. A download can take minutes, so it is a
+`busy` card with a stop button — and stopping it says the `.part` file is still in
+`~/Downloads` instead of claiming a file. `ffmpeg` merges the streams, and `node`
+is the JavaScript runtime `/etc/yt-dlp.conf` names, which is what makes YouTube
+offer the high-quality formats at all (`[debug] JS runtimes: node-24.21.0`).
 
 ## Clipboard history
 
@@ -277,6 +330,14 @@ markdown source. The style is `~/.config/glow/solarized.json`, the same palette
 as everything else: headings carry a cyan/blue bar, inline code and fenced
 blocks sit on base02, and code is highlighted with the solarized token colours.
 The first row searches all pages with ripgrep and opens the one that matches.
+
+The second row is the *other* manual on the machine: **A program's manual** asks
+for a word and lists every installed manual page whose description mentions it
+(`apropos`), one row per page with the section in brackets and the description in
+the dim colour; Enter opens `man` in a terminal, where `MANPAGER` (`col -bx | bat
+-l man -p`, from `etc/profile.d/90-cli-tools.sh`) renders the page in the same
+palette as everything else. The same name in two sections (`printf (1)` and
+`printf (3)`) is two rows, because `man` has to be told which one.
 
 `glow -p` pages through `less`, so the page scrolls with the usual keys and
 leaves nothing behind when it closes.

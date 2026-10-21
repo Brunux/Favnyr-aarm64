@@ -127,6 +127,11 @@ applications-development           f121
 org.gnome.Papers                   f02d
 multimedia-photo-viewer            f03e
 document-print-preview             f02f
+# The Download entry asks for folder-download, which the fourth table also
+# renders because pcmanfm's places sidebar asks for the same name: the file is
+# the same PNG either way, and each table stays a complete answer to its own
+# question (what the launcher shows / what the file manager draws).
+folder-download                    f019
 TABLE
 
 # 2. The command palette.  rofi's run mode resolves an icon by *asking the icon

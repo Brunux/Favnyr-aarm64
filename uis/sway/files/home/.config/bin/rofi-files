@@ -30,6 +30,12 @@
 #
 # Enter opens a directory (the listing reopens there) or a file; a typed path
 # works too, because dmenu hands back the typed text when no row matches.
+# **Alt+1 acts on the row instead of opening it** (rofi's -kb-custom-1, exit
+# status 10): ~/.config/bin/rofi-file-actions offers what fits it - the size of a
+# directory, packing it, unpacking an archive, mounting a disk image, converting
+# a video, the path in the clipboard, a terminal in that folder. That needs
+# `global-kb: true` in ~/.config/rofi/config.rasi, or sway answers Alt+1 with
+# "workspace number 1" and the browser never sees the key.
 # Alt+Ctrl+F opens the browser from the session, the Search key opens
 # `--search`, and it is also in the root menu and the launcher ("Files").
 #
@@ -290,15 +296,15 @@ esac
 if [ "$mode" = search ]; then
 	matches=$(wc -l < "$list")
 	if [ "$matches" -ge "$LIMIT" ]; then
-		mesg=$(printf '%s  \302\267  the newest %s matches  \302\267  type to narrow it  \302\267  Enter opens  \302\267  Esc closes' \
+		mesg=$(printf '%s  \302\267  the newest %s matches  \302\267  type to narrow it  \302\267  Enter opens  \302\267  Alt+1 acts on it  \302\267  Esc closes' \
 			"$shown" "$LIMIT")
 	else
-		mesg=$(printf '%s  \302\267  %s file%s  \302\267  Enter opens  \302\267  Esc closes' \
+		mesg=$(printf '%s  \302\267  %s file%s  \302\267  Enter opens  \302\267  Alt+1 acts on it  \302\267  Esc closes' \
 			"$shown" "$matches" "$(if [ "$matches" -eq 1 ]; then :; else printf s; fi)")
 	fi
 else
 	free=$(df -h --output=avail -- "$dir" 2>/dev/null | tail -n 1 | tr -d ' ' || :)
-	mesg=$(printf '%s  \302\267  %s dir%s  \302\267  %s file%s  \302\267  %s free  \302\267  Enter opens  \302\267  Ctrl+Return takes a typed path' \
+	mesg=$(printf '%s  \302\267  %s dir%s  \302\267  %s file%s  \302\267  %s free  \302\267  Enter opens  \302\267  Alt+1 acts on it  \302\267  type a path' \
 		"$shown" \
 		"$dirs" "$(if [ "$dirs" -eq 1 ]; then :; else printf s; fi)" \
 		"$files" "$(if [ "$files" -eq 1 ]; then :; else printf s; fi)" \
@@ -324,14 +330,22 @@ dmenu_rows() {
 }
 
 if [ "$mode" = search ]; then prompt="Search"; else prompt="Files"; fi
+# rofi exits 10 for -kb-custom-1 (Alt+1) and 1 for a dismissal; the row comes
+# back on stdout either way, so the status is read after the choice.
+rc=0
 choice=$(dmenu_rows |
 	rofi -dmenu -markup-rows -i -show-icons -theme "$theme" \
 		-p "$prompt" -lines 18 -selected-row "$first" \
+		-kb-custom-1 Alt+1 \
 		-preview-cmd "$HOME/.config/bin/nureb-thumbnail {input} {output} {size}" \
 		-theme-str "window { width: 58%; }
 mainbox { children: [ inputbar, message, listview ]; }
 element-icon { size: 32px; padding: 0 8px 0 0; }" \
-		-mesg "$mesg") || exit 0
+		-mesg "$mesg") || rc=$?
+case $rc in
+0 | 10) ;;
+*) exit 0 ;;
+esac
 
 if [ -z "$choice" ]; then exit 0; fi
 
@@ -353,6 +367,18 @@ if [ -z "$action" ]; then
 		notify-send -a Files "No such path" "$choice"
 		exit 0
 	fi
+fi
+
+# Alt+1 asks what else can be done with the row instead of opening it, and it
+# works on the row that was typed as well as on the one that was listed. The
+# dotfile switch is the one row with nothing behind it.
+if [ "$rc" -eq 10 ]; then
+	if [ "$action" = hidden ]; then
+		notify-send -a Files "Hidden files" \
+			"Enter switches them · Alt+1 has nothing to act on"
+		exit 0
+	fi
+	exec "$HOME/.config/bin/rofi-file-actions" "$payload"
 fi
 
 # The browser is the reader for what the other programs do not take: an EPUB, a
