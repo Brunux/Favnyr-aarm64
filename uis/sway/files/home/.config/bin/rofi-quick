@@ -15,7 +15,7 @@
 # Tablet mode has a second row while it is on: "Calibrate rotation" stores which
 # way the accelerometer says is up, for a screen that turns the wrong way on the
 # hardware (see ~/.config/bin/tablet-mode).  Both of those rows' actions notify
-# with an icon from the Nureb theme - preferences-desktop-keyboard for the mode
+# with an icon from the LazyOS theme - preferences-desktop-keyboard for the mode
 # and preferences-desktop-display for the rotation - so the answer to a click on
 # the bar's list looks like the rest of the session's.
 #
@@ -187,7 +187,7 @@ if [ "${1:-}" = "--rotation-menu" ]; then
 		# The list is gone by now, so this is the only sign that the screen
 		# was asked to turn (and tablet mode's poller would turn it back on
 		# the next second if the accelerometer says so - hence the wording).
-		notify-send -a Nureb -i preferences-desktop-display 'Rotation' \
+		notify-send -a LazyOS -i preferences-desktop-display 'Rotation' \
 			"$_out: $_t" 2>/dev/null || true
 		;;
 	esac

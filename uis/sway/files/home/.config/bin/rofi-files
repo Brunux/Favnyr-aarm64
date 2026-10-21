@@ -15,12 +15,12 @@
 # its mimetype icon), and it would replace the markup rows and the bat/popup
 # behaviour below. The browsing is therefore a shell script over rofi's dmenu:
 # the entries as markup rows, directories first, and an icon on *every* row - a
-# 32 px `thumbnail://` picture where nureb-thumbnail can make one, a glyph from
-# the Nureb icon theme (folder, text-x-generic, application-pdf, ...) everywhere
+# 32 px `thumbnail://` picture where lazyos-thumbnail can make one, a glyph from
+# the LazyOS icon theme (folder, text-x-generic, application-pdf, ...) everywhere
 # else, chosen from the extension alone. Every row having one is the point: a
 # row without an icon loses the icon column and its name starts further left, so
 # a directory of text files used to be a bare, unstyled list. rofi renders a
-# thumbnail through nureb-thumbnail for the rows it is about to show, all at
+# thumbnail through lazyos-thumbnail for the rows it is about to show, all at
 # once, and only when that picture is not cached in ~/.cache/thumbnails yet.
 #
 #   rofi-files              start in the current directory
@@ -222,7 +222,7 @@ rows() {
 	# The icon comes from the extension and the executable bit, both of which
 	# the listing already carries: a `file` per row would be one subprocess per
 	# entry, which is exactly what this listing avoids. The first line is what
-	# nureb-thumbnail can turn into a picture (ffmpeg for an image or a video
+	# lazyos-thumbnail can turn into a picture (ffmpeg for an image or a video
 	# frame, poppler for a PDF page), so those ask for a thumbnail and never
 	# fall back: a cached one is reused, and a decode that fails leaves the row
 	# without a picture instead of with a wrong one. An image format it cannot
@@ -234,7 +234,7 @@ rows() {
 		if (e ~ /^(jpg|jpeg|png|gif|webp|bmp|tif|tiff|avif|mp4|mkv|webm|mov|avi|m4v|mpg|mpeg|ogv|wmv|flv|3gp|pdf)$/)
 			return "thumbnail://" p
 		# The other formats papers reads: a document is a document, even when
-		# nureb-thumbnail has no decoder for it (ddjvu and an unzip of a comic
+		# lazyos-thumbnail has no decoder for it (ddjvu and an unzip of a comic
 		# are not worth a subprocess per row).
 		if (e ~ /^(djvu|djv|cbz|cbr|cb7|cbt|ai)$/) return "application-pdf"
 		if (e ~ /^(html|htm|xhtml|shtml)$/) return "text-html"
@@ -317,7 +317,7 @@ first=0
 if [ "$mode" = browse ] && [ "$dir" != "/" ]; then first=1; fi
 
 # dmenu rows carry an optional icon after a NUL: `text\0icon\x1f<value>`. For a
-# `thumbnail://<path>` value rofi calls nureb-thumbnail with the cache file it
+# `thumbnail://<path>` value rofi calls lazyos-thumbnail with the cache file it
 # wants ({output}), and skips the call when that file already exists. Every row
 # carries one, so the 32 px icon column is the same width everywhere and a name
 # never starts under a neighbour's icon. awk cannot write a NUL in a string
@@ -337,7 +337,7 @@ choice=$(dmenu_rows |
 	rofi -dmenu -markup-rows -i -show-icons -theme "$theme" \
 		-p "$prompt" -lines 18 -selected-row "$first" \
 		-kb-custom-1 Alt+1 \
-		-preview-cmd "$HOME/.config/bin/nureb-thumbnail {input} {output} {size}" \
+		-preview-cmd "$HOME/.config/bin/lazyos-thumbnail {input} {output} {size}" \
 		-theme-str "window { width: 58%; }
 mainbox { children: [ inputbar, message, listview ]; }
 element-icon { size: 32px; padding: 0 8px 0 0; }" \

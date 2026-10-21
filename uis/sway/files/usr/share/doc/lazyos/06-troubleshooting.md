@@ -3,7 +3,7 @@
 Start with the report; it is faster than reading logs:
 
 ```sh
-check-system.sh ~/Dev/Nureb
+check-system.sh ~/Dev/LazyOS
 journalctl -b -p err --no-pager | tail -50
 ```
 
@@ -78,14 +78,14 @@ The firmware boots `p1`, not `/boot`. If the machine comes back to the firmware
 menu, or boots the old kernel, the kernel partition was not rewritten:
 
 ```sh
-sudo ~/Dev/Nureb/scripts/install-kpart.sh
+sudo ~/Dev/LazyOS/scripts/install-kpart.sh
 ```
 
 To see the boot messages (they are quiet by default), build a verbose kpart once:
 
 ```sh
 KERNEL_CMDLINE_OVERRIDE="console=tty0 ignore_loglevel loglevel=7" \
-  sudo -E ~/Dev/Nureb/scripts/make-kpart.sh
+  sudo -E ~/Dev/LazyOS/scripts/make-kpart.sh
 ```
 
 Never append a bare `debug`: initramfs-tools then sends its own output to a file
@@ -103,9 +103,9 @@ screen.
   `~/.config/bin/`, and a missing script is a row that silently does nothing.
   `check-system.sh` fails for each one.
 * **A hole where an icon should be.** The launcher draws application *images*,
-  and the session's own entries take theirs from the small **Nureb** theme
-  (`/usr/share/icons/Nureb`, 48x48 PNGs rendered from the icon fonts). If the
-  theme is missing, rebuild it with `sudo ~/Dev/Nureb/scripts/make-icons.sh` - it
+  and the session's own entries take theirs from the small **LazyOS** theme
+  (`/usr/share/icons/LazyOS`, 48x48 PNGs rendered from the icon fonts). If the
+  theme is missing, rebuild it with `sudo ~/Dev/LazyOS/scripts/make-icons.sh` - it
   needs ImageMagick - or reinstall the image. An application you installed that
   shows no icon is a packaging problem of that application, not this one.
 
@@ -117,7 +117,7 @@ is missing or unparsable. The style is named by **absolute path** in
 the file it points at is `~/.config/glow/solarized.json`. To see the error:
 
 ```sh
-glow /usr/share/doc/nureb/01-welcome.md    # the message names the problem
+glow /usr/share/doc/lazyos/01-welcome.md    # the message names the problem
 ```
 
 ## A file does not open, or opens in the wrong place
@@ -140,12 +140,12 @@ means both `imv` and `chafa` are.
 ## The bar shows a spinner that never ends
 
 That card belongs to `~/.config/bin/bar-busy`: one file per running task lives in
-`$XDG_RUNTIME_DIR/nureb-busy`, and a task that is killed without `busy end`
+`$XDG_RUNTIME_DIR/lazyos-busy`, and a task that is killed without `busy end`
 leaves one behind. They expire after five minutes on their own; to clear them at
 once:
 
 ```sh
-rm -rf "$XDG_RUNTIME_DIR/nureb-busy"/* && pkill -RTMIN+8 waybar
+rm -rf "$XDG_RUNTIME_DIR/lazyos-busy"/* && pkill -RTMIN+8 waybar
 ```
 
 ## No notifications
@@ -162,7 +162,7 @@ A card **without its picture** is a different fault with no log line either: the
 notification arrived, but mako could not resolve the icon name the sender gave
 it. mako reads no icon-theme metadata - it walks the roots named by
 `icon-path` in `~/.config/mako/config`, which is where the session's own
-`/usr/share/icons/Nureb` has to be. `check-system.sh` reports both halves
+`/usr/share/icons/LazyOS` has to be. `check-system.sh` reports both halves
 (`icons=1` and an existing `icon-path`), and the names themselves are rendered by
 `scripts/make-icons.sh` on the build host.
 
@@ -217,7 +217,7 @@ one guess about how the panel's accelerometer is mounted, and units differ.
 Hold the card upright in your hands, screen facing you, in tablet mode, and run
 `~/.config/bin/tablet-mode calibrate` (or **Settings → Calibrate rotation**, which
 is only listed while the mode is on): it reads the sensor there and stores
-`normal=<axis><sign>` in `~/.config/nureb/tablet.conf`, one line, and the four
+`normal=<axis><sign>` in `~/.config/lazyos/tablet.conf`, one line, and the four
 positions are derived from it at once. `~/.config/bin/tablet-mode calibration`
 says `calibrated y-` or `default y-`; deleting the file goes back to the built-in
 mapping, and `check-system.sh` reports a calibration file that does not parse,

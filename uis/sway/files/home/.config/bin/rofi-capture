@@ -29,7 +29,7 @@ set -eu
 dir=$(dirname "$0")
 . "$dir/lib-rofi.sh"
 
-state=${XDG_RUNTIME_DIR:-/tmp}/nureb-capture
+state=${XDG_RUNTIME_DIR:-/tmp}/lazyos-capture
 mkdir -p "$state" 2>/dev/null || true
 
 rec_pid=$state/recording.pid
@@ -118,7 +118,7 @@ start_recording() { # [GEOMETRY]
 	fi
 	_geom=${1:-}
 	mkdir -p "$HOME/Videos" || exit 1
-	_file=$HOME/Videos/nureb-$(date +%Y%m%d-%H%M%S).mp4
+	_file=$HOME/Videos/lazyos-$(date +%Y%m%d-%H%M%S).mp4
 	if [ -n "$_geom" ]; then
 		setsid wf-recorder -c libx264 -p preset=veryfast -p crf=28 -r 30 \
 			-g "$_geom" -f "$_file" >"$state/recorder.log" 2>&1 &

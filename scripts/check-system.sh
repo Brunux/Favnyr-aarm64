@@ -685,15 +685,15 @@ fi
 # A notification icon is a name mako looks up on its icon-path, and one it cannot
 # find draws nothing at all: the card is text-only, with no log line and no error.
 # The names are lib-rofi.sh's UI_ICON_* constants.
-if [ -r "$HOME/.config/bin/lib-rofi.sh" ] && [ -d /usr/share/icons/Nureb ]; then
+if [ -r "$HOME/.config/bin/lib-rofi.sh" ] && [ -d /usr/share/icons/LazyOS ]; then
 	_missing_icon=
 	for _n in $(sed -n 's/^UI_ICON_[A-Z]*=\([a-z-]*\)$/\1/p' "$HOME/.config/bin/lib-rofi.sh"); do
-		ls /usr/share/icons/Nureb/*/apps/"$_n".png >/dev/null 2>&1 ||
+		ls /usr/share/icons/LazyOS/*/apps/"$_n".png >/dev/null 2>&1 ||
 			_missing_icon="$_missing_icon $_n"
 	done
 	[ -z "$_missing_icon" ] &&
-		ok "notification icons resolve in the Nureb theme" ||
-		warn "notification icon(s) missing from /usr/share/icons/Nureb:$_missing_icon (scripts/make-icons.sh)"
+		ok "notification icons resolve in the LazyOS theme" ||
+		warn "notification icon(s) missing from /usr/share/icons/LazyOS:$_missing_icon (scripts/make-icons.sh)"
 fi
 
 # mako reads icon-path itself (no theme metadata), so both halves have to be there
@@ -753,7 +753,7 @@ esac
 # card and runs it, and `busy cancelled` then answers 0 so the producer reports
 # nothing instead of half a result. The probe is one file in the runtime
 # directory and it is removed before this block ends.
-_busy_rt=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
+_busy_rt=${XDG_RUNTIME_DIR:-/tmp}/lazyos-busy
 _busy_bin="$HOME/.config/bin/busy"
 if [ ! -d "${XDG_RUNTIME_DIR:-/tmp}" ] || [ ! -w "${XDG_RUNTIME_DIR:-/tmp}" ]; then
 	skip "no writable runtime directory: the busy/stop protocol cannot be exercised here"
@@ -923,21 +923,21 @@ else
 	fail "fd is missing (package fd-find): rofi-files --search falls back to browsing"
 fi
 
-# Alt+Search asks the same question in a terminal: nureb-find streams fd into
-# fzf and hands the choice to nureb-view. There are four separate ways for that
+# Alt+Search asks the same question in a terminal: lazyos-find streams fd into
+# fzf and hands the choice to lazyos-view. There are four separate ways for that
 # key to look dead - no binding, a script without its executable bit, no fzf, no
 # opener - and the fzf one is a FAIL rather than a warning because a missing
 # filter is an *empty list*: the window opens, prints nothing, and reads as "no
 # such file" instead of as a missing package.
-if grep -qs 'Super_L+Mod1 exec .*nureb-find' "$HOME/.config/sway/config"; then
-	ok "Alt+Search opens the terminal file search (nureb-find)"
+if grep -qs 'Super_L+Mod1 exec .*lazyos-find' "$HOME/.config/sway/config"; then
+	ok "Alt+Search opens the terminal file search (lazyos-find)"
 else
-	fail "Alt+Search does not run 'nureb-find' in ~/.config/sway/config"
+	fail "Alt+Search does not run 'lazyos-find' in ~/.config/sway/config"
 fi
-if [ -x "$HOME/.config/bin/nureb-find" ]; then
-	ok "terminal file search (nureb-find) is executable"
+if [ -x "$HOME/.config/bin/lazyos-find" ]; then
+	ok "terminal file search (lazyos-find) is executable"
 else
-	fail "bin/nureb-find is missing or not executable: Alt+Search opens a foot window that closes at once"
+	fail "bin/lazyos-find is missing or not executable: Alt+Search opens a foot window that closes at once"
 fi
 if have fzf; then
 	ok "fzf present, which the terminal file search filters with"
@@ -946,8 +946,8 @@ else
 fi
 # Its notifications carry the search glyph, and a name mako cannot resolve draws
 # no picture at all: the card is text-only with no log line.
-[ -r /usr/share/icons/Nureb/48x48/apps/system-search.png ] ||
-	warn "the Nureb theme has no system-search icon: nureb-find's notifications are text-only"
+[ -r /usr/share/icons/LazyOS/48x48/apps/system-search.png ] ||
+	warn "the LazyOS theme has no system-search icon: lazyos-find's notifications are text-only"
 
 # Search inside files (Alt+Ctrl+G) is the other half of the Search key: rofi-files
 # finds a file by its name, rofi-grep by what is written in it. Two things take it
@@ -1018,6 +1018,74 @@ else
 	fail "format a disk incomplete:$_missing_fmt (the Places row does nothing)"
 fi
 
+# Auxiliary swap (rofi-swap) writes a swap partition and the fstab block that
+# activates it at boot. parted, mkswap, swapon/swapoff and blkid are the commands
+# it runs; a missing one is a menu that fails halfway, and the two rows that reach
+# it (Places and the root menu) are plain text that would still be drawn.
+_missing_aux=""
+for _c in parted mkswap swapon swapoff blkid; do
+	have "$_c" || _missing_aux="$_missing_aux $_c"
+done
+[ -x "$HOME/.config/bin/rofi-swap" ] || _missing_aux="$_missing_aux bin/rofi-swap"
+if [ -z "$_missing_aux" ]; then
+	ok "auxiliary swap complete (parted, mkswap, swapon, blkid, rofi-swap)"
+else
+	fail "auxiliary swap incomplete:$_missing_aux (the menu cannot prepare or activate a card)"
+fi
+
+# The card is optional, so no block is OK, not a FAIL. When there is one, the
+# options that keep a missing card from holding the boot are witnessed here:
+# nofail and a device timeout. The priority has to stay below zram's 100, or the
+# kernel round-robins between compressed RAM and the much slower card.
+_aux_opts=$(awk '$1 == "LABEL=lazyos_swap" && $3 == "swap" { print $4; exit }' /etc/fstab 2>/dev/null)
+if [ -z "$_aux_opts" ]; then
+	ok "no auxiliary swap configured"
+else
+	_aux_bad=""
+	case ",$_aux_opts," in *,nofail,*) ;; *) _aux_bad="$_aux_bad nofail" ;; esac
+	case ",$_aux_opts," in
+	*,x-systemd.device-timeout=*) ;;
+	*) _aux_bad="$_aux_bad x-systemd.device-timeout" ;;
+	esac
+	_aux_pri=
+	case ",$_aux_opts," in
+	*,pri=*)
+		_aux_pri=${_aux_opts#*pri=}
+		_aux_pri=${_aux_pri%%,*}
+		;;
+	esac
+	case ${_aux_pri:-} in
+	'' | *[!0-9]*) _aux_bad="$_aux_bad pri=" ;;
+	*) [ "$_aux_pri" -lt 100 ] || _aux_bad="$_aux_bad pri<100" ;;
+	esac
+	if [ -z "$_aux_bad" ]; then
+		ok "auxiliary swap fstab block is safe for a missing card (nofail, device timeout, priority $_aux_pri < 100)"
+	else
+		warn "auxiliary swap fstab options unsafe:$_aux_bad (a boot without the card waits, or zram stops winning)"
+	fi
+	_aux_dev=$(asroot blkid -L lazyos_swap 2>/dev/null)
+	if [ -z "$_aux_dev" ]; then
+		skip "auxiliary swap configured, card not inserted (nofail keeps the boot clean)"
+	else
+		# One line per device and zram comes first, so join them before `case`:
+		# a newline is not the space the pattern needs (this reported an active
+		# card as inactive).
+		_aux_swaps=$(swapon --show=NAME --noheadings 2>/dev/null | tr '\n' ' ' || true)
+		case " $_aux_swaps " in
+		*" $_aux_dev "*) ok "auxiliary swap active on $_aux_dev" ;;
+		*) warn "auxiliary swap configured on $_aux_dev but not active: open Auxiliary swap and set it up again" ;;
+		esac
+	fi
+fi
+
+# The two entry points are static rows, so they can outlive the script. Places is
+# the documented way in (the root menu's row is the second copy).
+if [ -r "$HOME/.config/bin/rofi-places" ]; then
+	grep -qs 'rofi-swap' "$HOME/.config/bin/rofi-places" &&
+		ok "Places lists the Auxiliary swap row" ||
+		fail "bin/rofi-places has no Auxiliary swap row: the disk menu is unreachable from Places"
+fi
+
 # The Learn menu's second row is the machine's own documentation: apropos searches
 # the whatis database man-db builds, and man renders the page. Without man-db both
 # are absent and the row reports a search that found nothing.
@@ -1044,11 +1112,11 @@ fi
 # The manual, the key view, dictation and hibernate. The first two are pure
 # scripts (a missing one is invisible: the menu entry just does nothing); the
 # last two depend on hardware and packages, so they warn instead of failing.
-_learn_pages=$(ls /usr/share/doc/nureb/*.md 2>/dev/null | wc -l)
+_learn_pages=$(ls /usr/share/doc/lazyos/*.md 2>/dev/null | wc -l)
 if [ "$_learn_pages" -ge 6 ] && [ -x "$HOME/.config/bin/rofi-learn" ]; then
 	ok "manual installed ($_learn_pages pages) and rofi-learn present"
 else
-	fail "manual incomplete: $_learn_pages page(s) in /usr/share/doc/nureb, rofi-learn $( [ -x "$HOME/.config/bin/rofi-learn" ] && echo present || echo missing)"
+	fail "manual incomplete: $_learn_pages page(s) in /usr/share/doc/lazyos, rofi-learn $( [ -x "$HOME/.config/bin/rofi-learn" ] && echo present || echo missing)"
 fi
 [ -x "$HOME/.config/bin/rofi-keys" ] && ok "keybindings view (rofi-keys) is executable" ||
 	fail "bin/rofi-keys is missing: the key view has no script"
@@ -1096,7 +1164,7 @@ _reminder=""
 have systemd-analyze || _reminder="$_reminder systemd-analyze"
 have notify-send || _reminder="$_reminder notify-send"
 have jq || _reminder="$_reminder jq"
-[ -r /usr/share/icons/Nureb/48x48/apps/preferences-system-time.png ] ||
+[ -r /usr/share/icons/LazyOS/48x48/apps/preferences-system-time.png ] ||
 	_reminder="$_reminder preferences-system-time.png"
 [ -x "$HOME/.config/bin/rofi-remind" ] || _reminder="$_reminder bin/rofi-remind"
 if [ -z "$_reminder" ]; then
@@ -1122,11 +1190,11 @@ fi
 # nothing - Colour was the one that had neither the row nor the `case` arm.
 if [ -r "$HOME/.config/bin/bar-menu" ]; then
 	_root_missing=
-	for _m in rofi-dns rofi-pkg rofi-color rofi-about rofi-remind; do
+	for _m in rofi-dns rofi-pkg rofi-color rofi-about rofi-remind rofi-swap; do
 		grep -qs "$_m" "$HOME/.config/bin/bar-menu" || _root_missing="$_root_missing ${_m#rofi-}"
 	done
 	[ -z "$_root_missing" ] &&
-		ok "root menu reaches DNS, Packages, Colour, About and Reminders" ||
+		ok "root menu reaches DNS, Packages, Colour, About, Reminders and Auxiliary swap" ||
 		fail "root menu has no entry for:$_root_missing (bar-menu)"
 fi
 
@@ -1155,10 +1223,10 @@ fi
 # list silently text-only, the same class of bug as the file browser's.
 if [ -r "$HOME/.config/bin/rofi-keys" ] &&
 	grep -qs -- '-show-icons' "$HOME/.config/bin/rofi-keys" &&
-	grep -qs -- '-icon-theme Nureb' "$HOME/.config/bin/rofi-keys"; then
-	ok "rofi-keys asks the theme for a picture per section (-show-icons, Nureb)"
+	grep -qs -- '-icon-theme LazyOS' "$HOME/.config/bin/rofi-keys"; then
+	ok "rofi-keys asks the theme for a picture per section (-show-icons, LazyOS)"
 else
-	warn "rofi-keys no longer passes -show-icons/-icon-theme Nureb: the key view shows no pictures"
+	warn "rofi-keys no longer passes -show-icons/-icon-theme LazyOS: the key view shows no pictures"
 fi
 
 # fastfetch exits when it has drawn, so without --hold the About window flashes
@@ -1200,10 +1268,10 @@ grep -qs 'bin/screenshot' /etc/sway/config.d/90-screenshot-shortcuts.conf &&
 grep -qs -- '"$dir/screenshot"' "$HOME/.config/bin/rofi-capture" &&
 	ok "the capture menu saves through bin/screenshot" ||
 	fail "rofi-capture calls grimshot directly: its screenshots land in \$HOME"
-if [ -r /usr/share/applications/org.nureb.screenshot-area.desktop ]; then
-	grep -qs 'Exec=.*bin/screenshot' /usr/share/applications/org.nureb.screenshot-area.desktop &&
+if [ -r /usr/share/applications/org.lazyos.screenshot-area.desktop ]; then
+	grep -qs 'Exec=.*bin/screenshot' /usr/share/applications/org.lazyos.screenshot-area.desktop &&
 		ok "the Screenshot (area) launcher entry uses bin/screenshot" ||
-		fail "org.nureb.screenshot-area.desktop still runs grimshot: that entry saves into \$HOME"
+		fail "org.lazyos.screenshot-area.desktop still runs grimshot: that entry saves into \$HOME"
 fi
 
 # Clipboard history (Alt+Ctrl+V) and the emoji picker (Alt+Ctrl+E): each is a
@@ -1302,7 +1370,7 @@ fi
 # The rotation reference is optional - the built-in -Y table is the default - but a
 # file that does not parse is ignored in silence by orient(), which reads as "the
 # rotation keeps turning back to the old way" after a calibration that claimed to work.
-_calib_pose="${XDG_CONFIG_HOME:-$HOME/.config}/nureb/tablet.conf"
+_calib_pose="${XDG_CONFIG_HOME:-$HOME/.config}/lazyos/tablet.conf"
 if [ ! -f "$_calib_pose" ]; then
 	skip "no rotation calibration ($_calib_pose): the built-in -Y reference is in use"
 else
@@ -1316,7 +1384,7 @@ fi
 # running while the mode is off is either a leftover from a session that was
 # killed mid-mode or something starting it at login; either way it covers the
 # bottom of the screen for no reason.
-if [ ! -d "${XDG_RUNTIME_DIR:-/tmp}/nureb-tablet" ]; then
+if [ ! -d "${XDG_RUNTIME_DIR:-/tmp}/lazyos-tablet" ]; then
 	if pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
 		warn "wvkbd-mobintl is running outside tablet mode (config.d/28-tablet.conf starts it on the switch only)"
 	fi
@@ -1359,7 +1427,7 @@ else
 	fail "/usr/local/bin/xdg-open is missing: ctrl+click in foot and URL-printing tools fail"
 fi
 # Thumbnails in the file browser: rofi draws a row's picture through
-# nureb-thumbnail, which is ffmpeg for images and video and pdftocairo for a
+# lazyos-thumbnail, which is ffmpeg for images and video and pdftocairo for a
 # PDF's first page. A missing binary is silent - the row simply has no picture -
 # so the two tools are a FAIL; the cache directory (rofi's own, under
 # ~/.cache/thumbnails) only warns, because it is created on first use.
@@ -1394,7 +1462,7 @@ fi
 if [ -x /usr/local/bin/imv ]; then
 	ok "the imv short name resolves (/usr/local/bin/imv -> the package dispatcher)"
 else
-	fail "/usr/local/bin/imv is missing: rofi-files and nureb-view cannot start the viewer"
+	fail "/usr/local/bin/imv is missing: rofi-files and lazyos-view cannot start the viewer"
 fi
 # mpv-mpris is a plugin file, not a program, so nothing else notices it: without
 # it the film plays and playerctl, the Media menu and the bar see no player.
@@ -1434,18 +1502,18 @@ else
 	warn "papers is missing: a PDF opens in Firefox instead of the reader (the fallback works, it is just the browser)"
 fi
 
-# Every row of the file browser carries an icon *name* the Nureb theme has to
+# Every row of the file browser carries an icon *name* the LazyOS theme has to
 # resolve; a missing PNG is a blank 32 px column with no log line anywhere.
 _missing_row_icons=""
 for _i in folder go-up view-hidden dialog-warning text-x-generic text-html \
 	application-pdf image-x-generic video-x-generic audio-x-generic \
 	application-x-executable package-x-generic x-office-document; do
-	[ -r "/usr/share/icons/Nureb/48x48/apps/$_i.png" ] || _missing_row_icons="$_missing_row_icons $_i"
+	[ -r "/usr/share/icons/LazyOS/48x48/apps/$_i.png" ] || _missing_row_icons="$_missing_row_icons $_i"
 done
 if [ -z "$_missing_row_icons" ]; then
-	ok "file browser icons present (the Nureb theme has every row name)"
+	ok "file browser icons present (the LazyOS theme has every row name)"
 else
-	warn "Nureb theme is missing row icons:$_missing_row_icons (those rows lose the icon column)"
+	warn "LazyOS theme is missing row icons:$_missing_row_icons (those rows lose the icon column)"
 fi
 
 # The GTK3 half of the palette. One window in this image is GTK3 (pcmanfm), and
@@ -1458,11 +1526,11 @@ if [ -r "$HOME/.config/gtk-3.0/gtk.css" ]; then
 else
 	warn "$HOME/.config/gtk-3.0/gtk.css is missing: pcmanfm renders in Adwaita's light grey"
 fi
-if grep -qs '^gtk-icon-theme-name=Nureb' "$HOME/.config/gtk-3.0/settings.ini" &&
+if grep -qs '^gtk-icon-theme-name=LazyOS' "$HOME/.config/gtk-3.0/settings.ini" &&
 	grep -qs '^gtk-application-prefer-dark-theme=1' "$HOME/.config/gtk-3.0/settings.ini"; then
-	ok "GTK3 windows use the Nureb icons on a dark base (gtk-3.0/settings.ini)"
+	ok "GTK3 windows use the LazyOS icons on a dark base (gtk-3.0/settings.ini)"
 else
-	warn "gtk-3.0/settings.ini does not select Nureb + dark: pcmanfm looks like a foreign program"
+	warn "gtk-3.0/settings.ini does not select LazyOS + dark: pcmanfm looks like a foreign program"
 fi
 
 # The windowed file manager is pcmanfm (the Files menu stays rofi-files, and the
@@ -1507,17 +1575,17 @@ fi
 _missing=
 for _icon in folder user-home user-trash text-x-generic application-pdf \
 	image-x-generic drive-harddisk view-refresh edit-copy folder-new; do
-	[ -r /usr/share/icons/Nureb/48x48/apps/"$_icon".png ] || _missing="$_missing $_icon"
+	[ -r /usr/share/icons/LazyOS/48x48/apps/"$_icon".png ] || _missing="$_missing $_icon"
 done
 if [ -z "$_missing" ]; then
-	ok "the Nureb theme carries every icon the file manager asks for"
+	ok "the LazyOS theme carries every icon the file manager asks for"
 else
-	warn "the Nureb theme has no icon for:$_missing (holes in pcmanfm's sidebar and icon view)"
+	warn "the LazyOS theme has no icon for:$_missing (holes in pcmanfm's sidebar and icon view)"
 fi
-if [ -x "$HOME/.config/bin/nureb-view" ]; then
-	ok "open-with handler installed (nureb-view: bat, imv, papers, mpv, firefox-esr)"
+if [ -x "$HOME/.config/bin/lazyos-view" ]; then
+	ok "open-with handler installed (lazyos-view: bat, imv, papers, mpv, firefox-esr)"
 else
-	fail "bin/nureb-view is missing or not executable: a double click in pcmanfm opens nothing"
+	fail "bin/lazyos-view is missing or not executable: a double click in pcmanfm opens nothing"
 fi
 # The launcher entry is a shadow of the package's (same file name, so it replaces
 # Debian's "PCMan File Manager"): without it the launcher shows "Files" (the
@@ -1529,7 +1597,7 @@ else
 fi
 # `gio mime` resolves the association exactly like the application does, and it
 # is also a test of the .desktop entry itself: GIO drops an entry whose Exec
-# program does not exist, so a nureb-view without its executable bit reads as
+# program does not exist, so a lazyos-view without its executable bit reads as
 # "no default application" instead of as an error. LC_ALL=C so the label is the
 # one this greps for, not a translation.
 #
@@ -1540,7 +1608,7 @@ fi
 # the same variable: the desktop id, nothing else.
 _mime_default() { # MIME-TYPE
 	if have gio; then
-		# gio's line is `Default application for “image/png”: org.nureb.view.desktop`
+		# gio's line is `Default application for “image/png”: org.lazyos.view.desktop`
 		# (typographic quotes, and the type before the colon), or
 		# `No default applications for “...”` when there is none - the field
 		# after the last `: ` is the answer in the first shape and absent in
@@ -1553,10 +1621,10 @@ _mime_default() { # MIME-TYPE
 	fi
 }
 _mime=$(_mime_default image/png)
-if [ "$_mime" = org.nureb.view.desktop ]; then
-	ok "a double click on an image reaches nureb-view (mimeapps.list)"
+if [ "$_mime" = org.lazyos.view.desktop ]; then
+	ok "a double click on an image reaches lazyos-view (mimeapps.list)"
 else
-	warn "image/png defaults to '${_mime:-(nothing)}', not org.nureb.view.desktop: a photo opens in the browser or nowhere"
+	warn "image/png defaults to '${_mime:-(nothing)}', not org.lazyos.view.desktop: a photo opens in the browser or nowhere"
 fi
 # A document is papers' job, and the association is the half a package cannot
 # carry: papers ships org.gnome.Papers.desktop, and this file is what points
@@ -1597,7 +1665,7 @@ if [ -n "$_hib_swap" ]; then
 	*) warn "disk swap $_hib_swap is active but the kernel command line has no resume=: hibernate would not resume" ;;
 	esac
 else
-	skip "no disk swap: hibernation needs a swap labelled nureb_swap (see sway-hibernate)"
+	skip "no disk swap: hibernation needs a swap labelled lazyos_swap (see sway-hibernate)"
 fi
 [ -x "$HOME/.config/bin/sway-hibernate" ] || fail "bin/sway-hibernate is missing"
 
@@ -1612,13 +1680,12 @@ for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_
 
 # The session's own launcher entries. They are the only way to reach the bar's
 # panels and the session actions by typing, and a missing one is invisible: the
-# list simply has fewer rows and nobody notices. The idle screen's entry is the
-# one that is not org.nureb.*: its name is LazyOS's (the rest of the distro is
-# still Nureb until the rename lands).
+# list simply has fewer rows and nobody notices. The idle screen's entry is
+# checked apart because it is the one the brand owns: its name is the mark's.
 _missing_desktop=""
 for _d in wifi wifi-nmtui bluetooth audio-output power lock suspend \
 	screenshot-area capture lazygit tmux files emoji clipboard; do
-	[ -r "/usr/share/applications/org.nureb.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
+	[ -r "/usr/share/applications/org.lazyos.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
 done
 [ -r /usr/share/applications/org.lazyos.screensaver.desktop ] ||
 	_missing_desktop="$_missing_desktop lazyos-screensaver"
@@ -1723,16 +1790,16 @@ if have fc-list && [ -r "$_alphabet" ]; then
 fi
 
 # The launcher shows application *images*, and Debian's Adwaita has none of this
-# session's names, so the image ships the small Nureb theme (48x48 PNGs rendered
-# from the Font Awesome codepoints). Without it every org.nureb.* row is a hole.
+# session's names, so the image ships the small LazyOS theme (48x48 PNGs rendered
+# from the Font Awesome codepoints). Without it every org.lazyos.* row is a hole.
 _icons=""
-[ -d /usr/share/icons/Nureb ] || _icons="$_icons /usr/share/icons/Nureb"
-[ -r /usr/share/icons/Nureb/index.theme ] || _icons="$_icons Nureb/index.theme"
+[ -d /usr/share/icons/LazyOS ] || _icons="$_icons /usr/share/icons/LazyOS"
+[ -r /usr/share/icons/LazyOS/index.theme ] || _icons="$_icons LazyOS/index.theme"
 _iconless=""
 # The session's own entries, plus the viewer packages': their Icon= is not their
 # binary name (imv asks for multimedia-photo-viewer, papers for org.gnome.Papers)
 # and Adwaita 51 has neither, so the same hole appears on those rows.
-for _d in /usr/share/applications/org.nureb.*.desktop \
+for _d in /usr/share/applications/org.lazyos.*.desktop \
 	/usr/share/applications/org.gnome.Papers.desktop \
 	/usr/share/applications/imv.desktop \
 	/usr/share/applications/mpv.desktop; do
@@ -1742,13 +1809,13 @@ for _d in /usr/share/applications/org.nureb.*.desktop \
 		case $_line in Icon=*) _icon=${_line#Icon=}; break ;; esac
 	done <"$_d"
 	[ -n "$_icon" ] || continue
-	[ -r "/usr/share/icons/Nureb/48x48/apps/$_icon.png" ] && continue
+	[ -r "/usr/share/icons/LazyOS/48x48/apps/$_icon.png" ] && continue
 	# An application's own icon (hicolor, pixmaps) is fine too.
 	[ -n "$(find /usr/share/icons /usr/share/pixmaps -name "$_icon.*" 2>/dev/null | head -1)" ] && continue
 	_iconless="$_iconless $(basename "$_d" .desktop)=$_icon"
 done
 if [ -z "$_icons" ] && [ -z "$_iconless" ]; then
-	ok "launcher icons complete (Nureb theme, every session entry resolves)"
+	ok "launcher icons complete (LazyOS theme, every session entry resolves)"
 elif [ -z "$_icons" ]; then
 	fail "launcher entries without an icon:$_iconless (a hole in the launcher row)"
 else
@@ -1760,7 +1827,7 @@ fi
 # names too.  Missing ones are a blank 26 px column, not an error.
 _runless=""
 for _c in foot btop htop lazygit tmux nvim fzf rg bat eza mpv imv firefox-esr; do
-	[ -r "/usr/share/icons/Nureb/48x48/apps/$_c.png" ] || _runless="$_runless $_c"
+	[ -r "/usr/share/icons/LazyOS/48x48/apps/$_c.png" ] || _runless="$_runless $_c"
 done
 if [ -z "$_runless" ]; then
 	ok "command palette icons present (the run mode resolves binaries by name)"
@@ -1772,11 +1839,11 @@ if have grep; then
 	_cfg_rasi="$HOME/.config/rofi/config.rasi"
 	if [ -r "$_cfg_rasi" ]; then
 		_show=$(grep -c 'show-icons: *true' "$_cfg_rasi" 2>/dev/null || true)
-		_theme=$(grep -c 'icon-theme: *"Nureb"' "$_cfg_rasi" 2>/dev/null || true)
+		_theme=$(grep -c 'icon-theme: *"LazyOS"' "$_cfg_rasi" 2>/dev/null || true)
 		if [ "${_show:-0}" -ge 1 ] && [ "${_theme:-0}" -ge 1 ]; then
-			ok "rofi shows icons from the Nureb theme (show-icons, icon-theme)"
+			ok "rofi shows icons from the LazyOS theme (show-icons, icon-theme)"
 		else
-			warn "rofi/config.rasi does not enable show-icons and icon-theme \"Nureb\""
+			warn "rofi/config.rasi does not enable show-icons and icon-theme \"LazyOS\""
 		fi
 	fi
 fi

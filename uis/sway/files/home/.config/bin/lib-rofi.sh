@@ -109,7 +109,7 @@ UI_I_DESKTOP=$(printf '\357\204\210')   # f108
 UI_I_CHIP=$(printf '\357\213\233')   # f2db
 
 # The notification icons are *names*, not glyphs: mako resolves them through the
-# icon theme, and ~/.config/mako/config puts /usr/share/icons/Nureb on its
+# icon theme, and ~/.config/mako/config puts /usr/share/icons/LazyOS on its
 # icon-path.  The names below are the ones scripts/make-icons.sh renders into
 # that theme (its index.theme inherits Adwaita and hicolor for everything it does
 # not ship), so a notification answers "what is this about" the same way a row
@@ -217,6 +217,55 @@ ui_heading() {
 		"$UI_DIM" "$(ui_esc "${1:-}")"
 }
 
+# The ChromeOS kernel partition type.  A disk that carries one is a disk this
+# firmware can load a kernel from, which makes it a system disk and never a
+# candidate: the eMMC and both cards of this machine are excluded by it, whatever
+# their device names are (p1 of the layout in scripts/lib-cgpt.sh).
+UI_KERN_TYPE=fe3a2a5d-4f32-41a7-b725-accc3285a309
+
+# ui_disks PREFIX [COLOUR]: one row per disk this session may write to.
+#
+# The safety is the list, not the question, and this is the one copy of it: a disk
+# with anything mounted on it is not offered (that excludes the running root,
+# /boot and every stick udisks mounted - and a busy disk would fail halfway
+# anyway), a disk carrying a **ChromeOS kernel partition** is not offered, and
+# zram, loop and optical devices are not disks a person writes to.  What is left
+# has nothing this system needs on it; the caller still confirms, but it can only
+# confirm one of these.
+#
+# PREFIX is the key the caller gets back (`fmt:sda`, `swap:mmcblk1`), so the same
+# rows can feed two menus without either one guessing what the other does.
+ui_disks() {
+	_ui_disk_prefix=${1:-disk}
+	_ui_disk_colour=${2:-$UI_YELLOW}
+	lsblk -dnro NAME,SIZE,MODEL,TRAN 2>/dev/null | while read -r name size model tran; do
+		[ -n "${name:-}" ] || continue
+		# zram, loop, ram and optical devices are not disks a person writes to.
+		# Neither is the SPI flash (mtd*, the firmware this port must never
+		# touch) nor the eMMC's boot0/boot1 hardware partitions (mmcblk*boot*,
+		# 4 MB each, listed by lsblk as disks of their own).  The last group is
+		# pseudo/foreign block devices a session has no business formatting.
+		case $name in
+		zram* | loop* | ram* | sr* | mtd* | mmcblk*boot* | mmcblk*rpmb | dm-* | md* | nbd* | rbd*)
+			continue
+			;;
+		esac
+		# Anything mounted, on the disk itself or on a partition of it.  An
+		# active swap partition shows [SWAP] here, so it is excluded too.
+		_ui_disk_mnt=$(lsblk -nro MOUNTPOINT "/dev/$name" 2>/dev/null | tr -d '[:space:]' || true)
+		[ -z "$_ui_disk_mnt" ] || continue
+		# A bootable disk: one PARTTYPE read, matched with case so that no
+		# `producer | grep -q` pipeline can report a false negative.
+		_ui_disk_types=$(lsblk -nro PARTTYPE "/dev/$name" 2>/dev/null || true)
+		case $_ui_disk_types in *"$UI_KERN_TYPE"*) continue ;; esac
+		# -r escapes a space in a model as \x20; the row shows a model, not an
+		# escape sequence ("USB\x20DISK\x203.0" is not what a person reads).
+		_ui_disk_model=$(printf '%s' "${model:-unknown model}" | sed 's/\\x20/ /g')
+		ui_row "$UI_I_DISK" "/dev/$name" \
+			"$_ui_disk_model · $size${tran:+ · $tran}" "$_ui_disk_prefix:$name" "$_ui_disk_colour"
+	done
+}
+
 # ui_width FILE: the window width, as a rofi distance, that the rows in FILE need.
 # Rofi cannot scroll a row sideways, so a row wider than the box is cut with an
 # ellipsis and the end - which for a path is the part that identifies it - is what
@@ -276,7 +325,7 @@ ui_width() {
 
 # ui_pick PROMPT [MESSAGE] < rows: prints the chosen key, exits 1 on Escape.
 ui_pick() {
-	_ui_file=$(mktemp "${TMPDIR:-/tmp}/nureb-menu.XXXXXX") || return 1
+	_ui_file=$(mktemp "${TMPDIR:-/tmp}/lazyos-menu.XXXXXX") || return 1
 	cat >"$_ui_file"
 	_ui_width=$(ui_width "$_ui_file")
 	if [ -n "${2:-}" ]; then
@@ -314,7 +363,7 @@ ui_pick() {
 # binding, which both of this port's callers do ("Alt+1 deletes that entry"), in
 # which case repeating it would be noise.
 ui_pick_alt() {
-	_ui_file=$(mktemp "${TMPDIR:-/tmp}/nureb-menu.XXXXXX") || return 1
+	_ui_file=$(mktemp "${TMPDIR:-/tmp}/lazyos-menu.XXXXXX") || return 1
 	cat >"$_ui_file"
 	_ui_bind=${3:-Alt+1}
 	_ui_bind=${_ui_bind%% *}
@@ -348,8 +397,8 @@ ui_pick_alt() {
 # and the caller that knows better (a copied clipboard entry, a deleted one) says
 # that instead.
 ui_say() {
-	notify-send -a Nureb -i "${4:-$UI_ICON_INFO}" -u "${3:-normal}" \
-		"${1:-Nureb}" "${2:-}" 2>/dev/null || true
+	notify-send -a LazyOS -i "${4:-$UI_ICON_INFO}" -u "${3:-normal}" \
+		"${1:-LazyOS}" "${2:-}" 2>/dev/null || true
 }
 
 # ui_copy TEXT [NOTE]

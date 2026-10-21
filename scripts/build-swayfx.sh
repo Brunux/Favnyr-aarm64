@@ -26,7 +26,7 @@ MULTIARCH="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
 LDCONFIG="$(command -v ldconfig || printf /sbin/ldconfig)"
 # Debian packaging revision: a change to the packaging itself (not the upstream
 # source) bumps this, so apt sees an upgrade.
-PACKAGING_REVISION="1nureb1"
+PACKAGING_REVISION="1lazyos1"
 SCENEFX_PKG_VERSION="$SCENEFX_VERSION-$PACKAGING_REVISION"
 COMPOSITOR_PKG_VERSION="$COMPOSITOR_VERSION-$PACKAGING_REVISION"
 
@@ -149,7 +149,7 @@ build_deb() {
 		printf 'Package: %s\n' "$name"
 		printf 'Version: %s\n' "$version"
 		printf 'Architecture: %s\n' "$ARCH"
-		printf 'Maintainer: %s\n' "Nureb builder <builder@localhost>"
+		printf 'Maintainer: %s\n' "LazyOS builder <builder@localhost>"
 		printf 'Installed-Size: %s\n' "$size"
 		if [ -n "$depends" ]; then printf 'Depends: %s\n' "$depends"; fi
 		printf 'Section: x11\n'

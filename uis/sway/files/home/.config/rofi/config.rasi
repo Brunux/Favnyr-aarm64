@@ -53,22 +53,22 @@ configuration {
      * lists this port draws itself carry a font glyph instead (lib-rofi.sh),
      * which costs nothing, follows the palette and is already how the bar is
      * drawn - except the file browser, whose rows carry a real thumbnail
-     * (rofi-files, 32 px, made by ~/.config/bin/nureb-thumbnail), and rofi-keys,
+     * (rofi-files, 32 px, made by ~/.config/bin/lazyos-thumbnail), and rofi-keys,
      * which asks this theme for one icon per category by name (-show-icons).
      *
      * bar-pick passes -no-show-icons, so the bar's popups keep the tighter
      * text-only layout.
      *
-     * The theme is Nureb, not Adwaita: Debian's Adwaita 51 ships only monochrome
+     * The theme is LazyOS, not Adwaita: Debian's Adwaita 51 ships only monochrome
      * *symbolic* icons and not one of the application names this session uses,
      * so the launcher showed a hole where an icon should be. The overlay ships
      * a solarized line icon per session entry (terminal, folder, gear, bell,
-     * power...) in usr/share/icons/Nureb, and its index.theme inherits Adwaita
+     * power...) in usr/share/icons/LazyOS, and its index.theme inherits Adwaita
      * and hicolor, so an application that brings its own icon (foot, btop,
      * htop) still gets it in colour.  scripts/make-icons.sh renders them, both
      * the launcher's names and the category names rofi-keys asks for. */
     show-icons: true;
-    icon-theme: "Nureb";
+    icon-theme: "LazyOS";
 
     /* fzf-style matching, as tofi and fuzzel did. */
     matching: "fuzzy";

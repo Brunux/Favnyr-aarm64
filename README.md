@@ -16,8 +16,8 @@ First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada
   **dictation**, **agents**, tablet mode, and the **LazyOS** idle screen and lock (see
   [Using the system](#using-the-system)).
 - **Using it:** [Using the system](#using-the-system) below, and the manual that ships in the image
-  (`/usr/share/doc/nureb/`, or **Learn** in the launcher) - its sources are
-  [`uis/sway/files/usr/share/doc/nureb/`](uis/sway/files/usr/share/doc/nureb/).
+  (`/usr/share/doc/lazyos/`, or **Learn** in the launcher) - its sources are
+  [`uis/sway/files/usr/share/doc/lazyos/`](uis/sway/files/usr/share/doc/lazyos/).
 - **The session in detail:** [`uis/sway/README.md`](uis/sway/README.md) · **the compositor:**
   [`compositors/swayfx/README.md`](compositors/swayfx/README.md)
 - **Measured device tuning:** [`docs/optimization.md`](docs/optimization.md)
@@ -81,9 +81,9 @@ from the on-image copy of the repository: it writes `/dev/mmcblk0` and destroys 
 ## Using the system
 
 What the image boots into, and how to learn the rest without leaving the machine. Everything
-here is also in the manual the image carries: **Learn** in the launcher, or `/usr/share/doc/nureb/` on
+here is also in the manual the image carries: **Learn** in the launcher, or `/usr/share/doc/lazyos/` on
 the machine, or the same files under
-[`uis/sway/files/usr/share/doc/nureb/`](uis/sway/files/usr/share/doc/nureb/) here.
+[`uis/sway/files/usr/share/doc/lazyos/`](uis/sway/files/usr/share/doc/lazyos/) here.
 
 ### First login
 
@@ -131,7 +131,7 @@ The full tour is the manual's *Shortcuts* page, and the live list is Alt+Ctrl+K.
 
 ![The launcher, with the icons rendered from the icon fonts](docs/screenshots/hayato-r1-launcher.png)
 
-*The launcher. Debian's Adwaita has no application icons, so the session ships a small **Nureb**
+*The launcher. Debian's Adwaita has no application icons, so the session ships a small **LazyOS**
 theme: the same Font Awesome codepoints the bar and the menus draw, rendered once to 48x48 PNGs by
 `scripts/make-icons.sh`. Applications that bring their own icon still show theirs.*
 
@@ -156,8 +156,12 @@ in range"` turns the card into the answer.*
   via `CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`). Usage meters are planned, not built; see
   [`docs/plan-agents.md`](docs/plan-agents.md).
 * **Hibernate** - refused unless a **disk** swap (not zram) of at least 2/5 of RAM exists *and* the
-  kernel command line carries `resume=` (a swap partition labelled `nureb_swap` is the intended
+  kernel command line carries `resume=` (a swap partition labelled `lazyos_swap` is the intended
   wiring). Each missing condition says what to do.
+* **Auxiliary swap** - Places → **Auxiliary swap** (also the root menu): pick a card, confirm, and it
+  becomes a `lazyos_swap` partition that is active now and on every boot, with priority 10 so zram
+  (100) is used first. The same disk list as Format a disk; `nofail` and a 15 s device timeout keep
+  a boot without the card clean. The **Turn it off** row undoes it.
 * **Screenshots** - region, full screen, or region to the clipboard.
 
 ### The terminal
@@ -170,18 +174,18 @@ in range"` turns the card into the answer.*
 ### Health, updates and the boot partition
 
 ```sh
-check-system.sh ~/Dev/Nureb     # OK/WARN/FAIL, one line per check (also /usr/local/sbin)
+check-system.sh ~/Dev/LazyOS     # OK/WARN/FAIL, one line per check (also /usr/local/sbin)
 ```
 
 The kernel is **inside** the ChromeOS kernel partition (`p1`), not only in `/boot`, so after a kernel
-update the partition has to be rewritten: `sudo ~/Dev/Nureb/scripts/install-kpart.sh`. The
+update the partition has to be rewritten: `sudo ~/Dev/LazyOS/scripts/install-kpart.sh`. The
 manual's *The system* page explains the layout, suspend, hibernate, backups and the firmware menu.
 
 ### Where to read more
 
 | Topic | File |
 |---|---|
-| the manual as shipped (welcome, rofi, shortcuts, software, the system, troubleshooting, agents) | [`uis/sway/files/usr/share/doc/nureb/`](uis/sway/files/usr/share/doc/nureb/) |
+| the manual as shipped (welcome, rofi, shortcuts, software, the system, troubleshooting, agents) | [`uis/sway/files/usr/share/doc/lazyos/`](uis/sway/files/usr/share/doc/lazyos/) |
 | the session: bar, launcher, idle screen, CLI tools, deviations from Nura | [`uis/sway/README.md`](uis/sway/README.md) |
 | the compositor: why swayfx, its effects policy, the packaging | [`compositors/swayfx/README.md`](compositors/swayfx/README.md) |
 | why the device is tuned the way it is (MGLRU, schedutil, HZ, zram, THP) | [`docs/optimization.md`](docs/optimization.md) |
@@ -353,7 +357,7 @@ the repository follows a few rules:
 - **`AGENTS.md` is the contract** for the agent: it records the device facts, the boot chain, the
   gotchas and the commands. Agents should update it as they learn.
 - **Icons first, never forced.** A thing the session shows carries a picture when its surface can
-  draw one (`UI_I_*` glyph in the menus and notifications, a Nureb theme name in the launcher, the
+  draw one (`UI_I_*` glyph in the menus and notifications, a LazyOS theme name in the launcher, the
   file list and the notifications), and the terminal tools are chosen for the same taste (`eza
   --icons`, `bat`, `glow`, fzf's preview pane) when a plainer one prints the same facts. A surface
   that cannot draw one - an fzf row in foot, the health report other scripts grep - says so instead

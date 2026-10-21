@@ -30,11 +30,11 @@ progress-color=over #2aa198ff
 # The notification's picture.  notify-send -i takes either a path or a *name*, and
 # a name is resolved by mako searching icon-path for <size>/<category>/<name>.png.
 # mako reads no icon-theme metadata at all (its man page says the search only
-# approximates the XDG spec), so what goes here is the theme root: the Nureb
+# approximates the XDG spec), so what goes here is the theme root: the LazyOS
 # theme this session ships, whose index.theme inherits Adwaita and hicolor - and
 # those two are searched anyway (with /usr/share/pixmaps), which is how an icon
 # this image does not render (a browser, a package) still resolves.
-icon-path=/usr/share/icons/Nureb
+icon-path=/usr/share/icons/LazyOS
 # 48 is the size of the PNGs scripts/make-icons.sh renders, so the fixed-size copy
 # is used as it is and nothing is scaled; the icon sits inside the card's 12 px
 # padding, next to text at 11 px.

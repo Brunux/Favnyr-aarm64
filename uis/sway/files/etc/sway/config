@@ -25,7 +25,7 @@ set $term foot
 # Your preferred application launcher. rofi does three jobs with one binary and
 # one theme (~/.config/rofi/{config,solarized}.rasi): the applications
 # ($launcher, the .desktop entries including this port's own session actions in
-# usr/share/applications/org.nureb.*), the command palette ($runner, $PATH, where
+# usr/share/applications/org.lazyos.*), the command palette ($runner, $PATH, where
 # Shift+Enter runs the choice in foot) and the window switcher ($switcher, which
 # sway does not have). See uis/sway/README.md, "The launcher".
 set $launcher rofi -show drun

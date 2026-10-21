@@ -1,6 +1,6 @@
-# Welcome to Nureb
+# Welcome to LazyOS
 
-Nureb is Debian (**forky**, arm64) running on a Google **Hayato**: the ASUS
+LazyOS is Debian (**forky**, arm64) running on a Google **Hayato**: the ASUS
 Chromebook Detachable CM3 with a MediaTek **MT8192** ("Asurada") SoC, 4 GB of RAM
 and a 58 GB eMMC. It is not a Debian remix: the hardware support comes from
 Nura (the postmarketOS-based system this port started from), and Debian supplies
@@ -41,9 +41,9 @@ At 300 s the screen locks instead: the wallpaper inside a base03 frame. The lock
 first and refuses to draw a second time over itself, and the suspend shortcuts lock the screen
 *before* the machine sleeps, so nothing behind the lock is ever on screen.
 
-The name is on purpose. The idle screen is the first piece of the **LazyOS** rename (the rest of the
-system still calls itself Nureb), and "lazy by design" is the idea the lazy tools share - lazygit,
-lazydocker: the tool does the boring part, and the thing to press is on the screen.
+The name is on purpose. **LazyOS** is the distribution, "lazy by design" is what it promises, and
+the idea is the one the lazy tools share - lazygit, lazydocker: the tool does the boring part, and
+the thing to press is on the screen.
 
 ## Where things live
 
@@ -54,8 +54,8 @@ lazydocker: the tool does the boring part, and the thing to press is on the scre
 | `~/.config/{bar-*,rofi-keys,rofi-learn,dictate,sway-*}` | the scripts the bar and the keys call |
 | `~/.config/{waybar,foot,rofi,mako}/` | the look of each piece |
 | `~/.config/bin/` | every script this desktop ships; they are all plain shell |
-| `/usr/share/doc/nureb/` | these pages |
-| `~/Dev/Nureb/` | a **snapshot** of the repository this image was built from, with a `REVISION` file naming the commit. The directory is named after the repository: if it is ever renamed, the copy takes the new name |
+| `/usr/share/doc/lazyos/` | these pages |
+| `~/Dev/LazyOS/` | a **snapshot** of the repository this image was built from, with a `REVISION` file naming the commit. The directory is named after the repository: if it is ever renamed, the copy takes the new name |
 
 That last one matters: the image carries the tested tree, and the scripts that
 rewrite the kernel partition (`scripts/install-kpart.sh`) or back the system up
@@ -66,7 +66,7 @@ than you think.
 ## Is everything healthy?
 
 ```sh
-check-system.sh ~/Dev/Nureb
+check-system.sh ~/Dev/LazyOS
 ```
 
 It prints one line per check (`OK`, `WARN`, `FAIL`, `SKIP`), and every check maps

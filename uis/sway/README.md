@@ -32,10 +32,10 @@ launcher, waybar and the foot terminal.
 | `home/.config/bin/sway-hibernate` | Hibernate, gated on a disk swap and `resume=`. |
 | `home/.config/bin/rofi-agents` | **Agents**: launch a coding agent, install one, keep accounts per agent. |
 | `home/.config/bin/rofi-capture`, `rofi-qr`, `screenshot` | **Capture** (screenshot, annotate, OCR, QR, record), the Wi-Fi QR code, and the one place a screenshot's folder is decided (`~/Pictures/Screenshots/<today>/`). |
-| `home/.config/bin/rofi-files`, `nureb-thumbnail`, `nureb-view` | The file browser, the thumbnail generator it calls, and the "open with Nureb" rule (text/bat, document/papers, image/imv, video/mpv, the rest/Firefox). |
-| `home/.config/bin/nureb-find` | **Alt+Search**: `fd` streamed into `fzf` over the whole home, with a preview pane (see **Files in a terminal**). |
+| `home/.config/bin/rofi-files`, `lazyos-thumbnail`, `lazyos-view` | The file browser, the thumbnail generator it calls, and the "open with LazyOS" rule (text/bat, document/papers, image/imv, video/mpv, the rest/Firefox). |
+| `home/.config/bin/lazyos-find` | **Alt+Search**: `fd` streamed into `fzf` over the whole home, with a preview pane (see **Files in a terminal**). |
 | `home/.config/bin/rofi-power` | **Power** menu: lock, suspend, hibernate, log out, reboot, shut down (the last three ask first). |
-| `usr/share/doc/nureb/*.md` | The seven manual pages the Learn menu opens. |
+| `usr/share/doc/lazyos/*.md` | The seven manual pages the Learn menu opens. |
 | `home/.config/rofi/config.rasi` | Launcher settings: the three modes, `terminal = foot`, matching. |
 | `home/.config/rofi/solarized.rasi` | The solarized look, shared by the launcher, the window switcher and the bar's dmenu. |
 | `home/.config/foot/foot.ini` | Solarized palette, JetBrains Mono and the Nerd Font fallback for the session terminal and the bar's popups. |
@@ -94,7 +94,7 @@ Three jobs, one binary: **rofi** 2.0, themed by `~/.config/rofi/config.rasi` (se
 
 | Binding | Command | What it lists |
 |---|---|---|
-| `$mod+d` | `rofi -show drun` | the `.desktop` entries, including the port's own session actions in `usr/share/applications/org.nureb.*` |
+| `$mod+d` | `rofi -show drun` | the `.desktop` entries, including the port's own session actions in `usr/share/applications/org.lazyos.*` |
 | Search key | `rofi-files --search` | every file under `$HOME`, newest first, narrowed by typing (one bounded `fd` run; see "The file browser") |
 | `$mod+Tab` | `rofi -show window` | the open windows, through wlroots' `zwlr_foreign_toplevel_manager_v1` - sway has no switcher of its own |
 | `$mod+Shift+d` | `rofi -show run` | every executable in `$PATH`; **Enter** runs it, **Shift+Enter** runs it in foot, which is how the TUIs from `packages/tools.list` are started |
@@ -114,7 +114,7 @@ was measured in:
 | Launcher | PSS while open | Notes |
 |---|---|---|
 | **rofi**, drun, this theme | **15.7-17.1 MB** | text only |
-| rofi, drun, **icons on**, ten rows | **13.2 MB** | measured again with the Nureb icon theme: only the visible rows are decoded, and the 57 MB figure came from a run that decoded far more |
+| rofi, drun, **icons on**, ten rows | **13.2 MB** | measured again with the LazyOS icon theme: only the visible rows are decoded, and the 57 MB figure came from a run that decoded far more |
 | rofi, `-dmenu` (a bar click) | 14.2-15.6 MB | |
 | rofi, `-show window` | 16.7 MB | |
 | tofi, drun (before) | 14.6 MB | applications only; its run mode just printed the selection |
@@ -147,8 +147,8 @@ Notifications are a fourth consumer of the same theme, through mako's `icon-path
 Debian's Adwaita 51 ships only monochrome *symbolic* icons and not one of this session's
 names - a drun row for "Files" had a hole where its icon should be - and the one full-colour
 theme in the archive (`papirus-icon-theme`) is 190 MB installed. So `scripts/make-icons.sh`
-renders the same Font Awesome codepoints into 48x48 PNGs and they ship as a small **Nureb**
-icon theme (`usr/share/icons/Nureb`), whose `index.theme` inherits Adwaita and hicolor: an
+renders the same Font Awesome codepoints into 48x48 PNGs and they ship as a small **LazyOS**
+icon theme (`usr/share/icons/LazyOS`), whose `index.theme` inherits Adwaita and hicolor: an
 application that brings its own icon (foot, btop, htop, anything installed later) still shows
 it in colour. The bar's popups pass `-no-show-icons` because they draw their own glyph.
 
@@ -156,7 +156,7 @@ The theme holds **three tables**, because three different things ask it for a na
 
 | Table | Who asks | Example |
 |---|---|---|
-| `.desktop` names | the launcher (`rofi -show drun`) | `org.nureb.files` |
+| `.desktop` names | the launcher (`rofi -show drun`) | `org.lazyos.files` |
 | binary names | the command palette (`rofi -show run`) | `foot.png`, `htop.png` |
 | freedesktop names | `rofi-files` rows and mako notifications | `folder`, `text-x-generic`, `application-pdf`, `dialog-error` |
 
@@ -183,7 +183,7 @@ empty spans, which is what the check for an empty canvas in the script now preve
 has to offer the icons through a *scalable* directory: a theme that shipped only `26x26` resolved
 nothing in rofi, while `48x48` plus a scalable entry does.
 
-![The launcher: the session's entries with Nureb icons, and foot's own hicolor icon](../../docs/screenshots/hayato-r1-launcher.png)
+![The launcher: the session's entries with LazyOS icons, and foot's own hicolor icon](../../docs/screenshots/hayato-r1-launcher.png)
 
 Two behaviours were verified rather than assumed: `rofi -dmenu` exits 1 on Escape, which is
 what `bar-pick`'s callers' `|| exit 0` relies on, and drun honours `Terminal=true` through
@@ -209,6 +209,7 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 | `rofi-kill` | End a process | the heaviest twenty by resident memory; SIGTERM, then an explicit offer of SIGKILL |
 | `rofi-tz` | Time zone | `timedatectl list-timezones` with the current one marked, and the network-clock switch. It restarts waybar afterwards: `timedatectl` only rewrites `/etc/localtime`, and a running process keeps the zone glibc cached the first time it called `localtime()` |
 | `rofi-places` | Places | home, documents, downloads, pictures, every mounted filesystem, and a **Mount** row for each unmounted one (a USB stick, an SD card) through `udisks2`; Enter browses there with `rofi-files`, Alt+1 unmounts the disk under the row |
+| `rofi-swap`, `rofi-format` | Places (swap is also in the root menu) | the two disk actions, both drawn from `ui_disks` in `lib-rofi.sh` (nothing mounted, no ChromeOS kernel partition, no SPI flash or eMMC boot partition): **swap** turns a card into a `lazyos_swap` partition and the fstab block that activates it on every boot (priority 10, below zram; `nofail` and a 15 s timeout), with **Turn it off** as the undo; **format** wipes a disk clean as FAT32 or ext4 |
 | `rofi-media` | Media | the current track and play/pause/next/previous through `playerctl` |
 | `rofi-calc` | `Alt+Ctrl+Q`, Calculator | awk, one prompt; Enter copies the result |
 | `rofi-layout` | Settings → Keyboard layout | every layout in `evdev.lst`, applied to all keyboards and kept in `~/.config/sway/config.d/90-keyboard-layout.conf` |
@@ -220,7 +221,7 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 | `rofi-remind` | Reminders | transient `systemd-run --user --collect` timers, listed back from systemd, cancelled by choosing one. A title, an **optional** note, then when: five delays or a repeat (a date and time, daily, weekdays, weekly, monthly on a day 1-28). Every custom expression is validated with `systemd-analyze calendar` and the card shows systemd's own next occurrence; title and note ride in the timer's `Description` |
 | `rofi-about` | About | model, revision, kernel, uptime, memory, disk, battery, network, compositor, processes |
 | `rofi-learn` | Learn | the manual, rendered with glow, with a search across every page |
-| `rofi-files`, `rofi-keys`, `rofi-agents` | see below | the file browser, the key view, the agents menu (`nureb-thumbnail` is the helper the first one calls for its row pictures) |
+| `rofi-files`, `rofi-keys`, `rofi-agents` | see below | the file browser, the key view, the agents menu (`lazyos-thumbnail` is the helper the first one calls for its row pictures) |
 
 ![Settings: the session's switches in one list, each row with its state](../../docs/screenshots/hayato-r1-settings.png)
 
@@ -272,7 +273,7 @@ it says it twice:
   yellow, left of the updates indicator - and it is also a button.
 
 `busy start|update|stop|end|fail TAG LABEL MESSAGE [ICON]` writes one file per task in
-`$XDG_RUNTIME_DIR/nureb-busy` and signals waybar (signal 8, the same mechanism the other `bar-*`
+`$XDG_RUNTIME_DIR/lazyos-busy` and signals waybar (signal 8, the same mechanism the other `bar-*`
 modules use). `bar-busy` prints `{"class":"empty"}` when there is nothing to show, which
 `style.css` collapses to zero width, and it drops a state file older than five minutes so a
 script killed mid-action cannot leave a spinner on the bar forever.
@@ -325,7 +326,7 @@ never written and every row kept its mimetype icon - and it would replace the ma
   `application-x-executable`. The name comes from the extension plus the executable bit, both
   already in the `find` listing, so a directory of source files is a list with a column of icons
   instead of bare text - the report's "no icons in Files". `-show-icons` with `-preview-cmd`
-  makes rofi call `~/.config/bin/nureb-thumbnail` for the rows it is about to draw, all at once,
+  makes rofi call `~/.config/bin/lazyos-thumbnail` for the rows it is about to draw, all at once,
   and only when that picture is not in `~/.cache/thumbnails` yet. The script is ffmpeg for an
   image or a video frame, `pdftocairo` for a PDF's first page, and nothing at all for a format it
   does not know (the row then keeps its theme icon);
@@ -375,12 +376,12 @@ Alt+Ctrl+F and the menu entry would silently do nothing (or answer "no browser i
 and warns when the thumbnail cache is not writable or the script stops asking for pictures.
 
 `usr/local/bin/xdg-open` is two dozen lines around the same question: a URL goes to Firefox as it
-is, and a path goes to **`nureb-view`** - the same rules a double click in pcmanfm applies - with
+is, and a path goes to **`lazyos-view`** - the same rules a double click in pcmanfm applies - with
 the browser as the answer for a user who has no session `bin` directory (root, an ssh session).
 That is what foot's ctrl+click, `yt-dlp --print-trailer` and any script that shells out to
 `xdg-open` expect, and there is no desktop portal in this image.
 A file opened from **outside** the session - a download manager, a terminal, a `file://` link -
-goes through `~/.config/bin/nureb-view` (`etc/xdg/mimeapps.list` and `org.nureb.view.desktop`),
+goes through `~/.config/bin/lazyos-view` (`etc/xdg/mimeapps.list` and `org.lazyos.view.desktop`),
 which applies the same rules as the browser: text in `bat`, a document in `papers`, a picture in
 `imv` (chafa when imv gets no EGL context), a video in `mpv`, and an HTML page, an EPUB or a
 `.deb` in Firefox - so a double click on a video does not open it in the browser.
@@ -401,17 +402,17 @@ launcher carries both rows (**Files**, **Files (window)**) and so does the root 
   and 4.9 MB, on the GTK3 the image already has for waybar, with no indexer and no
   daemon. The measurements and the rejected alternative are in `docs/omarchy-gap.md` §1.
 * **A double click opens what the Files list opens.** `/etc/xdg/mimeapps.list` sends the types to
-  `org.nureb.view.desktop`, whose `Exec` is `~/.config/bin/nureb-view` - the same rule table as
+  `org.lazyos.view.desktop`, whose `Exec` is `~/.config/bin/lazyos-view` - the same rule table as
   `rofi-files` (which reads an HTML file as text): text in `bat`, a document in `papers`, a
   picture in `imv` (or `chafa`'s sixels when imv gets no EGL context), a video in `mpv`, and an
   HTML page, an EPUB or a `.deb` in Firefox. There is
   no desktop portal here, so that pair *is* the "open with" mechanism for every GIO program.
   **A trap worth knowing**: GIO silently drops a `.desktop` whose `Exec` program does not exist,
-  so a missing executable bit on `nureb-view` reads as "no default application" rather than as an
+  so a missing executable bit on `lazyos-view` reads as "no default application" rather than as an
   error - which is why `check-system.sh` asks `gio mime image/png` *and* checks the mode. No
   `mimeinfo.cache` regeneration is needed for the associations to resolve (verified).
 * **The GTK3 half of the palette** is two files in `home/.config/gtk-3.0/`: `settings.ini`
-  (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `Nureb`, `JetBrains Mono 10`, animations
+  (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `LazyOS`, `JetBrains Mono 10`, animations
   off) and `gtk.css`, which repaints the surfaces with explicit selectors at the same specificity
   Adwaita uses and is parsed last. The colours are **opaque**: a translucent window would show the
   wallpaper through its own text. pcmanfm is the only window whose look comes from the GTK theme
@@ -419,7 +420,7 @@ launcher carries both rows (**Files**, **Files (window)**) and so does the root 
   its own surfaces), so this is a stylesheet, not a theme.
 * **The icon names came with it**: Adwaita 51 ships no full-colour `folder`, `user-home` or
   `drive-harddisk` at all, so `scripts/make-icons.sh` gained a **fourth table** (the places, the
-  actions and the mimetypes the sidebar and the icon view ask for by name) and the Nureb theme now
+  actions and the mimetypes the sidebar and the icon view ask for by name) and the LazyOS theme now
   carries 219 PNGs in `48x48/apps` + `scalable/apps`.
 * **The settings live in `etc/xdg/pcmanfm/default/pcmanfm.conf`**: `terminal=foot` (under
   `[config]`, which is where libfm reads it, not the `[ui]` section the dialog suggests - the
@@ -434,16 +435,16 @@ launcher carries both rows (**Files**, **Files (window)**) and so does the root 
   F1-F10 while Search is held (keyd), which is why neither binding fires on the press.
 * **What it does not do**: its thumbnails are images only (libfm ignores the freedesktop
   `.thumbnailer` files, so a PDF or a video keeps its mimetype icon there, while `rofi-files`
-  draws both through `nureb-thumbnail`); SMB and phone mounts need `gvfs-backends`; and
+  draws both through `lazyos-thumbnail`); SMB and phone mounts need `gvfs-backends`; and
   `pcmanfm --desktop` is X11-only, so nothing starts it on sway. Its Devices pane does mount a
   USB stick, because `udisks2` is installed and `gvfs`' volume monitor is the client - the same
   `udisksd` `rofi-places` talks to through `udisksctl`, and there is no `udiskie` (the resident
   tray daemon) on purpose.
 
-## Files in a terminal (nureb-find)
+## Files in a terminal (lazyos-find)
 
-**Alt+Search** opens `nureb-find`: `fd` streamed into **fzf** in a floated foot window, one row
-per file under `$HOME`, a preview pane on the right, and Enter handing the choice to `nureb-view`
+**Alt+Search** opens `lazyos-find`: `fd` streamed into **fzf** in a floated foot window, one row
+per file under `$HOME`, a preview pane on the right, and Enter handing the choice to `lazyos-view`
 - the same opener a double click in pcmanfm reaches. It is the third answer to "where is that
 file", and the three are one feature with three shapes: `rofi-files --search` is a *menu* (rows
 with icons and thumbnails, open before you type, one bounded `fd` run, a list you scroll),
@@ -485,7 +486,7 @@ Four things that are not obvious, each of them a bug that was caught:
   are the same ones both use - `.cache` alone is 330k of the 350k files in this home.
 * **The preview draws pictures with `chafa -f symbols`, not sixels.** The preview is a pane of the
   same terminal, not a window of its own, so a sixel picture would paint over fzf's next redraw.
-  The picture itself is `nureb-thumbnail`'s (the generator the menu uses, into
+  The picture itself is `lazyos-thumbnail`'s (the generator the menu uses, into
   `~/.cache/thumbnails/normal/`), bounded by `timeout 8`: a preview that waits is worse than a
   preview that says nothing. Text is `bat --line-range=:300` at the pane's own width, taken from
   the `FZF_PREVIEW_COLUMNS`/`LINES` fzf exports.
@@ -493,10 +494,10 @@ Four things that are not obvious, each of them a bug that was caught:
   cancelling is not an error - and `--no-multi` keeps a Tab that marked three rows from opening
   one and saying nothing about the others.
 
-The window is floated and centred by `etc/sway/config.d/29-file-search.conf` (`app_id=nureb-find`,
+The window is floated and centred by `etc/sway/config.d/29-file-search.conf` (`app_id=lazyos-find`,
 1200x760), and the binding is on release for the same reason as the Search key beside it: the top
 row doubles as `F1`-`F10` while Search is held. `check-system.sh` asks for the binding, the
-executable bit, `fzf`, the `system-search` notification icon and (through `nureb-view`) the
+executable bit, `fzf`, the `system-search` notification icon and (through `lazyos-view`) the
 opener, because each one on its own makes the key look dead: a missing filter is an *empty list*,
 not an error message.
 
@@ -505,13 +506,13 @@ not an error message.
 The session speaks Omarchy's keys with `Alt` in place of `Super`, so an action keeps the
 same letter and the same Ctrl/Shift combination wherever a sway default does not already
 own it. The whole set is the *Shortcuts* page of the manual
-(`usr/share/doc/nureb/03-shortcuts.md`) and, generated from the configuration,
+(`usr/share/doc/lazyos/03-shortcuts.md`) and, generated from the configuration,
 `rofi-keys`; this is the shape of it:
 
 | Group | Keys | Where it lives |
 |---|---|---|
 | launcher, switcher, commands | `Alt+D`, `Alt+Tab`, `Alt+Shift+D` | `19-launcher.conf` |
-| file search | `Search` (`rofi-files --search`) and `Alt+Search` (`nureb-find`) | `home/.config/sway/config` |
+| file search | `Search` (`rofi-files --search`) and `Alt+Search` (`lazyos-find`) | `home/.config/sway/config` |
 | root menu | `Alt+Space` (Omarchy: `Super+Space`) | `24-keys.conf` |
 | panels | `Alt+Ctrl+A/B/W` → audio, Bluetooth, network (Omarchy: `Super+Ctrl+A/B/W`) | `24-keys.conf` |
 | system | `Alt+Escape` and `Alt+Ctrl+P` power menu (`rofi-power`), `Alt+Ctrl+L` lock, `Alt+Shift+Escape` lock+sleep, `Alt+Ctrl+Escape` sleep | `21-lock-screen.conf`, `22-sleep.conf`, `24-keys.conf` |
@@ -542,10 +543,10 @@ the menu (floating itself is still `Alt+Shift+Space`).
 ## The manual, the key view, dictation and hibernate
 
 Four features that exist because rofi and the terminal can carry them without a resident process;
-`usr/share/doc/nureb/` holds the manual they are documented in.
+`usr/share/doc/lazyos/` holds the manual they are documented in.
 
 **Learn** (`Alt+Space` root menu → Learn, or the launcher entry) lists the pages in
-`/usr/share/doc/nureb/` and opens the chosen one with **glow** inside foot, so the markdown is
+`/usr/share/doc/lazyos/` and opens the chosen one with **glow** inside foot, so the markdown is
 *rendered* (headings, tables, inline code, lists) instead of shown as source, in the palette of
 `~/.config/glow/solarized.json`. The first row is a search: ripgrep over every page, one row per
 match, Enter opens the page that contains it. There is no browser in the image, and a terminal page
@@ -587,15 +588,17 @@ coding-agent CLIs it knows (Claude Code, Codex, OpenCode, Gemini, Copilot), laun
 one in foot from `~/Work`, offers `npm install -g --prefix ~/.local <package>` for the rest (so npm
 never wants root), and keeps **accounts** for the two that support an alternative config directory -
 Claude Code (`CLAUDE_CONFIG_DIR`) and Codex (`CODEX_HOME`) - as one directory per account under
-`~/.local/share/nureb/agents/`. Omarchy's usage meters are deliberately absent: they read provider
+`~/.local/share/lazyos/agents/`. Omarchy's usage meters are deliberately absent: they read provider
 APIs that change shape, and a broken meter is worse than none; if they return, the fitting shape is a
 `python3` script printing one line for a waybar `custom` module, not a daemon.
 
 **Hibernate** is only offered when it can resume: `/sys/power/state` must contain `disk`, a swap on
 disk (not zram) must be at least ~2/5 of RAM, and the kernel command line must carry `resume=`
-(`resume=LABEL=nureb_swap`, resolved through udev, so a labelled SD swap partition is enough). Each
+(`resume=LABEL=lazyos_swap`, resolved through udev, so a labelled SD swap partition is enough). Each
 missing condition gets its own message; it never hibernates into a swap the machine cannot come back
-from. There is no disk swap in the default image.
+from. The default image has no disk swap, but **Auxiliary swap** (Places and the root menu) prepares
+the partition and the fstab entry that activates it on every boot; it does not add `resume=`, which
+is a kernel command line change and a rebuilt kpart.
 
 ## The bar
 
@@ -604,7 +607,7 @@ clock, **busy**, updates, tray, layout, bluetooth, network, volume, brightness, 
 interactions.  The busy card only exists while an action runs (see *Something is happening*); it is
 one shell per second while it is on screen, and a zero-width module the rest of the time.  What differs is what happens on a click.  Deboma answers with a Quickshell panel, and
 the shell process that draws those panels costs **361 MB** of PSS: more than half of the whole
-Deboma session and several times a booted Nureb.  Here every click runs a short-lived process
+Deboma session and several times a booted LazyOS.  Here every click runs a short-lived process
 instead, and nothing survives the click:
 
 | Indicator | Left click | Right click | Scroll |
@@ -705,8 +708,8 @@ Deboma runs a screensaver 150 s after the last input and locks at 300 s
 The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
 design ::` and the arcade continue line `» press any key to continue «`, drawn in solarized orange
 (`foreground=cb4b16` in `screensaver.ini`, and its own SGR in the static frame). It is the one
-surface that carries the LazyOS name for now — the script, the app id and the launcher entry are
-named after it, and the rest of the distribution still says Nureb.
+surface that carries the block art: the script, the app id and the launcher entry are named after
+it, and the mark on the wallpaper and the launcher icon come from `scripts/make-brand.sh`.
 
 Any key dismisses it (`read -rsn1 -t 1` polls while the effect runs, so the dismissal does not wait
 for the effect to end; `tte` gets stdin on `/dev/null`, or it would swallow the key). Three details
@@ -952,7 +955,7 @@ there is a calibration instead of a hardcoded frame: `tablet-mode calibrate`
 (Settings → **Calibrate rotation**, only listed while the mode is on) reads the
 accelerometer in the pose the person is holding - upright, screen facing them -
 and writes the direction that must look upright to
-`~/.config/nureb/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on
+`~/.config/lazyos/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on
 every pass and derives all four positions from the one reference: the readings run
 around the device in the counter-clockwise order `+X, +Y, -X, -Y`, so each 90° the
 reading turns is 90° of transform, the reference getting `normal` and the rest
@@ -965,7 +968,7 @@ store anything while the device is flat or halfway between two positions (both s
 was just calibrated is the one that has to look upright.
 
 Nothing about this is resident in laptop mode: the state is a directory in
-`$XDG_RUNTIME_DIR/nureb-tablet` holding the two pids and the output name, so a
+`$XDG_RUNTIME_DIR/lazyos-tablet` holding the two pids and the output name, so a
 session that dies takes the keyboard and the poller with it, and the next
 `tablet:off` still restores the touchpad (`off` runs its undo even when the
 state is gone). `wvkbd` 0.15 from Debian is the version that ships the flags this

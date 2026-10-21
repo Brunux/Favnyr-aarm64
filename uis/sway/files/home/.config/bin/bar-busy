@@ -2,7 +2,7 @@
 # The bar's "working on it" card: what busy is doing, as a spinner - and the
 # stop button, because the spinner is the only thing on screen while it runs.
 #
-# busy writes one file per running task in $XDG_RUNTIME_DIR/nureb-busy; this
+# busy writes one file per running task in $XDG_RUNTIME_DIR/lazyos-busy; this
 # script is the waybar module that reads them.  It prints nothing (an empty
 # module, which style.css collapses) when there is no task, so the bar is
 # unchanged in the common case.
@@ -40,7 +40,7 @@
 
 set -u
 
-state=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
+state=${XDG_RUNTIME_DIR:-/tmp}/lazyos-busy
 bin=$(dirname "$0")
 
 # stale FILE: a script that died between start and end would leave a spinner
@@ -81,8 +81,8 @@ if [ "${1:-}" = stop ] || [ "${1:-}" = --stop ]; then
 	if [ -z "$stopcmd" ]; then
 		# Plain notify-send, not the card's own tag: replacing the toast would
 		# take away the only sign that the task is still going.
-		notify-send -a Nureb -i dialog-information -u low -t 4000 \
-			Nureb "$label cannot be stopped from here" 2>/dev/null || true
+		notify-send -a LazyOS -i dialog-information -u low -t 4000 \
+			LazyOS "$label cannot be stopped from here" 2>/dev/null || true
 		exit 0
 	fi
 	# Read above, before end removes the file.  The card becomes the result

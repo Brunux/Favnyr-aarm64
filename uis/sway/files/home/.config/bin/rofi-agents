@@ -36,8 +36,8 @@ theme="$HOME/.config/rofi/solarized.rasi"
 # already installed.
 PATH="$HOME/.local/bin:$PATH"
 export PATH
-state="${XDG_CONFIG_HOME:-$HOME/.config}/nureb/agents"
-data="${XDG_DATA_HOME:-$HOME/.local/share}/nureb/agents"
+state="${XDG_CONFIG_HOME:-$HOME/.config}/lazyos/agents"
+data="${XDG_DATA_HOME:-$HOME/.local/share}/lazyos/agents"
 default_file="$state/default"
 
 # name | binary | npm package | config-dir env var (empty = no profiles)
@@ -56,7 +56,7 @@ pick() { # prompt, lines on stdin
 }
 
 # The menu's messages are about accounts and installs, so the one icon is the
-# account one. It is a name scripts/make-icons.sh renders into the Nureb theme,
+# account one. It is a name scripts/make-icons.sh renders into the LazyOS theme,
 # which mako searches (see lib-rofi.sh); a name that does not resolve draws
 # nothing, never an error.
 notify() { notify-send -a Agents -i system-users "$@" 2>/dev/null || true; }

@@ -22,7 +22,7 @@ repository.
 ## What is installed, and where the lists are
 
 The image is built from four package lists in the repository, copied on the
-machine at `~/Dev/Nureb/`:
+machine at `~/Dev/LazyOS/`:
 
 | List | Holds |
 |---|---|
@@ -109,7 +109,7 @@ EPUB, a `.deb`, or anything whose own viewer is missing.
   about.
 * `xdg-open` exists (`/usr/local/bin/xdg-open`, two dozen lines): a URL goes to
   Firefox, and a path goes to the same rule table a double click in pcmanfm uses
-  (`nureb-view`), so a file opened from a script lands where it would land from
+  (`lazyos-view`), so a file opened from a script lands where it would land from
   the desktop. That is what foot's ctrl+click and the command-line tools that
   print a URL call - there is no desktop portal in this image.
 * It is a normal Wayland client here (no Xwayland needed), and its icon is its
@@ -147,8 +147,8 @@ one: tile it, move it to another workspace, close it with **Alt+Q**.
 * **A double click opens what the Files menu opens.** `/etc/xdg/mimeapps.list`
   decides, and it names the same programs the list does: a document (PDF, DjVu, a
   comic) goes to `papers`, a directory to pcmanfm, a page or a `.deb` to Firefox,
-  and text, pictures and video to `org.nureb.view.desktop` ->
-  `~/.config/bin/nureb-view`, which is the rule table `rofi-files` follows (text
+  and text, pictures and video to `org.lazyos.view.desktop` ->
+  `~/.config/bin/lazyos-view`, which is the rule table `rofi-files` follows (text
   in `bat`, a picture in `imv` - sixels in a foot window when imv cannot start - a
   video in `mpv`, an EPUB in Firefox; the list reads an HTML file as text where a
   double click opens the page). There is no desktop portal in this image, so those
@@ -170,7 +170,7 @@ one: tile it, move it to another workspace, close it with **Alt+Q**.
   `udisks2` mounts it, and `autorun` is off so a card never runs its own
   contents.
 * **Its colours are the session's.** `~/.config/gtk-3.0/settings.ini` loads
-  Adwaita dark with the **Nureb** icons on JetBrains Mono 10, and `gtk.css` next
+  Adwaita dark with the **LazyOS** icons on JetBrains Mono 10, and `gtk.css` next
   to it repaints the surfaces in the solarized palette: base03 windows, base1
   text, the cyan selection the menus use, and no animations of its own (swayfx
   already animates the window). It is the only window whose look comes from the
@@ -192,10 +192,21 @@ gets corrupted.
   up there as soon as it is mounted.
 * `vfat`, `exFAT` and `NTFS` all work - the kernel has those drivers - so a
   stick from a camera or from Windows needs no extra package.
+* **Auxiliary swap** is the row above it: it takes a card that is not a system card
+  and turns the whole thing - or 2, 4 or 8 GiB of it - into a swap partition
+  labelled `lazyos_swap`, adds the `/etc/fstab` line that activates it at every
+  boot, and turns it on now. The priority is 10 against zram's 100, so the
+  compressed RAM is used first and the card is the spillover; `nofail` plus a 15 s
+  device timeout keep a boot without the card from waiting or failing. It is a
+  dedicated swap card, not a filesystem, so it never appears as a Mount row.
+  Pulling it while it is active loses whatever pages live there: open the same row
+  and choose **Turn it off** first (`swapoff`, then the fstab entry is removed; the
+  partition stays, and **Format a disk** erases it). `resume=LABEL=lazyos_swap` is
+  the extra piece hibernate needs - see **The system** page.
 * **Format a disk** is the last row of Places: it offers only disks with nothing
   mounted on them and no ChromeOS kernel partition, so the eMMC and the card this
   system boots from are never candidates, and it asks twice with Cancel first.
-  The filesystem is FAT32 (`NUREB`, for a camera, a TV or a car) or ext4 (for a
+  The filesystem is FAT32 (`LAZYOS`, for a camera, a TV or a car) or ext4 (for a
   Linux machine), and the whole disk becomes one partition. It is not stoppable:
   a killed `mkfs` leaves a disk that looks formatted and is not.
 * A failed mount says why in the notification, in udisks' own words: "not

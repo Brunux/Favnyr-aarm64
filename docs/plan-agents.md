@@ -33,7 +33,7 @@ still no daemon, and no new toolchain to build and carry.
 * `rofi-agents`: a rofi menu listing the agents it knows (Claude Code, Codex, OpenCode, Gemini CLI,
   GitHub Copilot); launch in foot from `~/Work`; install the missing ones with
   `npm install -g --prefix ~/.local <pkg>` (no root, no writes to `/usr/local`); set the default.
-* Binding `Alt+Ctrl+Shift+A` (Omarchy's `Super+Shift+Ctrl+A`), an `org.nureb.agents.desktop` entry,
+* Binding `Alt+Ctrl+Shift+A` (Omarchy's `Super+Shift+Ctrl+A`), an `org.lazyos.agents.desktop` entry,
   a root-menu entry, a page in the manual (`07-agents.md`).
 * `PATH` must be forced to include `~/.local/bin` inside the script: sway's environment does not have
   it (only login/interactive shells get it from `profile.d`), which was already a real bug in the
@@ -42,7 +42,7 @@ still no daemon, and no new toolchain to build and carry.
 
 ### P2 - accounts (half-written, untracked)
 
-* An account is a directory under `~/.local/share/nureb/agents/<binary>/<name>`, selected with the
+* An account is a directory under `~/.local/share/lazyos/agents/<binary>/<name>`, selected with the
   variable each CLI documents: **`CLAUDE_CONFIG_DIR`** (Claude Code) and **`CODEX_HOME`** (Codex).
 * Create (empty), use (writes the agent's default), remove, and `--env` for the shell:
   `eval "$(rofi-agents --env 'Claude Code' work)"`.
@@ -66,7 +66,7 @@ still no daemon, and no new toolchain to build and carry.
 
 * Only if P3 is not enough. Needs provider credentials and per-provider endpoints, and it must be
   fail-soft. Keep it out of the bar: run it from the menu on demand, print what answered, cache the
-  last answer in `~/.cache/nureb/agents-usage.json`.
+  last answer in `~/.cache/lazyos/agents-usage.json`.
 * **Effort: unknown, and it is the part that ages badly.** I would not ship it without a reason.
 
 ### P5 - automatic account switching near a limit

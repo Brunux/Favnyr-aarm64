@@ -22,7 +22,7 @@ yet present in `scripts/` as not implemented.
 - **Icons first, never forced.** Icons and readable TUI tools are the house taste, not a garnish:
   a menu row gets its `UI_I_*` glyph from `~/.config/bin/lib-rofi.sh`, a notification its name from
   the same constants, a `rofi-files` row a `thumbnail://` or a name from the file-browser table, a
-  `.desktop` entry an `Icon=` the **Nureb** theme actually draws, and a terminal tool is picked for
+  `.desktop` entry an `Icon=` the **LazyOS** theme actually draws, and a terminal tool is picked for
   the same taste (`eza --icons`, `bat`, `glow`, fzf's preview pane, `btop`, `lazygit`) when a
   plainer one only prints the same facts. The order is fixed so the choice is testable: **a glyph
   already in the alphabet, then a name already in a `scripts/make-icons.sh` table, then a new table
@@ -40,7 +40,7 @@ yet present in `scripts/` as not implemented.
   on the row, a text-only card) and logs nothing. The tables and the mako `icon-path` trap are in
   the UI section, under *The launcher* and *The file browser*.
 - **A feature ships with its three witnesses**: a `check-system.sh` line that fails when its
-  dependency disappears, a paragraph in `usr/share/doc/nureb/` (the manual is what a person
+  dependency disappears, a paragraph in `usr/share/doc/lazyos/` (the manual is what a person
   reads on the device), and a bullet in this file that says why it is built this way.
 - **Nothing resident.** Menus are one-shot rofi scripts and a viewer is the viewer's own window,
   so the session starts nothing that stays (`cliphist`'s watcher is the one agreed exception: no
@@ -468,7 +468,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   too** (`swaymsg input type:keyboard events disabled`, `enabled` on exit; the folded keys are on
   the table and a keystroke there is a keystroke), and starts its own **1 Hz poller**
   (`tablet-mode poller`) over the accelerometer; `off` kills both, re-enables **both** input types
-  and puts `transform normal` back. The state is a directory in `$XDG_RUNTIME_DIR/nureb-tablet`
+  and puts `transform normal` back. The state is a directory in `$XDG_RUNTIME_DIR/lazyos-tablet`
   holding the keyboard pid, the poller pid and the output name, so a session that dies removes all
   three, and `off` still restores the inputs when the state is gone (that path is the one a person
   cannot fix without a mouse, so it exists). **The keyboard is switched off only after `start_kbd`
@@ -497,7 +497,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   calibration instead of a hardcoded frame**: `tablet-mode calibrate` (a row in Settings while the
   mode is on, "Calibrate rotation") reads the accelerometer in the pose the person is holding -
   upright, screen facing them - and writes the direction that must look upright to
-  `$XDG_CONFIG_HOME/nureb/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on every
+  `$XDG_CONFIG_HOME/lazyos/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on every
   pass and derives all four positions from the single reference: the readings run around the device
   in the counter-clockwise order `+X, +Y, -X, -Y`, so each 90 degrees the reading turns is 90 of
   transform, the reference getting `normal` and the rest 90/180/270 in that order - which is
@@ -544,7 +544,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `~/.config/workstyle/config.toml` is kept so `cargo install workstyle` is enough to enable it.
 - **The launcher, the window switcher and the bar's dmenu are all `rofi` 2.0** (Debian's `rofi`;
   +6 packages / 1.75 MB over the previous set). `$mod+d` = `rofi -show drun` (the
-  `.desktop` entries, including the port's own `usr/share/applications/org.nureb.*`), `$mod+Tab` =
+  `.desktop` entries, including the port's own `usr/share/applications/org.lazyos.*`), `$mod+Tab` =
   `rofi -show window` (wlroots foreign-toplevel; sway has no switcher of its own), `$mod+Shift+d` =
   `rofi -show run` (`$PATH`; **Shift+Enter** runs the choice in foot - rofi's own binding, and the
   only way the TUIs from `packages/tools.list` start, since a TUI without a tty exits), and
@@ -568,8 +568,8 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   **Adwaita 51 ships no application icons** - only monochrome `-symbolic` files,
   and not one of this session's names - so the launcher showed a hole where an icon should be, and
   `papirus-icon-theme` is 190 MB installed. `scripts/make-icons.sh` renders the same Font Awesome
-  codepoints into 48x48 PNGs that ship as the small **Nureb** theme
-  (`uis/sway/files/usr/share/icons/Nureb`), whose `index.theme` inherits Adwaita and hicolor, so an
+  codepoints into 48x48 PNGs that ship as the small **LazyOS** theme
+  (`uis/sway/files/usr/share/icons/LazyOS`), whose `index.theme` inherits Adwaita and hicolor, so an
   application that brings its own icon still shows it in colour. The theme carries **three**
   tables now, not two: the launcher's `.desktop` names, the command palette's binary names, and
   the **names the rest of the session asks for by freedesktop name** - the file browser's row
@@ -578,12 +578,12 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   dialog-warning`) and the ones a notification draws (`dialog-information dialog-warning
   dialog-error network-server display-brightness input-touchpad input-keyboard
   preferences-desktop-theme preferences-desktop-effects preferences-system-windows`). rofi's
-  dmenu resolves `\0icon\x1f<name>` through `icon-theme: "Nureb"`, so the launcher and the file
+  dmenu resolves `\0icon\x1f<name>` through `icon-theme: "LazyOS"`, so the launcher and the file
   list share the alphabet. **mako does not**: it reads no theme metadata, it walks the roots of
   its `icon-path` (`mako(5)`: *"This approximates the search algorithm used by the XDG Icon Theme
   Specification, but does not support any of the theme metadata"*), and `/usr/share/icons` is not
   a theme root - so `~/.config/mako/config` has to name
-  `icon-path=/usr/share/icons/Nureb:/usr/share/icons/hicolor` or every notification icon stays
+  `icon-path=/usr/share/icons/LazyOS:/usr/share/icons/hicolor` or every notification icon stays
   blank while `notify-send -i folder` looks perfectly correct on the command line. Two traps that
   cost a round each:
   a literal private-use character does not survive every editor or transport (the first attempt
@@ -640,7 +640,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   text file - would open as source in `bat` and could never be looked at. The details that make
   the rows work: `rofi -dmenu`
   draws a row's icon from the `\0icon\x1f<value>` suffix, and a value that starts with
-  `thumbnail://<path>` makes rofi call `-preview-cmd` (`nureb-thumbnail`) for the rows it is
+  `thumbnail://<path>` makes rofi call `-preview-cmd` (`lazyos-thumbnail`) for the rows it is
   about to draw and keep the result in `~/.cache/thumbnails/normal/<md5 of the path>.png`,
   skipping the call when that file exists (verified: two runs, one call); **every** row also
   carries a theme icon name when it has no thumbnail, because a row without one loses the 32 px
@@ -650,7 +650,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   directory, `go-up` for the parent, `view-hidden` for the dotfile switch, `dialog-warning` for
   a broken link, `thumbnail://` for jpg/jpeg/png/gif/webp/bmp/tif/tiff/avif, the video containers
   (mp4/mkv/webm/mov/avi/m4v/mpg/mpeg/ogv/wmv/flv/3gp) and pdf, `application-pdf` for the
-  formats papers reads but nureb-thumbnail has no decoder for (djvu/djv/cbz/cbr/cb7/cbt/ai),
+  formats papers reads but lazyos-thumbnail has no decoder for (djvu/djv/cbz/cbr/cb7/cbt/ai),
   `text-html` for
   html/htm/xhtml/shtml, `x-office-document` for odt/ods/odp/odg/doc/docx/xls/xlsx/ppt/pptx/rtf/
   epub, `application-x-executable` for sh/bash/zsh/fish/py/pl/rb/lua/awk/deb/appimage/run/bin/
@@ -662,7 +662,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   tsv/json/yml/yaml/toml/ini/cfg/conf/env/lock/list/xml/rasi/desktop/service/rules/sql/diff/
   patch and for the common source extensions, and for a name with no extension the executable
   bit decides (`application-x-executable` for a program, `text-x-generic` for a README). Every
-  one of those names is a PNG in the Nureb theme (`scripts/make-icons.sh`, third table). dmenu
+  one of those names is a PNG in the LazyOS theme (`scripts/make-icons.sh`, third table). dmenu
   matches the **markup-stripped** text, so the dim size/date do not get in the way of typing
   (verified: `-filter span` matches nothing); `-L` makes a symlink to a directory navigate and
   leaves only broken links as `l`; the name column is padded to the longest name because the
@@ -696,13 +696,13 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   answers 0 and the menu reports nothing instead of half a result. The rest (copy the path, a
   terminal, the `udisksctl` mount) finish in milliseconds and would only flash a card. `rofi-files` asks for
   `$HOME/.config/bin/rofi-file-actions` and not `$dir`, the same convention it already uses for
-  `nureb-thumbnail`, because a row must not depend on which directory is being browsed.
+  `lazyos-thumbnail`, because a row must not depend on which directory is being browsed.
 - **A thumbnail is rofi's own cache plus one script.** A row is
   `text\0icon\x1fthumbnail://<abs path>`; with `-show-icons` and
-  `-preview-cmd 'nureb-thumbnail {input} {output} {size}'` rofi calls that script for the rows it
+  `-preview-cmd 'lazyos-thumbnail {input} {output} {size}'` rofi calls that script for the rows it
   is about to draw and keeps the result in `~/.cache/thumbnails/normal/<md5 of the path>.png`
   (128 px), **skipping the call when the file already exists** (verified: two runs, one call), so
-  a picture is decoded once, ever. `~/.config/bin/nureb-thumbnail` is the whole generator -
+  a picture is decoded once, ever. `~/.config/bin/lazyos-thumbnail` is the whole generator -
   ffmpeg for an image or a video frame (`-ss 1`, one frame, retried at 0 for a clip shorter than
   a second), `pdftocairo` page 1 for a PDF, nothing for a format it does not know (that row then
   has no icon) - and three things about it are not obvious. rofi starts **one process per visible
@@ -728,7 +728,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   starts at 80x24 and resizes only after the window is mapped, so chafa would measure the wrong
   size and paint into a corner (the same lesson as the screensaver), and `--hold` keeps the
   window up after chafa has drawn once and exited. `uis/sway/files/usr/local/bin/xdg-open` is the
-  two dozen lines that send a URL to `firefox-esr` and a path to `nureb-view` (the same rule
+  two dozen lines that send a URL to `firefox-esr` and a path to `lazyos-view` (the same rule
   table a double click uses, so a file opened from a script lands where it would from the
   desktop); it is what foot's ctrl+click and the CLI tools expect, and there is no desktop portal
   here. `check-system.sh` fails when the browser, the shim, `imv`, `papers`, `mpv`, the
@@ -752,7 +752,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   on the UI thread with gdk-pixbuf and ignores `.thumbnailer` files, so thumbnails are images
   only, and a 24 MP JPEG costs ~83 MB for a 128 px thumbnail), `autorun=0`, a 900x600 window.
 - **A double click in pcmanfm resolves through `/etc/xdg/mimeapps.list` ->
-  `org.nureb.view.desktop` -> `~/.config/bin/nureb-view`**, which applies exactly the rules
+  `org.lazyos.view.desktop` -> `~/.config/bin/lazyos-view`**, which applies exactly the rules
   `rofi-files` applies (text in `bat`; a document - PDF, DjVu, a comic - in `papers`; a picture
   in `imv` with `chafa`'s sixels as the fallback when imv gets no EGL context; a video in `mpv`;
   and an HTML page, an EPUB or a `.deb` in `firefox-esr`), so a file opens the same way from the
@@ -760,10 +760,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   text in `bat` and a double click takes to the browser, because that is what a page is.
   `inode/directory` stays `pcmanfm.desktop`. There is no `xdg-desktop-portal` in the image, so this pair *is* the
   open-with mechanism for every GIO program. **GIO silently drops a `.desktop` whose `Exec`
-  program does not exist**: with `nureb-view` not executable (or absent) `gio mime image/png`
+  program does not exist**: with `lazyos-view` not executable (or absent) `gio mime image/png`
   answers "no default application" instead of an error, which looks like a broken association -
   so the `check-system.sh` line is both the association test and the mode test
-  (`LC_ALL=C gio mime image/png` must say `Default application: org.nureb.view.desktop`, and
+  (`LC_ALL=C gio mime image/png` must say `Default application: org.lazyos.view.desktop`, and
   `gio mime inode/directory` must say `pcmanfm.desktop`). That CLI is **`libglib2.0-bin`**
   (0.9 MB, no daemon) and it is in `uis/sway/packages.list` for exactly this: `pcmanfm` and
   `gvfs` link libgio but ship no `/usr/bin/gio`, and without it the check can only read
@@ -785,7 +785,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   chafa; and **`mpv --no-config` empties the script directory too**, so `mpv-mpris` (which is
   what makes `playerctl`, the Media menu and the bar see the film at all) has to be passed as
   `--script=/etc/mpv/scripts/mpris.so`, guarded by `-r` so a tree without the plugin still
-  plays. `rofi-files` and `nureb-view` carry the same table on purpose (the menu does not start a
+  plays. `rofi-files` and `lazyos-view` carry the same table on purpose (the menu does not start a
   process to decide what to start), so a change to one belongs in the other; `check-system.sh`
   FAILs on a missing `imv`/`papers`/`mpv`, on the missing `/usr/local/bin/imv`, on a missing
   `mpris.so`, and warns when `application/pdf` does not resolve to
@@ -818,19 +818,69 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   (`fe3a2a5d-4f32-41a7-b725-accc3285a309`, p1 of the layout in `scripts/lib-cgpt.sh`). Those two
   rules are what exclude the eMMC, the card that wrote the system and the card the system is
   running from - however they are named, and with no device name hardcoded - and they also exclude
-  every stick udisks already mounted, which would fail halfway anyway. zram, loop and optical
-  devices are not disks a person formats. What is left has nothing this system needs, and the
-  confirmation still names the device, its model and its size, with **Cancel as the first row**
-  so a stray Enter does nothing; the filesystem is FAT32 (label `NUREB`) or ext4, and the whole
-  disk becomes one partition (`parted -s mktable gpt` + `mkpart primary`, then `mkfs`). **It is
-  not stoppable on purpose**, like the apt install: a killed `mkfs` leaves a disk that looks
-  formatted and is not, which is worse than a wait. The step chain is linear (`rc`/`step`) rather
-  than nested `if`s because `set -e` exits from inside an `if` *body* on a failed command - a
-  failing `mkfs` would leave the `busy` card spinning with no reason in it. `parted`, `mkfs.vfat`
-  and `mkfs.ext4` are already in the image (`parted` in `packages/base.list`), so the menu adds
-  no package; `check-system.sh` FAILs when any of the three or the script is missing.
+  every stick udisks already mounted, which would fail halfway anyway. The candidate list is
+  **`ui_disks` in `lib-rofi.sh`**, shared with `rofi-swap`, and it also skips zram, loop, ram,
+  optical, pseudo devices, **`mtd*`** (the SPI flash this port must never write) and
+  **`mmcblk*boot*`** (the eMMC's 4 MB hardware boot partitions, which `lsblk -d` lists as disks of
+  their own) - see the next bullet for the hardware that made those two necessary. What is left has
+  nothing this system needs, and the confirmation still names the device, its model and its size,
+  with **Cancel as the first row** so a stray Enter does nothing; the filesystem is FAT32 (label
+  `LAZYOS`) or ext4, and the whole disk becomes one partition (`parted -s mktable gpt` +
+  `mkpart primary`, then `mkfs`). **It is not stoppable on purpose**, like the apt install: a killed
+  `mkfs` leaves a disk that looks formatted and is not, which is worse than a wait. The step chain
+  is linear (`rc`/`step`) rather than nested `if`s because `set -e` exits from inside an `if` *body*
+  on a failed command - a failing `mkfs` would leave the `busy` card spinning with no reason in it.
+  `parted`, `mkfs.vfat` and `mkfs.ext4` are already in the image (`parted` in `packages/base.list`),
+  so the menu adds no package; `check-system.sh` FAILs when any of the three or the script is
+  missing.
+- **Auxiliary swap turns a card into extra memory, and it shares Format's list on purpose.**
+  `rofi-swap` (Places, the row before Format a disk, and the root menu's *system* section) picks a
+  disk, then how much of it - the whole card first, then 2/4/8 GiB only when they fit with 64 MiB of
+  margin - then confirms with **Cancel first**. The candidates are the same `ui_disks` function as
+  Format (`PREFIX` per caller, `UI_KERN_TYPE` beside it), so the two menus cannot disagree about
+  which disk is a system disk. **Sharing it fixed two holes the card's own `lsblk` shows**: `-d`
+  lists the SPI flash as `mtdblock0` (8 MB) and the eMMC's hardware boot partitions as
+  `mmcblk0boot0`/`mmcblk0boot1` (4 MB each), none mounted and none carrying a kernel partition, so
+  Format used to offer all three - and writing `mtdblock0` is the one thing this port must never do.
+  `ui_disks` excludes `mtd*` and `mmcblk*boot*`/`mmcblk*rpmb` by name (plus `dm-*`, `md*`, `nbd*`,
+  `rbd*`), so both menus are fixed at once and no device name is hardcoded.
+  Setup is `parted -s mktable gpt` + `mkpart primary linux-swap 1MiB <end>` (the partition type is
+  Linux swap, so Places skips it instead of offering it as a Mount), then
+  `mkswap -f -L lazyos_swap` - `-f` because the new partition starts where an old filesystem's
+  signature may still be - and one marked block in `/etc/fstab`:
+  `LABEL=lazyos_swap none swap sw,nofail,x-systemd.device-timeout=15s,pri=10 0 0`. `nofail` keeps a
+  boot without the card from failing, the 15 s timeout keeps it from waiting the default 90 s, and
+  `pri=10` is **below zram's 100** (`rootfs-setup.sh`) so compressed RAM is used first and the card
+  is the spillover it is good for; equal priorities would round-robin between RAM and a card. The
+  label is the one `resume=LABEL=lazyos_swap` already names, so hibernate and this menu talk about
+  one card; the menu does not add `resume=`, which is a kernel command line change and a rebuilt
+  kpart.
+  The block is **replaced, not appended** (markers `# LazyOS auxiliary swap` / `# end LazyOS
+  auxiliary swap`), and removal drops any non-comment line whose source is `LABEL=lazyos_swap`, so
+  the manual recipe in `sway-hibernate` is undoable from the menu too. The write is `install` to
+  `/etc/.fstab.lazyos-swap` then `mv` over `/etc/fstab`: a `cat >` in place would truncate the file
+  first. Activation is `swapon -p 10 <part>` (not `swapon -a`, whose exit status another fstab entry
+  can spoil) followed by a read of `swapon --show=NAME --noheadings` **joined with `tr '\n' ' '`**:
+  the list is one line per device and **zram is always first**, so `case " $list " in *" $part "*)`
+  looked for a space where the card's own line began with a newline, and the read-back called every
+  successful setup a failure while the swap was on (`check-system.sh` had the same line and WARNed
+  that a configured card was inactive). **A failed activation removes the fstab block again**,
+  because a card that is not doing anything should not be configured at boot either, and turns the
+  partition back off when `swapon` itself answered 0 but the read-back could not see it: a swap that
+  is on with no fstab entry is a state nothing explains. Both modes refuse an unreadable
+  `/etc/fstab` up front, since both rewrite it. **Undo is the state surface**: when a block or an
+  active labelled swap exists, the menu opens on the status (device, size, priority) with *Turn it
+  off* - `swapoff` first (if that fails the fstab block stays, which is the state that was there),
+  then the block and `systemctl daemon-reload`. The partition is left labelled and inactive, and
+  Format a disk is how it is erased. **One label has to mean one card** (fstab and `resume=` both
+  resolve `LABEL=` to whichever device carries it), so setup refuses a disk while a different
+  device already carries the label. Not stoppable, like Format: a killed `parted`/`mkswap` leaves
+  half a card. `parted`, `mkswap`/`swapon` (util-linux) and `blkid` are already in the image, so the
+  menu adds no package. `check-system.sh` FAILs on a missing tool or script and when Places loses
+  the row; when the fstab block exists it WARNs if `nofail`, the device timeout or a priority below
+  100 went away, SKIPs when the card is not inserted, and WARNs when it is inserted but not active.
 - **The GTK3 half of the palette is two files** in `uis/sway/files/home/.config/gtk-3.0/`:
-  `settings.ini` (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `Nureb`,
+  `settings.ini` (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `LazyOS`,
   `JetBrains Mono 10`, animations off) and `gtk.css`, which repaints the surfaces with explicit
   selectors of the same specificity Adwaita uses and is parsed after it. The fills are **opaque**
   base03 - a translucent window shows the wallpaper through its own text - and pcmanfm is the
@@ -849,9 +899,9 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   search rather than the window, which answers a narrower question instead of the wrong one.
   Nothing of this is resident: the menu is one rofi process while it is open, and the window is
   the window.
-- **`Alt+Search` is the same question in a terminal** (`~/.config/bin/nureb-find`): `fd` streams
+- **`Alt+Search` is the same question in a terminal** (`~/.config/bin/lazyos-find`): `fd` streams
   the whole tree under `$HOME` into **fzf**, the fruit of typing narrows it while the walk is
-  still running, the right 55 % is a preview pane, and Enter hands the choice to **`nureb-view`**
+  still running, the right 55 % is a preview pane, and Enter hands the choice to **`lazyos-view`**
   - the same opener a double click in pcmanfm uses - so the list, the window and the key never
   disagree about where a file goes. The two searches are deliberately different questions:
   `rofi-files --search` is **bounded** (500 rows, sorted newest, icons and thumbnails, up in a
@@ -877,23 +927,23 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   the flag every row is shifted two characters nobody types and every path handed to the opener
   is wrong. **The preview draws with `chafa -f symbols`, never sixels**: the pane is part of
   fzf's own terminal, not a window, so a sixel image is painted over by the next redraw, while a
-  symbols image survives it (and reuses the same `nureb-thumbnail` cache, so a picture is
+  symbols image survives it (and reuses the same `lazyos-thumbnail` cache, so a picture is
   decoded once, as in the browser). **No glyph column**: foot cannot render a Font Awesome
   codepoint (its fallback font is Symbols Nerd Font Mono), so a row carries no icon and the
   picture is **the preview pane** - which is why this feature satisfies the picture rule without
   a name in `scripts/make-icons.sh`; the notification that a failed search raises does carry
   `system-search`, and `check-system.sh` warns when the theme loses it. **`--no-multi`** because
   the opener takes one file: a Tab that marked three rows would open the first and say nothing
-  about the other two. The window is a foot with `--app-id=nureb-find`, floated and centred by
+  about the other two. The window is a foot with `--app-id=lazyos-find`, floated and centred by
   `etc/sway/config.d/29-file-search.conf`, and started from a shell it runs in that shell
   instead - the key and the command are the same program. `check-system.sh` FAILs on a missing
   binding, on a script that lost its executable bit (the window would flash and close), on a
   missing `fzf` (an empty list reads as "no such file", never as a missing package) and on a
-  missing `nureb-view`, and warns on the icon. Nothing is resident: one fzf process while the
+  missing `lazyos-view`, and warns on the icon. Nothing is resident: one fzf process while the
   window is open.
 - **`Alt+Ctrl+G` searches the text inside the files** (`rofi-grep`, and "Search inside files" in
   the root menu). It is the third question in the family and each one is a different tool on
-  purpose: `rofi-files --search` asks *which file was it* (bounded, 500 rows, icons), `nureb-find`
+  purpose: `rofi-files --search` asks *which file was it* (bounded, 500 rows, icons), `lazyos-find`
   asks *I will know it when I see it* (uncapped, fzf, a preview), and this asks *where did I write
   this* - one `rg --line-number --no-heading` run over `$HOME`, one row per match with the matching
   **text** on the row (the text is what tells two matches apart) and `path:line` in the dim
@@ -912,7 +962,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   picture this feature has is the text on the row, and the notification that says "nothing
   matches" carries `system-search` from the theme.
 - **Capture is a menu over commands that already exist** (`rofi-capture`, `Alt+Ctrl+C`, "Capture"
-  in the root menu and the launcher entry `org.nureb.capture.desktop`):
+  in the root menu and the launcher entry `org.lazyos.capture.desktop`):
   `screenshot -n save|copy screen|area|window` for the screenshot, where
   `~/.config/bin/screenshot` is the one place that decides where a picture lands -
   `~/Pictures/Screenshots/<the date>/`, one folder per day, under grimshot's own `date -Ins`
@@ -928,7 +978,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   stdout -l eng` (English is the only `tesseract-ocr-*` the image ships) or `zbarimg -q --raw`
   reads, the result copied with `ui_copy` and the first line in the notification.
   **`wf-recorder` is the one action that outlives the menu**, so it is started and stopped from the
-  same list and its pid and file name live in `$XDG_RUNTIME_DIR/nureb-capture`: a session that dies
+  same list and its pid and file name live in `$XDG_RUNTIME_DIR/lazyos-capture`: a session that dies
   takes the state with it (a stale pid is `kill -0`-tested), the `.mp4` stays. x264 on the CPU
   (`-c libx264 -p preset=veryfast -p crf=28 -r 30`) because the MT8192 has no hardware encoder and
   four cores are the frame budget, **no audio track** because that needs a PipeWire monitor source
@@ -943,7 +993,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   because a connection name may contain a colon and `nmcli -t` escapes it. `check-system.sh` FAILs
   when any of the tools or the two scripts is missing.
 - **Download is `yt-dlp` with three decisions** (`rofi-download`, the root menu's "Download" row
-  and the launcher entry `org.nureb.download.desktop`): a link is pasted (or taken from the
+  and the launcher entry `org.lazyos.download.desktop`): a link is pasted (or taken from the
   clipboard when it holds one), the kind is video or **audio only**, and the file lands in
   `~/Downloads` under yt-dlp's own `Title [id].ext` name. `--no-playlist` keeps a shared link to a
   video inside a playlist from turning into a thousand files on a 58 GB eMMC; `--no-mtime` keeps
@@ -997,7 +1047,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   tabbed), the key view is `Alt+Ctrl+K` (`Alt+K` is vim focus up, `Alt+Shift+K` moves the window), and there is no "cycle layout"
   key (sway's layouts are stacking/tabbed/split, not dwindle/master/scrolling).
   `bindswitch`/`wtype`/`iio` facts for the tablet work are in the sensor bullet above; the full
-  mapping is `usr/share/doc/nureb/03-shortcuts.md`. **Every binding carries its description on a
+  mapping is `usr/share/doc/lazyos/03-shortcuts.md`. **Every binding carries its description on a
   comment line above**, and it covers the bindings below it until a blank line or another comment,
   because `rofi-keys` shows those comments - a binding without one appears as its raw command in the
   key view, and a group header with no blank line after it would label the first binding instead.
@@ -1006,7 +1056,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   are the menus behind the root menu (`rofi-quick`, `rofi-notify`, `rofi-clean`, `rofi-kill`,
   `rofi-tz`, `rofi-places`, `rofi-media`, `rofi-calc`, `rofi-layout`, `rofi-learn`, `rofi-emoji`,
   `rofi-clip`, `rofi-about`, `rofi-dns`, `rofi-pkg`, `rofi-color`, `rofi-remind`, `rofi-download`,
-  `rofi-grep`, `rofi-format`, `rofi-file-actions`); they share
+  `rofi-grep`, `rofi-format`, `rofi-swap`, `rofi-file-actions`); they share
   `lib-rofi.sh` (`ui_row` glyph+bold+dim row, `ui_pick` table-and-key round trip because rofi hands
   back the rendered row, `ui_pick_alt` when a second action sits on Alt+1 - it returns `alt:KEY` and
   rofi exits 10 for that, `ui_say` for results) and each is one process while open. **A slow action
@@ -1014,7 +1064,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   [ICON]` opens a mako toast that does not expire, `busy end`/`fail` turn the same card into the
   result (same `x-canonical-private-synchronous` tag, so mako replaces instead of stacking), and
   `bar-busy` is the waybar `custom/busy` module that shows a braille spinner plus the label in
-  yellow while a state file exists in `$XDG_RUNTIME_DIR/nureb-busy` - zero width when idle, and a
+  yellow while a state file exists in `$XDG_RUNTIME_DIR/lazyos-busy` - zero width when idle, and a
   state file older than five minutes is dropped so a killed script cannot leave a spinner forever.
   **Clicking that spinner stops the task it names**: the producer sets `BUSY_STOP` to the one shell
   line that ends its own slow step (`pkill -f "[n]mcli.*device wifi list"`, a pattern, not a pid
@@ -1046,7 +1096,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   are text, link or image by content; an image is listed by what `cliphist` knows about it, not by
   a thumbnail (a rofi row is one line), and "Save the newest image" decodes it into
   `~/Pictures/clipboard/<date>.<ext>` (extension from `file --mime-type`) and opens it with
-  `xdg-open`, which routes a path through `nureb-view` and therefore shows it in `imv` now that
+  `xdg-open`, which routes a path through `lazyos-view` and therefore shows it in `imv` now that
   the viewer is in the image. The database is `~/.cache/cliphist/db` and
   holds everything copied, secrets included, so the menu's last row clears it.
   `rofi-emoji` (`Alt+Ctrl+E`) reads `~/.config/emojis.tsv`, **generated on the build host by
@@ -1079,7 +1129,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `TimersCalendar` before claiming anything. The bar's `sbs-8-000b` gauge is the
   battery there; a `hid-*` power supply belongs to the touchpad and reads 0%.
 
-- **The manual is rendered, not printed.** `usr/share/doc/nureb/*.md` (seven pages: welcome, rofi,
+- **The manual is rendered, not printed.** `usr/share/doc/lazyos/*.md` (seven pages: welcome, rofi,
   shortcuts, software, the system, troubleshooting, agents) is opened by `rofi-learn` with **glow**
   (`packages/tools.list`), styled by `~/.config/glow/solarized.json` - a *glamour* style, unrelated
   to the rofi theme; glow lives in `~/.config/glow/glow.yml`, whose `style:` must be an absolute
@@ -1122,18 +1172,21 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   never hangs, and the root menu keeps a **Dictation** row so the mouse can stop it too.
   Omarchy runs voxtype (a Rust daemon) for the same interaction. `sway-hibernate` refuses unless three things hold, each with
   its own message: `/sys/power/state` has `disk`, a **disk** swap (not zram) of at least 2/5 of RAM
-  exists, and the kernel command line carries `resume=`. `resume=LABEL=nureb_swap` is the intended
+  exists, and the kernel command line carries `resume=`. `resume=LABEL=lazyos_swap` is the intended
   wiring (initramfs-tools resolves the label through udev, so an SD swap partition labelled
-  `nureb_swap` is enough) - a swap *file* cannot be used for resume because it has no label. The
+  `lazyos_swap` is enough) - a swap *file* cannot be used for resume because it has no label. The
   default image has no disk swap, so the menu entry explains instead of hibernating into a swap the
-  machine cannot resume from. `check-system.sh` checks the manual, `rofi-keys`, the dictation tools,
+  machine cannot resume from. **Auxiliary swap** (Places and the root menu) prepares that partition
+  and the fstab line that activates it at every boot; `resume=LABEL=lazyos_swap` still has to be
+  added to the kernel command line and needs the kpart rebuilt. `check-system.sh` checks the manual,
+  `rofi-keys`, the dictation tools,
   the model (SKIP when absent) and the hibernate conditions (SKIP/WARN, never FAIL).
 - **Agents** (`rofi-agents`, Alt+Ctrl+Shift+A = Omarchy's Super+Shift+Ctrl+A) is the local half of
   Omarchy's agents feature: launch (in foot, from `~/Work`, because the agents refuse to remember
   trust in `$HOME`), install (`npm install -g --prefix ~/.local <pkg>` - an explicit prefix, so npm
   never needs root and never touches `/usr/local`, and `~/.local/bin` is already on PATH), default
   agent, and accounts. An "account" is a directory under
-  `~/.local/share/nureb/agents/<agent>/<name>` used through the variable the CLI itself documents:
+  `~/.local/share/lazyos/agents/<agent>/<name>` used through the variable the CLI itself documents:
   **`CLAUDE_CONFIG_DIR`** for Claude Code and **`CODEX_HOME`** for Codex. OpenCode, Gemini and
   Copilot have no such variable and the menu says so instead of pretending. A new account is created
   empty on purpose - the first launch there runs the CLI's own sign-in, so two subscriptions never
@@ -1178,16 +1231,18 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
   design ::` and the arcade continue line `» press any key to continue «` - the lazy-tools idea
   (lazygit/lazydocker: the tool does the boring part, the thing to press is on the screen) plus the
-  arcade screen an idle machine deserves. It is the **one surface that says LazyOS** for now: the
-  script is `~/.config/bin/lazyos-screensaver`, the app id `org.lazyos.screensaver`, its drop-in and
-  its launcher entry are named after it, and the rest of the distribution stays Nureb until the later
-  rename. **The frame rate is the whole cost.** Measured on this host with a pty and the real art, one
-  complete cycle of the seven effects is **70 s of wall time and 8.5 s of CPU (~12 % of one core)**,
-  peaking at **49 MB** in `tte` on top of foot's ~25 MB, and costing nothing after it ends; the same
-  cycle at 120 fps takes 20 s and ~6.4 s of CPU, i.e. ~32 % of a core, for an animation three times
-  faster than a screensaver needs. `tte` has no global foreground flag, so the colour lives in
-  the terminal profile (`~/.config/foot/screensaver.ini`, `foreground=cb4b16`, solarized orange) for
-  the effects that paint in the terminal's foreground, and the static frame prints its own SGR.
+  arcade screen an idle machine deserves. It is the surface that carries the **wordmark**: the art
+  is `~/.config/lazyos/screensaver.txt`, the script is `~/.config/bin/lazyos-screensaver`, the app
+  id `org.lazyos.screensaver`, and its drop-in and launcher entry are named after it. The mark and
+  the wallpaper are `scripts/make-brand.sh`'s; the terminal gets the text art because that is what
+  a terminal can draw. **The frame rate is the whole cost.** Measured on this host with a pty and
+  the real art, one complete cycle of the seven effects is **70 s of wall time and 8.5 s of CPU
+  (~12 % of one core)**, peaking at **49 MB** in `tte` on top of foot's ~25 MB, and costing nothing
+  after it ends; the same cycle at 120 fps takes 20 s and ~6.4 s of CPU, i.e. ~32 % of a core, for
+  an animation three times faster than a screensaver needs. `tte` has no global foreground flag,
+  so the colour lives in the terminal profile (`~/.config/foot/screensaver.ini`,
+  `foreground=cb4b16`, solarized orange) for the effects that paint in the terminal's foreground,
+  and the static frame prints its own SGR.
   Four things are not obvious. **`tte`'s stdout is the animation** - the first version redirected it
   to `/dev/null` while silencing the log and the screen stayed black for the whole run ("the
   screensaver does not work, nothing moves"). **A terminal allocates an 80x24 pty and resizes it only
@@ -1414,7 +1469,7 @@ scripts/build-rootfs.sh     # debootstrap Debian forky rootfs    -> $WORK_DIR/ro
 scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initramfs
 scripts/install-swayfx.sh   # install the compositor .debs (rootfs by default, `/` for a running system)
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
-scripts/make-icons.sh       # Font Awesome glyphs -> the Nureb icon theme PNGs (host tool, committed output)
+scripts/make-icons.sh       # Font Awesome glyphs -> the LazyOS icon theme PNGs (host tool, committed output)
 scripts/make-emojis.sh      # Python's Unicode database -> ~/.config/emojis.tsv (host tool, committed output)
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
 scripts/make-image.sh       # distributable disk image from the rootfs (no card needed)

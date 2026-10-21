@@ -40,7 +40,7 @@ fi
 
 _dir=${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots/$(date +%Y-%m-%d)
 mkdir -p "$_dir" 2>/dev/null || {
-	notify-send -a Nureb -i dialog-error Screenshot \
+	notify-send -a LazyOS -i dialog-error Screenshot \
 		"Could not create $_dir" 2>/dev/null || true
 	exit 1
 }

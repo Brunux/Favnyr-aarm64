@@ -15,26 +15,26 @@
 # http/https stay with Firefox, which is the browser the shim already calls.
 
 [Default Applications]
-text/plain=org.nureb.view.desktop
-text/markdown=org.nureb.view.desktop
-text/x-markdown=org.nureb.view.desktop
-image/png=org.nureb.view.desktop
-image/jpeg=org.nureb.view.desktop
-image/gif=org.nureb.view.desktop
-image/webp=org.nureb.view.desktop
-image/bmp=org.nureb.view.desktop
-image/tiff=org.nureb.view.desktop
-image/svg+xml=org.nureb.view.desktop
-image/avif=org.nureb.view.desktop
-image/heif=org.nureb.view.desktop
-image/heic=org.nureb.view.desktop
-video/mp4=org.nureb.view.desktop
-video/webm=org.nureb.view.desktop
-video/x-matroska=org.nureb.view.desktop
-video/quicktime=org.nureb.view.desktop
-video/x-msvideo=org.nureb.view.desktop
-video/mpeg=org.nureb.view.desktop
-video/ogg=org.nureb.view.desktop
+text/plain=org.lazyos.view.desktop
+text/markdown=org.lazyos.view.desktop
+text/x-markdown=org.lazyos.view.desktop
+image/png=org.lazyos.view.desktop
+image/jpeg=org.lazyos.view.desktop
+image/gif=org.lazyos.view.desktop
+image/webp=org.lazyos.view.desktop
+image/bmp=org.lazyos.view.desktop
+image/tiff=org.lazyos.view.desktop
+image/svg+xml=org.lazyos.view.desktop
+image/avif=org.lazyos.view.desktop
+image/heif=org.lazyos.view.desktop
+image/heic=org.lazyos.view.desktop
+video/mp4=org.lazyos.view.desktop
+video/webm=org.lazyos.view.desktop
+video/x-matroska=org.lazyos.view.desktop
+video/quicktime=org.lazyos.view.desktop
+video/x-msvideo=org.lazyos.view.desktop
+video/mpeg=org.lazyos.view.desktop
+video/ogg=org.lazyos.view.desktop
 application/pdf=org.gnome.Papers.desktop
 application/x-bzpdf=org.gnome.Papers.desktop
 application/x-gzpdf=org.gnome.Papers.desktop
@@ -55,8 +55,8 @@ x-scheme-handler/https=firefox-esr.desktop
 inode/directory=pcmanfm.desktop
 
 [Added Associations]
-text/plain=org.nureb.view.desktop;
-image/png=org.nureb.view.desktop;
-image/jpeg=org.nureb.view.desktop;
+text/plain=org.lazyos.view.desktop;
+image/png=org.lazyos.view.desktop;
+image/jpeg=org.lazyos.view.desktop;
 application/pdf=org.gnome.Papers.desktop;
 inode/directory=pcmanfm.desktop;

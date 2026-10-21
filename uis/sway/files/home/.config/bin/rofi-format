@@ -1,18 +1,11 @@
 #!/bin/sh
 # Format a disk: a USB stick or an SD card, wiped and made empty.
 #
-# This is the one destructive thing the session offers, so what makes it safe is
-# the list, not the confirmation:
-#
-#   * a disk with anything *mounted* on it is not offered at all.  That single
-#     rule already excludes the running root, /boot, and every stick udisks
-#     mounted - and a busy disk would fail halfway anyway;
-#   * a disk carrying a **ChromeOS kernel partition** is not offered: that is the
-#     signature of a disk this machine boots from (p1 of the layout in
-#     scripts/lib-cgpt.sh), so the eMMC, the card that wrote the system and the
-#     card the system is running from are all excluded however they are named -
-#     no device name is hardcoded here;
-#   * zram, loop and optical devices are not disks a person formats.
+# The candidate list is ui_disks (lib-rofi.sh), and its rules are the safety, not
+# the confirmation: nothing mounted, no ChromeOS kernel partition, no zram, loop
+# or optical device.  That excludes the running root, /boot, the eMMC and the card
+# this system boots from without naming any device, and rofi-swap draws its own
+# list from the same function.
 #
 # What is left has nothing this system needs on it, and the confirmation still
 # names the device, its model and its size, with **Cancel as the first row** so a
@@ -44,31 +37,9 @@ if [ -n "$missing" ]; then
 	exit 1
 fi
 
-# The ChromeOS kernel partition type.  A disk that has one is a disk this
-# firmware can load a kernel from, which makes it a system disk and never a
-# candidate - the eMMC and both cards of this machine are excluded by it.
-KERN_TYPE=fe3a2a5d-4f32-41a7-b725-accc3285a309
-
-candidates() {
-	lsblk -dnro NAME,SIZE,MODEL,TRAN 2>/dev/null | while read -r name size model tran; do
-		[ -n "${name:-}" ] || continue
-		case $name in zram* | loop* | ram* | sr*) continue ;; esac
-		# Anything mounted, on the disk itself or on a partition of it.
-		_mnt=$(lsblk -nro MOUNTPOINT "/dev/$name" 2>/dev/null | tr -d '[:space:]' || true)
-		[ -z "$_mnt" ] || continue
-		# A bootable disk: one PARTTYPE read, matched with case so that no
-		# `producer | grep -q` pipeline can report a false negative.
-		_types=$(lsblk -nro PARTTYPE "/dev/$name" 2>/dev/null || true)
-		case $_types in *"$KERN_TYPE"*) continue ;; esac
-		# -r escapes a space in a model as \x20; the row shows a model, not an
-		# escape sequence ("USB\x20DISK\x203.0" is not what a person reads).
-		_model=$(printf '%s' "${model:-unknown model}" | sed 's/\\x20/ /g')
-		ui_row "$UI_I_DISK" "/dev/$name" \
-			"$_model · $size${tran:+ · $tran}" "fmt:$name" "$UI_YELLOW"
-	done
-}
-
-candidates >"$tmp/rows"
+# The rows come from ui_disks in lib-rofi.sh: the same list rofi-swap draws, so
+# the two menus cannot drift apart on what a system disk is.
+ui_disks fmt >"$tmp/rows"
 
 if [ ! -s "$tmp/rows" ]; then
 	ui_say 'Format a disk' \
@@ -146,16 +117,16 @@ fi
 if [ "$rc" -eq 0 ]; then
 	step=filesystem
 	if [ "$fs" = fat32 ]; then
-		out=$(sudo -n mkfs.vfat -F32 -n NUREB "$part" 2>&1) || rc=$?
+		out=$(sudo -n mkfs.vfat -F32 -n LAZYOS "$part" 2>&1) || rc=$?
 	else
-		out=$(sudo -n mkfs.ext4 -F -q -L NUREB "$part" 2>&1) || rc=$?
+		out=$(sudo -n mkfs.ext4 -F -q -L LAZYOS "$part" 2>&1) || rc=$?
 	fi
 fi
 
 if [ "$rc" -eq 0 ]; then
-	"$dir/busy" end format "$dev is empty ($fs, label NUREB)"
+	"$dir/busy" end format "$dev is empty ($fs, label LAZYOS)"
 	ui_say 'Format a disk' \
-		"$dev · $fs · label NUREB · mount it from Places when you need it" \
+		"$dev · $fs · label LAZYOS · mount it from Places when you need it" \
 		normal "$UI_ICON_DISK"
 	exit 0
 fi

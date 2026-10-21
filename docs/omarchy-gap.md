@@ -15,7 +15,7 @@ deserve a checked answer instead of a feeling.
   names (`hyprpicker`, `yaru-theme-icon`, `libqalculate23`) are standalone tools that are
   reclassified in the tables below.
 * **Features**: the inventory in [`plan-rofi.md`](plan-rofi.md) and the manual's own "not built yet"
-  list (`uis/sway/files/usr/share/doc/nureb/03-shortcuts.md`).
+  list (`uis/sway/files/usr/share/doc/lazyos/03-shortcuts.md`).
 * **Section 5 is not Omarchy parity**: it is what this port's own plans (`plan-rofi.md`'s batches B
   and C, its tablet section, `plan-agents.md`) already specify and has not been built. It is here so
   the two questions - "what does Omarchy have that we do not" and "what have we planned and not
@@ -61,7 +61,7 @@ Adopted since this list was written: `swappy` and `wf-recorder` (the capture men
 `fonts-noto-color-emoji` (the emoji picker's glyphs, `rofi-emoji`), `pcmanfm` + `gvfs` (the
 windowed file manager: `Search+Shift`, the launcher's **Files (window)**; the decision is section
 1), and the five names the file story was waiting for: **`mpv` + `mpv-mpris`** (a video plays in a
-real player, and `playerctl`, `rofi-media` and the bar see it because `nureb-view` passes
+real player, and `playerctl`, `rofi-media` and the bar see it because `lazyos-view` passes
 `--script=/etc/mpv/scripts/mpris.so` - `--no-config` empties the directory the plugin installs
 into), **`imv`** (the picture viewer, with `chafa` kept as the fallback for a GPU without an EGL
 context), **`papers`** (PDF, DjVu and comics in a reader instead of a browser tab), **`udisks2`**
@@ -69,7 +69,7 @@ context), **`papers`** (PDF, DjVu and comics in a reader instead of a browser ta
 it is a resident tray daemon and this bar has no tray), and **`neovim` + `vim`** (so `EDITOR` and
 `VISUAL` name `nvim` instead of leaving `eff` on nano, and `vim` brings `/usr/bin/vi` with it).
 The colour picker needed no package at all: `slurp` + `grim` + `ffmpeg` already read a pixel - and
-neither did `ffmpegthumbnailer`: `nureb-thumbnail` makes a video's thumbnail with the `ffmpeg` the
+neither did `ffmpegthumbnailer`: `lazyos-thumbnail` makes a video's thumbnail with the `ffmpeg` the
 image already has.
 
 ## 2. Covered by something else
@@ -78,7 +78,7 @@ image already has.
 |---|---|
 | `chromium` (280 MB) | `firefox-esr` (in `uis/sway/packages.list`), the image's one browser: documents, pictures and video have viewers of their own now (`papers`, `imv`, `mpv`) |
 | `alacritty`, `kitty` | `foot` - half the memory of an alacritty window on a 4 GB machine |
-| `yaru-theme-icon` | the **Nureb** icon theme, rendered by `scripts/make-icons.sh` from the Font Awesome codepoints used in the menus |
+| `yaru-theme-icon` | the **LazyOS** icon theme, rendered by `scripts/make-icons.sh` from the Font Awesome codepoints used in the menus |
 | `libxkbcommon-tools` (`xkbcli list`) | `keyd` for the keymap and `swaymsg -t get_inputs` + `jq` for the layout indicator |
 | `libqalculate23` | `rofi-calc` (an `awk` expression, no library) |
 | `hyprsunset` | `wlsunset` + the night-light row in `rofi-quick` |

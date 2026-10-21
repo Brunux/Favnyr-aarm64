@@ -42,11 +42,11 @@ bindsym --no-repeat --release Super_L exec /home/brunux/.config/bin/rofi-files -
 # holding the key has nothing to repeat.
 bindsym --no-repeat --release Super_L+Shift exec pcmanfm "$HOME"
 
-# Alt+Search is the same question asked in a terminal: `nureb-find` streams
+# Alt+Search is the same question asked in a terminal: `lazyos-find` streams
 # every file under $HOME through fd into fzf, so the prompt is up before the
 # walk is done and there is no cap on what an empty query offers, with a preview
 # pane on the right (text read with bat, a picture or a PDF page decoded once and
-# drawn with chafa) and Enter handing the choice to nureb-view - the same opener
+# drawn with chafa) and Enter handing the choice to lazyos-view - the same opener
 # a double click in pcmanfm reaches.
 #
 # It sits next to the Search key because the two are one feature with two
@@ -57,6 +57,6 @@ bindsym --no-repeat --release Super_L+Shift exec pcmanfm "$HOME"
 #
 # Same release/no-repeat reasoning as the two above: Search is a Super_L press,
 # and releasing it while Alt is still down lands here, while Search alone falls
-# through to the list. `foot --app-id=nureb-find` is floated and centred by
+# through to the list. `foot --app-id=lazyos-find` is floated and centred by
 # etc/sway/config.d/29-file-search.conf.
-bindsym --no-repeat --release Super_L+Mod1 exec /home/brunux/.config/bin/nureb-find
+bindsym --no-repeat --release Super_L+Mod1 exec /home/brunux/.config/bin/lazyos-find

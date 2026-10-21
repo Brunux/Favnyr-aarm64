@@ -4,7 +4,7 @@ Omarchy's desktop is a Quickshell shell: every menu is a QML tree whose leaves c
 every script prompts through `omarchy-menu-select` (a dmenu) before it acts. That is the same shape
 this port already has, one process at a time:
 
-| Omarchy | Nureb |
+| Omarchy | LazyOS |
 |---|---|
 | `omarchy-menu` (a QML tree of routes) | `~/.config/bin/bar-menu` (a `rofi -dmenu` list) |
 | `omarchy-menu-select "Title" -- <flags>` | `bar-pick` (a `rofi -dmenu` wrapper: prompt, theme, `-no-custom`) |
@@ -39,15 +39,15 @@ Grouped by verdict. "Effort" is implementation + test on the card, not reading.
 
 ### Already covered (no work)
 
-| Omarchy | Nureb today |
+| Omarchy | LazyOS today |
 |---|---|
 | Apps (`omarchy.dock apps`) | `rofi -show drun` |
 | Window list | `rofi -show window` (`$mod+Tab`; Omarchy has no equivalent in the menu) |
-| Power / Lock / Screensaver / Suspend | `bar-power`, `sway-lock`, `lazyos-screensaver`, `sway-suspend` (+ the `org.nureb.*` and `org.lazyos.*` entries) |
+| Power / Lock / Screensaver / Suspend | `bar-power`, `sway-lock`, `lazyos-screensaver`, `sway-suspend` (+ the `org.lazyos.*` and `org.lazyos.*` entries) |
 | Wi-Fi / Bluetooth / audio panels | `bar-net`, `bar-bt`, `bar-audio` |
 | Notifications | mako |
 | Clipboard *panel* (QML grid) | `rofi-clip`: the same history as a list, not a grid - see P0 #2 |
-| Screenshot (`omarchy-capture-screenshot`) | `grimshot` + `org.nureb.screenshot-area` |
+| Screenshot (`omarchy-capture-screenshot`) | `grimshot` + `org.lazyos.screenshot-area` |
 
 ### P0 - cheap, high value, no new daemon
 
@@ -163,7 +163,7 @@ anything that takes seconds: the Wi-Fi scan, the Bluetooth scan, connecting, and
 Free space.
 
 The manual is rendered by **glow** instead of shown as bat source, the launcher shows real icons
-(the **Nureb** theme, rendered from the same Font Awesome codepoints by `scripts/make-icons.sh`),
+(the **LazyOS** theme, rendered from the same Font Awesome codepoints by `scripts/make-icons.sh`),
 and the image now carries **firefox-esr** as its one viewer, which is what `rofi-files` hands
 anything that is not text to, plus a two-dozen-line `xdg-open`.
 
@@ -185,7 +185,7 @@ QR (#6), OCR (#7), QR capture (#8) and screen recording (#14) landed with the **
 recording has no audio track on purpose: that is a PipeWire monitor source, and it is Batch C's
 "recording with audio".
 
-Done in the first batch: **Learn** (seven pages in `usr/share/doc/nureb` + `rofi-learn`, opened with
+Done in the first batch: **Learn** (seven pages in `usr/share/doc/lazyos` + `rofi-learn`, opened with
 bat in foot), the **key view** (`rofi-keys`, generated from the configuration, `Alt+Ctrl+K` as
 Omarchy's `Super+K`), **dictation** (`dictate` + `dictate-model`, whisper.cpp, `Alt+Ctrl+X` as
 Omarchy's `Super+Ctrl+X`), **hibernate** (`sway-hibernate`, gated on a disk swap and `resume=`) and
@@ -202,7 +202,7 @@ dropped its `filebrowser` mode; it had not (2.0.0-0.2 has it, with sorting, hidd
 the markup rows and the `bat`/popup behaviour, so the view is a script over
 `rofi -dmenu -markup-rows` that reopens itself in the chosen directory, reads text files with `bat`
 and draws pictures with `chafa` in the floated foot window. The thumbnails came after that: rofi's
-own cache (`~/.cache/thumbnails`, 128 px) fed by `~/.config/bin/nureb-thumbnail`, which is why the
+own cache (`~/.cache/thumbnails`, 128 px) fed by `~/.config/bin/lazyos-thumbnail`, which is why the
 batch cost two packages (`poppler-utils` for a PDF's first page, `chafa` for the picture fallback) and why
 `bubblewrap` left the list - it was there for a glycin that this rofi does not use (AGENTS.md).
 
@@ -234,7 +234,7 @@ filtered by "can it be a rofi list plus a script, with no resident process". Cos
 | **Kill process** | macOS/Raycast, KRunner | `ps --sort=-rss` → rofi → TERM, Alt+1 KILL, never the session's own tree |
 | **SSH hosts** | KRunner, rofi itself | **`rofi -show ssh`** - built in; add `ssh` to `modes` and a menu row (free) |
 | **Places** | KRunner places, GNOME Files | static list (Home, Downloads, Documents, Pictures, `/media`, the card) → foot or `xdg-open` |
-| **Search the manual** | - | `rg` over `/usr/share/doc/nureb` → open the page at the match |
+| **Search the manual** | - | `rg` over `/usr/share/doc/lazyos` → open the page at the match |
 | **Keyboard layout** | KRunner, GNOME | `swaymsg input <id> xkb_layout …`; the bar indicator follows |
 | **Touchpad toggle** | Omarchy | `swaymsg input type:touchpad events toggle` + a state file for the marker |
 | **Night light toggle** | elementary, GNOME | `wlsunset` runs permanently today; the toggle stops it or restarts it with the configured temperature |

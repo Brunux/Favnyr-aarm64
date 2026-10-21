@@ -16,7 +16,7 @@ is only half done after `apt`: the new kernel lands in `/boot` and `/lib/modules
 but `p1` still carries the old one. Finish it from the repository copy:
 
 ```sh
-sudo ~/Dev/Nureb/scripts/install-kpart.sh
+sudo ~/Dev/LazyOS/scripts/install-kpart.sh
 ```
 
 That script finds the partition this machine booted from (it compares
@@ -47,7 +47,7 @@ at 50 % pressure instead of letting the machine freeze. `swapon --show` and
 ## Health and backups
 
 ```sh
-check-system.sh ~/Dev/Nureb    # OK / WARN / FAIL, one line per check
+check-system.sh ~/Dev/LazyOS    # OK / WARN / FAIL, one line per check
 ```
 
 Every check corresponds to a bug this port has already hit, so a `FAIL` is a
@@ -57,8 +57,8 @@ regression, not a theory. The image ships the script as
 Backups are made of the *parts* a disk cannot be regenerated from:
 
 ```sh
-sudo ~/Dev/Nureb/scripts/backup-system.sh /media/you/BACKUP
-sudo ~/Dev/Nureb/scripts/restore-system.sh /media/you/BACKUP /dev/mmcblk0
+sudo ~/Dev/LazyOS/scripts/backup-system.sh /media/you/BACKUP
+sudo ~/Dev/LazyOS/scripts/restore-system.sh /media/you/BACKUP /dev/mmcblk0
 ```
 
 The kernel partition, the partition table, `/boot` and the root filesystem go
@@ -91,8 +91,13 @@ lock instead of a flat colour.
   RAM, so 2 GB is the practical minimum here;
 * `resume=` on the kernel command line, so the next boot restores the image
   instead of starting fresh. Because `resume=` is resolved through udev, a
-  **label** is enough: a swap partition labelled `nureb_swap` plus
-  `resume=LABEL=nureb_swap` in `devices/google-asurada/kernel-cmdline.conf`.
+  **label** is enough: a swap partition labelled `lazyos_swap` plus
+  `resume=LABEL=lazyos_swap` in `devices/google-asurada/kernel-cmdline.conf`.
+
+The **Auxiliary swap** row in Places (and in the root menu) writes that partition
+and the `/etc/fstab` line that activates it on every boot, with priority 10 so
+zram keeps being used first. It does not add `resume=`: that is a kernel command
+line change and needs the kernel partition rebuilt.
 
 `sway-hibernate` (in the root menu, and as a launcher entry) checks both and says
 which one is missing. It never hibernates into a swap the machine cannot resume
@@ -111,8 +116,8 @@ booting the card and running the installer again.
 
 ```sh
 sudo apt update && sudo apt full-upgrade
-sudo ~/Dev/Nureb/scripts/install-kpart.sh   # if the kernel changed
-check-system.sh ~/Dev/Nureb
+sudo ~/Dev/LazyOS/scripts/install-kpart.sh   # if the kernel changed
+check-system.sh ~/Dev/LazyOS
 ```
 
 The image itself is a snapshot: it is rebuilt from the repository, not upgraded

@@ -8,7 +8,7 @@
 # file does not exist, so a picture is decoded once, ever, and a directory that
 # has been listed before opens with its thumbnails already in place.
 #
-#   nureb-thumbnail <input> <output> <size>
+#   lazyos-thumbnail <input> <output> <size>
 #
 # The input is a path (not a URL) and the output is the cache file rofi will
 # read. A file neither ffmpeg nor poppler understands leaves nothing behind, so
@@ -84,7 +84,7 @@ if [ "${1:-}" = --decode ]; then
 fi
 
 if [ $# -lt 2 ]; then
-	printf 'usage: nureb-thumbnail <input> <output> [size]\n' >&2
+	printf 'usage: lazyos-thumbnail <input> <output> [size]\n' >&2
 	exit 2
 fi
 in=$1
@@ -95,7 +95,7 @@ size=${3:-128}
 # kernel releases it when the process dies, so a killed run cannot leave a slot
 # taken and the browser waiting on it. If the runtime directory is not writable,
 # decode anyway rather than show no pictures at all.
-dir=${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/nureb-thumbnails
+dir=${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/lazyos-thumbnails
 if mkdir -p -- "$dir" 2>/dev/null; then
 	i=1
 	while [ "$i" -le "$SLOTS" ]; do

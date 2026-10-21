@@ -14,11 +14,11 @@ question: every one of its checks maps to a bug this port has already hit.
 
 ```sh
 cat /etc/debian-aarch64-revision      # commit, device, UI, kernel, build date
-/usr/local/sbin/check-system.sh ~/Dev/Nureb
+/usr/local/sbin/check-system.sh ~/Dev/LazyOS
 ```
 
 * the revision must be the build you meant to test. The tree at
-  `~/Dev/Nureb` is a snapshot (`git archive HEAD`), not a checkout, so compare
+  `~/Dev/LazyOS` is a snapshot (`git archive HEAD`), not a checkout, so compare
   that hash with `git log --oneline -1` on the machine that wrote the card;
 * `check-system.sh` must end with **0 FAIL**. WARN and SKIP lines are expected
   and explained in `reports/README.md`; anything else stops the run here.
@@ -36,7 +36,7 @@ cat /etc/debian-aarch64-revision      # commit, device, UI, kernel, build date
 
 An **empty** list is the watcher, not the menu: `pgrep -fx 'wl-paste --watch cliphist store'`
 (`etc/sway/config.d/27-clipboard.conf` starts it once per session). An image
-that does not open is `~/.config/bin/nureb-view` (not executable) or `imv`; a
+that does not open is `~/.config/bin/lazyos-view` (not executable) or `imv`; a
 saved file ending in `.bin` means `file` is missing and the extension could not
 be read from the contents.
 
@@ -125,7 +125,7 @@ the reason, and the menu shows it instead of claiming success.
 | Enter on an HTML file | `bat` (it is text), not Firefox |
 | Enter on a `.deb` | Firefox, as a download prompt: the browser is what a package is for here |
 | Enter on a text file | `bat` in the popup window (`BAT_THEME=ansi`, solarized) |
-| open a deep path (`~/Dev/Nureb/uis/sway/files/home/.config/bin`) | the window is drawn wide enough that the **end** of the name is readable: rofi cannot scroll a row sideways, so `lib-rofi.sh`'s `ui_width` sizes the list instead of letting rofi cut it with `…` |
+| open a deep path (`~/Dev/LazyOS/uis/sway/files/home/.config/bin`) | the window is drawn wide enough that the **end** of the name is readable: rofi cannot scroll a row sideways, so `lib-rofi.sh`'s `ui_width` sizes the list instead of letting rofi cut it with `…` |
 | spam `Alt+Ctrl+F` on a directory of large photos | the application keeps responding while the rows fill in (four decoders at a time) |
 | **Alt+1** on a directory | the actions for it: disk usage, compress, copy the path, a terminal here. Enter still *opens* the row; only Alt+1 asks |
 | **Alt+1** → **Compress** on a folder | a `busy` card, then `folder.tar.xz` beside it, and the bar spinner while it packs (click the spinner to stop it) |
@@ -140,7 +140,7 @@ that opens the row means `-kb-custom-1 Alt+1` was dropped from `rofi-files`.
 `check-system.sh` warns about both.
 
 A list with no pictures at all means `-show-icons`/`thumbnail://` was dropped from
-`rofi-files`, or `nureb-thumbnail` is not executable; `check-system.sh` warns
+`rofi-files`, or `lazyos-thumbnail` is not executable; `check-system.sh` warns
 about both. A row with **no** icon in a text-only directory means the theme is
 missing that name (`check-system.sh` checks the table against the PNGs).
 
@@ -174,8 +174,32 @@ missing that name (`check-system.sh` checks the table against the PNGs).
 | open it with only the eMMC and the boot card attached | "Nothing to format": both carry a ChromeOS kernel partition, so neither is offered |
 | insert a USB stick, leave it unmounted | the stick, with its model and size |
 | pick it → **Cancel** | nothing at all is written |
-| pick it → **FAT32** → the confirmation | a card, then "is empty (fat32, label NUREB)"; the stick mounts again from Places |
+| pick it → **FAT32** → the confirmation | a card, then "is empty (fat32, label LAZYOS)"; the stick mounts again from Places |
 | the same with **ext4** | `mkfs.ext4`, and the disk mounts on a Linux machine |
+
+Neither menu may ever list `mtdblock0` (the SPI flash) or `mmcblk0boot0`/`mmcblk0boot1`
+(the eMMC's hardware boot partitions): `lsblk -d` shows all three as small disks,
+none mounted and none carrying a kernel partition, and writing any of them is how
+this machine gets bricked or loses its boot blocks.
+
+## Auxiliary swap - root menu -> **Auxiliary swap**, or **Places** -> **Auxiliary swap**
+
+| Step | Expected |
+|---|---|
+| open it with only the eMMC and the boot card attached | "Nothing to offer: every disk here is mounted or is a system disk" |
+| open it with the boot card and a spare, unmounted card/SD | the spare card only, with model and size |
+| pick it → **Cancel** | no partition table is written |
+| pick it → **The whole card** → the confirmation | a busy card, then a notification with the partition and "priority 10"; `swapon --show` lists it, `blkid -L lazyos_swap` resolves it |
+| `grep lazyos_swap /etc/fstab` | one marked block: `LABEL=lazyos_swap none swap sw,nofail,x-systemd.device-timeout=15s,pri=10 0 0` |
+| reboot with the card in | `swapon --show` lists it again without touching the menu (priority 10, below zram's 100) |
+| remove the card and reboot | the boot still reaches the session (a swap unit may show as failed only if `nofail` was lost); it waits at most 15 s for the card |
+| run the menu again | the status row (device, size, priority) and **Turn it off**, not the disk picker |
+| **Turn it off** → confirm | the partition is swapped off, the fstab block is gone, the partition is still in `lsblk` with `FSTYPE=swap`, and the next boot does not try to use it |
+| after turning it off, open **Format a disk** | the card is offered again (it is no longer active swap), and formatting erases the old swap partition |
+
+Never pull the card while the swap is active: the pages living on it are lost. Turn
+it off from the same menu first. Hibernate additionally needs `resume=` on the
+kernel command line; the swap row does not edit the kernel partition.
 
 ## Search key - the file search
 
@@ -204,9 +228,9 @@ with files means `fd`/`fdfind` is missing (`check-system.sh` FAILs).
 | type `config` | dotfiles are found here (`~/.config/...`), unlike the Search key's list |
 | Escape | the window closes and nothing opens |
 | press Alt+Search twice in a row | two windows, and no `fzf` process left after both close |
-| `nureb-find` from a foot prompt | the same search runs *in that terminal* instead of a new window |
+| `lazyos-find` from a foot prompt | the same search runs *in that terminal* instead of a new window |
 
-A window that flashes and closes means `bin/nureb-find` lost its executable
+A window that flashes and closes means `bin/lazyos-find` lost its executable
 bit; an empty list on a home with files means `fzf` is missing
 (`check-system.sh` FAILs both). `fd`'s `.cache`, `.git`, `node_modules` and
 `.local/share/containers` are excluded, so a file inside one of them is
@@ -216,7 +240,7 @@ correctly absent.
 
 | Step | Expected |
 |---|---|
-| hold **Shift**, tap **Search**, release Search then Shift | pcmanfm opens on `$HOME`, in the solarized palette (base03 window, cyan selection), JetBrains Mono, Nureb icons |
+| hold **Shift**, tap **Search**, release Search then Shift | pcmanfm opens on `$HOME`, in the solarized palette (base03 window, cyan selection), JetBrains Mono, LazyOS icons |
 | tap **Search** on its own | the file search, not the window (`rofi-files --search`) |
 | hold **Search**, tap a top-row key | an F-key reaches the focused window; no menu opens on the way |
 | right-click a file -> **Open With** | the first entry is what a double click does: text in `bat`, a document in `papers`, a picture in `imv` (or `chafa`), a video in `mpv`. Two deliberate exceptions: an HTML page is text to the Files list (`bat`) and a page to a double click (**Firefox**), and an EPUB goes to Firefox because `papers` reads none |
@@ -227,10 +251,10 @@ correctly absent.
 | `dpkg -l pcmanfm gvfs` | both installed; `gvfs-backends` absent on purpose |
 
 A window that looks like Adwaita's light grey means `~/.config/gtk-3.0/gtk.css` is
-missing; icons that are empty squares mean a name the Nureb theme does not carry
+missing; icons that are empty squares mean a name the LazyOS theme does not carry
 (`check-system.sh` warns with the list). A double click that does nothing means
-`~/.config/bin/nureb-view` is not executable: `gio mime image/png` then answers
-"no default application" instead of naming `org.nureb.view.desktop`.
+`~/.config/bin/lazyos-view` is not executable: `gio mime image/png` then answers
+"no default application" instead of naming `org.lazyos.view.desktop`.
 
 ## USB sticks and SD cards - Places
 
@@ -289,7 +313,7 @@ Fold the keyboard all the way back.
 | fold it back into a laptop | keyboard gone, touchpad **and keyboard** back (type), screen upright, "Tablet mode off" |
 | `pgrep -x wvkbd-mobintl` and `pgrep -af 'tablet-mode poller'` afterwards | nothing |
 | Settings (`Alt+Ctrl+O`) -> **Tablet mode** | toggles by hand; the row reads `on · screen 90` or `off` |
-| Settings -> **Calibrate rotation** (listed only in tablet mode) | hold it upright and it says so; `~/.config/nureb/tablet.conf` then holds `normal=<axis><sign>` |
+| Settings -> **Calibrate rotation** (listed only in tablet mode) | hold it upright and it says so; `~/.config/lazyos/tablet.conf` then holds `normal=<axis><sign>` |
 | Settings -> **Rotation** | still turns the screen by hand, independently |
 
 What a failure means:
@@ -303,7 +327,7 @@ What a failure means:
 * **rotation inverted or turned the wrong way** (the 2026-10-21 card came up
   upside down): run **Settings → Calibrate rotation** while holding the screen
   upright, or `~/.config/bin/tablet-mode calibrate`. It writes the reference to
-  `~/.config/nureb/tablet.conf` and applies it at once, and it needs no rebuild.
+  `~/.config/lazyos/tablet.conf` and applies it at once, and it needs no rebuild.
   `tablet-mode calibration` says `calibrated …` or `default …`; deleting the file
   goes back to the built-in mapping. The four `transform` values in `orient()`
   are now derived from that one reference.
@@ -329,7 +353,7 @@ What a failure means:
 | root menu (`Alt+Space`) | **Colour**, **DNS**, **Packages**, **Reminders**, **About**, **Download**, **Password** and **Search inside files** are all there |
 | `Alt+Ctrl+G` and then `Alt+1` inside that menu | nothing is taken by sway: the menu answers, the workspace does not change |
 | `Alt+Ctrl+F`, then `Alt+1` | the actions menu, not workspace 1 (the `global-kb` fix reached both menus) |
-| `gio mime image/png`, `gio mime application/pdf`, `gio mime inode/directory` | `org.nureb.view.desktop`, `org.gnome.Papers.desktop`, `pcmanfm.desktop`. This is GIO's own answer, not the file read back: a `nureb-view` without its executable bit makes GIO say "no default application" |
+| `gio mime image/png`, `gio mime application/pdf`, `gio mime inode/directory` | `org.lazyos.view.desktop`, `org.gnome.Papers.desktop`, `pcmanfm.desktop`. This is GIO's own answer, not the file read back: a `lazyos-view` without its executable bit makes GIO say "no default application" |
 | `dig +short example.com` and `host example.com` | an address. `dig` comes from `bind9-dnsutils`; `resolvectl` is deliberately absent because NetworkManager owns `resolv.conf`, and its absence is not a gap |
 | a menu whose rows are long (Files on a deep path, a grep match with a long line) | the window is wide enough for the end of the path; a row cut with `…` mid-detail means `ui_width` stopped sizing that list |
 | lock (`Alt+Ctrl+L`, the Lock key, and the 300 s idle timer) | the wallpaper on base03, then back to the session; no idle screen left behind (it is stopped before the lock) |

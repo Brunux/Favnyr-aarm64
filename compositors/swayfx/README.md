@@ -29,8 +29,8 @@ Two packages, into `$COMPOSITOR_STAGE` (see `scripts/lib.sh`):
 
 | Package | Contents |
 |---|---|
-| `libscenefx-0.5_0.5-1nureb1_arm64.deb` | `libscenefx-0.5.so`: the effects renderer scenefx adds to wlroots |
-| `swayfx_0.6-1nureb1_arm64.deb` | `sway`, `swaymsg`, `swaynag`, `swaybar`, the `sway.desktop` session file, man pages and shell completions |
+| `libscenefx-0.5_0.5-1lazyos1_arm64.deb` | `libscenefx-0.5.so`: the effects renderer scenefx adds to wlroots |
+| `swayfx_0.6-1lazyos1_arm64.deb` | `sway`, `swaymsg`, `swaynag`, `swaybar`, the `sway.desktop` session file, man pages and shell completions |
 
 Both install into `/usr`, exactly where Debian's sway lives, so the greeter (`greetd` runs `sway`),
 `/etc/sway/config`, the drop-ins and every keybind keep working. The swayfx package is

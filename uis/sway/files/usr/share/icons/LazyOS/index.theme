@@ -1,5 +1,5 @@
 [Icon Theme]
-Name=Nureb
+Name=LazyOS
 Comment=Solarized Font Awesome icons for the session's own launcher entries
 Inherits=Adwaita,hicolor
 Directories=48x48/apps,scalable/apps
