@@ -1,11 +1,17 @@
 #!/bin/sh
-# Browse the filesystem in rofi, and read text files in foot.
+# Browse the filesystem in rofi, read text files in foot, look at pictures in
+# foot, and leave the rest to Firefox.
 #
-# rofi 2.0 has no filebrowser mode (its modes are drun, run, window and ssh) and
-# this image has no xdg-open, so the browsing is a shell script over rofi's
-# dmenu: the directory's entries as markup rows, directories first, and the
-# selected text file opened with bat in a floated foot window (the `popup`
-# app-id from config.d/25-bar-panels.conf). Nothing stays resident.
+# rofi 2.0 does have a filebrowser mode, but with -show-icons it draws no
+# thumbnails on this image (the XDG cache is never written and every row keeps
+# its mimetype icon), and it would replace the markup rows and the bat/popup
+# behaviour below. The browsing is therefore a shell script over rofi's dmenu:
+# the directory's entries as markup rows, directories first, and a
+# `thumbnail://` icon on the rows that have a picture - rofi renders it through
+# nureb-thumbnail for the rows it is about to show, all at once, and only when
+# that picture is not cached in ~/.cache/thumbnails yet. The selected text file
+# opens with bat in a floated foot window (the `popup` app-id from
+# config.d/25-bar-panels.conf). Nothing stays resident.
 #
 #   rofi-files            start in the current directory
 #   rofi-files <dir>      start there
@@ -137,11 +143,35 @@ mesg=$(printf '%s  \302\267  %s dir%s  \302\267  %s file%s  \302\267  %s free  \
 first=0
 if [ "$dir" != "/" ]; then first=1; fi
 
-choice=$(cut -f1 "$table" |
-	rofi -dmenu -markup-rows -i -theme "$theme" \
+# dmenu rows carry an optional icon after a NUL: `text\0icon\x1f<value>`. For a
+# `thumbnail://<path>` value rofi calls nureb-thumbnail with the cache file it
+# wants ({output}), and skips the call when that file already exists. Only the
+# rows that have a picture ask for one, so a directory of source files costs
+# nothing. awk cannot write a NUL in a string constant (mawk truncates the
+# format at \0), so the separator is built with %c: 0 and 31, the unit
+# separator rofi expects.
+dmenu_rows() {
+	awk -F'\t' '
+	BEGIN { sep = sprintf("%cicon%c", 0, 31) }
+	function picture(p,   e) {
+		e = tolower(p)
+		sub(/^.*\./, "", e)
+		return e ~ /^(jpg|jpeg|png|gif|webp|bmp|tif|tiff|avif|mp4|mkv|webm|mov|avi|m4v|pdf)$/
+	}
+	{
+		if ($2 == "dir") print $1 sep "folder"
+		else if ($2 == "file" && picture($3)) print $1 sep "thumbnail://" $3
+		else print $1
+	}' < "$table"
+}
+
+choice=$(dmenu_rows |
+	rofi -dmenu -markup-rows -i -show-icons -theme "$theme" \
 		-p "Files" -lines 18 -selected-row "$first" \
+		-preview-cmd "$HOME/.config/bin/nureb-thumbnail {input} {output} {size}" \
 		-theme-str "window { width: 58%; }
-mainbox { children: [ inputbar, message, listview ]; }" \
+mainbox { children: [ inputbar, message, listview ]; }
+element-icon { size: 32px; padding: 0 8px 0 0; }" \
 		-mesg "$mesg") || exit 0
 
 if [ -z "$choice" ]; then exit 0; fi
@@ -189,15 +219,33 @@ case $action in
 		fi
 		total=$(head -c 4096 -- "$payload" 2>/dev/null | wc -c)
 		text=$(head -c 4096 -- "$payload" 2>/dev/null | tr -d '\000' | wc -c)
+		# Pictures and video go to chafa, which draws them with sixels; foot
+		# renders those natively, so the viewer is one foot window (~16 MB
+		# measured) instead of a browser. A PDF stays with Firefox: it is the
+		# reader with search, zoom and printing, and poppler only feeds the
+		# row's thumbnail.
+		media=no
+		case $(printf '%s' "${payload##*/}" | tr 'A-Z' 'a-z') in
+			*.jpg|*.jpeg|*.png|*.gif|*.webp|*.bmp|*.tif|*.tiff|*.avif|*.svg|*.mp4|*.mkv|*.webm|*.mov|*.avi|*.m4v)
+				media=yes ;;
+		esac
 		if [ "$text" -eq "$total" ]; then
 			setsid foot --app-id=popup --title="$(basename -- "$payload")" \
 				env BAT_THEME=ansi bat --paging=always --style=numbers \
 				--file-name="$(basename -- "$payload")" -- "$payload" \
 				>/dev/null 2>&1 &
+		elif [ "$media" = yes ] && command -v chafa >/dev/null 2>&1; then
+			# --hold keeps the window up after chafa has drawn once and exited,
+			# and the inner sh waits for foot to resize the pty (a terminal
+			# starts at 80x24 and only then matches the window), so chafa
+			# measures the real size instead of painting into a corner.
+			setsid foot --hold --app-id=popup --title="$(basename -- "$payload")" \
+				-e sh -c 'sleep 0.2; exec chafa -f sixels "$1"' chafa "$payload" \
+				>/dev/null 2>&1 &
 		elif command -v firefox-esr >/dev/null 2>&1; then
-			# Everything else is the browser's job: an image, a PDF, an SVG, a
-			# video, the HTML file, and a .deb is a download prompt, which is
-			# still an answer. setsid keeps it alive after this script exits.
+			# Everything else is the browser's job: a PDF, the HTML file, and a
+			# .deb is a download prompt, which is still an answer. setsid keeps
+			# it alive after this script exits.
 			setsid firefox-esr "file://$payload" >/dev/null 2>&1 &
 		else
 			notify-send -a Files "$(basename -- "$payload")" \

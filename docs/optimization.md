@@ -316,3 +316,91 @@ The parameters in `26-swayfx.conf` follow from the table:
 harness had to get right, and a naive version gets wrong: every pass must read and write *different*
 buffers. Sampling the target you are writing is a feedback loop, which the driver may legally throw
 away - a first version of it measured a chain that cost less than one of its own passes.
+
+## 8. The file browser's thumbnails
+
+The file browser (`rofi-files`) shows a 32 px picture on every row that has one. It is the only
+thing in the session that decodes media, so the question was not "does it work" but "what does a
+screenful cost", and the answer decides three settings: how many decoders run at once, how they are
+threaded, and how a JPEG is opened. The numbers below were measured on the build host (aarch64, the
+same SoC) with forky's rofi 2.0.0-0.2 and this host's ffmpeg 9.0.2, driven by `-preview-cmd` exactly
+as the session runs it; the card was not booted, so treat them as the shape of the cost rather than
+as a promise for forky's ffmpeg 8.x (same decoders, a little slower).
+
+### What rofi does on its own
+
+* rofi draws a row's icon from a `\0icon\x1f<value>` suffix. A `thumbnail://<path>` value makes it
+  call the `-preview-cmd` for that row and keep the result in
+  `~/.cache/thumbnails/normal/<md5 of the path>.png`, and **it skips the call when the file is
+  already there** (two runs of the same listing: one call). The cache is rofi's, so the generator
+  does not have to think about reuse at all.
+* **It is lazy and parallel already.** rofi asks only for the rows it is about to draw - ten of
+  forty, roughly - and starts one process per row at the same time: 8 preview processes within
+  30 ms. Scrolling asks for the next screenful only. That is the "generate at scrolling time"
+  behaviour, and it is why the script never needs a warm-up pass.
+* Consequence for the generator: the parallelism is **across files**, so `-threads 1
+  -filter_threads 1` per decoder is right - ffmpeg's own thread pool would take the other decoders'
+  cores and make the screenful finish later, not sooner.
+
+### What a screenful costs
+
+| Case | Time | Peak RSS |
+|---|---|---|
+| 1280x800 PNG, one decode | 54 ms | 50 MB |
+| 24 MP PNG, one decode | 577 ms | 131 MB |
+| 24 MP JPEG, default decode | 179 ms | 83 MB |
+| 24 MP JPEG, `-lowres 2` | **53 ms** | **50 MB** |
+| PDF page 1, `pdftocairo -scale-to 128` | 132 ms | 22 MB |
+| Ten 1280x800 PNGs, one after another | 2.0 s | - |
+| Ten 1280x800 PNGs, eight requests, four slots | **0.97 s** | - |
+| Ten 24 MP JPEGs, one after another | 1.8 s | - |
+| Ten 24 MP JPEGs, eight requests, four slots | **0.93 s** | - |
+
+Time is `ffmpeg -benchmark`'s `rtime` and the wall clock of the whole loop; RSS is `VmHWM` sampled
+from `/proc/<pid>/status` while the decode ran, which is the number that decides how many decoders
+can run at once.
+
+The fan-out that makes it fast is also what would make it heavy: eight 24 MP PNGs at once is
+~1 GB on a 4 GB machine. `nureb-thumbnail` therefore gates itself to **four** decoders with `flock`
+slots (measured: max 4 concurrent ffmpeg over 8 requests), which is ~200 MB for the realistic case
+(12 MP phone JPEGs, ~50 MB each at `-lowres 2`) and finishes a screenful in about a second. `flock`
+releases the slot when the process dies, so a killed listing cannot leave the browser waiting on a
+lock nobody holds - the reason for a lock file and not a pid counter. The fifth and later requests
+wait on the slot their path hashes to, which spreads them over the four instead of queueing all of
+them on the first one (1.1 s against 0.97 s for ten files).
+
+### What the browser itself costs
+
+PSS of the `rofi` process, read from `/proc/<pid>/smaps_rollup` with the window open, on the build
+host with forky's rofi 2.0.0-0.2:
+
+* rofi in dmenu mode, thirteen text rows: **17.1 MB** (17.1 and 17.1 on two runs).
+* the same window with fourteen rows of 32 px thumbnails: **23.2 MB**. The delta is rofi's icon
+  cache - it keeps the decoded pixbufs for the rows it has drawn and drops them with the window
+  (nothing stays after a selection, and no separate process exists at any point).
+* the launcher's application icons, for comparison: **13.2 MB** for ten rows. A `.desktop` icon is
+  48 px and comes from a theme directory, a thumbnail is 128 px decoded from a photo, which is why
+  the file browser's number is larger and why the 32 px is per menu rather than a theme-wide
+  change (the launcher and the bar popups keep 26 px).
+* the viewer: `foot --hold` + `chafa -f sixels` is **16 MB** of PSS for a 6000x4000 photo, and
+  that number is foot's, not chafa's - chafa draws once and exits, and the sixel picture stays in
+  the terminal's scrollback. A browser window for the same file is hundreds of MB (the package is
+  280 MB installed), which is the whole reason pictures no longer go there.
+
+### The rules that follow
+
+* **Four decoders, not eight.** `SLOTS=4` in `nureb-thumbnail`; the constant is the knob if a bigger
+  folder ever feels slow, and it is bounded by the worst decode (131 MB for a 24 MP PNG) rather
+  than the average.
+* **`-lowres 2` for JPEG only.** It is a quarter-size decode in one step (53 ms against 179 ms and
+  50 MB against 83 MB at 24 MP); the PNG/TIFF decoders ignore the option, so it is applied by
+  extension and not globally.
+* **The 128 px is rofi's**, not the row's: rofi always asks for 128 and the theme scales it to 32,
+  so the cache is shared with any other 128 px consumer and the file stays 3-8 kB.
+* **Atomic writes.** The generator writes `<output>.part.<pid>.png` and renames. rofi reads the
+  cache path directly, and a decode killed by a closing window would otherwise leave a truncated
+  PNG that looks cached forever - a wrong thumbnail that never regenerates.
+* **No thumbnailer package.** `-preview-cmd` replaces the XDG thumbnailer protocol, so no
+  gdk-pixbuf loader, glycin or ffmpegthumbnailer package is installed for this; the two additions
+  are `poppler-utils` (1.1 MB, for the PDF page) and `chafa` (0.7 MB with `libchafa0t64`, for the
+  viewer). `ffmpeg` was already in the image for `rofi-color` and dictation.

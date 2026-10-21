@@ -493,10 +493,13 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   **Icons: a font glyph in the lists, an image in the launcher.** The lists this port draws put a
   Font Awesome codepoint in the row text (`~/.config/bin/lib-rofi.sh`), so they cost nothing, follow
   the palette and are filtered away by typing; the launcher and the window switcher show the real
-  `.desktop` icon through glycin, **13.2 MB of PSS for ten rows** when measured again (the earlier
-  57.1 MB figure came from a run that decoded far more, and `bubblewrap` is now in
-  `uis/sway/packages.list` so glycin can sandbox the decoder instead of logging *Glycin running
-  without sandbox*). **Adwaita 51 ships no application icons** - only monochrome `-symbolic` files,
+  `.desktop` icon, **13.2 MB of PSS for ten rows** (the earlier 57.1 MB figure came from a run that
+  decoded far more). **rofi 2.0.0-0.2 decodes those icons with gdk-pixbuf, not glycin**: the binary
+  links `libgdk-pixbuf-2.0-0` and has no `glycin`/`sandbox`/`bwrap` string in it, and forky ships
+  no glycin package here, so the `bubblewrap` that `uis/sway/packages.list` used to carry "for
+  glycin to sandbox the decoder" was sandboxing nothing and is gone. A rofi `-show-icons` row is
+  decoded when it is drawn, so the picture costs memory only while the window is open.
+  **Adwaita 51 ships no application icons** - only monochrome `-symbolic` files,
   and not one of this session's names - so the launcher showed a hole where an icon should be, and
   `papirus-icon-theme` is 190 MB installed. `scripts/make-icons.sh` renders the same Font Awesome
   codepoints into 48x48 PNGs that ship as the small **Nureb** theme
@@ -520,21 +523,59 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   script that logged its calls), which is why the calculator is a one-shot prompt and not a live
   preview; the plan that assumed otherwise is corrected in `docs/plan-rofi.md`. `grimshot` is a package of its own. `pactl` (the
   XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
-- **The file browser is a script, because rofi 2.0 has no `filebrowser` mode** (its modes are
-  `drun`, `run`, `window`, `ssh`). `rofi-files` (`Alt+Ctrl+F`,
-  "Files" in the root menu and the launcher) lists one directory per run with `find -L ... -printf`
-  as `rofi -dmenu -markup-rows`, and Enter reopens the script in the chosen directory or reads the
-  file with `bat --paging=always` in the floated `popup` foot window (`BAT_THEME=ansi`, since
-  foot runs the command directly and never sources the profile). The details that make it work:
-  dmenu matches the **markup-stripped** text, so the dim size/date do not get in the way of
-  typing (verified: `-filter span` matches nothing); `-L` makes a symlink to a directory navigate
-  and leaves only broken links as `l`; the name column is padded to the longest name because the
-  theme is monospace; and anything that is not text goes to **`firefox-esr`** (`file://` URL,
-  `setsid` so it outlives the script), because bat would render a binary as an empty page.
-  Firefox is the image's one viewer - 280 MB installed, nothing while closed - and it is what
-  `uis/sway/files/usr/local/bin/xdg-open` opens for URLs and paths, the two dozen lines that foot's
-  ctrl+click and the CLI tools expect (there is no desktop portal here). `check-system.sh` fails
-  when the browser or the shim is missing.
+- **The file browser is a script over rofi's dmenu, and its rows carry thumbnails.**
+  `rofi -show filebrowser` *does* exist in 2.0.0-0.2 (`sorting-method`, `directories-first`,
+  `show-hidden`, even a `recursivebrowser`), but with `-show-icons` it generated **no**
+  thumbnails here - `~/.cache/thumbnails` stayed untouched and every row kept its mimetype icon -
+  and it would replace the markup rows and the `bat`/popup behaviour below, so the dmenu path is
+  the one that works. `rofi-files` (`Alt+Ctrl+F`, "Files" in the root menu and the launcher)
+  lists one directory per run with `find -L ... -printf` as
+  `rofi -dmenu -markup-rows -show-icons`, and Enter reopens the script in the chosen directory,
+  reads the file with `bat --paging=always` in the floated `popup` foot window (`BAT_THEME=ansi`,
+  since foot runs the command directly and never sources the profile) or draws a picture there
+  with **chafa**. The details that make it work: dmenu matches the **markup-stripped** text, so
+  the dim size/date do not get in the way of typing (verified: `-filter span` matches nothing);
+  `-L` makes a symlink to a directory navigate and leaves only broken links as `l`; the name
+  column is padded to the longest name because the theme is monospace; and text is told from
+  binary by the first 4 kB, because bat would render a binary as an empty page.
+- **A thumbnail is rofi's own cache plus one script.** A row is
+  `text\0icon\x1fthumbnail://<abs path>`; with `-show-icons` and
+  `-preview-cmd 'nureb-thumbnail {input} {output} {size}'` rofi calls that script for the rows it
+  is about to draw and keeps the result in `~/.cache/thumbnails/normal/<md5 of the path>.png`
+  (128 px), **skipping the call when the file already exists** (verified: two runs, one call), so
+  a picture is decoded once, ever. `~/.config/bin/nureb-thumbnail` is the whole generator -
+  ffmpeg for an image or a video frame (`-ss 1`, one frame, retried at 0 for a clip shorter than
+  a second), `pdftocairo` page 1 for a PDF, nothing for a format it does not know (that row then
+  has no icon) - and three things about it are not obvious. rofi starts **one process per visible
+  row at the same time** (8 within 30 ms), which is what makes the 8 cores useful (ten 1280x800
+  PNGs in 0.97 s through the gate against 2.0 s one after another), but a 24 MP PNG decodes into
+  ~131 MB, so the script gates itself to **four** decoders with `flock` slots (the kernel releases
+  a slot when the process dies, so a killed run cannot leave the browser waiting), passes
+  `-threads 1 -filter_threads 1` (the parallelism is across files, not inside one) and `-lowres
+  2` for a JPEG (53 ms / 50 MB against 179 ms / 83 MB for 24 MP). It writes a `.part` file and
+  renames, because rofi reads the cache path directly and a killed decode must not leave a
+  truncated PNG that looks cached. And the rows are built by awk: **mawk truncates a format
+  string at `\0`** (`printf "a\0b"` prints only `a`), so the separator is
+  `sprintf("%cicon%c", 0, 31)`, the one form that works in both mawk and gawk (the image has
+  mawk). rofi hands back the row text up to the NUL, so the table-to-choice mapping still works
+  with the suffix present (verified with `-auto-select`). The 32 px is **per menu**
+  (`-theme-str element-icon { size: 32px }`); the launcher and the bar popups keep the theme's
+  26 px. Cost: 23 MB of PSS for a window of fourteen thumbnail rows against 17 MB for the same
+  window without them, and nothing afterwards; the numbers are in `docs/optimization.md`.
+- **Pictures go to chafa, the PDF stays with Firefox.** `foot --hold --app-id=popup -e sh -c
+  'sleep 0.2; exec chafa -f sixels "$1"'` draws an image, a video frame or an SVG with sixels,
+  which foot renders natively: ~16 MB of PSS for a 6000x4000 photo, against a browser window of
+  hundreds of MB (280 MB installed). The `sleep` is not decoration - a terminal starts at 80x24 and
+  resizes only after the window is mapped, so chafa would measure the wrong size and paint into a
+  corner (the same lesson as the screensaver), and `--hold` keeps the window up after chafa has
+  drawn once and exited. A PDF, an HTML file and a `.deb` still go to **`firefox-esr`** (`file://`
+  URL, `setsid` so it outlives the script): it is the reader with search, zoom and printing, and
+  poppler only feeds the row's thumbnail. Firefox is also what
+  `uis/sway/files/usr/local/bin/xdg-open` opens for URLs and paths, the two dozen lines that
+  foot's ctrl+click and the CLI tools expect (there is no desktop portal here).
+  `check-system.sh` fails when the browser, the shim, `ffmpeg`, `pdftocairo` or `chafa` is
+  missing, and warns when the thumbnail cache is unwritable or `rofi-files` stops passing
+  `-show-icons`/`thumbnail://` - a dropped flag makes the list silently text-only.
 - **Capture is a menu over commands that already exist** (`rofi-capture`, `Alt+Ctrl+C`, "Capture"
   in the root menu and the launcher entry `org.nureb.capture.desktop`): `grimshot -n save|copy
   screen|area|window` for the screenshot (it prints and announces the path; the notification

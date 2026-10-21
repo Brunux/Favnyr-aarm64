@@ -126,9 +126,10 @@ get a box that fits them. Matching is fzf-style fuzzy.
 **Icons: font glyphs in the lists, images in the launcher.** Every list this port draws itself
 puts a Font Awesome codepoint in the row text (`~/.config/bin/lib-rofi.sh`), the same alphabet
 the bar uses: it costs nothing, follows the palette and is filtered away by typing. The
-launcher and the window switcher show the application's real icon, which rofi resolves through
-glycin - about 13 MB while ten rows are on screen and nothing afterwards, with `bubblewrap` in
-`uis/sway/packages.list` so glycin can sandbox the decoder.
+launcher and the window switcher show the application's real icon, which rofi decodes with
+gdk-pixbuf - about 13 MB while ten rows are on screen and nothing afterwards. The file browser
+is the one list with pictures instead of glyphs: `rofi-files` puts a 32 px thumbnail on every
+row that has one (see "The file browser" below).
 
 Debian's Adwaita 51 ships only monochrome *symbolic* icons and not one of this session's
 names - a drun row for "Files" had a hole where its icon should be - and the one full-colour
@@ -189,7 +190,7 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 | `rofi-remind` | Reminders | transient `systemd-run --user --on-active=` timers, listed back from systemd, cancelled by choosing one |
 | `rofi-about` | About | model, revision, kernel, uptime, memory, disk, battery, network, compositor, processes |
 | `rofi-learn` | Learn | the manual, rendered with glow, with a search across every page |
-| `rofi-files`, `rofi-keys`, `rofi-agents` | see below | the file browser, the key view, the agents menu |
+| `rofi-files`, `rofi-keys`, `rofi-agents` | see below | the file browser, the key view, the agents menu (`nureb-thumbnail` is the helper the first one calls for its row pictures) |
 
 ![Settings: the session's switches in one list, each row with its state](../../docs/screenshots/hayato-r1-settings.png)
 
@@ -259,9 +260,11 @@ busy stop wifi
 
 ## The file browser
 
-`rofi-files` (`Alt+Ctrl+F`, "Files" in the root menu and the launcher) exists because rofi 2.0
-has no `filebrowser` mode - its modes are `drun`, `run`, `window` and `ssh`. It is a shell script
-around `rofi -dmenu`:
+`rofi-files` (`Alt+Ctrl+F`, "Files" in the root menu and the launcher) is a shell script around
+`rofi -dmenu`. rofi 2.0 *does* have a `filebrowser` mode (with sorting, hidden files and a
+`recursivebrowser`), but with `-show-icons` it drew no thumbnails here at all - the XDG cache was
+never written and every row kept its mimetype icon - and it would replace the markup rows and the
+`bat`/popup behaviour below, so the dmenu path is what this port uses:
 
 * the rows are Pango markup, directories first (cyan, trailing `/`), then files with the size
   and the date dimmed; `find -L` decides the type, so a symlink to a directory navigates and a
@@ -269,19 +272,40 @@ around `rofi -dmenu`:
 * the name column is padded to the longest name in the listing, which works because the theme
   is monospace, and dmenu matches the text **with the markup stripped** (verified: a filter on
   a tag name finds no row), so typing a name is not disturbed by the styling;
+* **every row that has a picture carries a 32 px thumbnail** (32 px here only - the launcher and
+  the bar popups keep the theme's 26 px). A row is `text\0icon\x1fthumbnail://<path>`, and
+  `-show-icons` with `-preview-cmd` makes rofi call `~/.config/bin/nureb-thumbnail` for the rows
+  it is about to draw, all at once, and only when that picture is not in `~/.cache/thumbnails`
+  yet. The script is ffmpeg for an image or a video frame, `pdftocairo` for a PDF's first page,
+  and nothing at all for a format it does not know (the row then has no icon);
 * Enter opens a directory, reads a text file with `bat --paging=always` (`BAT_THEME=ansi`) inside
-  the floated `popup` foot window, and hands everything else to **firefox-esr** - an image, a
-  PDF, an SVG, the HTML file. The first 4 kB are checked for a NUL to tell the two apart, because
-  bat would show a binary as an empty page. Firefox is the only viewer the image carries: it
-  renders its own PDFs, costs 280 MB of disk once, and nothing while it is closed;
+  the floated `popup` foot window, and shows a picture, a video frame or an SVG with **chafa** in
+  that same window: `-f sixels` is a protocol foot renders natively, so looking at an image costs
+  one foot window (16 MB measured for a 24 MP photo) instead of a browser. **firefox-esr** keeps a PDF and the
+  HTML file, because it is the reader with search, zoom and printing. The first 4 kB are checked
+  for a NUL to tell text from binary, because bat would show a binary as an empty page;
 * `↑ parent directory` is the first row (and the one that is *not* preselected), the dotfiles
   are toggled by the last row, and a typed path that matches nothing is taken literally, which is
   what makes Ctrl+Return useful;
 * the line under the prompt carries the path, the counts and the free space.
 
-Nothing is cached or resident: the listing is built per run, and the viewer is foot's or
-Firefox's own window. `check-system.sh` fails when the script or the browser is missing, because
-Alt+Ctrl+F and the menu entry would silently do nothing (or answer "no browser is installed").
+Thumbnails are generated **lazily and in parallel, which is rofi's doing**: it asks for the rows
+it is about to show and starts one process per row at the same time (8 started within 30 ms), so a
+screenful of ten 1280x800 PNGs takes 0.97 s through the gate against 2.0 s one after another, and
+scrolling asks for the next screenful only. Because a 24 MP PNG decodes into ~131 MB, the script
+gates itself to four decoders with `flock` slots and passes `-threads 1 -filter_threads 1`, which
+keeps the parallelism across files; `-lowres 2` decodes a JPEG at a quarter of its size in one step
+(53 ms and 50 MB against 179 ms and 83 MB for 24 MP). rofi owns the cache
+(`~/.cache/thumbnails/normal/<md5 of the path>.png`, 3-8 kB a picture) and skips
+the command when the file is there, so a picture is decoded once, ever. The cost is 23 MB of
+PSS for a window of fourteen thumbnail rows against 17 MB for the same window without them, and
+nothing afterwards; the numbers are in `docs/optimization.md`.
+
+Nothing is resident: the listing is built per run, and the viewer is foot's or Firefox's own
+window. `check-system.sh` fails when the script, the browser, `ffmpeg`, `pdftocairo` or `chafa` is
+missing, because Alt+Ctrl+F and the menu entry would silently do nothing (or answer "no browser is
+installed"), and warns when the thumbnail cache is not writable or the script stops asking for
+pictures.
 
 `usr/local/bin/xdg-open` is two dozen lines around the same binary: a URL goes to Firefox as it
 is and a path becomes a `file://` URL, which is what foot's ctrl+click, `yt-dlp --print-trailer`

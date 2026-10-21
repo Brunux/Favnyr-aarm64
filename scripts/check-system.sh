@@ -917,9 +917,10 @@ if [ -r "$HOME/.config/glow/solarized.json" ] &&
 	warn "glow style: a colour is missing its # (glamour reads it as a 256-colour index; the page loses its palette)"
 fi
 
-# The browser is the image's only viewer: rofi-files hands it anything that is
-# not text and /usr/local/bin/xdg-open is a shim around it. Without it those two
-# answer with a notification instead, which is easy to miss.
+# The browser is the image's reader for what chafa cannot draw: a PDF, the HTML
+# file, a URL. rofi-files and /usr/local/bin/xdg-open are the two things that
+# start it; without it they answer with a notification instead, which is easy to
+# miss.
 if have firefox-esr; then
 	ok "browser installed (firefox-esr), used by rofi-files and xdg-open"
 else
@@ -929,6 +930,33 @@ if [ -x /usr/local/bin/xdg-open ]; then
 	ok "xdg-open shim is installed (URLs and paths go to the browser)"
 else
 	fail "/usr/local/bin/xdg-open is missing: ctrl+click in foot and URL-printing tools fail"
+fi
+# Thumbnails in the file browser: rofi draws a row's picture through
+# nureb-thumbnail, which is ffmpeg for images and video and pdftocairo for a
+# PDF's first page. A missing binary is silent - the row simply has no picture -
+# so the two tools are a FAIL; the cache directory (rofi's own, under
+# ~/.cache/thumbnails) only warns, because it is created on first use.
+if have ffmpeg && have pdftocairo; then
+	ok "thumbnails can be generated (ffmpeg for images/video, pdftocairo for PDF page 1)"
+else
+	fail "thumbnails cannot be generated:$(have ffmpeg || echo ' ffmpeg')$(have pdftocairo || echo ' pdftocairo') (Files rows lose their pictures)"
+fi
+if have chafa; then
+	ok "picture viewer present (chafa draws sixels in foot)"
+else
+	fail "chafa is missing: Files cannot show an image without starting Firefox"
+fi
+if [ -d "$HOME/.cache/thumbnails" ] && [ ! -w "$HOME/.cache/thumbnails" ]; then
+	warn "$HOME/.cache/thumbnails is not writable: every picture is decoded again on every listing"
+fi
+# And the browser has to keep asking: an edit that drops the flag or the
+# thumbnail:// suffix makes the list silently text-only.
+if [ -r "$HOME/.config/bin/rofi-files" ] &&
+	grep -qs -- '-show-icons' "$HOME/.config/bin/rofi-files" &&
+	grep -qs 'thumbnail://' "$HOME/.config/bin/rofi-files"; then
+	ok "rofi-files asks rofi for thumbnails (-show-icons and thumbnail://)"
+else
+	warn "rofi-files no longer passes -show-icons/thumbnail://: the file list shows no pictures"
 fi
 
 # Dictation: the shortcut records with parecord and transcribes with whisper-cli.

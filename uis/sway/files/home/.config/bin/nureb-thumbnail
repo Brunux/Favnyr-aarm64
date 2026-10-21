@@ -1,0 +1,114 @@
+#!/bin/sh
+# Render the 128 px picture rofi shows beside a row of the file browser.
+#
+# rofi -dmenu draws a row's icon from the `\0icon\x1f<value>` suffix, and for a
+# value that starts with thumbnail:// it asks a command for the image - that is
+# rofi-files' -preview-cmd. rofi computes the cache name itself (the md5 of the
+# path, under ~/.cache/thumbnails/normal/) and calls the command only when that
+# file does not exist, so a picture is decoded once, ever, and a directory that
+# has been listed before opens with its thumbnails already in place.
+#
+#   nureb-thumbnail <input> <output> <size>
+#
+# The input is a path (not a URL) and the output is the cache file rofi will
+# read. A file neither ffmpeg nor poppler understands leaves nothing behind, so
+# that row simply has no icon.
+#
+# Cost, measured on the build host (MT8192, 8 cores, 4 GB, ffmpeg 9.0.2):
+#   * rofi asks for the rows it is about to draw, all of them at the same time
+#     (8 processes started within 30 ms), which is what makes the cores useful
+#     here: ten 1280x800 PNGs take 0.97 s through this gate against 2.0 s one
+#     after another.
+#   * that fan-out is also the risk - a 24 MP PNG decodes into ~131 MB and a
+#     24 MP JPEG into ~83 MB, so eight of them at once is ~1 GB. SLOTS below
+#     keeps four decoders running at most: ~200 MB for the realistic case (12 MP
+#     phone JPEGs at -lowres 2) and still about a second per screenful, while
+#     the fifth request waits for a slot instead of adding memory.
+#   * -threads 1 -filter_threads 1 stop one decode from competing with the
+#     other three, and -lowres 2 decodes a JPEG at a quarter of its size in one
+#     step (53 ms / 50 MB instead of 179 ms / 83 MB for 24 MP).
+#
+# Nothing is resident: one process per picture, and the only thing left behind
+# is rofi's own XDG cache (128 px PNGs, 3-8 kB each).
+set -eu
+
+SLOTS=4
+
+# Internal branch: the decode itself, run while holding a slot (see below).
+if [ "${1:-}" = --decode ]; then
+	shift
+	in=$1
+	out=$2
+	size=$3
+	# Write beside the cache file and rename: rofi reads that path directly, and
+	# a killed decode must not leave a truncated PNG that looks cached forever.
+	tmp="$out.part.$$.png"
+	trap 'rm -f -- "$tmp"' EXIT
+	ext=$(printf '%s' "${in##*/}" | tr 'A-Z' 'a-z')
+	ext=${ext##*.}
+	case $ext in
+		pdf)
+			# poppler renders page 1; -singlefile appends .png to the prefix.
+			pdftocairo -png -singlefile -f 1 -l 1 -scale-to "$size" "$in" "${tmp%.png}" 2>/dev/null || :
+			;;
+		mp4|mkv|webm|mov|avi|m4v)
+			# One frame, a second in: a video's first frame is often black.
+			ffmpeg -nostdin -y -loglevel error -ss 1 -threads 1 -filter_threads 1 \
+				-i "$in" -an -sn -frames:v 1 -threads 1 \
+				-vf "scale=$size:$size:force_original_aspect_ratio=decrease" \
+				"$tmp" 2>/dev/null || :
+			if [ ! -s "$tmp" ]; then
+				# Shorter than a second: take the first frame instead.
+				ffmpeg -nostdin -y -loglevel error -threads 1 -filter_threads 1 \
+					-i "$in" -an -sn -frames:v 1 -threads 1 \
+					-vf "scale=$size:$size:force_original_aspect_ratio=decrease" \
+					"$tmp" 2>/dev/null || :
+			fi
+			;;
+		*)
+			lowres=""
+			case $ext in jpg|jpeg) lowres="-lowres 2" ;; esac
+			# shellcheck disable=SC2086  # -lowres is two words or nothing
+			ffmpeg -nostdin -y -loglevel error $lowres -threads 1 -filter_threads 1 \
+				-i "$in" -an -sn -frames:v 1 -threads 1 \
+				-vf "scale=$size:$size:force_original_aspect_ratio=decrease" \
+				"$tmp" 2>/dev/null || :
+			;;
+	esac
+	[ -s "$tmp" ] || exit 0
+	mv -f -- "$tmp" "$out"
+	exit 0
+fi
+
+if [ $# -lt 2 ]; then
+	printf 'usage: nureb-thumbnail <input> <output> [size]\n' >&2
+	exit 2
+fi
+in=$1
+out=$2
+size=${3:-128}
+
+# A slot is a lock file: flock holds it for the length of the decode and the
+# kernel releases it when the process dies, so a killed run cannot leave a slot
+# taken and the browser waiting on it. If the runtime directory is not writable,
+# decode anyway rather than show no pictures at all.
+dir=${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}/nureb-thumbnails
+if mkdir -p -- "$dir" 2>/dev/null; then
+	i=1
+	while [ "$i" -le "$SLOTS" ]; do
+		rc=0
+		flock -n -E 42 "$dir/$i.lock" "$0" --decode "$in" "$out" "$size" || rc=$?
+		[ "$rc" -eq 42 ] || exit "$rc"
+		i=$((i + 1))
+	done
+	# Every slot is busy: wait on the one this path hashes to, so the waiters
+	# spread over the four slots instead of queueing on the first (measured:
+	# ten files, 4 slots, 1.9 s serial, 1.1 s queueing on one slot, ~0.6 s
+	# hashing). Bounded, so a stuck decode cannot hang the browser.
+	n=$(printf '%s' "$in" | cksum | cut -d' ' -f1)
+	n=$(( n % SLOTS + 1 ))
+	flock -w 20 "$dir/$n.lock" "$0" --decode "$in" "$out" "$size" || :
+else
+	"$0" --decode "$in" "$out" "$size" || :
+fi
+exit 0

@@ -196,11 +196,15 @@ in the image written to the card at `2df252d` (the first boot that carries it is
 be tested on hardware).
 
 Added after this plan was written: the **file browser** (`rofi-files`, `Alt+Ctrl+F`, "Files" in the
-root menu and the launcher). It was not in the batches because the assumption was that rofi 2.0
-still had a `filebrowser` mode; it does not (its modes are drun, run, window and ssh) and the image
-has no `xdg-open`, so the view is a script over `rofi -dmenu -markup-rows` that reopens itself in
-the chosen directory and reads text files with `bat` in the floated foot window. No new package:
-it is the same "rofi plus a script, nothing resident" shape as the rest of the plan.
+root menu and the launcher). It was not in the batches because the assumption was that rofi 2.0 had
+dropped its `filebrowser` mode; it had not (2.0.0-0.2 has it, with sorting, hidden files and even a
+`recursivebrowser`), but `-show-icons` there drew no thumbnails at all and it would have replaced
+the markup rows and the `bat`/popup behaviour, so the view is a script over
+`rofi -dmenu -markup-rows` that reopens itself in the chosen directory, reads text files with `bat`
+and draws pictures with `chafa` in the floated foot window. The thumbnails came after that: rofi's
+own cache (`~/.cache/thumbnails`, 128 px) fed by `~/.config/bin/nureb-thumbnail`, which is why the
+batch cost two packages (`poppler-utils` for a PDF's first page, `chafa` for the viewer) and why
+`bubblewrap` left the list - it was there for a glycin that this rofi does not use (AGENTS.md).
 
 Added with the first card feedback (2026-10-20): **`rofi-power`** (`Alt+Escape` and `Alt+Ctrl+P`:
 lock, suspend, hibernate, log out, reboot, shut down, the last three behind a yes/no), because both
