@@ -354,6 +354,13 @@ the repository follows a few rules:
   to reproduce the build, it lives in `scripts/` and is documented.
 - **`AGENTS.md` is the contract** for the agent: it records the device facts, the boot chain, the
   gotchas and the commands. Agents should update it as they learn.
+- **Icons first, never forced.** A thing the session shows carries a picture when its surface can
+  draw one (`UI_I_*` glyph in the menus and notifications, a Nureb theme name in the launcher, the
+  file list and the notifications), and the terminal tools are chosen for the same taste (`eza
+  --icons`, `bat`, `glow`, fzf's preview pane) when a plainer one prints the same facts. A surface
+  that cannot draw one - an fzf row in foot, the health report other scripts grep - says so instead
+  of showing a tofu box or a broken column. The order and the escapes are in the feature rules of
+  [`AGENTS.md`](AGENTS.md).
 - **Small, explained commits.** One logical change per commit, in English.
 - **Build and test on the real machine.** The reference device is the one being ported.
 - **Never flash firmware.** Only ChromeOS GPT partitions on the removable/internal storage are

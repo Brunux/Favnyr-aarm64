@@ -19,17 +19,26 @@ yet present in `scripts/` as not implemented.
 
 ## Feature rules
 
-- **Everything a feature shows carries a picture, and the picture comes before the feature is
-  called done.** A menu row gets its `UI_I_*` glyph from `~/.config/bin/lib-rofi.sh` (and, if the
-  alphabet has no name for it, the glyph is chosen before the row is written); a notification gets
-  its icon name from the same constants; a `rofi-files` row gets a `thumbnail://` or a name from
-  the file-browser table; a `.desktop` entry gets an `Icon=` the **Nureb** theme actually draws.
-  **A name the theme does not carry is added to the third table of `scripts/make-icons.sh` and the
-  PNGs regenerated** - the build host is where that happens, never the image. A feature without
-  an icon is unfinished: a name nobody renders draws nothing at all (a hole on the row, a
-  text-only card) and logs nothing, so `check-system.sh` verifies the theme's files against the
-  names the scripts ask for instead of trusting the picture. The tables and the mako `icon-path`
-  trap are in the UI section, under *The launcher* and *The file browser*.
+- **Icons first, never forced.** Icons and readable TUI tools are the house taste, not a garnish:
+  a menu row gets its `UI_I_*` glyph from `~/.config/bin/lib-rofi.sh`, a notification its name from
+  the same constants, a `rofi-files` row a `thumbnail://` or a name from the file-browser table, a
+  `.desktop` entry an `Icon=` the **Nureb** theme actually draws, and a terminal tool is picked for
+  the same taste (`eza --icons`, `bat`, `glow`, fzf's preview pane, `btop`, `lazygit`) when a
+  plainer one only prints the same facts. The order is fixed so the choice is testable: **a glyph
+  already in the alphabet, then a name already in a `scripts/make-icons.sh` table, then a new table
+  entry with the PNGs regenerated on the build host, then text alone.**
+  **"If possible" is part of the rule.** No glyph where the surface cannot render it (an fzf row is
+  foot, whose fallback is Symbols Nerd Font Mono, so a Font Awesome codepoint there is a tofu box -
+  that feature's picture is its preview pane), no name the theme does not carry (it draws nothing
+  and logs nothing), no package or daemon that exists only to draw, nothing that costs alignment,
+  legibility or a warning line in `check-system.sh`, and no picture in `check-system.sh`'s own
+  report, which other scripts read. A feature with no picture is finished when its text says the
+  same thing; a broken row is worse than a plain one, and "this surface cannot draw it" is a reason
+  the commit states, not one it leaves implicit.
+  `check-system.sh` verifies the theme's files against the names the scripts ask for **and** that a
+  font still carries every `UI_I_*` codepoint: a name nobody renders draws nothing at all (a hole
+  on the row, a text-only card) and logs nothing. The tables and the mako `icon-path` trap are in
+  the UI section, under *The launcher* and *The file browser*.
 - **A feature ships with its three witnesses**: a `check-system.sh` line that fails when its
   dependency disappears, a paragraph in `usr/share/doc/nureb/` (the manual is what a person
   reads on the device), and a bullet in this file that says why it is built this way.
