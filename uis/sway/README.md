@@ -748,5 +748,7 @@ layer-shell surface at the bottom edge, which is what `--dock` would do.
 Settings (`Alt+Ctrl+O`) carries **Tablet mode** next to **Rotation**: the second
 is the manual turn (`rofi-quick --rotation-menu`), the first is this script. The
 on-screen keyboard's layout is the mobile-international one compiled into
-`wvkbd-mobintl`, with the accent layer reachable from its own `Cmp` key
-(`Cmp`+`a` → `á`, `Cmp`+`n` → `ñ`).
+`wvkbd-mobintl`, where each key's variants are one `Cmp` away: `Cmp` then `a`
+opens `á à â ä …` and the one you tap is inserted (`Cmp` then `?` reaches `¿`).
+It is a variant layer, not a dead-key compose sequence, which is why clicking is
+part of typing an accent.

@@ -108,10 +108,11 @@ all three undo themselves, with the screen upright again.
 | Settings → Rotation | turn the screen by hand, four positions (this is not tablet mode, and it stays) |
 
 The keyboard is `wvkbd` drawn in the session's palette and font. Its letters
-layer is the mobile-international one, so accented characters come from the
-**Cmp** key: `Cmp` then `a` gives `á`, `Cmp` then `n` gives `ñ`, `Cmp` then `?`
-gives `¿`. It types into the focused window through the virtual-keyboard
-protocol, which is why it works in foot, Firefox and the rofi prompts alike.
+layer is the mobile-international one, so accented characters are one **Cmp**
+away: `Cmp` then `a` opens that key's variants (`á`, `à`, `â`, `ä`…) and the one
+you tap is what gets typed; `Cmp` then `?` is how `¿` is reached. It types into
+the focused window through the virtual-keyboard protocol, which is why it works
+in foot, Firefox and the rofi prompts alike.
 
 ## What was copied from Omarchy, and what differs
 

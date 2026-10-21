@@ -16,6 +16,11 @@ reports are published, and the hardware address of one particular machine is
 evidence of nothing here — unlike `74:4C:A1`, which says whose radio it is.
 Everything else, error lines included, is verbatim.
 
+What to try with a fresh card before capturing one is `docs/test-checklist.md`:
+the script covers what a script can see, and that file covers the rest — whether
+the glyph reaches the cursor, whether the screen turns the right way, whether the
+notification appeared while the action was still running.
+
 ## check-system-2026-10-16-card.txt
 
 First report from a booted image — the 2-partition card, from before the layout

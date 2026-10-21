@@ -99,7 +99,9 @@ reports/                   check-system.sh output captured on real hardware, kep
 docs/                      plan.md, recon.md, optimization.md (measured device
                            and kernel-config findings), plan-rofi.md (what of
                            Omarchy's menus can move onto rofi), plan-agents.md
-                           (the agents feature, phased), releases/<version>.md
+                           (the agents feature, phased), test-checklist.md (what
+                           to try on a fresh card before capturing a report),
+                           releases/<version>.md
                            (release notes, reused as the tag message and the
                            GitHub release body), screenshots/
 ```
@@ -443,8 +445,9 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   releases); the compositor places it as a layer-shell surface at the bottom edge. Its layout is the
   mobile-international one, and there is **no `latin-american` layer** among `--list-layers` (`full`,
   `fullwide`, `special`, `simple`, `dialer`, cyrillic/arabic/persian/greek/georgian/hebrew, `emoji`,
-  `nav`, `landscape`, …) - accents come from its `Cmp` compose key (`Cmp`+`a` → `á`, `Cmp`+`n` →
-  `ñ`). **The rotation mapping is a table in `orient()`**: screen-up gives `+Z` (the accelerometer
+  `nav`, `landscape`, …) - accents come from its `Cmp` key, which opens that key's variants for a
+  tap (`Cmp`+`a` → a row of `á à â ä …`; `Cmp`+`?` → `¿`), a variant layer and **not** a dead-key
+  compose sequence. **The rotation mapping is a table in `orient()`**: screen-up gives `+Z` (the accelerometer
   reports the reaction to gravity), so flat `+Z` → `normal`, upright `+Y` → `normal`, `-Y` → `180`,
   `-X` → `90` (`transform` is clockwise), `+X` → `270`, and no axis dominant → keep the current one;
   the thresholds are `0.85` (flat) and `0.75` (an axis, ~41° off vertical) so tilting does not flip
