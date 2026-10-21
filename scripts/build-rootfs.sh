@@ -26,9 +26,19 @@ if [ "$(id -u)" -ne 0 ]; then
 		"$(readlink -f "$0")" "$@"
 fi
 
+# Anything mounted *under* the tree has to go before the `rm -rf` below, and the
+# check is not cosmetic: a rootfs left with the host's /dev bind-mounted (the
+# headless test harness does that, and a killed run leaves it behind) makes
+# `rm -rf "$ROOTFS"` walk into the *host's* devtmpfs and delete its device nodes.
+# That happened once here: null, zero, the disks and the DRM nodes disappeared
+# and had to be rebuilt with mknod + `udevadm trigger`.  Unmount everything,
+# newest first, and refuse to continue if anything survives.
 cleanup_mounts() {
-	for m in dev proc sys; do
-		umount -lf "$ROOTFS/$m" 2>/dev/null || true
+	_left="$(findmnt -rn -o TARGET 2>/dev/null |
+		awk -v r="$ROOTFS" 'index($0, r "/") == 1' | sort -r)"
+	[ -n "$_left" ] || return 0
+	printf '%s\n' "$_left" | while read -r _m; do
+		umount -lf "$_m" 2>/dev/null || true
 	done
 }
 trap cleanup_mounts EXIT
@@ -38,6 +48,11 @@ log "Kernel : $KERNEL_FLAVOR $KERNEL_RELEASE"
 log "Rootfs : $ROOTFS"
 
 log "debootstrap $DEBIAN_SUITE/$DEBIAN_ARCH"
+cleanup_mounts
+_left="$(findmnt -rn -o TARGET 2>/dev/null |
+	awk -v r="$ROOTFS" 'index($0, r "/") == 1')"
+[ -z "$_left" ] ||
+	die "still mounted under $ROOTFS, refusing to wipe it:\n$_left"
 rm -rf "$ROOTFS"
 mkdir -p "$ROOTFS"
 debootstrap --arch="$DEBIAN_ARCH" --variant=minbase \

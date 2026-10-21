@@ -82,6 +82,47 @@ screen.
 * An empty window means the list was empty - check that `/usr/share/applications`
   has entries and that `~/.config/rofi/config.rasi` exists.
 * A bar click that does nothing: `~/.config/bin/bar-pick` must be executable.
+  The same goes for every row of the root menu: each one is a `rofi-*` script in
+  `~/.config/bin/`, and a missing script is a row that silently does nothing.
+  `check-system.sh` fails for each one.
+* **A hole where an icon should be.** The launcher draws application *images*,
+  and the session's own entries take theirs from the small **Nureb** theme
+  (`/usr/share/icons/Nureb`, 48x48 PNGs rendered from the icon fonts). If the
+  theme is missing, rebuild it with `sudo ~/Dev/Nureb/scripts/make-icons.sh` - it
+  needs ImageMagick - or reinstall the image. An application you installed that
+  shows no icon is a packaging problem of that application, not this one.
+
+## The manual opens a window that closes at once
+
+`Learn` runs `glow -p <page>` in foot, and glow exits immediately when its style
+is missing or unparsable. The style is named by **absolute path** in
+`~/.config/glow/glow.yml` (a bare name is looked up among glow's built-ins), and
+the file it points at is `~/.config/glow/solarized.json`. To see the error:
+
+```sh
+glow /usr/share/doc/nureb/01-welcome.md    # the message names the problem
+```
+
+## A file does not open, or opens in the wrong place
+
+The file browser reads text with `bat` and hands everything else to
+**firefox-esr**; `xdg-open` is a two-dozen-line shim around the same binary. If a
+file only produces a notification, the browser is gone:
+
+```sh
+command -v firefox-esr || sudo apt install firefox-esr
+```
+
+## The bar shows a spinner that never ends
+
+That card belongs to `~/.config/bin/bar-busy`: one file per running task lives in
+`$XDG_RUNTIME_DIR/nureb-busy`, and a task that is killed without `busy end`
+leaves one behind. They expire after five minutes on their own; to clear them at
+once:
+
+```sh
+rm -rf "$XDG_RUNTIME_DIR/nureb-busy"/* && pkill -RTMIN+8 waybar
+```
 
 ## No notifications
 
