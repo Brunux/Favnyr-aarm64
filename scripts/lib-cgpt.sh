@@ -144,6 +144,17 @@ disk_layout_parts() {
 # Sets BOOT_UUID and ROOT_UUID. Unmount with disk_layout_umount.
 disk_layout_mount() {
 	_disk="$1" _mnt="$2"
+	# disk_release() refuses a target with a mounted partition, but it runs
+	# before the new table exists. On a desktop session, udisks2 auto-mounts the
+	# partitions this script has just created within a second of `partx -a`, and
+	# mkfs then answers "/dev/mmcblk1p3 is mounted; will not make a filesystem
+	# here!" *after* the GPT was rewritten - a half-written card that reads as a
+	# bug in this function. Checked again here, with the culprit named.
+	for _p in "$BOOT_PART" "$ROOT_PART"; do
+		findmnt -rn -S "$_p" >/dev/null 2>&1 &&
+			die "$_p was mounted (udisks2 auto-mounts a new partition); unmount it and run again:
+  udisksctl unmount -b $_p    (or mask udisks2 for the run: systemctl mask --runtime udisks2)"
+	done
 	# The mkfs command lines are the ones format_partition_with_filesystem() in
 	# pmb/install/format.py builds for these two filesystems: mkfs.ext2 for the
 	# boot partition (the schema default), mkfs.ext4 for the root, both with -F

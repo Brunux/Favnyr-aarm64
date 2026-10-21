@@ -734,6 +734,15 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   why pmbootstrap does it too — then `cgpt create` / `cgpt add` on top of it.
 - After writing the table, refresh the kernel's view with `partx -d` + `partx -a`
   (`blockdev --rereadpt` returns `EBUSY` on this microSD card).
+- **`udisks2` mounts the partitions `write-sd.sh` has just created**, and that is what the
+  confusing failure looks like: the GPT is rewritten, `partx -a` presents p2/p3, the session's
+  udisks2 auto-mounts both within a second, and `mkfs.ext4` stops the run with
+  `/dev/mmcblk1p3 is mounted; will not make a filesystem here!` — after the table was already
+  replaced, leaving a half-written card. `disk_release()` cannot catch it because it runs before
+  the partitions exist; `disk_layout_mount()` now checks again and names the fix
+  (`udisksctl unmount -b <part>`, or `systemctl mask --runtime udisks2` for the duration of the
+  write, then `systemctl unmask --runtime udisks2`). Seen while writing this build on the machine
+  itself, where the port's own session is the thing mounting the card.
 - `lsblk -nro PATH <disk>` lists the **disk first**, then its partitions: skip the first line when
   resolving `p1`/`p2`/`p3`. A wrong index here formats the whole disk instead of a partition.
 - The tools needed **on the device** are three separate Debian packages and it is easy to install
