@@ -60,7 +60,9 @@ candidates() {
 		# `producer | grep -q` pipeline can report a false negative.
 		_types=$(lsblk -nro PARTTYPE "/dev/$name" 2>/dev/null || true)
 		case $_types in *"$KERN_TYPE"*) continue ;; esac
-		_model=${model:-unknown model}
+		# -r escapes a space in a model as \x20; the row shows a model, not an
+		# escape sequence ("USB\x20DISK\x203.0" is not what a person reads).
+		_model=$(printf '%s' "${model:-unknown model}" | sed 's/\\x20/ /g')
 		ui_row "$UI_I_DISK" "/dev/$name" \
 			"$_model · $size${tran:+ · $tran}" "fmt:$name" "$UI_YELLOW"
 	done
@@ -83,7 +85,8 @@ fmt:*) name=${key#fmt:} ;;
 *) exit 0 ;;
 esac
 dev=/dev/$name
-info=$(lsblk -dnro SIZE,MODEL "/dev/$name" 2>/dev/null | sed 's/  */ /g' || true)
+info=$(lsblk -dnro SIZE,MODEL "/dev/$name" 2>/dev/null |
+	sed -e 's/\\x20/ /g' -e 's/  */ /g' || true)
 
 {
 	ui_row "$UI_I_DISK" 'FAT32' 'any machine: Windows, macOS, a camera, a television' fat32
