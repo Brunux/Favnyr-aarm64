@@ -724,7 +724,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   answers "no default application" instead of an error, which looks like a broken association -
   so the `check-system.sh` line is both the association test and the mode test
   (`LC_ALL=C gio mime image/png` must say `Default application: org.nureb.view.desktop`, and
-  `gio mime inode/directory` must say `pcmanfm.desktop`). No `mimeinfo.cache` regeneration is
+  `gio mime inode/directory` must say `pcmanfm.desktop`). That CLI is **`libglib2.0-bin`**
+  (0.9 MB, no daemon) and it is in `uis/sway/packages.list` for exactly this: `pcmanfm` and
+  `gvfs` link libgio but ship no `/usr/bin/gio`, and without it the check can only read
+  `mimeapps.list` - it would pass while GIO refused the entry. No `mimeinfo.cache` regeneration is
   needed for that to resolve (verified), and a user `~/.config/mimeapps.list` overrides the
   system file, so nothing is locked in.
 - **The three viewers are `papers`, `imv` and `mpv`, and each one is a package with its own

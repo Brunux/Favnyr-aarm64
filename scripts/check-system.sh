@@ -755,23 +755,27 @@ esac
 # directory and it is removed before this block ends.
 _busy_rt=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
 _busy_bin="$HOME/.config/bin/busy"
-if BUSY_STOP=: "$_busy_bin" start check-system Probe 'probe' >/dev/null 2>&1 &&
-	[ -f "$_busy_rt/check-system.stop" ] &&
-	[ "$(stat -c %a "$_busy_rt/check-system.stop" 2>/dev/null)" = 600 ]; then
-	ok "busy records the stop command (mode 0600) the spinner runs"
-	if "$_busy_bin" cancelled check-system >/dev/null 2>&1; then
-		warn "busy cancelled says a running card is already gone (a stopped lookup looks finished)"
+if [ ! -d "${XDG_RUNTIME_DIR:-/tmp}" ] || [ ! -w "${XDG_RUNTIME_DIR:-/tmp}" ]; then
+	skip "no writable runtime directory: the busy/stop protocol cannot be exercised here"
+else
+	if BUSY_STOP=: "$_busy_bin" start check-system Probe 'probe' >/dev/null 2>&1 &&
+		[ -f "$_busy_rt/check-system.stop" ] &&
+		[ "$(stat -c %a "$_busy_rt/check-system.stop" 2>/dev/null)" = 600 ]; then
+		ok "busy records the stop command (mode 0600) the spinner runs"
+		if "$_busy_bin" cancelled check-system >/dev/null 2>&1; then
+			warn "busy cancelled says a running card is already gone (a stopped lookup looks finished)"
+		else
+			ok "busy cancelled tells a running task from a stopped one"
+		fi
 	else
-		ok "busy cancelled tells a running task from a stopped one"
+		warn "busy does not record a stop command in $_busy_rt: the spinner cannot stop its task"
 	fi
-else
-	warn "busy does not record a stop command in $_busy_rt: the spinner cannot stop its task"
-fi
-"$_busy_bin" stop check-system >/dev/null 2>&1 || true
-if "$_busy_bin" cancelled check-system >/dev/null 2>&1; then
-	ok "after a stop, busy says the task was cancelled (the producer reports nothing)"
-else
-	warn "busy cancelled still sees the card after busy stop (the producer would report a half result)"
+	"$_busy_bin" stop check-system >/dev/null 2>&1 || true
+	if "$_busy_bin" cancelled check-system >/dev/null 2>&1; then
+		ok "after a stop, busy says the task was cancelled (the producer reports nothing)"
+	else
+		warn "busy cancelled still sees the card after busy stop (the producer would report a half result)"
+	fi
 fi
 
 # The idle screensaver is a foot window running ~/.config/bin/sway-screensaver:
@@ -851,6 +855,21 @@ fi
 # rofi is also the bar's dmenu: without it every bar click is a silent no-op.
 [ -x "$HOME/.config/bin/bar-pick" ] && ok "bar-pick (rofi -dmenu) is executable" ||
 	fail "bin/bar-pick is missing or not executable"
+
+# Every Alt+1 second action in these menus (delete a clipboard entry, unmount a
+# disk, act on a file row) is rofi's -kb-custom-1, and sway would answer Alt+1
+# itself with "workspace number 1" before rofi ever saw the key: a layer surface
+# with exclusive keyboard interactivity does not stop compositor bindings, only
+# an active zwp_keyboard_shortcuts_inhibitor does, and rofi asks for one only
+# when `global-kb` is on. Off, the menu switches workspace and does nothing -
+# there is no error anywhere, which is why it is checked and not assumed.
+if [ -r "$HOME/.config/rofi/config.rasi" ]; then
+	if grep -qs '^[[:space:]]*global-kb:[[:space:]]*true' "$HOME/.config/rofi/config.rasi"; then
+		ok "rofi inhibits the compositor's shortcuts while a menu is open (global-kb)"
+	else
+		warn "rofi/config.rasi does not set global-kb: true - Alt+1 inside a menu is taken by sway's workspace binding"
+	fi
+fi
 
 # The Search key is the file search and $mod+d is the launcher: they used to be the
 # same menu, so a binding that goes back to the launcher is a key that no longer
@@ -998,13 +1017,20 @@ if [ -r "$HOME/.config/bin/bar-menu" ]; then
 fi
 
 # A row and its `case` arm are two halves of one entry; a row whose key has no
-# arm closes the list and does nothing. Keys are the last word of a ui_row line;
-# a row with a colour puts the key one word earlier, which this ignores, so it
-# can only report a key it is sure about.
+# arm closes the list and does nothing. Keys are the last word of a ui_row line,
+# and the arms are indented inside the `case`. A row whose key is followed by a
+# colour passes `"$UI_RED"` as its last word, so that one is read from the field
+# before it - the earlier version took $NF always, which reported the Power row
+# as dead, and matched arms only at column 0, which reported every row as dead.
 if [ -r "$HOME/.config/bin/bar-menu" ]; then
 	_dead_rows=$(awk '
-		/^[[:space:]]*ui_row / { k = $NF; gsub(/["\x27]/, "", k); rows[k] = 1 }
-		/^[a-z][a-z-]*\)/      { k = $0; sub(/\).*/, "", k);     arms[k] = 1 }
+		/^[[:space:]]*ui_row / {
+			k = $NF
+			if (k ~ /^\$|^"\$/) k = $(NF - 1)
+			gsub(/"/, "", k)
+			rows[k] = 1
+		}
+		/^[[:space:]]*[a-z][a-z-]*\)/ { k = $1; sub(/\).*/, "", k); arms[k] = 1 }
 		END { for (k in rows) if (!(k in arms)) printf "%s ", k }' \
 		"$HOME/.config/bin/bar-menu")
 	[ -z "$_dead_rows" ] && ok "every root-menu row has an action" ||
@@ -1092,6 +1118,14 @@ if pgrep -fx 'wl-paste --watch cliphist store' >/dev/null 2>&1; then
 else
 	warn "the cliphist watcher is not running: the clipboard list stays empty (config.d/27-clipboard.conf starts it with the session)"
 fi
+# "Save the newest image" names the file after the type `file` reports, and
+# without it the picture is written with no extension at all - the viewer then
+# refuses it, which reads as a broken clipboard rather than a missing package.
+if have file; then
+	ok "file(1) is installed (a clipboard image is saved with its extension)"
+else
+	warn "file(1) is missing (package file): an image saved from the clipboard has no extension"
+fi
 # An inserted emoji needs a colour font; fc-match says what would draw it.
 if have fc-match; then
 	_emoji_font=$(fc-match -f '%{family}' 'emoji' 2>/dev/null || true)
@@ -1135,10 +1169,21 @@ fi
 # keyboard comes up first: a card whose keyboard was disabled before wvkbd proved
 # alive would be a touchscreen with no way to type. The mode is the only thing in
 # the session that disables a keyboard, so the pattern is a fair test of the wiring.
-if grep -qs 'input type:keyboard events disabled' "$HOME/.config/bin/tablet-mode"; then
-	ok "tablet mode switches the physical keyboard off (touchpad and keyboard, after wvkbd is up)"
+# The value is `$1` of inputs() and not the word `disabled`, so what is tested is
+# the call (`inputs disabled`) and the order of the last one against `start_kbd`:
+# `on` answers an already-running mode before it starts the keyboard, and that
+# early `inputs disabled` is the one a plain line-order test would find.
+_tm="$HOME/.config/bin/tablet-mode"
+if grep -qs 'input type:keyboard events' "$_tm"; then
+	_after_kbd=$(grep -n 'inputs disabled' "$_tm" | tail -1 | cut -d: -f1)
+	_start_kbd=$(grep -n 'start_kbd ||' "$_tm" | head -1 | cut -d: -f1)
+	if [ -n "$_after_kbd" ] && [ -n "$_start_kbd" ] && [ "$_after_kbd" -gt "$_start_kbd" ]; then
+		ok "tablet mode switches the physical keyboard off (touchpad and keyboard, after wvkbd is up)"
+	else
+		fail "bin/tablet-mode disables the keyboard before wvkbd is confirmed alive: the touchscreen can be left unable to type"
+	fi
 else
-	fail "bin/tablet-mode does not disable the physical keyboard: the folded keys keep typing on the table"
+	fail "bin/tablet-mode does not touch type:keyboard: the folded keys keep typing on the table"
 fi
 # The rotation reference is optional - the built-in -Y table is the default - but a
 # file that does not parse is ignored in silence by orient(), which reads as "the
@@ -1373,30 +1418,40 @@ fi
 # program does not exist, so a nureb-view without its executable bit reads as
 # "no default application" instead of as an error. LC_ALL=C so the label is the
 # one this greps for, not a translation.
-_mime=$({ have gio && LC_ALL=C gio mime image/png 2>/dev/null; } ||
-	grep -s '^image/png=' "${_pcm_dirs%%:*}/mimeapps.list")
-if grep -qs 'Default application: org.nureb.view.desktop' <<<"$_mime"; then
+#
+# The image ships `gio` (libglib2.0-bin) so this is the real question, but the
+# file is the answer that does not depend on a package: the fallback used to
+# read `[Default Applications]` and then compare it with gio's own wording, so
+# every association warned even when the file was right. Both shapes now feed
+# the same variable: the desktop id, nothing else.
+_mime_default() { # MIME-TYPE
+	if have gio; then
+		LC_ALL=C gio mime "$1" 2>/dev/null | sed -n 's/^Default application: //p' | head -1
+	else
+		sed -n "s|^$1=||p" "${_pcm_dirs%%:*}/mimeapps.list" 2>/dev/null | head -1
+	fi
+}
+_mime=$(_mime_default image/png)
+if [ "$_mime" = org.nureb.view.desktop ]; then
 	ok "a double click on an image reaches nureb-view (mimeapps.list)"
 else
-	warn "image/png has no default through org.nureb.view.desktop: a photo opens in the browser or nowhere"
+	warn "image/png defaults to '${_mime:-(nothing)}', not org.nureb.view.desktop: a photo opens in the browser or nowhere"
 fi
 # A document is papers' job, and the association is the half a package cannot
 # carry: papers ships org.gnome.Papers.desktop, and this file is what points
 # application/pdf at it. GIO drops an entry whose Exec does not exist, so the
 # same question also proves the .desktop is installed.
-_mime_pdf=$({ have gio && LC_ALL=C gio mime application/pdf 2>/dev/null; } ||
-	grep -s '^application/pdf=' "${_pcm_dirs%%:*}/mimeapps.list")
-if grep -qs 'Default application: org.gnome.Papers.desktop' <<<"$_mime_pdf"; then
+_mime_pdf=$(_mime_default application/pdf)
+if [ "$_mime_pdf" = org.gnome.Papers.desktop ]; then
 	ok "a double click on a PDF reaches papers (mimeapps.list)"
 else
-	warn "application/pdf does not default to papers: a document opens in the browser"
+	warn "application/pdf defaults to '${_mime_pdf:-(nothing)}', not org.gnome.Papers.desktop: a document opens in the browser"
 fi
-_dir=$({ have gio && LC_ALL=C gio mime inode/directory 2>/dev/null; } ||
-	grep -s '^inode/directory=' "${_pcm_dirs%%:*}/mimeapps.list")
-if grep -qs 'Default application: pcmanfm.desktop' <<<"$_dir"; then
+_dir=$(_mime_default inode/directory)
+if [ "$_dir" = pcmanfm.desktop ]; then
 	ok "'Open containing folder' opens pcmanfm (inode/directory)"
 else
-	warn "inode/directory does not resolve to pcmanfm.desktop: 'Open containing folder' does nothing"
+	warn "inode/directory defaults to '${_dir:-(nothing)}', not pcmanfm.desktop: 'Open containing folder' does nothing"
 fi
 
 # Dictation: the shortcut records with parecord and transcribes with whisper-cli.
