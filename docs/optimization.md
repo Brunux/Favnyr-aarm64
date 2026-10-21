@@ -382,10 +382,11 @@ host with forky's rofi 2.0.0-0.2:
   48 px and comes from a theme directory, a thumbnail is 128 px decoded from a photo, which is why
   the file browser's number is larger and why the 32 px is per menu rather than a theme-wide
   change (the launcher and the bar popups keep 26 px).
-* the viewer: `foot --hold` + `chafa -f sixels` is **16 MB** of PSS for a 6000x4000 photo, and
-  that number is foot's, not chafa's - chafa draws once and exits, and the sixel picture stays in
-  the terminal's scrollback. A browser window for the same file is hundreds of MB (the package is
-  280 MB installed), which is the whole reason pictures no longer go there.
+* the viewer: **imv** draws the picture on the GPU in its own window, and the fallback
+  (`foot --hold` + `chafa -f sixels`) is **16 MB** of PSS for a 6000x4000 photo - that number is
+  foot's, not chafa's (chafa draws once and exits, and the sixel picture stays in the terminal's
+  scrollback). A browser window for the same file is hundreds of MB (the package is 280 MB
+  installed), which is the whole reason pictures no longer go there.
 
 ### The rules that follow
 
@@ -403,4 +404,91 @@ host with forky's rofi 2.0.0-0.2:
 * **No thumbnailer package.** `-preview-cmd` replaces the XDG thumbnailer protocol, so no
   gdk-pixbuf loader, glycin or ffmpegthumbnailer package is installed for this; the two additions
   are `poppler-utils` (1.1 MB, for the PDF page) and `chafa` (0.7 MB with `libchafa0t64`, for the
-  viewer). `ffmpeg` was already in the image for `rofi-color` and dictation.
+  picture fallback when imv gets no graphics context). `ffmpeg` was already in the image for
+  `rofi-color` and dictation.
+
+## 9. The terminal file search
+
+`Alt+Search` runs `~/.config/bin/nureb-find`, which is `fd` piped into `fzf` with a preview pane.
+It answers the same question the Search key does, in a different way: `rofi-files --search` is
+bounded (500 rows, 92 ms end to end, icons and thumbnails) and lives in a menu, while this one is
+uncapped with a preview and lives in a terminal. The numbers below decide the settings that are not
+obvious - the excludes, `--scheme=path`, and where the picture comes from - and were measured on the
+build host (aarch64, same SoC) with forky's fd 10.5.0 and fzf 0.74.4, driven inside a pty so fzf
+painted at the size it paints in a real foot window.
+
+### What the walk costs
+
+`fd --type f --hidden --strip-cwd-prefix` over this `$HOME` (348k files, 330k of them under
+`.cache`), wall clock of the walk alone, ten runs:
+
+| Pool | Files | Time |
+|---|---|---|
+| visible only, no excludes | 2,020 | 21 ms |
+| hidden + the four excludes | **19,400** | **43 ms** |
+| everything, hidden included | 348,000 | 1.6 s |
+
+The excludes are `.cache`, `.git`, `node_modules` and `.local/share/containers`, the same four
+`rofi-files --search` uses - and `.cache` alone is why the third row exists: an unfiltered walk is
+37 times the work for a list where every seventh row is a browser cache entry.
+
+### What the list costs
+
+fzf, from the first byte of `fd`'s output to the first painted list, and from a keystroke to the
+repainted list (the `change` event), PSS from `/proc/<pid>/smaps_rollup` with the window open:
+
+| Case | Time | PSS |
+|---|---|---|
+| first paint, 19.4k rows | **24 ms** (17-24) | - |
+| keystroke repaint, `--scheme=path` | **5-35 ms** | - |
+| window open, 19.4k rows | - | **35.6 MB** |
+| window open, 348k rows | - | **86.7 MB** |
+
+fzf filters **as the producer streams**: the prompt is up and typable before `fd` has finished, so
+the 43 ms above and the 24 ms here overlap instead of adding up. `--read0`/`--print0` keep a name
+with a space, a tab or a newline one row and one argument; `--scheme=path` ranks a path by its
+segments, which is what makes typing `sway conf` reach `~/.config/sway/config` (the default scheme
+scores the whole string and prefers a shorter candidate).
+
+The 86.7 MB row is the reason the excludes are not optional: fzf keeps a scored entry per row, and
+348k of them turns a search window into the heaviest thing in the session, for a list where every
+seventh row is a browser cache entry.
+
+### The preview
+
+The pane is 55 % of the width and shows one of three things: the first 300 lines of a text file
+through `bat` (`--paging=never`, `--style=numbers`, `BAT_THEME=ansi`), a picture or a PDF page, or
+`file`'s mimetype plus `du` for anything else. A preview is drawn **for the row under the cursor
+only**, so the cost is one decode of the 128 px thumbnail `nureb-thumbnail` already keeps for
+`rofi-files`: the same cache path (`~/.cache/thumbnails/normal/<md5>.png`), the same generator, and
+a picture is decoded once ever, whichever of the two asked for it.
+
+The pane draws with **`chafa -f symbols`**, not sixels, and that is the one setting that could be
+mistaken for a downgrade. Sixels are what the file viewer uses (`foot --hold -e chafa -f sixels`)
+because there chafa owns the terminal and nothing repaints over it. Here the pane is a region of
+fzf's own terminal: every keystroke redraws the screen, and a sixel image - which is placement
+state in the terminal, not text - is erased or smeared by that redraw. A symbols image is ordinary
+text, so it survives. The cost of the difference is resolution: ~80x24 cells for a picture, against
+the full window in the viewer, and the 128 px thumbnail is already about that.
+
+### The alternatives
+
+* **fzf** (chosen). Already in `packages/tools.list` for the shell's Ctrl-R/Ctrl-T/Alt-C bindings
+  and `ff`, so the feature adds a script and no package; filters as the producer streams;
+  `--read0`/`--print0` are path-safe; the preview is a setting, not an architecture.
+* **skim** (`sk`). A Rust clone of fzf with the same interface and the same feature set for this
+  job. It would be a second fuzzy finder in the image doing what the first one does, and nothing
+  measured made it faster here - rejected on the duplication, not on quality.
+* **television** (`tv`). Nice channel/syntax model, and not packaged in forky: it would need a
+  cargo build on the build host and a vendored dependency tree for a tool that has to be on the
+  first boot. `fd | fzf` is the same pipeline with two packaged binaries.
+* **fzy**. Simpler, no preview pane and a slower scorer on the 19.4k-file case; the preview is the
+  reason this search exists next to `rofi-files`.
+* **fzf's own `--walker`**. It walks without `fd`, which sounds like one process fewer, but it does
+  not read `.gitignore`: vendor and build directories come back and the list is no longer the tree
+  the person meant. `fd` in front keeps one definition of the pool.
+
+The rules that follow are the four traps, each of them the reason a line in the script exists:
+`--strip-cwd-prefix` (fd's `--print0` prefixes `./`, and the prefix reached both the rows and the
+opener), `--no-multi` (the opener takes one file), `-f symbols` (above) and `--hidden` with the
+excludes (the 2,020-to-19,400 jump is the whole point of asking for the whole tree).

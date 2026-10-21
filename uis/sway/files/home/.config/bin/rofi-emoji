@@ -24,7 +24,7 @@ dir=$(dirname "$0")
 
 data="${XDG_CONFIG_HOME:-$HOME/.config}/emojis.tsv"
 if [ ! -r "$data" ]; then
-	ui_say Emoji "the emoji table is missing: $data" critical
+	ui_say Emoji "the emoji table is missing: $data" critical "$UI_ICON_ERROR"
 	exit 1
 fi
 
@@ -32,11 +32,14 @@ tmp=$(mktemp "${TMPDIR:-/tmp}/emoji.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
 
 # One awk pass instead of a ui_row per line: 2000 rows through ui_row would be
-# 4000 forks (sed and tr per row) and the menu would open a second late.
+# 4000 forks (sed and tr per row) and the menu would open a second late.  The
+# columns are ui_row's - glyph, bold name, dim small detail - spelled out here for
+# that reason; the block name is a detail like any other, so it is the smaller
+# size too.
 awk -F'\t' -v cyan="$UI_CYAN" -v strong="$UI_STRONG" -v dim="$UI_DIM" '
 	/^#/ || NF < 3 { next }
 	{
-		printf "<span foreground=\"%s\">%s</span>   <span weight=\"bold\" foreground=\"%s\">%s</span>   <span foreground=\"%s\">%s</span>\t%s\n",
+		printf "<span foreground=\"%s\">%s</span>   <span weight=\"bold\" foreground=\"%s\">%s</span>   <span size=\"small\" foreground=\"%s\">%s</span>\t%s\n",
 			cyan, $2, strong, $1, dim, $3, $2
 	}' "$data" >"$tmp"
 
@@ -47,13 +50,13 @@ key=$(ui_pick_alt 'Emoji' 'Enter inserts at the cursor · Alt+1 copies only · E
 glyph=${key#alt:}
 
 if ! printf '%s' "$glyph" | wl-copy 2>/dev/null; then
-	ui_say Emoji 'wl-copy is not available, so nothing was inserted' critical
+	ui_say Emoji 'wl-copy is not available, so nothing was inserted' critical "$UI_ICON_ERROR"
 	exit 1
 fi
 
 case $key in
 alt:*)
-	ui_say Emoji "$glyph copied to the clipboard"
+	ui_say Emoji "$glyph copied to the clipboard" normal "$UI_ICON_EMOJI"
 	;;
 *)
 	if command -v wtype >/dev/null 2>&1 &&
@@ -61,7 +64,8 @@ alt:*)
 		:
 	else
 		# The glyph is already on the clipboard, so this is a hint, not a failure.
-		ui_say Emoji "$glyph copied · this window takes no virtual keyboard, paste it yourself"
+		ui_say Emoji "$glyph copied · this window takes no virtual keyboard, paste it yourself" \
+			normal "$UI_ICON_EMOJI"
 	fi
 	;;
 esac

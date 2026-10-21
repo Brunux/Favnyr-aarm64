@@ -203,7 +203,7 @@ the markup rows and the `bat`/popup behaviour, so the view is a script over
 `rofi -dmenu -markup-rows` that reopens itself in the chosen directory, reads text files with `bat`
 and draws pictures with `chafa` in the floated foot window. The thumbnails came after that: rofi's
 own cache (`~/.cache/thumbnails`, 128 px) fed by `~/.config/bin/nureb-thumbnail`, which is why the
-batch cost two packages (`poppler-utils` for a PDF's first page, `chafa` for the viewer) and why
+batch cost two packages (`poppler-utils` for a PDF's first page, `chafa` for the picture fallback) and why
 `bubblewrap` left the list - it was there for a glycin that this rofi does not use (AGENTS.md).
 
 Added with the first card feedback (2026-10-20): **`rofi-power`** (`Alt+Escape` and `Alt+Ctrl+P`:

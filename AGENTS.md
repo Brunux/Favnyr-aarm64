@@ -17,6 +17,27 @@ yet present in `scripts/` as not implemented.
 - Everything generated is versioned here (build scripts, kernel packaging, device package,
   installer, docs). Do not leave useful work only in `/tmp`.
 
+## Feature rules
+
+- **Everything a feature shows carries a picture, and the picture comes before the feature is
+  called done.** A menu row gets its `UI_I_*` glyph from `~/.config/bin/lib-rofi.sh` (and, if the
+  alphabet has no name for it, the glyph is chosen before the row is written); a notification gets
+  its icon name from the same constants; a `rofi-files` row gets a `thumbnail://` or a name from
+  the file-browser table; a `.desktop` entry gets an `Icon=` the **Nureb** theme actually draws.
+  **A name the theme does not carry is added to the third table of `scripts/make-icons.sh` and the
+  PNGs regenerated** - the build host is where that happens, never the image. A feature without
+  an icon is unfinished: a name nobody renders draws nothing at all (a hole on the row, a
+  text-only card) and logs nothing, so `check-system.sh` verifies the theme's files against the
+  names the scripts ask for instead of trusting the picture. The tables and the mako `icon-path`
+  trap are in the UI section, under *The launcher* and *The file browser*.
+- **A feature ships with its three witnesses**: a `check-system.sh` line that fails when its
+  dependency disappears, a paragraph in `usr/share/doc/nureb/` (the manual is what a person
+  reads on the device), and a bullet in this file that says why it is built this way.
+- **Nothing resident.** Menus are one-shot rofi scripts and a viewer is the viewer's own window,
+  so the session starts nothing that stays (`cliphist`'s watcher is the one agreed exception: no
+  history without a watcher). A slow action gets a `busy` card **and** a bar spinner, and says
+  whether it can be stopped.
+
 ## Critical upstream facts
 
 - **Nura is postmarketOS renamed** (rebrand 2026). Old names `postmarketOS`, `pmOS`, `pmaports`,
@@ -394,7 +415,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `KEY_BRIGHTNESSDOWN` (evdev 224) as keycode 232.
 
 - **`uis/sway/`** ports the maintainer's Nura session (solarized theme, Alt as `$mod`, Search
-  key opens rofi, waybar, foot) on top of the compositor described above. `rootfs-setup.sh`
+  key opens the file search, waybar, foot) on top of the compositor described above. `rootfs-setup.sh`
   rewrites `/home/brunux` inside the shipped text files to `$USERNAME`, and merges
   `uis/sway/files/home/` into that home.
 - **tuigreet**: Debian ships the *original* tuigreet **0.9.1**, which has no `--config`/TOML
@@ -434,11 +455,20 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
 - **Tablet mode is `~/.config/bin/tablet-mode`, driven by two `bindswitch` lines**
   (`etc/sway/config.d/28-tablet.conf`): `on` starts `wvkbd-mobintl` (solarized colours, `JetBrains
   Mono`, `-H 300`/`-L 240`, `-R 8`, `--alpha 242`), turns the touchpad off (`swaymsg input
-  type:touchpad events disabled` - it is on the back of the screen now) and starts its own **1 Hz
-  poller** (`tablet-mode poller`) over the accelerometer; `off` kills both, re-enables the touchpad
+  type:touchpad events disabled` - it is on the back of the screen now) **and the physical keyboard
+  too** (`swaymsg input type:keyboard events disabled`, `enabled` on exit; the folded keys are on
+  the table and a keystroke there is a keystroke), and starts its own **1 Hz poller**
+  (`tablet-mode poller`) over the accelerometer; `off` kills both, re-enables **both** input types
   and puts `transform normal` back. The state is a directory in `$XDG_RUNTIME_DIR/nureb-tablet`
   holding the keyboard pid, the poller pid and the output name, so a session that dies removes all
-  three, and `off` still restores the touchpad when the state is gone. **The keyboard belongs to
+  three, and `off` still restores the inputs when the state is gone (that path is the one a person
+  cannot fix without a mouse, so it exists). **The keyboard is switched off only after `start_kbd`
+  has confirmed the process is alive**, and never after a failed start: from that moment the
+  touchscreen is the only input, so a wvkbd that did not start must leave the physical keyboard on.
+  The on-screen keyboard is unaffected by that switch because it is **not an input device** - it is
+  a Wayland client of `zwp_virtual_keyboard_manager_v1`; and the **Lock key still suspends**
+  (logind reads `/dev/input` itself and `cros_ec_buttons` is a switch device, not one of the
+  keyboards turned off). **The keyboard belongs to
   tablet mode and nowhere else** - `check-system.sh` warns when `wvkbd-mobintl` runs while the mode
   is off, because nothing else starts it. `wvkbd` 0.15 is the version in forky: it has `-H`, `-L`,
   `-R`, `--fn`, the colour flags and `--alpha`, and **no `--dock`/`--ratio`/`--auto`** (later
@@ -447,14 +477,33 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `fullwide`, `special`, `simple`, `dialer`, cyrillic/arabic/persian/greek/georgian/hebrew, `emoji`,
   `nav`, `landscape`, …) - accents come from its `Cmp` key, which opens that key's variants for a
   tap (`Cmp`+`a` → a row of `á à â ä …`; `Cmp`+`?` → `¿`), a variant layer and **not** a dead-key
-  compose sequence. **The rotation mapping is a table in `orient()`**: screen-up gives `+Z` (the accelerometer
-  reports the reaction to gravity), so flat `+Z` → `normal`, upright `+Y` → `normal`, `-Y` → `180`,
-  `-X` → `90` (`transform` is clockwise), `+X` → `270`, and no axis dominant → keep the current one;
-  the thresholds are `0.85` (flat) and `0.75` (an axis, ~41° off vertical) so tilting does not flip
-  the screen. It assumes the panel frame ChromeOS uses; an inverted unit is fixed by swapping the
-  four `transform` values. **Nothing here has run on hardware yet** (no Wayland session in the shell
-  that wrote it): the switch, the keyboard and the rotation are the acceptance test, and the manual
-  section is `03-shortcuts.md` § Tablet mode.
+  compose sequence. **The rotation mapping is a table in `orient()`, and the card's first report
+  said the screen came up upside down**: the accelerometer in this panel sits 180 degrees around
+  from the frame the first table assumed, so an upright device reads **-Y**, not +Y, and the four
+  in-plane rules are the mirror image of the assumption (the flat rule is unchanged). Screen-up
+  gives `+Z`, so flat `+Z` → `normal`, upright `-Y` → `normal`, `+Y` → `180`, `+X` → `90`
+  (`transform` is clockwise), `-X` → `270`, and no axis dominant → keep the current one; the
+  thresholds are `0.85` (flat) and `0.75` (an axis, ~41° off vertical) so tilting does not flip
+  the screen. **Because a sign in a comment is a guess until it is checked on a unit, there is a
+  calibration instead of a hardcoded frame**: `tablet-mode calibrate` (a row in Settings while the
+  mode is on, "Calibrate rotation") reads the accelerometer in the pose the person is holding -
+  upright, screen facing them - and writes the direction that must look upright to
+  `$XDG_CONFIG_HOME/nureb/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on every
+  pass and derives all four positions from the single reference: the readings run around the device
+  in the counter-clockwise order `+X, +Y, -X, -Y`, so each 90 degrees the reading turns is 90 of
+  transform, the reference getting `normal` and the rest 90/180/270 in that order - which is
+  exactly the table above for a `-Y` reference and needs nothing new for a unit that reads `+Y` or
+  is held upright in portrait (`x+`/`x-`). The file is **optional** (no file means the table above),
+  a malformed one is ignored silently (`orient()` runs once a second from the poller, where a
+  notification would be the wrong answer), and deleting it is the way back. `tablet-mode
+  calibration` prints which mapping is in use, `calibrate` refuses to store anything while the
+  device is flat or halfway between two positions (both say "hold the screen upright"), and it
+  applies `normal` at once, because the pose that was just calibrated is the one that has to look
+  upright. Nothing of this is resident: the poller is still one process while the mode is on and
+  nothing afterwards. **The acceptance test is on hardware** (the 2026-10-21 card folded once, the
+  screen came up upside down and the physical keyboard kept typing): the inverted default, the
+  keyboard switch, the calibration and the restore paths are what to try, and the manual section is
+  `03-shortcuts.md` § Tablet mode.
 - **Nerd Fonts / waybar icons**: Debian has no Nerd-patched Adwaita Mono, so the theme uses
   `JetBrains Mono` for the text. Beware `fonts-nerd-symbols`: it is **DFSG-stripped** and only
   ships Octicons, Codicons, Devicons, Seti and Powerline. It has **no Font Awesome
@@ -485,7 +534,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   linked against musl, which cannot run against glibc. Its drop-in is not shipped, but
   `~/.config/workstyle/config.toml` is kept so `cargo install workstyle` is enough to enable it.
 - **The launcher, the window switcher and the bar's dmenu are all `rofi` 2.0** (Debian's `rofi`;
-  +6 packages / 1.75 MB over the previous set). `$mod+d`/Search key = `rofi -show drun` (the
+  +6 packages / 1.75 MB over the previous set). `$mod+d` = `rofi -show drun` (the
   `.desktop` entries, including the port's own `usr/share/applications/org.nureb.*`), `$mod+Tab` =
   `rofi -show window` (wlroots foreign-toplevel; sway has no switcher of its own), `$mod+Shift+d` =
   `rofi -show run` (`$PATH`; **Shift+Enter** runs the choice in foot - rofi's own binding, and the
@@ -493,6 +542,11 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `bar-pick` is `rofi -dmenu`. It replaced tofi (launcher) and fuzzel (bar popups), so the session
   has one picker instead of two; measured PSS while open: drun 15.7-17.1 MB, dmenu 14.2-15.6 MB,
   window 16.7 MB, against **40.5 MB for each fuzzel popup** it replaced and 62.1 MB for wofi.
+  **The Chromebook Search key is the file search** (`rofi-files --search`: one bounded `fd` run
+  over `$HOME`), bound in `~/.config/sway/config` and not in `19-launcher.conf` - the launcher had
+  it and the key found applications, which is the one thing the launcher already does better one
+  key away (`$mod+d`). The binding is `--release --no-repeat` because the top row doubles as
+  F1-F10 with Search held down (keyd), and `Alt+d` stays unbound.
   **Icons: a font glyph in the lists, an image in the launcher.** The lists this port draws put a
   Font Awesome codepoint in the row text (`~/.config/bin/lib-rofi.sh`), so they cost nothing, follow
   the palette and are filtered away by typing; the launcher and the window switcher show the real
@@ -507,7 +561,22 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `papirus-icon-theme` is 190 MB installed. `scripts/make-icons.sh` renders the same Font Awesome
   codepoints into 48x48 PNGs that ship as the small **Nureb** theme
   (`uis/sway/files/usr/share/icons/Nureb`), whose `index.theme` inherits Adwaita and hicolor, so an
-  application that brings its own icon still shows it in colour. Two traps that cost a round each:
+  application that brings its own icon still shows it in colour. The theme carries **three**
+  tables now, not two: the launcher's `.desktop` names, the command palette's binary names, and
+  the **names the rest of the session asks for by freedesktop name** - the file browser's row
+  icons (`folder go-up view-hidden text-x-generic text-html application-pdf image-x-generic
+  video-x-generic audio-x-generic application-x-executable package-x-generic x-office-document
+  dialog-warning`) and the ones a notification draws (`dialog-information dialog-warning
+  dialog-error network-server display-brightness input-touchpad input-keyboard
+  preferences-desktop-theme preferences-desktop-effects preferences-system-windows`). rofi's
+  dmenu resolves `\0icon\x1f<name>` through `icon-theme: "Nureb"`, so the launcher and the file
+  list share the alphabet. **mako does not**: it reads no theme metadata, it walks the roots of
+  its `icon-path` (`mako(5)`: *"This approximates the search algorithm used by the XDG Icon Theme
+  Specification, but does not support any of the theme metadata"*), and `/usr/share/icons` is not
+  a theme root - so `~/.config/mako/config` has to name
+  `icon-path=/usr/share/icons/Nureb:/usr/share/icons/hicolor` or every notification icon stays
+  blank while `notify-send -i folder` looks perfectly correct on the command line. Two traps that
+  cost a round each:
   a literal private-use character does not survive every editor or transport (the first attempt
   shipped a row of empty spans), and `printf '\uXXXX'` needs bash - dash has no `\u`, so the first
   `make-icons.sh` under `#!/bin/sh` rendered nothing; the script is bash and now fails loudly on an
@@ -526,7 +595,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   script that logged its calls), which is why the calculator is a one-shot prompt and not a live
   preview; the plan that assumed otherwise is corrected in `docs/plan-rofi.md`. `grimshot` is a package of its own. `pactl` (the
   XF86Audio* keys) comes from `pulseaudio-utils`, not from `pipewire-pulse`.
-- **The file browser is a script over rofi's dmenu, and its rows carry thumbnails.**
+- **The file browser is a script over rofi's dmenu, and every row carries an icon.**
   `rofi -show filebrowser` *does* exist in 2.0.0-0.2 (`sorting-method`, `directories-first`,
   `show-hidden`, even a `recursivebrowser`), but with `-show-icons` it generated **no**
   thumbnails here - `~/.cache/thumbnails` stayed untouched and every row kept its mimetype icon -
@@ -535,12 +604,59 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   lists one directory per run with `find -L ... -printf` as
   `rofi -dmenu -markup-rows -show-icons`, and Enter reopens the script in the chosen directory,
   reads the file with `bat --paging=always` in the floated `popup` foot window (`BAT_THEME=ansi`,
-  since foot runs the command directly and never sources the profile) or draws a picture there
-  with **chafa**. The details that make it work: dmenu matches the **markup-stripped** text, so
-  the dim size/date do not get in the way of typing (verified: `-filter span` matches nothing);
-  `-L` makes a symlink to a directory navigate and leaves only broken links as `l`; the name
-  column is padded to the longest name because the theme is monospace; and text is told from
-  binary by the first 4 kB, because bat would render a binary as an empty page.
+  since foot runs the command directly and never sources the profile) or hands it to the program
+  that fits it. **Where it goes is the extension, not a guess**: a **document to `papers`** (PDF,
+  DjVu, a comic: search, zoom, printing and annotations, where a PDF used to be a 280 MB browser
+  tab; poppler only feeds the row's thumbnail), a **picture to `imv`** (the GPU viewer, with
+  zoom/pan/rotate and a slideshow of the folder) with **`chafa`'s sixels as the fallback** for a
+  GPU where imv gets no EGL context (~16 MB of PSS for a 6000x4000 photo against a browser window
+  of hundreds of MB), text to `bat`, a **video to mpv** (a container is what chafa answers with
+  *unknown file format*, so a real player was always the answer: `setsid mpv --no-config
+  --no-resume-playback --force-window=yes --keep-open=no --title=<name> -- <path>`, no
+  `~/.config/mpv` so a profile from another machine cannot decide anything, **plus
+  `--script=/etc/mpv/scripts/mpris.so`** because `--no-config` also empties the script directory
+  mpv-mpris installs into - without it playerctl, the Media menu and the bar see no player, which
+  is silent), an HTML file still opens as text because it *is* text, and a `.deb` is the browser's
+  download prompt. **The image family is decided before the text test**, or an SVG - which is a
+  text file - would open as source in `bat` and could never be looked at. The details that make
+  the rows work: `rofi -dmenu`
+  draws a row's icon from the `\0icon\x1f<value>` suffix, and a value that starts with
+  `thumbnail://<path>` makes rofi call `-preview-cmd` (`nureb-thumbnail`) for the rows it is
+  about to draw and keep the result in `~/.cache/thumbnails/normal/<md5 of the path>.png`,
+  skipping the call when that file exists (verified: two runs, one call); **every** row also
+  carries a theme icon name when it has no thumbnail, because a row without one loses the 32 px
+  icon column and its name starts further left - a directory of source files was a bare,
+  unstyled list, which is the bug the report named. The name comes from the extension plus the
+  executable bit, both already in the listing (`%m`), never from a `file` per row: `folder` for a
+  directory, `go-up` for the parent, `view-hidden` for the dotfile switch, `dialog-warning` for
+  a broken link, `thumbnail://` for jpg/jpeg/png/gif/webp/bmp/tif/tiff/avif, the video containers
+  (mp4/mkv/webm/mov/avi/m4v/mpg/mpeg/ogv/wmv/flv/3gp) and pdf, `application-pdf` for the
+  formats papers reads but nureb-thumbnail has no decoder for (djvu/djv/cbz/cbr/cb7/cbt/ai),
+  `text-html` for
+  html/htm/xhtml/shtml, `x-office-document` for odt/ods/odp/odg/doc/docx/xls/xlsx/ppt/pptx/rtf/
+  epub, `application-x-executable` for sh/bash/zsh/fish/py/pl/rb/lua/awk/deb/appimage/run/bin/
+  exe/elf/o/so/a/ko and for anything unrecognised, `package-x-generic` for tar/gz/tgz/bz2/tbz2/
+  xz/txz/zst/zstd/zip/7z/rar/lz/lz4/lzma/iso/img, `audio-x-generic` for mp3/flac/ogg/oga/opus/
+  wav/m4a/aac/wma/aiff/aif/mid/midi, `image-x-generic` for an image format ffmpeg cannot turn
+  into a thumbnail (svg/heic/heif/jxl/raw/cr2/cr3/nef/arw/dng/psd/xcf/ico/icns - asking for a
+  thumbnail there would never produce one), `text-x-generic` for txt/log/out/err/nfo/md/rst/csv/
+  tsv/json/yml/yaml/toml/ini/cfg/conf/env/lock/list/xml/rasi/desktop/service/rules/sql/diff/
+  patch and for the common source extensions, and for a name with no extension the executable
+  bit decides (`application-x-executable` for a program, `text-x-generic` for a README). Every
+  one of those names is a PNG in the Nureb theme (`scripts/make-icons.sh`, third table). dmenu
+  matches the **markup-stripped** text, so the dim size/date do not get in the way of typing
+  (verified: `-filter span` matches nothing); `-L` makes a symlink to a directory navigate and
+  leaves only broken links as `l`; the name column is padded to the longest name because the
+  theme is monospace; and text is told from binary by the first 4 kB, because bat would render a
+  binary as an empty page. **`rofi-files --search` is the Search key's mode**: one bounded `fd`
+  run over `$HOME` (`--type f --max-results 500`, `--exclude .cache .git node_modules
+  .local/share/containers`, hidden only with `--hidden` - Debian's binary is `fdfind` and the
+  image also has `/usr/local/bin/fd`), one `stat` for the metadata of whatever it found, sorted
+  newest first, with the `~/relative/path` as the row's name so typing filters it and Enter
+  opening the file exactly like a browser row; Escape closes either mode with nothing, and a
+  missing fd falls back to browsing with a notification. The cost is bounded by construction:
+  501 rows (500 matches + the dotfile switch) of a 700-file `$HOME`, 92 ms end to end on this
+  machine, no subprocess per row.
 - **A thumbnail is rofi's own cache plus one script.** A row is
   `text\0icon\x1fthumbnail://<abs path>`; with `-show-icons` and
   `-preview-cmd 'nureb-thumbnail {input} {output} {size}'` rofi calls that script for the rows it
@@ -565,24 +681,169 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   (`-theme-str element-icon { size: 32px }`); the launcher and the bar popups keep the theme's
   26 px. Cost: 23 MB of PSS for a window of fourteen thumbnail rows against 17 MB for the same
   window without them, and nothing afterwards; the numbers are in `docs/optimization.md`.
-- **Pictures go to chafa, the PDF stays with Firefox.** `foot --hold --app-id=popup -e sh -c
-  'sleep 0.2; exec chafa -f sixels "$1"'` draws an image, a video frame or an SVG with sixels,
-  which foot renders natively: ~16 MB of PSS for a 6000x4000 photo, against a browser window of
-  hundreds of MB (280 MB installed). The `sleep` is not decoration - a terminal starts at 80x24 and
-  resizes only after the window is mapped, so chafa would measure the wrong size and paint into a
-  corner (the same lesson as the screensaver), and `--hold` keeps the window up after chafa has
-  drawn once and exited. A PDF, an HTML file and a `.deb` still go to **`firefox-esr`** (`file://`
-  URL, `setsid` so it outlives the script): it is the reader with search, zoom and printing, and
-  poppler only feeds the row's thumbnail. Firefox is also what
-  `uis/sway/files/usr/local/bin/xdg-open` opens for URLs and paths, the two dozen lines that
-  foot's ctrl+click and the CLI tools expect (there is no desktop portal here).
-  `check-system.sh` fails when the browser, the shim, `ffmpeg`, `pdftocairo` or `chafa` is
-  missing, and warns when the thumbnail cache is unwritable or `rofi-files` stops passing
-  `-show-icons`/`thumbnail://` - a dropped flag makes the list silently text-only.
+- **The picture fallback is `chafa`, and `xdg-open` is the shim.** When imv gets no EGL context,
+  `foot --hold --app-id=popup -e sh -c 'sleep 0.2; exec chafa -f sixels "$1"'` draws the picture
+  with sixels, which foot renders natively: ~16 MB of PSS for a 6000x4000 photo, against a
+  browser window of hundreds of MB (280 MB installed). The `sleep` is not decoration - a terminal
+  starts at 80x24 and resizes only after the window is mapped, so chafa would measure the wrong
+  size and paint into a corner (the same lesson as the screensaver), and `--hold` keeps the
+  window up after chafa has drawn once and exited. `uis/sway/files/usr/local/bin/xdg-open` is the
+  two dozen lines that send a URL to `firefox-esr` and a path to `nureb-view` (the same rule
+  table a double click uses, so a file opened from a script lands where it would from the
+  desktop); it is what foot's ctrl+click and the CLI tools expect, and there is no desktop portal
+  here. `check-system.sh` fails when the browser, the shim, `imv`, `papers`, `mpv`, the
+  `mpris.so` plugin, `ffmpeg`, `pdftocairo` or `chafa` is missing, and warns when the thumbnail
+  cache is unwritable or `rofi-files` stops passing `-show-icons`/`thumbnail://` - a dropped flag
+  makes the list silently text-only.
+- **Files exists twice on purpose: `rofi-files` is the list and `pcmanfm` is the window.** The
+  Search key and `Alt+Ctrl+F` open the list (one process, no window); **`Search+Shift`** opens
+  pcmanfm, and the launcher and the root menu carry both rows - **Files** and **Files (window)**
+  (`pcmanfm.desktop` is shadowed by a user-level copy with that name, so the launcher says what it
+  opens). nautilus was measured and rejected (`docs/omarchy-gap.md` §1: 504 packages, GTK4 +
+  libadwaita + 38 MB of ICU + GStreamer + 31 MB of `samba-libs`, a `localsearch` indexer crawling
+  `$HOME`, glycin); pcmanfm is 229 packages and 4.9 MB on the GTK3 the image already has, `gvfs`
+  adds the trash (`gvfsd-trash`) and the volume monitor, and `gvfs-backends` is deliberately out
+  (that is where `samba-libs` and the mtp/gphoto backends come from), so the Network places are
+  off. It ships `etc/xdg/pcmanfm/default/pcmanfm.conf`: **`terminal=foot` under `[config]`**,
+  which is where libfm reads it - not `[ui]`, where the Preferences dialog makes it look like it
+  belongs - because the packaged default `x-terminal-emulator` does not exist here and F4/"Open
+  Terminal Here" would silently do nothing; `bm_open_method=0` (ask GIO, which is how the
+  association below is reached), `use_trash=1`, `thumbnail_max=4096` **kilobytes** (libfm decodes
+  on the UI thread with gdk-pixbuf and ignores `.thumbnailer` files, so thumbnails are images
+  only, and a 24 MP JPEG costs ~83 MB for a 128 px thumbnail), `autorun=0`, a 900x600 window.
+- **A double click in pcmanfm resolves through `/etc/xdg/mimeapps.list` ->
+  `org.nureb.view.desktop` -> `~/.config/bin/nureb-view`**, which applies exactly the rules
+  `rofi-files` applies (text in `bat`; a document - PDF, DjVu, a comic - in `papers`; a picture
+  in `imv` with `chafa`'s sixels as the fallback when imv gets no EGL context; a video in `mpv`;
+  and an HTML page, an EPUB or a `.deb` in `firefox-esr`), so a file opens the same way from the
+  list and from the window - with one deliberate exception, an HTML file, which the list reads as
+  text in `bat` and a double click takes to the browser, because that is what a page is.
+  `inode/directory` stays `pcmanfm.desktop`. There is no `xdg-desktop-portal` in the image, so this pair *is* the
+  open-with mechanism for every GIO program. **GIO silently drops a `.desktop` whose `Exec`
+  program does not exist**: with `nureb-view` not executable (or absent) `gio mime image/png`
+  answers "no default application" instead of an error, which looks like a broken association -
+  so the `check-system.sh` line is both the association test and the mode test
+  (`LC_ALL=C gio mime image/png` must say `Default application: org.nureb.view.desktop`, and
+  `gio mime inode/directory` must say `pcmanfm.desktop`). No `mimeinfo.cache` regeneration is
+  needed for that to resolve (verified), and a user `~/.config/mimeapps.list` overrides the
+  system file, so nothing is locked in.
+- **The three viewers are `papers`, `imv` and `mpv`, and each one is a package with its own
+  reason**: a document (PDF, DjVu, a comic) goes to **`papers`** - a reader with search, zoom,
+  printing and annotations, where a PDF used to be a 280 MB browser tab, and poppler stays only
+  as the thumbnailer; a picture goes to **`imv`**, which draws it on the GPU and gives zoom, pan,
+  rotation and a slideshow of the folder, with `chafa`'s sixels kept as the **fallback** for a
+  GPU where imv gets no EGL context; a container goes to **`mpv`**. **`papers` does not open
+  EPUB** - its `MimeType=` has no `application/epub+zip`, whatever `docs/omarchy-gap.md` once
+  said - so an EPUB (and a `.deb`) still goes to the browser, and `foliate` (12.4 MB, in forky)
+  is the package that would change that. Two packaging facts cost a round each: **Debian's `imv`
+  installs no `/usr/bin/imv`** (the package ships `imv-wayland`/`imv-x11` and a
+  `/usr/libexec/imv/imv` dispatcher), so `rootfs-setup.sh` adds the short name the way it does
+  for `bat` and `fd` - without it every `command -v imv` fails and a photo silently lands in
+  chafa; and **`mpv --no-config` empties the script directory too**, so `mpv-mpris` (which is
+  what makes `playerctl`, the Media menu and the bar see the film at all) has to be passed as
+  `--script=/etc/mpv/scripts/mpris.so`, guarded by `-r` so a tree without the plugin still
+  plays. `rofi-files` and `nureb-view` carry the same table on purpose (the menu does not start a
+  process to decide what to start), so a change to one belongs in the other; `check-system.sh`
+  FAILs on a missing `imv`/`papers`/`mpv`, on the missing `/usr/local/bin/imv`, on a missing
+  `mpris.so`, and warns when `application/pdf` does not resolve to
+  `org.gnome.Papers.desktop`.
+- **Removable media is `udisks2`, and mounting it is a row in Places.** An unprivileged session
+  cannot `mount(8)` anything - that is a root operation - so a USB stick used to be unusable:
+  no mount point, no `udisksctl`, and pcmanfm's Devices pane had nothing to talk to.
+  `uis/sway/packages.list` carries **`udisks2`** (D-Bus activated on the system bus, so nothing
+  runs until something asks and nothing stays resident) and `rofi-places` grew two row kinds:
+  `disk:` for every mounted real filesystem (`findmnt`, minus `/` and `/boot`), and `mount:` for
+  every partition `lsblk` reports with a filesystem and no mount point, which
+  `udisksctl mount -b` mounts and then opens in `rofi-files`. **`Alt+1` on a `disk:` row
+  unmounts it**, because a stick mounted from the menu stays mounted otherwise - and pulling one
+  that is still mounted is how a filesystem gets corrupted. Three details: `udisksctl mount`
+  prints `Mounted /dev/sda1 at /run/media/<user>/<LABEL>.` **with a full stop**, so the path
+  handed to the browser is `${out##* at }` with `${mp%.}` after it, or the menu opens a
+  directory that does not exist; `lsblk -r` escapes a space in a label as `\x20`, so the row
+  unescapes that one sequence (a label is what a person recognises); and the `mount:` rows skip
+  `swap` and `crypto_LUKS` on purpose - udisks can unlock LUKS, but it needs a passphrase prompt
+  this menu does not have, and a swap partition has nothing to show. **`udiskie` is deliberately
+  not installed**: it is a resident Python daemon (`python3-gi` + `gir1.2-gtk-3.0` +
+  `python3-docopt`/`python3-yaml`, none of them in this image) whose remaining job would be a
+  tray icon this bar has no host for; on-demand `udisksctl` is the same result with no daemon.
+  No userspace filesystem helper is needed either: the kernel has `VFAT_FS=y` and
+  `EXFAT_FS=m`/`NTFS3_FS=m`, so a stick from any other machine mounts, and `dosfstools` is
+  already in `packages/base.list` for the `fsck.vfat` udisks runs before mounting one.
+- **The GTK3 half of the palette is two files** in `uis/sway/files/home/.config/gtk-3.0/`:
+  `settings.ini` (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `Nureb`,
+  `JetBrains Mono 10`, animations off) and `gtk.css`, which repaints the surfaces with explicit
+  selectors of the same specificity Adwaita uses and is parsed after it. The fills are **opaque**
+  base03 - a translucent window shows the wallpaper through its own text - and pcmanfm is the
+  only GTK3 *window* whose look comes from the GTK theme (waybar is GTK3 too but paints the bar
+  from its own stylesheet, foot is pixman and rofi draws its own surfaces), so
+  this is a stylesheet, not a theme package. Adwaita 51 ships no full-colour `folder`,
+  `user-home` or `drive-harddisk` at all, which is why `scripts/make-icons.sh` grew a **fourth
+  table** (50 names: the places, the actions and the mimetypes the sidebar and the icon view ask
+  for by name; the theme is 215 PNGs in `48x48/apps` + `scalable/apps`), and `check-system.sh`
+  asks the theme for the names pcmanfm draws instead of trusting the picture.
+- **`Search+Shift` is the window, and both halves are release bindings**: sway matches a release
+  binding against the modifiers held when the key comes up, so Search released with Shift still
+  down lands on `pcmanfm "$HOME"`, Search alone falls through to `rofi-files --search`, and
+  neither fires on the press - the top row doubles as F1-F10 while Search is held (keyd), so a
+  press binding would open a menu on the way to an F-key. Releasing Shift first gives the file
+  search rather than the window, which answers a narrower question instead of the wrong one.
+  Nothing of this is resident: the menu is one rofi process while it is open, and the window is
+  the window.
+- **`Alt+Search` is the same question in a terminal** (`~/.config/bin/nureb-find`): `fd` streams
+  the whole tree under `$HOME` into **fzf**, the fruit of typing narrows it while the walk is
+  still running, the right 55 % is a preview pane, and Enter hands the choice to **`nureb-view`**
+  - the same opener a double click in pcmanfm uses - so the list, the window and the key never
+  disagree about where a file goes. The two searches are deliberately different questions:
+  `rofi-files --search` is **bounded** (500 rows, sorted newest, icons and thumbnails, up in a
+  menu), which is what a file whose name you half-remember wants; this one is **uncapped** with a
+  preview, which is what "I will know it when I see it" wants. Dotfiles are **included** here and
+  hidden in the menu, because the whole tree is the pool and `~/.config` is a place people look
+  for things; the four excludes are the same (`.cache`, `.git`, `node_modules`,
+  `.local/share/containers` - `.cache` alone is 330k of the 350k files in this home) and
+  `.gitignore` keeps vendor trees out.
+  **fzf is the picker because it is already here** (the shell's Ctrl-R/Ctrl-T/Alt-C and `ff`,
+  `packages/tools.list`) **and it filters as the producer streams instead of after it**;
+  `--read0`/`--print0` make a name with a space, a tab or a newline one row and one argument.
+  Rejected, each at its own line in `docs/optimization.md` §9: `skim` (a second finder with the
+  same behaviour and no measurement to justify it), `television`/`tv` (not packaged in forky, so
+  it would need a cargo build for a tool that has to be there on the first boot), `fzy` (slower
+  and no preview) and fzf's own `--walker` (it does not read `.gitignore`, so `node_modules`
+  comes back). Measured on the build host: **2,020 visible files walk in 21 ms**, the 19.4k of
+  hidden-plus-excludes in **43 ms**, **first paint in 24 ms**, a keystroke repaints in **5-35 ms**,
+  35.6 MB of PSS while open - and the unfiltered tree (348k files) costs 1.6 s of walk and 86.7
+  MB, which is why the excludes are not optional.
+  Four things here are traps, all of them found by running it. **`fd --print0` prefixes every
+  relative path with `./`** and `--strip-cwd-prefix` is the only thing that removes it - without
+  the flag every row is shifted two characters nobody types and every path handed to the opener
+  is wrong. **The preview draws with `chafa -f symbols`, never sixels**: the pane is part of
+  fzf's own terminal, not a window, so a sixel image is painted over by the next redraw, while a
+  symbols image survives it (and reuses the same `nureb-thumbnail` cache, so a picture is
+  decoded once, as in the browser). **No glyph column**: foot cannot render a Font Awesome
+  codepoint (its fallback font is Symbols Nerd Font Mono), so a row carries no icon and the
+  picture is **the preview pane** - which is why this feature satisfies the picture rule without
+  a name in `scripts/make-icons.sh`; the notification that a failed search raises does carry
+  `system-search`, and `check-system.sh` warns when the theme loses it. **`--no-multi`** because
+  the opener takes one file: a Tab that marked three rows would open the first and say nothing
+  about the other two. The window is a foot with `--app-id=nureb-find`, floated and centred by
+  `etc/sway/config.d/29-file-search.conf`, and started from a shell it runs in that shell
+  instead - the key and the command are the same program. `check-system.sh` FAILs on a missing
+  binding, on a script that lost its executable bit (the window would flash and close), on a
+  missing `fzf` (an empty list reads as "no such file", never as a missing package) and on a
+  missing `nureb-view`, and warns on the icon. Nothing is resident: one fzf process while the
+  window is open.
 - **Capture is a menu over commands that already exist** (`rofi-capture`, `Alt+Ctrl+C`, "Capture"
-  in the root menu and the launcher entry `org.nureb.capture.desktop`): `grimshot -n save|copy
-  screen|area|window` for the screenshot (it prints and announces the path; the notification
-  carries the image), `swappy -f FILE` to annotate, which writes the edits back over the same file
+  in the root menu and the launcher entry `org.nureb.capture.desktop`):
+  `screenshot -n save|copy screen|area|window` for the screenshot, where
+  `~/.config/bin/screenshot` is the one place that decides where a picture lands -
+  `~/Pictures/Screenshots/<the date>/`, one folder per day, under grimshot's own `date -Ins`
+  name and handed to grimshot as its **third positional argument**, the only channel a
+  `~/.config/user-dirs.dirs` cannot override (exporting `XDG_SCREENSHOTS_DIR` loses to the file
+  grimshot re-sources after reading the environment, which is why the variable-only fix looked
+  correct on an image that ships no such file and wrong on a machine that has one). Without it
+  grimshot wrote `$HOME` - `XDG_PICTURES_DIR` has no `user-dirs.dirs` to come from - and every
+  screenshot landed among the dotfiles (the card's report). The three keys and the capture menu
+  all go through the wrapper, `check-system.sh` fails when the wrapper is not executable, and the
+  notification prints the path and carries the image. `swappy -f FILE` annotates, which writes the edits back over the same file
   and exits when its window closes, `slurp -d` + `grim -g` for one region that `tesseract FILE
   stdout -l eng` (English is the only `tesseract-ocr-*` the image ships) or `zbarimg -q --raw`
   reads, the result copied with `ui_copy` and the first line in the notification.
@@ -650,14 +911,27 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `lib-rofi.sh` (`ui_row` glyph+bold+dim row, `ui_pick` table-and-key round trip because rofi hands
   back the rendered row, `ui_pick_alt` when a second action sits on Alt+1 - it returns `alt:KEY` and
   rofi exits 10 for that, `ui_say` for results) and each is one process while open. **A slow action
-  needs visible progress**: `busy start TAG LABEL MESSAGE [ICON]` opens a mako toast that does not
-  expire, `busy end`/`fail` turn the same card into the result (same
-  `x-canonical-private-synchronous` tag, so mako replaces instead of stacking), and `bar-busy` is
-  the waybar `custom/busy` module that shows a braille spinner plus the label in yellow while a
-  state file exists in `$XDG_RUNTIME_DIR/nureb-busy` - zero width when idle, and a state file older
-  than five minutes is dropped so a killed script cannot leave a spinner forever. Wired into the
-  Wi-Fi scan/connect/radio, the Bluetooth scan/connect/radio and the `du` walk in Free space; a new
-  slow action gets the same two lines.
+  needs visible progress, and the progress is the stop button**: `busy start TAG LABEL MESSAGE
+  [ICON]` opens a mako toast that does not expire, `busy end`/`fail` turn the same card into the
+  result (same `x-canonical-private-synchronous` tag, so mako replaces instead of stacking), and
+  `bar-busy` is the waybar `custom/busy` module that shows a braille spinner plus the label in
+  yellow while a state file exists in `$XDG_RUNTIME_DIR/nureb-busy` - zero width when idle, and a
+  state file older than five minutes is dropped so a killed script cannot leave a spinner forever.
+  **Clicking that spinner stops the task it names**: the producer sets `BUSY_STOP` to the one shell
+  line that ends its own slow step (`pkill -f "[n]mcli.*device wifi list"`, a pattern, not a pid
+  this script would have to guess from the label), `busy start` writes it to `<tag>.stop` with mode
+  0600 because something executes it, and the module's `on-click` (`bar-busy stop`) turns the card
+  into `Stopped <label>` and then runs that line - the card first, so a producer that starts a card
+  of its own finds an empty state instead of racing the removal of its own. The producer then asks
+  `busy cancelled TAG`, which answers 0 once the tag has no card, and reports **nothing**: without
+  that question a killed command reads as a result (half a scan drawn as a network list) or as a
+  failure (`Wi-Fi: ` in a critical toast). A task with no `BUSY_STOP` says so when clicked and
+  keeps running; a `.stop` from a previous run with the same tag is never inherited; the card with
+  one ends its tooltip with *click to stop*. Deliberately **not** stoppable: an `apt` install
+  (dpkg's lock outlives it), the DNS switch (it has already written the profile), and the radio
+  toggles (they finish in milliseconds). Wired into the Wi-Fi scan/join, the Bluetooth scan, the
+  `du` walk in Free space and the dictation recording; a new slow action gets the same two lines
+  and, when it can be interrupted safely, one more.
 - **Clipboard history and emoji are the two exceptions that were worth it.** `rofi-clip`
   (`Alt+Ctrl+V`) lists what `cliphist` kept, which is fed by
   `exec wl-paste --watch cliphist store` in `config.d/27-clipboard.conf` - **the only resident
@@ -666,7 +940,8 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   are text, link or image by content; an image is listed by what `cliphist` knows about it, not by
   a thumbnail (a rofi row is one line), and "Save the newest image" decodes it into
   `~/Pictures/clipboard/<date>.<ext>` (extension from `file --mime-type`) and opens it with
-  `xdg-open`, i.e. Firefox - `imv` is not in the image. The database is `~/.cache/cliphist/db` and
+  `xdg-open`, which routes a path through `nureb-view` and therefore shows it in `imv` now that
+  the viewer is in the image. The database is `~/.cache/cliphist/db` and
   holds everything copied, secrets included, so the menu's last row clears it.
   `rofi-emoji` (`Alt+Ctrl+E`) reads `~/.config/emojis.tsv`, **generated on the build host by
   `scripts/make-emojis.sh`** from Python's `unicodedata` (name, glyph, block; 1988 rows, the emoji
@@ -682,9 +957,20 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   (`nmcli connection up` - hence the busy card and then the read-back, not a claim), packages are
   `apt-cache search` then `apt-get -y` behind the same card, colour is `slurp -p` + `grim` 1x1 +
   `ffmpeg -f rawvideo` (no ImageMagick) plus the solarized palette as swatch rows, reminders are
-  transient `systemd-run --user --collect --on-active=`/`--on-calendar=` timers that fire
-  `notify-send` once and are listed back from systemd (nothing on disk, and they die with the
-  session's user manager), and about reads procfs/sysfs. The bar's `sbs-8-000b` gauge is the
+  transient `systemd-run --user --collect` timers that fire `notify-send` once and are listed back
+  from systemd (nothing on disk, and they die with the session's user manager), and about reads
+  procfs/sysfs. **A reminder is not a countdown**: the flow is a title, then an **optional** note
+  (Enter or Escape there means "no note", not "forget it" - the timing menu is where a reminder is
+  abandoned, so one keystroke cannot cost the title), then when - the five delays plus a `repeat`
+  group (on a date and time, every day at a time, every weekday, every week on a chosen weekday,
+  every month on a day 1-28, 28 rather than 31 so no month is skipped). **Every custom expression
+  goes through `systemd-analyze calendar --iterations=1` before anything is created**, with
+  `LC_ALL=C` so its `Next elapse:`/`Normalized form:` labels parse, and a rejection echoes the
+  tool's own words (`Failed to parse calendar specification '*-*-* 25:00': Invalid argument`) and
+  returns to the When menu with the title and note still known; the confirmation shows systemd's
+  own next occurrence. The title and the note live in the timer unit's `Description`, which is what
+  the list shows on a second, dimmer line, and cancelling reads `LoadState`/`Description`/
+  `TimersCalendar` before claiming anything. The bar's `sbs-8-000b` gauge is the
   battery there; a `hid-*` power supply belongs to the touchpad and reads 0%.
 
 - **The manual is rendered, not printed.** `usr/share/doc/nureb/*.md` (seven pages: welcome, rofi,
@@ -801,11 +1087,22 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   **`fd-find` installs `fdfind`**, so `rootfs-setup.sh` adds `/usr/local/bin/bat` and
   `/usr/local/bin/fd` symlinks (guarded, so a tree without the list still builds) because the
   aliases, `MANPAGER` and `FZF_DEFAULT_COMMAND` call them by their upstream names.
+- **The editors are `nano` (in `packages/base.list`, the one that is always there) plus
+  `neovim` and `vim` (in `packages/tools.list`)**, and `EDITOR`/`VISUAL` name `nvim` - guarded on
+  the binary, because an `EDITOR` pointing at a program that is not installed makes `git commit`,
+  `crontab -e` and `eff` fail instead of falling back to nano. **`vim` alone provides
+  `/usr/bin/vi`**: its postinst runs `update-alternatives --install /usr/bin/vi vi
+  /usr/bin/vim.basic 30` (it also registers `editor`, `ex`, `view` and `vimdiff` at the same
+  priority), so `vim-tiny` is not needed - and `check-system.sh` asks for `vi` by name, because a
+  `vim` whose postinst never ran leaves `vi` missing while `vim` works, which only the script
+  that calls `vi` notices. `neovim` brings its own LuaJIT and tree-sitter library, which is why
+  the standalone `tree-sitter-cli`/`lua5.4` that Deboma installs stay out.
 - **The shell wiring is one file plus a symlink**: `uis/sway/files/etc/profile.d/90-cli-tools.sh`
   holds the environment (`MANPAGER='sh -c "col -bx | bat -l man -p"'` - `bsdextrautils` supplies
   `col`, `man-db` supplies `man` itself, which base.list does not pull in - `BAT_THEME=ansi` so bat
   paints with the terminal's own 16 colours, i.e. the solarized palette, and `$HOME/.local/bin`
-  appended to `PATH`), and it is sourced from `uis/sway/files/home/.bashrc`, which replaces Debian's
+  appended to `PATH`; plus `EDITOR`/`VISUAL` naming `nvim`, see the editors bullet), and it is
+  sourced from `uis/sway/files/home/.bashrc`, which replaces Debian's
   skel file and defines everything else: `ls`/`lsa`/`lt`/`lta` as `eza` (`--icons=auto`), `cat` as
   `bat --style=plain --paging=never`, a `cd` wrapper that tries the real path first and only then
   `z`, `zd`/`ff`/`eff`, the fzf **key bindings only** (its `completion.bash` rewraps ~76 commands'

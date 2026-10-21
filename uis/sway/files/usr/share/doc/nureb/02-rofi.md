@@ -23,7 +23,9 @@ daemon).
 | **Learn** (root menu) | `rofi-learn` | these pages, rendered with glow, plus a search across all of them |
 
 The rest of the menus live in the root menu and the launcher: **Places**
-(home, documents, downloads, pictures, the mounted disks), **Media** (what is
+(home, documents, downloads, pictures, every mounted disk, and a **Mount** row
+for each unmounted one - a USB stick or an SD card - where Enter mounts it and
+opens it in Files and **Alt+1** unmounts a disk), **Media** (what is
 playing, play/pause/next/previous), **Time zone** (with network time),
 **Free space** (what is using the disk, one action per row), **End a process**
 (the heaviest twenty), **Calculator**, **SSH** (hosts from `~/.ssh/config`),
@@ -58,35 +60,96 @@ busy end wifi '9 networks in range'      # or: busy fail wifi "$out"
 The state is a file per task in `$XDG_RUNTIME_DIR/nureb-busy`, and the bar card
 disappears on its own if a script dies without ending it.
 
+The spinner is also a button: **click it to stop what it names**. The card and
+its notification turn into "Stopped Wi-Fi" (or Bluetooth, Free space, Dictation)
+instead of a second toast appearing, and the menu that was waiting opens nothing
+- a stopped scan does not show you half a list of networks.
+
+| Card | Clicking it |
+|---|---|
+| **Wi-Fi** · scanning or connecting | stops waiting. The scan is NetworkManager's, and a join it has already started finishes on its own, so the network may still come up a moment later |
+| **Bluetooth** · scanning | stops the three-second scan |
+| **Free space** | stops measuring, so nothing is listed (nothing was deleted) |
+| **Dictation** | stops the recording and does what the shortcut's second press does: transcribes and types what you said |
+| **Packages**, **DNS**, **Wi-Fi** on/off, **Bluetooth** on/off or connecting | says that it cannot be stopped, and keeps going - an `apt` install cut in the middle leaves dpkg's lock behind, and the DNS switch has already written the profile by then |
+
+The tooltip of a stoppable card ends with "click to stop"; the others show the
+task alone.
+
 ## Browsing files
 
 `rofi-files` (Alt+Ctrl+F, "Files" in the root menu and the launcher) is a shell
 script over `rofi -dmenu`, because rofi 2.0 has no filebrowser mode:
 
+* **every row has an icon**: a 32 px picture of the file (a photo, a video's
+  frame, a PDF's first page) where one can be decoded and a glyph from the
+  system's icon theme where it cannot - a folder, a text file, a page, a
+  document, an archive, an executable, a song - so the names line up under one
+  column and the list says what things are before you read them;
 * directories come first, in cyan and with a trailing `/`; then files, with the
   size and the date in the dim colour; a symlink to a directory navigates like a
-  directory, and a broken one says so;
+  directory, and a broken one says so (with a warning icon);
 * **Enter** opens a directory (the listing reopens there), reads a text file with
   `bat` (paged, in the terminal's own solarized colours, `BAT_THEME=ansi`, inside
-  the floated `popup` window), or opens anything else with **Firefox** - an
-  image, a PDF, an SVG, the HTML file;
+  the floated `popup` window), opens a **document** (PDF, DjVu, a comic) in
+  **papers** - a reader with search, zoom, printing and annotations, not a
+  browser tab - draws an **image** with **imv** on the GPU (zoom, pan, rotate,
+  and the arrow keys walk the folder; `chafa`'s sixels in a foot window are the
+  fallback when imv gets no graphics context), and plays a **video** with **mpv**
+  in its own window (seek, subtitles, sound; press `q` to close it). A `.deb` or
+  anything else binary asks Firefox to open it, which is a download prompt -
+  still an answer;
 * the first row is `↑ parent directory`, and the last one toggles the dotfiles
   (hidden ones are out of the way until asked for);
 * typing filters the list; a path that matches no row is taken literally, so
   `/etc/sway/config.d` or `~/notes.md` can be typed and opened with
   **Ctrl+Return** (or plain Enter once nothing matches);
 * the line under the prompt says where you are, how many directories and files
-  are there and how much space is left;
-* a file that is not text goes to Firefox, which renders its own PDFs and shows
-  an image at its real size; if the browser is ever removed, a notification says
-  so instead of opening an empty page.
+  are there and how much space is left.
+
+**Search key: the files, not the launcher.** The Search key (and
+`rofi-files --search`) opens one list of every file under your home directory,
+newest first, filtered as you type: type `notes` and the row list narrows to the
+notes; Enter opens the choice exactly as the browser does. It is one `fd` run
+capped at 500 matches with the caches and build directories left out
+(`.cache`, `.git`, `node_modules`, `.local/share/containers`), so it is instant
+even on a home directory with hundreds of thousands of files - if a query is too
+broad, type one more letter rather than scrolling. The dotfiles are still one row
+away, and Escape closes it without opening anything. With `fd` missing the
+script says so and opens the browser instead.
+
+**Alt+Search: the same files, in a terminal.** The 500-row cap is the list's
+trade - it is what makes it open like a menu - so the question "where is the file
+I would recognise but cannot name" has a different answer: `nureb-find` streams
+the whole tree through `fd` into `fzf`, with the same four exclusions and the
+dotfiles included, a preview pane on the right (text read with `bat`, a picture
+or a PDF page decoded once and drawn with `chafa`) and Enter handing the choice
+to the same opener a double click in the window uses. Nothing is capped, the
+prompt is up before the walk is finished, **Ctrl+Y** copies the chosen path, and
+Escape closes it. Both keys are one process while their window is open and
+nothing afterwards.
 
 `xdg-open` exists too (`/usr/local/bin/xdg-open`, two dozen lines): a URL goes to
-Firefox, a path becomes a `file://` URL. That is what foot's ctrl+click and the
-CLI tools that print a URL call.
+Firefox, and a path goes to the same rule table a double click in the window uses
+(`nureb-view`), so a file opened from a script lands where it would from the
+desktop. That is what foot's ctrl+click and the CLI tools that print a URL call.
 
 It is the same trade as everything else here: 16 MB while open, nothing
 afterwards.
+
+**Search+Shift: the same files in a window.** `pcmanfm` (the root menu's **Files
+(window)** row, `Files (window)` in the launcher) is a real file manager for the
+things a list cannot do - drag a file onto a folder, select several, rename in
+place, send to the trash - and it opens a file with exactly the rules above: a
+double click reaches `~/.config/bin/nureb-view` through
+`/etc/xdg/mimeapps.list`, so text goes to `bat`, a document to `papers`, a picture
+to `imv` (or `chafa`'s sixels when imv cannot start), a video to `mpv` and an
+HTML page, an EPUB or a `.deb` to Firefox (the list itself reads an HTML file as
+text). Its colours are the session's too (base03 window, cyan selection,
+JetBrains Mono, the same icons). It is the *only* GTK3 window in
+the image, which is why it has a stylesheet and not a theme of its own, and it
+needs `gvfs` for the trash; SMB and phone mounts are not installed, so its
+Network places are off. `04-software.md` § *Files in a window* has the rest.
 
 ## Capture: the screen as a picture, as text, or as a video
 
@@ -96,7 +159,7 @@ ends before the list closes again:
 
 | Row | What it does |
 |---|---|
-| **Screenshot** · the whole screen / an area / a window | `grimshot` saves it under `~/Pictures` and names the file in a notification, which also carries the image |
+| **Screenshot** · the whole screen / an area / a window | `grimshot`, through `~/.config/bin/screenshot`, saves it to `~/Pictures/Screenshots/<today>/` and names the file in a notification, which also carries the image |
 | **Screenshot · an area, to the clipboard** | the same, straight to the clipboard (what **Alt+Ctrl+S** also does) |
 | **Annotate an area** | `grimshot` saves it and **swappy** opens it: arrows, rectangles, text, blur, crop. Enter saves back over the same file |
 | **Text from an area** | `slurp` picks the region, `tesseract` reads it, and the text lands in the clipboard, with the first line in the notification. English is what the image ships (`tesseract-ocr-eng`); other languages are one `apt install` away |
@@ -122,6 +185,11 @@ Everything this menu needs is already in the image: `grimshot`, `swappy`,
 `tesseract`, `zbar-tools`, `qrencode` and `wf-recorder`; `check-system.sh`
 fails when one of them is missing, because a row that does nothing is worse than
 a row that is not there.
+
+Every screenshot this menu takes - like every one the keys take - lands in
+`~/Pictures/Screenshots/<the date>/`, one folder per day, under grimshot's own
+file name; the last row opens that folder (or `~/Pictures` before the first
+screenshot).
 
 ## Clipboard history
 
@@ -181,9 +249,18 @@ Five more lists in the root menu, each one screen of answers about the machine:
   marked before they are picked. The last row updates the package lists, which is
   what to run when a search finds nothing.
 * **Reminders** (`rofi-remind`) writes nothing to disk: it starts a transient
-  `systemd-run --user --on-active=` timer that fires `notify-send` once and is
-  collected afterwards, and the list is read back from systemd, so choosing one
-  cancels it. A reminder lives as long as the session's user manager does.
+  `systemd-run --user --collect` timer that fires a `notify-send` and is
+  collected, and the list is read back from systemd, so choosing a reminder
+  cancels it and a reminder lives as long as the session's user manager does. It
+  asks for a title, then for an optional note — Enter or Escape there leaves it
+  empty, and neither cancels the reminder — then for when. Besides the five
+  delays it can repeat: on a date and time, every day at a time, every weekday
+  (Monday to Friday), every week on a chosen weekday, or every month on a day
+  1-28. Every date is put through `systemd-analyze calendar` before anything is
+  created, so a typo is refused with systemd's own message and the next
+  occurrence is shown for confirmation; the reminder then keeps the title and the
+  note in the timer's own description, which is what the list shows on a second,
+  dimmer line. "At 09:00" means the next nine in the morning, once.
 * **About** (`rofi-about`) is one screen of read-only facts — model, the revision
   this image was built from, kernel, uptime, memory and swap, disk, battery,
   network, compositor, process count — plus two rows: copy the summary as text,
@@ -215,21 +292,37 @@ manual - reads the same theme:
   JetBrains Mono 12, base02 card on the selected row, the box shrinking to its
   entries.
 
-Two kinds of icon, because rofi supports two:
+Three kinds of picture, because rofi has three:
 
 * the lists this session draws itself show a **font glyph** in the row text
   (Font Awesome, the same alphabet as the bar). It costs nothing, follows the
   palette, is filtered away by typing, and is what `lib-rofi.sh` puts in every
   `rofi-*` menu;
-* the launcher and the window switcher show the application's **image icon**,
-  which rofi resolves through glycin. Ten rows of icons cost about 13 MB of
-  memory while the window is open and nothing afterwards.
+* the launcher, the window switcher and the **key view** show an **image icon**,
+  which rofi resolves through the icon theme. The launcher and the switcher ask
+  for the application's own icon and cost about 13 MB of memory for ten rows
+  while the window is open; the key view asks for one picture per section
+  (terminal, gear, lock, sun, speaker, touchpad…) and draws it on the section
+  line, not on each of the nine bindings under it;
+* **notifications** show a picture too - `clipboard-history`, `dialog-error`,
+  `user-trash`, `folder`… - which mako looks up on its `icon-path`. A name the
+  theme does not carry draws nothing: the card is text-only, with no error
+  anywhere.
 
 Debian's Adwaita ships only monochrome symbolic icons and none of this session's
 names, so the image carries a small **Nureb** icon theme: the same Font Awesome
 codepoints, rendered once to 48×48 PNGs by `scripts/make-icons.sh`. Its
 `index.theme` inherits Adwaita and hicolor, so an application that brings its own
 icon (foot, btop, htop, anything installed later) still shows it in colour.
+
+A row is one line and rofi cannot scroll it sideways, so the second half of a row
+(a path, a revision, an emoji's block) is drawn a little smaller and, past sixty
+characters, cut with an ellipsis - a path keeps its end, because that is the part
+that identifies the file. The list grows wider instead when it can: 62% for a
+name and a sentence, 76% and 88% for the longest rows the session has (an emoji
+name is 76 characters). The full value is always in the notification that
+choosing the row raises, so nothing is lost - the list is the index, the card is
+the text.
 
 The bar's popups pass `-no-show-icons`: they draw a glyph in the text and do not
 need an icon column.
@@ -263,5 +356,12 @@ need an icon column.
 * **A row of empty space where an icon should be**: the `.desktop` names an icon
   that no installed theme has. `check-system.sh` verifies the Nureb theme and
   every `org.nureb.*` icon.
+* **A list opens no window at all, and the journal has a line about a binding**:
+  the menu was given an `Alt+1` action whose value was a sentence.
+  `-kb-custom-1` accepts a keybinding and nothing else; `lib-rofi.sh` passes one
+  word and puts the sentence in the message line.
+* **A row ends in `…` but the file name is not there**: the value did not fit the
+  window, and `ui_trim` kept the head because it contains no `/`. For a path the
+  tail is kept instead. Either way the whole value is in the notification.
 * **Nothing happens on a bar click**: `bar-pick` is not executable, or rofi is
   missing. `check-system.sh` fails for both.

@@ -1,0 +1,62 @@
+# Default applications for the whole image (/etc/xdg/mimeapps.list).
+#
+# Every GIO program resolves "open this file" through this list, and this image
+# has no xdg-desktop-portal to ask instead: pcmanfm's double click, `gio open`,
+# a "Open with" dialog in any application. The point of the file is that a
+# picture opens in imv (a GPU viewer, not a browser) and a text file opens paged
+# in bat - the same rules rofi-files follows, so the Files menu and a double
+# click in pcmanfm do not disagree.
+#
+# A user's ~/.config/mimeapps.list is read first and overrides everything here,
+# and `xdg-mime default` writes there, so nothing in the image is locked in.
+#
+# Deliberately absent: inode/directory is pcmanfm, so "Open containing folder"
+# and `xdg-open <dir>` land in a window (rofi-files is a key, not a handler);
+# http/https stay with Firefox, which is the browser the shim already calls.
+
+[Default Applications]
+text/plain=org.nureb.view.desktop
+text/markdown=org.nureb.view.desktop
+text/x-markdown=org.nureb.view.desktop
+image/png=org.nureb.view.desktop
+image/jpeg=org.nureb.view.desktop
+image/gif=org.nureb.view.desktop
+image/webp=org.nureb.view.desktop
+image/bmp=org.nureb.view.desktop
+image/tiff=org.nureb.view.desktop
+image/svg+xml=org.nureb.view.desktop
+image/avif=org.nureb.view.desktop
+image/heif=org.nureb.view.desktop
+image/heic=org.nureb.view.desktop
+video/mp4=org.nureb.view.desktop
+video/webm=org.nureb.view.desktop
+video/x-matroska=org.nureb.view.desktop
+video/quicktime=org.nureb.view.desktop
+video/x-msvideo=org.nureb.view.desktop
+video/mpeg=org.nureb.view.desktop
+video/ogg=org.nureb.view.desktop
+application/pdf=org.gnome.Papers.desktop
+application/x-bzpdf=org.gnome.Papers.desktop
+application/x-gzpdf=org.gnome.Papers.desktop
+application/x-xzpdf=org.gnome.Papers.desktop
+image/vnd.djvu=org.gnome.Papers.desktop
+image/vnd.djvu+multipage=org.gnome.Papers.desktop
+application/vnd.comicbook+zip=org.gnome.Papers.desktop
+application/vnd.comicbook-rar=org.gnome.Papers.desktop
+application/x-cbz=org.gnome.Papers.desktop
+application/x-cbr=org.gnome.Papers.desktop
+application/x-cb7=org.gnome.Papers.desktop
+application/x-cbt=org.gnome.Papers.desktop
+application/illustrator=org.gnome.Papers.desktop
+text/html=firefox-esr.desktop
+application/xhtml+xml=firefox-esr.desktop
+x-scheme-handler/http=firefox-esr.desktop
+x-scheme-handler/https=firefox-esr.desktop
+inode/directory=pcmanfm.desktop
+
+[Added Associations]
+text/plain=org.nureb.view.desktop;
+image/png=org.nureb.view.desktop;
+image/jpeg=org.nureb.view.desktop;
+application/pdf=org.gnome.Papers.desktop;
+inode/directory=pcmanfm.desktop;

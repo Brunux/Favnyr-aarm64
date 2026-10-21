@@ -7,6 +7,7 @@
 // they come from fonts-font-awesome-legacy (see uis/sway/README.md).
 //
 // Clicks:
+//   busy        left: stop the task the spinner names   (see bar-busy)
 //   menu        left: root menu   right: terminal
 //   clock       left: switch format (time/seconds)   scroll: calendar months
 //   updates     left: open the updater (only visible when something is pending)
@@ -85,12 +86,23 @@
     // bar is unchanged in the common case.  One shell per second is the price
     // of the frame; the module prints {"class":"empty"} when idle and
     // style.css collapses it.
+    //
+    // The card is also the stop button (`bar-busy stop`): clicking it runs the
+    // command the running task registered in BUSY_STOP, and the toast the card
+    // belongs to becomes "Stopped <label>" instead of a second notification.
+    // The tasks that can be stopped that way are the Wi-Fi scan and join, the
+    // Bluetooth scan, the du walk of Free space and a dictation recording; the
+    // ones that cannot (an apt install, the DNS re-activation, a radio switch,
+    // a Bluetooth connect) say so when the card is clicked, because they are
+    // either already over or not safe to cut.  The tooltip carries "click to
+    // stop" only when there is something to run.
     "custom/busy": {
         "exec": "~/.config/bin/bar-busy",
         "return-type": "json",
         "interval": 1,
         "signal": 8,
-        "tooltip": true
+        "tooltip": true,
+        "on-click": "~/.config/bin/bar-busy stop"
     },
     "custom/updates": {
         "exec": "~/.config/bin/bar-updates",

@@ -27,7 +27,9 @@ fd-find
 # "Search the manual" in rofi-learn uses.
 ripgrep
 # Fuzzy finder, for the Ctrl-R/Ctrl-T/Alt-C bindings (~/.bashrc sources
-# /usr/share/fzf/key-bindings.bash) and the `ff` preview picker.
+# /usr/share/fzf/key-bindings.bash), the `ff` preview picker, and the terminal
+# file search nureb-find (Alt+Search), which is why it is a hard dependency of a
+# key rather than only of the shell.
 fzf
 # cd, by frecency (`z`, `zi`); ~/.bashrc wraps `cd` so real paths still work.
 zoxide
@@ -71,6 +73,25 @@ zbar-tools
 # own script; here it is only the tool.
 tesseract-ocr
 tesseract-ocr-eng
+
+# --- editors ----------------------------------------------------------------
+# nano is in packages/base.list: it is the editor that is always there. These
+# two are what make setting $EDITOR worth it - ~/.config/bin/eff, git and
+# `crontab -e` all open whatever $EDITOR names, and etc/profile.d/90-cli-tools.sh
+# now points it here.
+#
+# neovim: 9.7 MB plus neovim-runtime (27 MB), /usr/bin/nvim. It is Omarchy's
+# editor, brings its own LuaJIT and tree-sitter library (which is why the
+# standalone tree-sitter-cli and lua5.4 below stay out), starts with no
+# configuration, and speaks LSP through plugins the user installs into
+# ~/.config/nvim - nothing of that is shipped.
+neovim
+# vim: 4.3 MB plus vim-runtime (38.8 MB), /usr/bin/vim.basic, and its postinst
+# registers the `vi` alternative (priority 30) - so /usr/bin/vi exists without
+# vim-tiny, the package this would otherwise need. It is the editor for a
+# machine where nvim's runtime is not wanted, and `vi` is what a script written
+# for POSIX expects to find.
+vim
 
 # --- dictation -------------------------------------------------------------
 # whisper.cpp: the dictation shortcut records with parecord and transcribes with

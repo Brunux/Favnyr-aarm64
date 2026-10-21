@@ -13,6 +13,16 @@
 # is how a person ends up running it twice.  The last line of apt's own output is
 # what the card shows when it fails.
 #
+# The card registers no stop command, and that is the one place here where a
+# missing button is the feature.  A SIGTERM to apt-get in the middle of a
+# download is not a cancel: dpkg may already be unpacking, so it leaves
+# /var/lib/dpkg/lock-frontend held (or the dpkg database with a package
+# half-configured) and the next apt run refuses to start until someone reads
+# the error.  apt has no cancel of its own - only "let it finish" - so a spinner
+# that offered one would be offering a broken machine.  Clicking the card says
+# it cannot be stopped, which is the truth, and the download is bounded by the
+# network, not by us.
+#
 # Nothing here is a package manager of its own: `apt-get upgrade` stays a
 # terminal command (the bar's updates indicator already opens that), and this
 # menu never removes anything.
@@ -23,7 +33,7 @@ dir=$(dirname "$0")
 . "$dir/lib-rofi.sh"
 
 if ! command -v apt-cache >/dev/null 2>&1; then
-	ui_say Packages 'apt-cache is not installed' critical
+	ui_say Packages 'apt-cache is not installed' critical dialog-error
 	exit 1
 fi
 
@@ -38,7 +48,7 @@ apt-cache search -- "$query" >"$tmp/found" 2>/dev/null || : >"$tmp/found"
 total=$(grep -c . "$tmp/found" 2>/dev/null || true)
 
 if [ "${total:-0}" -eq 0 ]; then
-	ui_say Packages "No package matches “$query”" \
+	ui_say Packages "No package matches “$query”" normal dialog-information \
 		'The lists may be old: the last row of the menu runs apt-get update'
 	exit 0
 fi
@@ -76,7 +86,7 @@ key=$(ui_pick "Packages · $query" "$mesg" <"$tmp/rows") || exit 0
 [ -n "${key:-}" ] || exit 0
 
 if [ "$(id -u)" -ne 0 ] && ! sudo -n true 2>/dev/null; then
-	ui_say Packages 'Installing needs root and sudo asks for a password here' critical
+	ui_say Packages 'Installing needs root and sudo asks for a password here' critical dialog-warning
 	exit 1
 fi
 
@@ -88,7 +98,7 @@ apt_run() { # LABEL MESSAGE ARGS...
 	_label=$1
 	_message=$2
 	shift 2
-	"$busy" start pkg Packages "$_message" box 2>/dev/null || true
+	"$busy" start pkg Packages "$_message" package-x-generic 2>/dev/null || true
 	if sudo -n env DEBIAN_FRONTEND=noninteractive apt-get "$@" \
 		-o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
 		>"$log" 2>&1; then
@@ -97,7 +107,7 @@ apt_run() { # LABEL MESSAGE ARGS...
 	fi
 	_err=$(grep -m1 -E '^(E|W): ' "$log" 2>/dev/null || true)
 	[ -n "$_err" ] || _err=$(tail -2 "$log" 2>/dev/null | tr '\n' ' ')
-	"$busy" fail pkg Packages "${_err:-apt-get failed}" 2>/dev/null || true
+	"$busy" fail pkg Packages "${_err:-apt-get failed}" dialog-error 2>/dev/null || true
 	return 1
 }
 

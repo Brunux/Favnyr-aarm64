@@ -682,6 +682,33 @@ else
 	skip "busctl is not installed"
 fi
 
+# A notification icon is a name mako looks up on its icon-path, and one it cannot
+# find draws nothing at all: the card is text-only, with no log line and no error.
+# The names are lib-rofi.sh's UI_ICON_* constants.
+if [ -r "$HOME/.config/bin/lib-rofi.sh" ] && [ -d /usr/share/icons/Nureb ]; then
+	_missing_icon=
+	for _n in $(sed -n 's/^UI_ICON_[A-Z]*=\([a-z-]*\)$/\1/p' "$HOME/.config/bin/lib-rofi.sh"); do
+		ls /usr/share/icons/Nureb/*/apps/"$_n".png >/dev/null 2>&1 ||
+			_missing_icon="$_missing_icon $_n"
+	done
+	[ -z "$_missing_icon" ] &&
+		ok "notification icons resolve in the Nureb theme" ||
+		warn "notification icon(s) missing from /usr/share/icons/Nureb:$_missing_icon (scripts/make-icons.sh)"
+fi
+
+# mako reads icon-path itself (no theme metadata), so both halves have to be there
+# for any picture to appear. The config has no --check, and a name it cannot find
+# is silent, which is why this is asked of the configuration directly.
+if [ -r "$HOME/.config/mako/config" ]; then
+	_mako_icons=$(sed -n 's/^icons=//p' "$HOME/.config/mako/config" | head -1)
+	_mako_path=$(sed -n 's/^icon-path=//p' "$HOME/.config/mako/config" | head -1)
+	if [ "$_mako_icons" = 1 ] && [ -n "$_mako_path" ] && [ -d "$_mako_path" ]; then
+		ok "notifications can carry a picture (icons=1, icon-path=$_mako_path)"
+	else
+		warn "mako draws no picture: icons=1 and an existing icon-path are missing from ~/.config/mako/config"
+	fi
+fi
+
 # The bar's menus are the whole port of Deboma's panels: each indicator draws
 # from waybar and runs ~/.config/bin/bar-* on click.  A missing script or a
 # missing tool does not log anything - the indicator still appears and every
@@ -698,6 +725,53 @@ if [ -z "$_missing_bar" ]; then
 	ok "bar menus complete (scripts plus rofi, nmcli, bluetoothctl, jq)"
 else
 	fail "bar menus broken:$_missing_bar (clicking those indicators does nothing)"
+fi
+
+# The bar's busy card is also the stop button: config.jsonc's custom/busy
+# on-click runs `bar-busy stop`, and a lost key leaves a spinner that draws and
+# does nothing when clicked - which is indistinguishable from "this action
+# cannot be stopped", the answer the card gives on purpose. Read the module
+# object out of the file (it is JSON with comments, so jq cannot parse it): the
+# block starts at its key and ends at the first line that is only `}`.
+_busy_mod=""
+[ -r "$HOME/.config/waybar/config.jsonc" ] &&
+	_busy_mod=$(awk '/"custom\/busy"[[:space:]]*:[[:space:]]*\{/ { f = 1 }
+		f && /^[[:space:]]*\}/ { print; exit }
+		f' "$HOME/.config/waybar/config.jsonc" 2>/dev/null || true)
+case $_busy_mod in
+*'on-click'*bar-busy*stop*)
+	ok "the bar's busy card is the stop button (custom/busy on-click)" ;;
+'')
+	warn "custom/busy is not readable in ~/.config/waybar/config.jsonc: the spinner may not be clickable" ;;
+*)
+	warn "custom/busy has no on-click stop: the spinner cannot be clicked" ;;
+esac
+
+# Both ends share one protocol, exercised here for real because it is invisible
+# until it fails: `busy start` records BUSY_STOP - a shell line, not a pid - in
+# <tag>.stop (0600, since something executes it), `bar-busy stop` removes the
+# card and runs it, and `busy cancelled` then answers 0 so the producer reports
+# nothing instead of half a result. The probe is one file in the runtime
+# directory and it is removed before this block ends.
+_busy_rt=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
+_busy_bin="$HOME/.config/bin/busy"
+if BUSY_STOP=: "$_busy_bin" start check-system Probe 'probe' >/dev/null 2>&1 &&
+	[ -f "$_busy_rt/check-system.stop" ] &&
+	[ "$(stat -c %a "$_busy_rt/check-system.stop" 2>/dev/null)" = 600 ]; then
+	ok "busy records the stop command (mode 0600) the spinner runs"
+	if "$_busy_bin" cancelled check-system >/dev/null 2>&1; then
+		warn "busy cancelled says a running card is already gone (a stopped lookup looks finished)"
+	else
+		ok "busy cancelled tells a running task from a stopped one"
+	fi
+else
+	warn "busy does not record a stop command in $_busy_rt: the spinner cannot stop its task"
+fi
+"$_busy_bin" stop check-system >/dev/null 2>&1 || true
+if "$_busy_bin" cancelled check-system >/dev/null 2>&1; then
+	ok "after a stop, busy says the task was cancelled (the producer reports nothing)"
+else
+	warn "busy cancelled still sees the card after busy stop (the producer would report a half result)"
 fi
 
 # The idle screensaver is a foot window running ~/.config/bin/sway-screensaver:
@@ -733,6 +807,29 @@ else
 	fail "CLI tools incomplete:$_missing_tools"
 fi
 
+# The editors. /usr/bin/vi is the part that goes missing on its own: it is an
+# update-alternatives link that vim's postinst registers, so a `vim` installed
+# without its postinst running leaves `vim` working and `vi` absent, which only
+# the script that calls vi notices.
+_editors=""
+for _c in nvim vim vi nano; do
+	have "$_c" || _editors="$_editors $_c"
+done
+if [ -z "$_editors" ]; then
+	ok "editors installed (nvim, vim, vi, nano)"
+else
+	fail "editor(s) missing:$_editors"
+fi
+# $EDITOR is what eff, `git commit` and `crontab -e` open, and it comes from
+# /etc/profile.d/90-cli-tools.sh - which a session started by greetd does not
+# source, so the question is asked of a login shell instead of this environment.
+_editor=$(bash -lc 'printf %s "${EDITOR:-}"' 2>/dev/null || true)
+if [ "$_editor" = nvim ]; then
+	ok "EDITOR is nvim (eff, git commit, crontab -e)"
+else
+	warn "a login shell has EDITOR='${_editor:-unset}': eff and git open nano instead of nvim"
+fi
+
 # `ls` is the one people notice.  Ask an interactive bash what the alias is -
 # that also proves ~/.bashrc is read at all - and match with a case statement:
 # `producer | grep -q` is the pipefail trap this script documents at the top.
@@ -754,6 +851,62 @@ fi
 # rofi is also the bar's dmenu: without it every bar click is a silent no-op.
 [ -x "$HOME/.config/bin/bar-pick" ] && ok "bar-pick (rofi -dmenu) is executable" ||
 	fail "bin/bar-pick is missing or not executable"
+
+# The Search key is the file search and $mod+d is the launcher: they used to be the
+# same menu, so a binding that goes back to the launcher is a key that no longer
+# does what the manual says. --search is a mode of bin/rofi-files itself, so both
+# halves are asked for: without the binding the key is dead, without the mode it
+# exits with a usage error and looks dead.
+if grep -qs 'Super_L exec .*rofi-files --search' "$HOME/.config/sway/config"; then
+	ok "the Search key opens the file search (rofi-files --search)"
+else
+	fail "the Search key does not run 'rofi-files --search' in ~/.config/sway/config (it opens the launcher again, or nothing)"
+fi
+grep -qs -- '--search)' "$HOME/.config/bin/rofi-files" ||
+	fail "bin/rofi-files has no --search mode: the Search key exits with a usage error"
+
+# The file search needs fd; without it rofi-files says so and browses $HOME instead,
+# which looks like a search that found nothing.
+if have fd || have fdfind; then
+	ok "file search available (fd), which rofi-files --search runs"
+else
+	fail "fd is missing (package fd-find): rofi-files --search falls back to browsing"
+fi
+
+# Alt+Search asks the same question in a terminal: nureb-find streams fd into
+# fzf and hands the choice to nureb-view. There are four separate ways for that
+# key to look dead - no binding, a script without its executable bit, no fzf, no
+# opener - and the fzf one is a FAIL rather than a warning because a missing
+# filter is an *empty list*: the window opens, prints nothing, and reads as "no
+# such file" instead of as a missing package.
+if grep -qs 'Super_L+Mod1 exec .*nureb-find' "$HOME/.config/sway/config"; then
+	ok "Alt+Search opens the terminal file search (nureb-find)"
+else
+	fail "Alt+Search does not run 'nureb-find' in ~/.config/sway/config"
+fi
+if [ -x "$HOME/.config/bin/nureb-find" ]; then
+	ok "terminal file search (nureb-find) is executable"
+else
+	fail "bin/nureb-find is missing or not executable: Alt+Search opens a foot window that closes at once"
+fi
+if have fzf; then
+	ok "fzf present, which the terminal file search filters with"
+else
+	fail "fzf is missing (package fzf): Alt+Search lists nothing"
+fi
+# Its notifications carry the search glyph, and a name mako cannot resolve draws
+# no picture at all: the card is text-only with no log line.
+[ -r /usr/share/icons/Nureb/48x48/apps/system-search.png ] ||
+	warn "the Nureb theme has no system-search icon: nureb-find's notifications are text-only"
+
+# dig is the first step of every DNS problem in the manual, and there is no
+# resolvectl here (the resolver is NetworkManager's, not systemd-resolved's), so
+# without bind9-dnsutils that section begins with "command not found".
+if have dig; then
+	ok "dig present (bind9-dnsutils), which DNS troubleshooting asks for"
+else
+	fail "dig is missing (package bind9-dnsutils): 06-troubleshooting.md's DNS section cannot run"
+fi
 
 # The manual, the key view, dictation and hibernate. The first two are pure
 # scripts (a missing one is invisible: the menu entry just does nothing); the
@@ -802,6 +955,80 @@ else
 	fail "not executable:$_noexec (the key or menu row that runs them does nothing)"
 fi
 
+# Reminders (Alt+Space > Reminders) are systemd transient timers, so what can
+# silently take half the menu away is a missing systemd-analyze (every custom
+# date is then refused while the five delays keep working) and a missing
+# notification icon (the card has no picture and nothing logs it).
+_reminder=""
+have systemd-analyze || _reminder="$_reminder systemd-analyze"
+have notify-send || _reminder="$_reminder notify-send"
+have jq || _reminder="$_reminder jq"
+[ -r /usr/share/icons/Nureb/48x48/apps/preferences-system-time.png ] ||
+	_reminder="$_reminder preferences-system-time.png"
+[ -x "$HOME/.config/bin/rofi-remind" ] || _reminder="$_reminder bin/rofi-remind"
+if [ -z "$_reminder" ]; then
+	ok "reminders complete (systemd-analyze, notify-send, jq, the clock icon)"
+else
+	fail "reminders incomplete:$_reminder (custom dates or the notification icon disappear)"
+fi
+
+# A repeat is a calendar expression handed to the timer itself, so the parser that
+# has to read it is worth one call: this is the exact expression the menu writes
+# for "every weekday", and a systemd without calendar support is a menu that
+# refuses every date.
+if have systemd-analyze; then
+	if LC_ALL=C systemd-analyze calendar --iterations=1 'Mon..Fri *-*-* 08:30:00' >/dev/null 2>&1; then
+		ok "systemd parses the calendar expressions the reminder menu writes"
+	else
+		fail "systemd-analyze cannot read 'Mon..Fri *-*-* 08:30:00' (repeating reminders would be refused)"
+	fi
+fi
+
+# 02-rofi.md sends a reader to the root menu for DNS, Packages, Colour, About and
+# Reminders. A row that goes missing is a documented keypress that answers
+# nothing - Colour was the one that had neither the row nor the `case` arm.
+if [ -r "$HOME/.config/bin/bar-menu" ]; then
+	_root_missing=
+	for _m in rofi-dns rofi-pkg rofi-color rofi-about rofi-remind; do
+		grep -qs "$_m" "$HOME/.config/bin/bar-menu" || _root_missing="$_root_missing ${_m#rofi-}"
+	done
+	[ -z "$_root_missing" ] &&
+		ok "root menu reaches DNS, Packages, Colour, About and Reminders" ||
+		fail "root menu has no entry for:$_root_missing (bar-menu)"
+fi
+
+# A row and its `case` arm are two halves of one entry; a row whose key has no
+# arm closes the list and does nothing. Keys are the last word of a ui_row line;
+# a row with a colour puts the key one word earlier, which this ignores, so it
+# can only report a key it is sure about.
+if [ -r "$HOME/.config/bin/bar-menu" ]; then
+	_dead_rows=$(awk '
+		/^[[:space:]]*ui_row / { k = $NF; gsub(/["\x27]/, "", k); rows[k] = 1 }
+		/^[a-z][a-z-]*\)/      { k = $0; sub(/\).*/, "", k);     arms[k] = 1 }
+		END { for (k in rows) if (!(k in arms)) printf "%s ", k }' \
+		"$HOME/.config/bin/bar-menu")
+	[ -z "$_dead_rows" ] && ok "every root-menu row has an action" ||
+		warn "root-menu rows with no action: $_dead_rows"
+fi
+
+# The key view draws one picture per section by name; a dropped flag makes the
+# list silently text-only, the same class of bug as the file browser's.
+if [ -r "$HOME/.config/bin/rofi-keys" ] &&
+	grep -qs -- '-show-icons' "$HOME/.config/bin/rofi-keys" &&
+	grep -qs -- '-icon-theme Nureb' "$HOME/.config/bin/rofi-keys"; then
+	ok "rofi-keys asks the theme for a picture per section (-show-icons, Nureb)"
+else
+	warn "rofi-keys no longer passes -show-icons/-icon-theme Nureb: the key view shows no pictures"
+fi
+
+# fastfetch exits when it has drawn, so without --hold the About window flashes
+# and closes - which reads as "the row does nothing".
+if [ -r "$HOME/.config/bin/rofi-about" ] && grep -qs -- '--hold' "$HOME/.config/bin/rofi-about"; then
+	ok "rofi-about holds its fastfetch window open (--hold)"
+else
+	warn "rofi-about no longer passes --hold: the fastfetch picture flashes and closes"
+fi
+
 # The capture menu (Alt+Ctrl+C) is a list over external tools: grimshot for the
 # screenshot, swappy to annotate, tesseract and zbarimg to read a region, and
 # wf-recorder for the one action that outlives the menu. A missing binary is a
@@ -811,13 +1038,32 @@ _missing_capture=""
 for _c in grimshot grim slurp tesseract zbarimg qrencode swappy wf-recorder; do
 	have "$_c" || _missing_capture="$_missing_capture $_c"
 done
-for _s in rofi-capture rofi-qr; do
+for _s in rofi-capture rofi-qr screenshot; do
 	[ -x "$HOME/.config/bin/$_s" ] || _missing_capture="$_missing_capture bin/$_s"
 done
 if [ -z "$_missing_capture" ]; then
 	ok "capture menu complete (grimshot, swappy, tesseract, zbarimg, wf-recorder, qrencode)"
 else
 	fail "capture menu incomplete:$_missing_capture (Alt+Ctrl+C loses those rows)"
+fi
+
+# Screenshots land in ~/Pictures/Screenshots/<date>/, and grimshot only knows that
+# when it is called through bin/screenshot: grimshot itself writes to $HOME on this
+# image (there is no user-dirs.dirs), so one key that calls it directly drops the
+# picture among the dotfiles again - which was the report.
+grep -qs 'bin/screenshot' /etc/sway/config.d/90-screenshot-shortcuts.conf &&
+	ok "the screenshot keys go through bin/screenshot" ||
+	fail "90-screenshot-shortcuts.conf does not call bin/screenshot: the files land in \$HOME"
+[ -z "$(grep -rs '^[[:space:]]*bindsym.*exec grimshot' /etc/sway/config.d/)" ] &&
+	ok "no key calls grimshot directly" ||
+	fail "a key calls grimshot directly: that screenshot lands in \$HOME"
+grep -qs -- '"$dir/screenshot"' "$HOME/.config/bin/rofi-capture" &&
+	ok "the capture menu saves through bin/screenshot" ||
+	fail "rofi-capture calls grimshot directly: its screenshots land in \$HOME"
+if [ -r /usr/share/applications/org.nureb.screenshot-area.desktop ]; then
+	grep -qs 'Exec=.*bin/screenshot' /usr/share/applications/org.nureb.screenshot-area.desktop &&
+		ok "the Screenshot (area) launcher entry uses bin/screenshot" ||
+		fail "org.nureb.screenshot-area.desktop still runs grimshot: that entry saves into \$HOME"
 fi
 
 # Clipboard history (Alt+Ctrl+V) and the emoji picker (Alt+Ctrl+E): each is a
@@ -885,6 +1131,28 @@ if [ -n "$_accel" ]; then
 else
 	fail "no cros-ec-accel with in_accel_*_raw: tablet mode starts but the screen never turns"
 fi
+# The two physical inputs are switched off with the mode, and the on-screen
+# keyboard comes up first: a card whose keyboard was disabled before wvkbd proved
+# alive would be a touchscreen with no way to type. The mode is the only thing in
+# the session that disables a keyboard, so the pattern is a fair test of the wiring.
+if grep -qs 'input type:keyboard events disabled' "$HOME/.config/bin/tablet-mode"; then
+	ok "tablet mode switches the physical keyboard off (touchpad and keyboard, after wvkbd is up)"
+else
+	fail "bin/tablet-mode does not disable the physical keyboard: the folded keys keep typing on the table"
+fi
+# The rotation reference is optional - the built-in -Y table is the default - but a
+# file that does not parse is ignored in silence by orient(), which reads as "the
+# rotation keeps turning back to the old way" after a calibration that claimed to work.
+_calib_pose="${XDG_CONFIG_HOME:-$HOME/.config}/nureb/tablet.conf"
+if [ ! -f "$_calib_pose" ]; then
+	skip "no rotation calibration ($_calib_pose): the built-in -Y reference is in use"
+else
+	_calib_line=$(sed -n '1s/[[:space:]]*$//;1s/^[[:space:]]*//;1p' "$_calib_pose" 2>/dev/null || true)
+	case $_calib_line in
+	normal=[xXyY][+-]) ok "rotation calibration is valid ($_calib_line in $_calib_pose)" ;;
+	*) fail "rotation calibration is malformed ('${_calib_line:-empty}' in $_calib_pose): orient() ignores it and the screen turns the built-in way (delete the file to say so out loud)" ;;
+	esac
+fi
 # The keyboard belongs to tablet mode and nowhere else. One that is already
 # running while the mode is off is either a leftover from a session that was
 # killed mid-mode or something starting it at login; either way it covers the
@@ -946,6 +1214,36 @@ if have chafa; then
 else
 	fail "chafa is missing: Files cannot show an image without starting Firefox"
 fi
+# The three programs the file browser hands a file to, each with a package of its
+# own: imv for a picture (chafa above is its fallback when the GPU gives it no
+# EGL context), papers for a document, mpv for a container. Without one of them
+# the branch falls through to the browser, which is 280 MB and cannot play a
+# video at all - and nothing logs it, which is why this is a FAIL.
+_viewers=""
+for _c in imv papers mpv; do
+	have "$_c" || _viewers="$_viewers $_c"
+done
+if [ -z "$_viewers" ]; then
+	ok "viewers installed (imv for a picture, papers for a document, mpv for a video)"
+else
+	fail "missing viewer(s):$_viewers (that kind of file falls back to the browser)"
+fi
+# imv is not a package binary: Debian ships imv-wayland/imv-x11 and a
+# /usr/libexec/imv/imv dispatcher, and rootfs-setup.sh puts that behind the short
+# name. Without the symlink every `command -v imv` fails and a photo goes to
+# chafa's sixels, which looks like "the new viewer does nothing".
+if [ -x /usr/local/bin/imv ]; then
+	ok "the imv short name resolves (/usr/local/bin/imv -> the package dispatcher)"
+else
+	fail "/usr/local/bin/imv is missing: rofi-files and nureb-view cannot start the viewer"
+fi
+# mpv-mpris is a plugin file, not a program, so nothing else notices it: without
+# it the film plays and playerctl, the Media menu and the bar see no player.
+if [ -r /etc/mpv/scripts/mpris.so ]; then
+	ok "mpv is an MPRIS player (mpv-mpris at /etc/mpv/scripts/mpris.so)"
+else
+	fail "mpv-mpris is missing: playerctl, the Media menu and the bar cannot see mpv"
+fi
 if [ -d "$HOME/.cache/thumbnails" ] && [ ! -w "$HOME/.cache/thumbnails" ]; then
 	warn "$HOME/.cache/thumbnails is not writable: every picture is decoded again on every listing"
 fi
@@ -957,6 +1255,148 @@ if [ -r "$HOME/.config/bin/rofi-files" ] &&
 	ok "rofi-files asks rofi for thumbnails (-show-icons and thumbnail://)"
 else
 	warn "rofi-files no longer passes -show-icons/thumbnail://: the file list shows no pictures"
+fi
+
+# A video is mpv's job: chafa only draws stills and answers a container with
+# "unknown file format", which is the error the report carried. Without mpv the
+# row falls back to Firefox (an .mkv then asks to be downloaded), so this is a
+# FAIL - the row claims to play something.
+if have mpv; then
+	ok "media player installed (mpv), what rofi-files opens a video with"
+else
+	fail "mpv is missing: a video in Files falls back to Firefox (chafa cannot decode a container)"
+fi
+# A document is papers' job. Without it a PDF goes to Firefox, which is a
+# 280 MB browser for a page, and an EPUB still needs it (papers does not read
+# EPUB, whatever the comparison table once said).
+if have papers; then
+	ok "document reader installed (papers), what a double click on a PDF uses"
+else
+	warn "papers is missing: a PDF opens in Firefox instead of the reader (the fallback works, it is just the browser)"
+fi
+
+# Every row of the file browser carries an icon *name* the Nureb theme has to
+# resolve; a missing PNG is a blank 32 px column with no log line anywhere.
+_missing_row_icons=""
+for _i in folder go-up view-hidden dialog-warning text-x-generic text-html \
+	application-pdf image-x-generic video-x-generic audio-x-generic \
+	application-x-executable package-x-generic x-office-document; do
+	[ -r "/usr/share/icons/Nureb/48x48/apps/$_i.png" ] || _missing_row_icons="$_missing_row_icons $_i"
+done
+if [ -z "$_missing_row_icons" ]; then
+	ok "file browser icons present (the Nureb theme has every row name)"
+else
+	warn "Nureb theme is missing row icons:$_missing_row_icons (those rows lose the icon column)"
+fi
+
+# The GTK3 half of the palette. One window in this image is GTK3 (pcmanfm), and
+# without these two files it renders in Adwaita's light grey - a bright rectangle
+# in a session whose every other pixel is base03. Both failures are silent: GTK
+# drops a stylesheet rule it cannot parse with a line on stderr nobody reads, and
+# an icon name the theme does not carry draws nothing at all.
+if [ -r "$HOME/.config/gtk-3.0/gtk.css" ]; then
+	ok "GTK3 windows use the solarized palette (gtk-3.0/gtk.css)"
+else
+	warn "$HOME/.config/gtk-3.0/gtk.css is missing: pcmanfm renders in Adwaita's light grey"
+fi
+if grep -qs '^gtk-icon-theme-name=Nureb' "$HOME/.config/gtk-3.0/settings.ini" &&
+	grep -qs '^gtk-application-prefer-dark-theme=1' "$HOME/.config/gtk-3.0/settings.ini"; then
+	ok "GTK3 windows use the Nureb icons on a dark base (gtk-3.0/settings.ini)"
+else
+	warn "gtk-3.0/settings.ini does not select Nureb + dark: pcmanfm looks like a foreign program"
+fi
+
+# The windowed file manager is pcmanfm (the Files menu stays rofi-files, and the
+# Search key finds files). What fails here does so silently: without its config
+# the terminal command is x-terminal-emulator, which this image does not have, so
+# "Open Terminal Here" does nothing; without the association a double click on a
+# photo starts the browser (280 MB) or nothing; and libfm's own loader is the only
+# thumbnail decoder, so a lost setting is invisible until a directory looks empty.
+if have pcmanfm; then
+	ok "file manager installed (pcmanfm $(dpkg-query -W -f='${Version}' pcmanfm 2>/dev/null))"
+else
+	fail "pcmanfm is missing: the Files (window) entry and 'Open containing folder' do nothing"
+fi
+# Mounting a USB stick needs udisks2: this session has no privilege for mount(8),
+# and both consumers - pcmanfm's Devices pane and rofi-places' "Mount" rows - go
+# through /usr/bin/udisksctl to udisksd on the system bus. The check is the client
+# talking to the daemon (udisksctl status activates the D-Bus service), because
+# the package can be installed with the service missing from the bus.
+if have udisksctl; then
+	if _udisks=$(udisksctl status 2>&1); then
+		ok "removable media can be mounted (udisks2 answers on the system bus)"
+	else
+		fail "udisksctl cannot reach udisksd: $_udisks (Places cannot mount a stick)"
+	fi
+else
+	fail "udisks2 is missing: an unprivileged session cannot mount a USB stick at all"
+fi
+_pcm_dirs=${XDG_CONFIG_DIRS:-/etc/xdg}
+_pcm_conf=${_pcm_dirs%%:*}/pcmanfm/default/pcmanfm.conf
+[ -r "$_pcm_conf" ] || _pcm_conf=/etc/xdg/pcmanfm/default/pcmanfm.conf
+if grep -qs '^terminal=foot' "$_pcm_conf"; then
+	ok "pcmanfm opens a terminal with foot (terminal=foot)"
+else
+	warn "no terminal=foot in $_pcm_conf: 'Open Terminal Here' (F4) starts nothing"
+fi
+if [ "$(grep -s '^show_thumbnail=' "$_pcm_conf" | cut -d= -f2)" = 0 ]; then
+	warn "thumbnails are off in $_pcm_conf: the icon view shows no pictures"
+fi
+# The names it draws with come from the theme, not from the package: Adwaita 51
+# ships no full-colour "folder" at all, so a PNG that did not make it into the
+# image is a hole in the places sidebar and in the icon view.
+_missing=
+for _icon in folder user-home user-trash text-x-generic application-pdf \
+	image-x-generic drive-harddisk view-refresh edit-copy folder-new; do
+	[ -r /usr/share/icons/Nureb/48x48/apps/"$_icon".png ] || _missing="$_missing $_icon"
+done
+if [ -z "$_missing" ]; then
+	ok "the Nureb theme carries every icon the file manager asks for"
+else
+	warn "the Nureb theme has no icon for:$_missing (holes in pcmanfm's sidebar and icon view)"
+fi
+if [ -x "$HOME/.config/bin/nureb-view" ]; then
+	ok "open-with handler installed (nureb-view: bat, imv, papers, mpv, firefox-esr)"
+else
+	fail "bin/nureb-view is missing or not executable: a double click in pcmanfm opens nothing"
+fi
+# The launcher entry is a shadow of the package's (same file name, so it replaces
+# Debian's "PCMan File Manager"): without it the launcher shows "Files" (the
+# menu) next to "PCMan File Manager", which reads as two copies of one thing.
+if grep -qs '^Name=Files (window)' "$HOME/.local/share/applications/pcmanfm.desktop"; then
+	ok "the launcher names the window 'Files (window)'"
+else
+	warn "$HOME/.local/share/applications/pcmanfm.desktop is missing: the launcher shows 'PCMan File Manager' next to 'Files'"
+fi
+# `gio mime` resolves the association exactly like the application does, and it
+# is also a test of the .desktop entry itself: GIO drops an entry whose Exec
+# program does not exist, so a nureb-view without its executable bit reads as
+# "no default application" instead of as an error. LC_ALL=C so the label is the
+# one this greps for, not a translation.
+_mime=$({ have gio && LC_ALL=C gio mime image/png 2>/dev/null; } ||
+	grep -s '^image/png=' "${_pcm_dirs%%:*}/mimeapps.list")
+if grep -qs 'Default application: org.nureb.view.desktop' <<<"$_mime"; then
+	ok "a double click on an image reaches nureb-view (mimeapps.list)"
+else
+	warn "image/png has no default through org.nureb.view.desktop: a photo opens in the browser or nowhere"
+fi
+# A document is papers' job, and the association is the half a package cannot
+# carry: papers ships org.gnome.Papers.desktop, and this file is what points
+# application/pdf at it. GIO drops an entry whose Exec does not exist, so the
+# same question also proves the .desktop is installed.
+_mime_pdf=$({ have gio && LC_ALL=C gio mime application/pdf 2>/dev/null; } ||
+	grep -s '^application/pdf=' "${_pcm_dirs%%:*}/mimeapps.list")
+if grep -qs 'Default application: org.gnome.Papers.desktop' <<<"$_mime_pdf"; then
+	ok "a double click on a PDF reaches papers (mimeapps.list)"
+else
+	warn "application/pdf does not default to papers: a document opens in the browser"
+fi
+_dir=$({ have gio && LC_ALL=C gio mime inode/directory 2>/dev/null; } ||
+	grep -s '^inode/directory=' "${_pcm_dirs%%:*}/mimeapps.list")
+if grep -qs 'Default application: pcmanfm.desktop' <<<"$_dir"; then
+	ok "'Open containing folder' opens pcmanfm (inode/directory)"
+else
+	warn "inode/directory does not resolve to pcmanfm.desktop: 'Open containing folder' does nothing"
 fi
 
 # Dictation: the shortcut records with parecord and transcribes with whisper-cli.
@@ -1053,7 +1493,13 @@ _icons=""
 [ -d /usr/share/icons/Nureb ] || _icons="$_icons /usr/share/icons/Nureb"
 [ -r /usr/share/icons/Nureb/index.theme ] || _icons="$_icons Nureb/index.theme"
 _iconless=""
-for _d in /usr/share/applications/org.nureb.*.desktop; do
+# The session's own entries, plus the viewer packages': their Icon= is not their
+# binary name (imv asks for multimedia-photo-viewer, papers for org.gnome.Papers)
+# and Adwaita 51 has neither, so the same hole appears on those rows.
+for _d in /usr/share/applications/org.nureb.*.desktop \
+	/usr/share/applications/org.gnome.Papers.desktop \
+	/usr/share/applications/imv.desktop \
+	/usr/share/applications/mpv.desktop; do
 	[ -r "$_d" ] || continue
 	_icon=""
 	while IFS= read -r _line; do

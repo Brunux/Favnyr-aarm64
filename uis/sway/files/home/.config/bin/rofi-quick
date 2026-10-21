@@ -12,6 +12,13 @@
 # switches live here as well because that is the one thing the pickers do not
 # answer at a glance.
 #
+# Tablet mode has a second row while it is on: "Calibrate rotation" stores which
+# way the accelerometer says is up, for a screen that turns the wrong way on the
+# hardware (see ~/.config/bin/tablet-mode).  Both of those rows' actions notify
+# with an icon from the Nureb theme - preferences-desktop-keyboard for the mode
+# and preferences-desktop-display for the rotation - so the answer to a click on
+# the bar's list looks like the rest of the session's.
+#
 # Nothing here is a daemon: every draw reads the state from nmcli,
 # bluetoothctl, swaymsg, makoctl and sysfs.
 
@@ -174,7 +181,15 @@ if [ "${1:-}" = "--rotation-menu" ]; then
 	} >"$tmp"
 	_cmd=$(ui_pick 'Rotation' "Turn the screen: $_out" <"$tmp") || exit 0
 	case $_cmd in
-	rot:*) swaymsg output "$_out" transform "${_cmd#rot:}" >/dev/null 2>&1 || true ;;
+	rot:*)
+		_t=${_cmd#rot:}
+		swaymsg output "$_out" transform "$_t" >/dev/null 2>&1 || true
+		# The list is gone by now, so this is the only sign that the screen
+		# was asked to turn (and tablet mode's poller would turn it back on
+		# the next second if the accelerometer says so - hence the wording).
+		notify-send -a Nureb -i preferences-desktop-display 'Rotation' \
+			"$_out: $_t" 2>/dev/null || true
+		;;
 	esac
 	exit 0
 fi
@@ -230,7 +245,24 @@ render() { # OUTFILE
 		fi
 		ui_row "$UI_I_MOUSE" 'Touchpad' "$_tp" touchpad "$_tpc"
 		ui_row "$UI_I_ROTATE" 'Rotation' "$(rotation_name)" rotation
-		ui_row "$UI_I_KEYBOARD" 'Tablet mode' "$(tablet_mode_detail)" tablet
+		# Tablet mode is the on-screen keyboard, both physical inputs off (the
+		# touchpad is on the back of the screen, and the folded keys are on the
+		# table) and the accelerometer turning the screen; the row is also the
+		# way in for a keyboard that is already detached and did not trigger
+		# the switch.
+		_tm=$(tablet_mode_detail)
+		if [ "$_tm" = off ]; then
+			ui_row "$UI_I_KEYBOARD" 'Tablet mode' "$_tm" tablet "$UI_DIM"
+		else
+			ui_row "$UI_I_KEYBOARD" 'Tablet mode' "$_tm" tablet
+			# Only while it is on: calibrating reads the accelerometer in the
+			# pose the person is holding, which only means something in tablet
+			# mode, and the row says which mapping is in use so an upside-down
+			# screen has a diagnosis as well as a fix.
+			ui_row "$UI_I_ROTATE" 'Calibrate rotation' \
+				"$("$dir/tablet-mode" calibration 2>/dev/null || echo unknown)" \
+				tablet-calibrate "$UI_YELLOW"
+		fi
 		ui_row "$UI_I_KEYBOARD" 'Keyboard layout' "$(layout_name)" layout
 	) >"$_s/4" &
 	(
@@ -301,6 +333,7 @@ while :; do
 	touchpad) swaymsg input type:touchpad events toggle >/dev/null 2>&1 || true ;;
 	rotation) exec "$dir/rofi-quick" --rotation-menu ;;
 	tablet) "$dir/tablet-mode" toggle ;;
+	tablet-calibrate) "$dir/tablet-mode" calibrate || true ;;
 	layout) exec "$dir/rofi-layout" ;;
 	audio) exec "$dir/bar-audio" ;;
 	media) exec "$dir/rofi-media" ;;

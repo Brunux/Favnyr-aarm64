@@ -53,7 +53,8 @@ configuration {
      * lists this port draws itself carry a font glyph instead (lib-rofi.sh),
      * which costs nothing, follows the palette and is already how the bar is
      * drawn - except the file browser, whose rows carry a real thumbnail
-     * (rofi-files, 32 px, made by ~/.config/bin/nureb-thumbnail).
+     * (rofi-files, 32 px, made by ~/.config/bin/nureb-thumbnail), and rofi-keys,
+     * which asks this theme for one icon per category by name (-show-icons).
      *
      * bar-pick passes -no-show-icons, so the bar's popups keep the tighter
      * text-only layout.
@@ -64,7 +65,8 @@ configuration {
      * a solarized line icon per session entry (terminal, folder, gear, bell,
      * power...) in usr/share/icons/Nureb, and its index.theme inherits Adwaita
      * and hicolor, so an application that brings its own icon (foot, btop,
-     * htop) still gets it in colour. */
+     * htop) still gets it in colour.  scripts/make-icons.sh renders them, both
+     * the launcher's names and the category names rofi-keys asks for. */
     show-icons: true;
     icon-theme: "Nureb";
 

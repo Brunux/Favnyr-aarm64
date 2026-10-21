@@ -13,6 +13,16 @@
 # `busy` card stays until the connection answers again and then becomes the
 # read-back from NetworkManager, not the value that was asked for.
 #
+# The card registers no stop command, and that is a decision, not an omission.
+# Killing `nmcli connection up` is safe in itself (NetworkManager finishes or
+# drops the activation on its own), and it is still the wrong button: by the
+# time the activation runs, `connection modify` has already written the new
+# servers to the profile, so a stop leaves the profile saying Cloudflare while
+# resolv.conf still holds whatever DHCP handed out - a mismatch with nothing on
+# screen to explain it, which is exactly what this menu exists to avoid.  The
+# wait it would save is one or two seconds.  A click says it cannot be stopped,
+# which is true.
+#
 # DNS is not the same as a VPN: the addresses below are public resolvers reached
 # in the clear unless the network itself is encrypted.  Nothing here touches
 # IPv6 DNS (`ipv6.dns`), which the same nmcli line could set.
@@ -23,21 +33,21 @@ dir=$(dirname "$0")
 . "$dir/lib-rofi.sh"
 
 if ! command -v nmcli >/dev/null 2>&1; then
-	ui_say DNS 'nmcli is not installed' critical
+	ui_say DNS 'nmcli is not installed' critical dialog-error
 	exit 1
 fi
 
 dev=$(nmcli -t -f DEVICE,TYPE,STATE device status 2>/dev/null |
 	awk -F: '$3 == "connected" && $2 != "loopback" { print $1; exit }') || true
 if [ -z "${dev:-}" ]; then
-	ui_say DNS 'No connection is up, so there is nothing to change' critical
+	ui_say DNS 'No connection is up, so there is nothing to change' critical dialog-warning
 	exit 1
 fi
 
 con=$(nmcli -g GENERAL.CONNECTION device show "$dev" 2>/dev/null | head -1) || true
 case ${con:-} in
 '' | --)
-	ui_say DNS "$dev has no active connection" critical
+	ui_say DNS "$dev has no active connection" critical dialog-warning
 	exit 1
 	;;
 esac
@@ -94,14 +104,14 @@ custom)
 esac
 
 if [ "$(id -u)" -ne 0 ] && ! sudo -n true 2>/dev/null; then
-	ui_say DNS 'Changing a connection needs root and sudo asks for a password here' critical
+	ui_say DNS 'Changing a connection needs root and sudo asks for a password here' critical dialog-warning
 	exit 1
 fi
 
 busy="$dir/busy"
 label='Automatic (DHCP)'
 [ -n "$servers" ] && label=$(printf '%s' "$servers" | tr ',' ' ')
-"$busy" start dns DNS "Applying $label" cloud 2>/dev/null || true
+"$busy" start dns DNS "Applying $label" network-server 2>/dev/null || true
 
 if [ -n "$servers" ]; then
 	out=$(sudo -n nmcli connection modify "$con" ipv4.dns "$servers" ipv4.ignore-auto-dns yes 2>&1) &&
@@ -110,7 +120,7 @@ else
 	out=$(sudo -n nmcli connection modify "$con" ipv4.ignore-auto-dns no ipv4.dns "" 2>&1) &&
 		out=$(sudo -n nmcli connection up "$con" 2>&1)
 fi || {
-	"$busy" fail dns DNS "$(printf '%s' "$out" | tail -2 | tr '\n' ' ')" 2>/dev/null || true
+	"$busy" fail dns DNS "$(printf '%s' "$out" | tail -2 | tr '\n' ' ')" dialog-error 2>/dev/null || true
 	exit 1
 }
 

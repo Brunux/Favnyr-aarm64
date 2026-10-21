@@ -12,6 +12,12 @@
 # rows that open a picker are the same scripts the bar's indicators run, so
 # there is one implementation per action.
 #
+# Every menu in this directory that answers a question about the machine has a
+# row here - DNS, Packages, Colour, About, Reminders - because the root menu is
+# where the manual points for them (02-rofi.md lists all five under "the rest of
+# the menus live in the root menu"), and a row that goes missing is a documented
+# keypress that answers nothing at all.
+#
 # Alt+Space (and the menu button) open this; Alt+Ctrl+O opens Settings, which is
 # the switch panel without the session actions.
 
@@ -28,9 +34,10 @@ while :; do
 	{
 		ui_row "$UI_I_TERM" 'Terminal' 'foot' terminal
 		ui_row "$UI_I_FILES" 'Files' 'browse the filesystem' files
+		ui_row "$UI_I_WINDOW" 'Files (window)' 'pcmanfm: folders, drag and drop, trash' files-window
 		ui_row "$UI_I_DISK" 'Places' 'home, disks, the configuration' places
 		ui_row "$UI_I_CAMERA" 'Capture' 'screenshot, OCR, QR, recording' capture
-		ui_row "$UI_I_COG" 'Settings' 'Wi-Fi, Bluetooth, night light, rotation' settings
+		ui_row "$UI_I_COG" 'Settings' 'Wi-Fi, Bluetooth, night light, tablet mode, rotation' settings
 		ui_row "$UI_I_BOOK" 'Learn' 'the manual, with search' learn
 		ui_row "$UI_I_KEYBOARD" 'Keybindings' 'every binding, from the configuration' keys
 		ui_row "$UI_I_USERS" 'Agents' 'Claude Code, Codex and the others' agents
@@ -51,6 +58,7 @@ while :; do
 		ui_row "$UI_I_TRASH" 'Free space' 'what is using it, and clean up' clean
 		ui_row "$UI_I_BUG" 'End a process' 'the heaviest twenty' kill
 		ui_row "$UI_I_BOX" 'Packages' 'search, then install one' pkg
+		ui_row "$UI_I_BRUSH" 'Colour' 'the hex of a pixel, and the palette' colour
 		ui_row "$UI_I_INFO" 'About' 'kernel, uptime, memory, battery' about
 
 		ui_heading 'session'
@@ -71,6 +79,10 @@ while :; do
 	case $key in
 	terminal) exec foot ;;
 	files) exec "$dir/rofi-files" ;;
+	# The windowed file manager: the same directory, with a mouse. It is a
+	# second row and not a replacement because the list is what the Search key
+	# and Alt+Ctrl+F open, and it costs one process with no window.
+	files-window) exec pcmanfm "$HOME" ;;
 	places) exec "$dir/rofi-places" ;;
 	capture) exec "$dir/rofi-capture" ;;
 	settings) exec "$dir/rofi-quick" ;;
@@ -82,6 +94,7 @@ while :; do
 	clip) exec "$dir/rofi-clip" ;;
 	dns) exec "$dir/rofi-dns" ;;
 	pkg) exec "$dir/rofi-pkg" ;;
+	colour) exec "$dir/rofi-color" ;;
 	about) exec "$dir/rofi-about" ;;
 	remind) exec "$dir/rofi-remind" ;;
 	ssh) exec rofi -show ssh ;;

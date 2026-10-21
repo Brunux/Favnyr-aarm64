@@ -13,8 +13,50 @@ input type:keyboard {
     repeat_rate 33
 }
 
-# Use the Chromebook Search key by itself for the app launcher ($launcher is
-# defined in /etc/sway/config). Alt+d does the same thing, so drop it to avoid
-# two ways to open the same menu.
+# Use the Chromebook Search key by itself to find *files*: it opens rofi-files
+# in its --search mode, one bounded fd run over $HOME listed by rofi, and Enter
+# opens the choice with the program that fits it (text in bat, a picture in
+# chafa, a video in mpv, a PDF in Firefox), or browses the folder that was
+# chosen. The applications are still on $mod+d, one key away, and this is the
+# one thing the launcher cannot do - there is no way to land on a file by typing
+# its name from a list of .desktop entries.
+#
+# The Search key is a Super_L press, so this is bound on release and without
+# repeat: the top row doubles as F1-F10 with Search held down (keyd, see
+# etc/keyd/default.conf), and firing on press would open the file search on the
+# way to those. Alt+d is not the launcher either - it is dropped below - so the
+# two keys do not compete for the same menu.
 unbindsym Mod1+d
-bindsym --no-repeat --release Super_L exec $launcher
+bindsym --no-repeat --release Super_L exec /home/brunux/.config/bin/rofi-files --search
+
+# Search+Shift is the same key held with Shift: the *windowed* file manager
+# (pcmanfm), for what a list cannot do - drag and drop, a multi-selection,
+# renaming in place, the trash. The two do not compete: a release binding is
+# matched against the modifiers held at the moment the key comes up, so Search
+# released while Shift is still down lands here, and Search on its own falls
+# through to the file search above. `$HOME` is passed explicitly because the
+# window would otherwise open at the session's working directory.
+#
+# It is bound on release for the same reason as the line above - the top row
+# doubles as F1-F10 while Search is held (keyd), and it is `--no-repeat` because
+# holding the key has nothing to repeat.
+bindsym --no-repeat --release Super_L+Shift exec pcmanfm "$HOME"
+
+# Alt+Search is the same question asked in a terminal: `nureb-find` streams
+# every file under $HOME through fd into fzf, so the prompt is up before the
+# walk is done and there is no cap on what an empty query offers, with a preview
+# pane on the right (text read with bat, a picture or a PDF page decoded once and
+# drawn with chafa) and Enter handing the choice to nureb-view - the same opener
+# a double click in pcmanfm reaches.
+#
+# It sits next to the Search key because the two are one feature with two
+# answers: rofi's list is a menu of rows with icons and thumbnails that is open
+# before you know the name of the file, and fzf is live filtering of everything
+# with a preview for when you would recognise it. Neither stays resident, and
+# the fd excludes are the same four both of them use.
+#
+# Same release/no-repeat reasoning as the two above: Search is a Super_L press,
+# and releasing it while Alt is still down lands here, while Search alone falls
+# through to the list. `foot --app-id=nureb-find` is floated and centred by
+# etc/sway/config.d/29-file-search.conf.
+bindsym --no-repeat --release Super_L+Mod1 exec /home/brunux/.config/bin/nureb-find

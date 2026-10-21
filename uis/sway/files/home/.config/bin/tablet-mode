@@ -1,17 +1,19 @@
 #!/bin/sh
-# Tablet mode: the on-screen keyboard, the touchpad off, and the screen turning
-# with the device.
+# Tablet mode: the on-screen keyboard, both physical inputs off, and the screen
+# turning with the device.
 #
 # The kernel already reports what this needs, so nothing has to be written for
 # it: `cros_ec_buttons` carries SW_LID + SW_TABLET_MODE, which is what sway's
 # `bindswitch tablet:on/off` (in etc/sway/config.d/28-tablet.conf) delivers, and
 # `cros-ec-accel` publishes in_accel_{x,y,z}_raw under /sys/bus/iio.
 #
-#   tablet-mode on      keyboard up, touchpad off, the poller started
-#   tablet-mode off     keyboard and poller gone, touchpad back, screen upright
-#   tablet-mode toggle  whichever of those the state says
-#   tablet-mode status  one line: whether it is on, and the screen rotation
-#   tablet-mode poller  the 1 Hz loop (internal; `on` starts it)
+#   tablet-mode on           keyboard up, touchpad and keyboard off, poller started
+#   tablet-mode off          keyboard and poller gone, both inputs back, screen upright
+#   tablet-mode toggle       whichever of those the state says
+#   tablet-mode status       one line: whether it is on, and the screen rotation
+#   tablet-mode calibrate    read the accelerometer here, and remember which way is up
+#   tablet-mode calibration  one line: the mapping in use (calibrated or default)
+#   tablet-mode poller       the 1 Hz loop (internal; `on` starts it)
 #
 # Nothing here is resident outside tablet mode: no daemon, no timer, just one
 # process while the keyboard is detached (the keyboard itself) and one more
@@ -21,17 +23,62 @@
 # Rotation comes from the accelerometer, which reports the reaction to gravity:
 # screen up gives +Z, so the dominant axis in the screen plane is the roll.
 #
+# The first version of this table assumed ChromeOS's panel frame (X to the
+# right, Y to the top of the screen) and the card came up *upside down* in
+# tablet mode: the accelerometer in this panel is mounted 180 degrees around
+# from that, so an upright device reads -Y and not +Y.  The four in-plane rules
+# are the mirror image of the assumption (the sign of X and the sign of Y both
+# flip), and the flat rule is unchanged because +Z is +Z either way:
+#
 #   | what the device is doing | reading  | transform |
 #   |--------------------------|----------|-----------|
 #   | flat, screen up          | +Z       | normal    |
-#   | upright, landscape       | +Y       | normal    |
-#   | upside down              | -Y       | 180       |
-#   | turned clockwise         | -X       | 90        |
-#   | turned counter-clockwise | +X       | 270       |
+#   | upright, landscape       | -Y       | normal    |
+#   | upside down              | +Y       | 180       |
+#   | turned clockwise         | +X       | 90        |
+#   | turned counter-clockwise | -X       | 270       |
 #
-# The mapping assumes the panel frame ChromeOS uses (X to the right, Y to the
-# top of the screen); if the screen turns the wrong way on the hardware, the
-# four `transform` values in orient() are the whole fix.
+# A sign in a comment is still a guess until it has been checked on the
+# hardware, and the next reader may be holding a unit that was mounted the
+# other way again, so the guess has an escape hatch that needs no rebuild:
+# `tablet-mode calibrate` (also a row in Settings) reads the accelerometer in
+# the pose the person is holding - screen facing them, upright, tablet mode on -
+# and stores the direction that should look upright in
+# $XDG_CONFIG_HOME/nureb/tablet.conf, one line, `normal=y-`.  orient() then
+# derives all four positions from that one reference: the four readings run
+# around the device in the counter-clockwise order +X, +Y, -X, -Y, and each 90
+# degrees the reading turns is 90 degrees more transform, so the reference gets
+# `normal` and the other three get 90, 180 and 270 in that order.  That is
+# exactly the table above when the reference is -Y, and it needs nothing new
+# when a unit reads +Y or is held upright in portrait (an X-dominant reference).
+# The file is optional - no file means the table above - and any unreadable or
+# malformed content falls back to it silently, because orient() runs once a
+# second from the poller and a notification is the wrong answer to a typo in a
+# file the person cannot see.  Deleting it is the way back to the default.
+#
+# The physical keyboard is turned off with the touchpad, for the obvious
+# reason: with the keyboard folded back its keys are on the table, under the
+# screen, and a keystroke there is a keystroke.  Three things about that are not
+# obvious:
+#
+#   - wvkbd is *not* an input device.  It is a Wayland client of
+#     zwp_virtual_keyboard_manager_v1 ("virtual input method" in its README,
+#     and `strings wvkbd-mobintl` names the interface and its "virtual_keyboard
+#     manager not available" error), so sway's input-device switch does not
+#     touch it and the on-screen keyboard keeps typing.  That is why the
+#     keyboard can be disabled at all.
+#   - The keyboard is disabled only *after* start_kbd() has confirmed the
+#     process is alive.  If the on-screen keyboard fails to start the physical
+#     one stays on, so the person is never left with a touchscreen and no way to
+#     type; and every path that ends tablet mode - `off`, `toggle`, the
+#     reattach switch, a stale state directory - re-enables both input types,
+#     including the touchpad-only fallback that already existed.
+#   - Suspend from the Lock key does not go through a keyboard device.  logind
+#     reads /dev/input directly and `cros_ec_buttons` (the power button, the lid
+#     and tablet switch) is a switch device, not one of the keyboards switched
+#     off here, so the Lock key keeps suspending the machine in tablet mode.
+#     Neither does the reattach itself: bindswitch is driven by that same switch
+#     device, so folding the keyboard back still delivers `tablet:off`.
 
 set -eu
 
@@ -39,7 +86,15 @@ dir=$(dirname "$0")
 state="${XDG_RUNTIME_DIR:-/tmp}/nureb-tablet"
 kbd_bin=wvkbd-mobintl
 
-say() { notify-send -a Nureb "${1:-Nureb}" "${2:-}" 2>/dev/null || true; }
+# The rotation reference `calibrate` writes, and the icon the mode's own
+# notifications carry (the Nureb theme has the name, Adwaita is the fallback).
+conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/nureb"
+conf_file=$conf_dir/tablet.conf
+
+say() { # TITLE [BODY] [ICON]
+	notify-send -a Nureb -i "${3:-preferences-desktop-keyboard}" \
+		"${1:-Nureb}" "${2:-}" 2>/dev/null || true
+}
 
 out_name() {
 	swaymsg -t get_outputs -r 2>/dev/null |
@@ -59,19 +114,72 @@ accel_dev() {
 	return 1
 }
 
+# Read the accelerometer once.  Prints "X Y Z"; fails when there is no sensor,
+# so both the poller and calibrate have one place to say so.
+accel_read() {
+	_dev=$(accel_dev) || return 1
+	printf '%s %s %s\n' \
+		"$(cat "$_dev/in_accel_x_raw" 2>/dev/null || echo 0)" \
+		"$(cat "$_dev/in_accel_y_raw" 2>/dev/null || echo 0)" \
+		"$(cat "$_dev/in_accel_z_raw" 2>/dev/null || echo 0)"
+}
+
+# conf_pose -> the calibrated reference (`y-`, `x+`, ...), nothing when there is
+# no calibration file or it does not parse.  Always succeeds: it is read from
+# orient(), inside the poller, where a non-zero exit would end the loop.
+conf_pose() {
+	[ -f "$conf_file" ] || return 0
+	_v=$(sed -n '1s/[[:space:]]*$//;1s/^[[:space:]]*//;1p' "$conf_file" 2>/dev/null || true)
+	case $_v in
+	normal=[xXyY][+-]) printf '%s\n' "${_v#normal=}" | tr 'XY' 'xy' ;;
+	esac
+	return 0
+}
+
+# pose_from X Y Z -> the reference line conf_pose() reads.
+# The check order is the same one orient() uses: Y first, then X, and a
+# diagonal (both axes at ~0.7 of the magnitude) is neither, so it fails.
+pose_from() { # X Y Z
+	awk -v x="$1" -v y="$2" -v z="$3" 'BEGIN {
+		m = sqrt(x * x + y * y + z * z)
+		if (m < 1) exit 1
+		if (z > 0.85 * m) exit 1
+		if (y > 0.75 * m) { print "y+"; exit }
+		if (y < -0.75 * m) { print "y-"; exit }
+		if (x < -0.75 * m) { print "x-"; exit }
+		if (x > 0.75 * m) { print "x+"; exit }
+		exit 1
+	}'
+}
+
 # orient X Y Z -> normal|90|180|270, or "keep" when no axis dominates (the
 # device is on a table edge, in a hand, mid-turn: better to leave the screen as
 # it is than to flip it back and forth).
+#
+# The reference is the reading that must look upright: the calibrated one when
+# $conf_file exists, the inverted-panel default (-Y, the table in the header)
+# otherwise.  Directions are indexed in the counter-clockwise order +X, +Y, -X,
+# -Y, so a reading k quarter turns after the reference gets 90*k - which is the
+# header table for a -Y reference and stays right for any other.
 orient() {
-	awk -v x="$1" -v y="$2" -v z="$3" 'BEGIN {
+	_ref=$(conf_pose)
+	[ -n "${_ref:-}" ] || _ref=y-
+	awk -v x="$1" -v y="$2" -v z="$3" -v ref="$_ref" 'BEGIN {
 		m = sqrt(x * x + y * y + z * z)
 		if (m < 1) { print "keep"; exit }
 		if (z > 0.85 * m) { print "normal"; exit }
-		if (y > 0.75 * m) { print "normal"; exit }
-		if (y < -0.75 * m) { print "180"; exit }
-		if (x < -0.75 * m) { print "90"; exit }
-		if (x > 0.75 * m) { print "270"; exit }
-		print "keep"
+		if (y > 0.75 * m) d = 1
+		else if (y < -0.75 * m) d = 3
+		else if (x < -0.75 * m) d = 2
+		else if (x > 0.75 * m) d = 0
+		else { print "keep"; exit }
+		axis = substr(ref, 1, 1)
+		sign = substr(ref, 2, 1)
+		if (axis == "x") r = (sign == "+" ? 0 : 2)
+		else r = (sign == "+" ? 1 : 3)
+		k = (d - r + 4) % 4
+		if (k == 0) print "normal"
+		else print 90 * k
 	}'
 }
 
@@ -91,18 +199,18 @@ is_on() {
 }
 
 poller() {
-	_dev=$(accel_dev) || exit 0
+	accel_dev >/dev/null || exit 0
 	_out=$(cat "$state/out" 2>/dev/null || true)
 	[ -n "$_out" ] || exit 0
 	_last=""
 	while [ -d "$state" ]; do
-		_x=$(cat "$_dev/in_accel_x_raw" 2>/dev/null || echo 0)
-		_y=$(cat "$_dev/in_accel_y_raw" 2>/dev/null || echo 0)
-		_z=$(cat "$_dev/in_accel_z_raw" 2>/dev/null || echo 0)
-		_t=$(orient "$_x" "$_y" "$_z")
-		if [ "$_t" != keep ] && [ "$_t" != "$_last" ]; then
-			apply_transform "$_t" "$_out"
-			_last=$_t
+		if _xyz=$(accel_read); then
+			# shellcheck disable=SC2086
+			_t=$(orient $_xyz)
+			if [ "$_t" != keep ] && [ "$_t" != "$_last" ]; then
+				apply_transform "$_t" "$_out"
+				_last=$_t
+			fi
 		fi
 		sleep 1
 	done
@@ -126,7 +234,9 @@ start_kbd() {
 	printf '%s\n' "$_pid" >"$state/kbd.pid"
 	# A keyboard that cannot open a display exits at once, and a notification
 	# claiming it is up while the screen has none is worse than saying so: the
-	# switch would look dead with nothing to read anywhere.
+	# switch would look dead with nothing to read anywhere.  `on` also waits for
+	# this before it switches the physical keyboard off: a failure here has to
+	# leave a keyboard.
 	sleep 0.3
 	if ! kill -0 "$_pid" 2>/dev/null; then
 		rm -f "$state/kbd.pid"
@@ -160,35 +270,77 @@ poller_alive() {
 	kill -0 "$(cat "$state/poller.pid" 2>/dev/null)" 2>/dev/null
 }
 
+# Both input types, in one place: `on` uses them to switch off, `off` to switch
+# back, and off's no-state path to repair what a killed session left behind.
+inputs() { # enabled|disabled
+	swaymsg input type:touchpad events "$1" >/dev/null 2>&1 || true
+	swaymsg input type:keyboard events "$1" >/dev/null 2>&1 || true
+}
+
 on() {
 	if is_on; then
-		# The keyboard is up: make sure the rotation is too.  A poller that
-		# died leaves the screen fixed with no other sign, and the switch only
-		# fires on a change, so nothing would restart it.
+		# The keyboard is up: make sure the rotation and the inputs are too.
+		# A poller that died leaves the screen fixed with no other sign, and
+		# the switch only fires on a change, so nothing would restart it.
 		poller_alive || start_poller
+		inputs disabled
 		return 0
 	fi
 	mkdir -p "$state"
 	stop_pid "$state/poller.pid"
 	start_kbd || { rmdir "$state" 2>/dev/null || true; return 1; }
-	swaymsg input type:touchpad events disabled >/dev/null 2>&1 || true
+	# Only now, with the on-screen keyboard confirmed alive: from here on the
+	# touchscreen is the input unless this is undone.
+	inputs disabled
 	start_poller
-	say Tablet 'Tablet mode: the keyboard is up and the screen follows the device'
+	say Tablet 'Tablet mode: the keyboard is up, the screen follows the device'
 }
 
 off() {
 	[ -d "$state" ] || {
-		# Still undo what a killed session could have left behind.
-		swaymsg input type:touchpad events enabled >/dev/null 2>&1 || true
+		# Still undo what a killed session could have left behind, keyboard
+		# included: that is the state a person cannot fix without a mouse.
+		inputs enabled
 		return 0
 	}
 	stop_pid "$state/poller.pid"
 	stop_pid "$state/kbd.pid"
 	rm -rf "$state"
-	swaymsg input type:touchpad events enabled >/dev/null 2>&1 || true
+	inputs enabled
 	_out=$(out_name)
 	if [ -n "$_out" ]; then apply_transform normal "$_out"; fi
 	say Tablet 'Tablet mode off'
+}
+
+calibrate() {
+	if ! _xyz=$(accel_read); then
+		say Tablet 'no accelerometer: the rotation cannot be calibrated' preferences-desktop-display
+		return 1
+	fi
+	# shellcheck disable=SC2086
+	_pose=$(pose_from $_xyz) || _pose=''
+	if [ -z "$_pose" ]; then
+		say 'Tablet rotation' \
+			'Hold the screen upright and run it again: flat, or halfway between two positions, says nothing about which way is up' \
+			preferences-desktop-display
+		return 1
+	fi
+	mkdir -p "$conf_dir"
+	printf 'normal=%s\n' "$_pose" >"$conf_file"
+	# The pose just calibrated is the one that must look upright, so this is
+	# also what the screen does right now rather than a second from now.
+	_out=$(out_name)
+	if [ -n "$_out" ]; then apply_transform normal "$_out"; fi
+	say 'Tablet rotation' "Calibrated: this pose is upright now (saved as $_pose)" preferences-desktop-display
+}
+
+calibration() {
+	_c=$(conf_pose)
+	if [ -n "${_c:-}" ]; then
+		printf 'calibrated %s\n' "$_c"
+	else
+		printf 'default %s\n' y-
+	fi
 }
 
 status() {
@@ -206,9 +358,11 @@ toggle)
 	if is_on; then off; else on; fi
 	;;
 status) status ;;
+calibrate) calibrate ;;
+calibration) calibration ;;
 poller) poller ;;
 *)
-	echo "usage: tablet-mode on|off|toggle|status" >&2
+	echo "usage: tablet-mode on|off|toggle|status|calibrate|calibration" >&2
 	exit 2
 	;;
 esac

@@ -29,30 +29,54 @@ whole image is ~4 GiB.
 
 | Theme | Package | Size | What it buys |
 |---|---|---|---|
-| Media | `mpv` + `mpv-mpris` | 3.5 MB + 83 kB | A real player for local video/audio, and MPRIS so `playerctl`, the Media menu and the bar see it. Firefox can play a file, but it is not a player. |
-| Media | `imv` | 375 kB | The image viewer (the file browser sends non-text files to Firefox today; imv is instant and is what clipboard images would open in). |
-| Media | `papers` | 7.2 MB | The document viewer (PDF/EPUB). Firefox renders PDFs; papers does it without a browser. |
-| Media | `ffmpegthumbnailer` | 89 kB | Video thumbnails, for any future file browser. |
+| Media | `foliate` | 12.4 MB | An EPUB reader that is not a browser. `papers` is now the document viewer and it reads **no EPUB at all** (`org.gnome.Papers.desktop`'s `MimeType=` has no `application/epub+zip`), so an EPUB still opens in Firefox. |
 | Fonts | `fonts-noto-core` | 42.5 MB | Cyrillic, Greek, Arabic, Hebrew, Devanagari… coverage. The image ships DejaVu + JetBrains + the icon fonts, which is Latin only. |
 | Fonts | `fonts-noto-cjk` | 91 MB | Chinese/Japanese/Korean. Optional: it is the single biggest item here. |
-| Storage | `udisks2` + `udiskie` | 3.2 MB + 523 kB | **Mounting removable media.** `rofi-places` lists disks that are *already* mounted; without udisks2 an unprivileged session cannot mount a USB stick at all. |
 | Storage | `gnome-disk-utility` | 7.2 MB | Formatting/partitioning with a GUI. Today it is `parted`/`cgpt` in a terminal. |
-| Files | `nautilus` + `python3-nautilus` + `gnome-sushi` + `gvfs-backends` | 4.6 MB | The GUI file manager and its previews. `rofi-files` is the port's answer and covers navigation, but has no thumbnails and no drag and drop. |
 | Secrets | `gnome-keyring` + `libsecret-1-0` | 4.6 MB + 414 kB | Somewhere for applications to store a password/token (Git, Nextcloud, Firefox Sync). |
-| Editor | `neovim` | 9.7 MB | Omarchy's editor. What there is: `nano`, `bat` and the `eff` helper, which edits with `${EDITOR:-nano}` (`EDITOR` is unset on purpose - `90-cli-tools.sh` says why). |
 | Portals | `xdg-desktop-portal-gtk` | 776 kB | The backend for GTK file choosers and the screenshot dialog. With only `xdg-desktop-portal-wlr`, an application that asks the portal for a file has no implementation. |
 | Network | `nm-connection-editor` | 5.5 MB | VPN and 802.1x editing. `bar-net` lists and connects Wi-Fi; it cannot author a VPN profile. |
 
+**The file manager is `pcmanfm` + `gvfs`, not `nautilus`** (measured on forky: `pcmanfm 1.4.0-1+b1`
+against `nautilus 51.0.1-3`). The four names Omarchy installs (`nautilus`, `python3-nautilus`,
+`gnome-sushi`, `gvfs-backends`) are 4.6 MB of binaries and **504 packages** of closure: GTK4 +
+libadwaita, `libicu78` (38 MB), GStreamer, `gexiv2` and `samba-libs` (31 MB, a hard dependency of
+`gvfs-backends`), plus a **resident indexer** - the binary queries
+`org.freedesktop.Tracker3.Miner.Files`, so one opened window leaves `localsearch` crawling `$HOME`
+on the eMMC - and glycin's sandboxed per-thumbnail decoders, which `plan-rofi.md` already declined.
+`pcmanfm` is 229 packages, is GTK3 (the image already has it for waybar), has no indexer
+(`search:///` is a plain walk, provided by `libfm-modules`), no glycin and no ICU. It ships in
+`uis/sway/packages.list` with `gvfs` (431 kB: the trash and the local volume monitor) and without
+`gvfs-backends`, which is where `samba-libs` comes from. It is the *windowed* half of the file
+story, not a replacement for the menu: the Search key and `Alt+Ctrl+F` still open `rofi-files` (one
+process, no window), while `Search+Shift` and the root menu's **Files (window)** row open pcmanfm.
+Three limits stay documented at the setting: its thumbnails come from libfm's own gdk-pixbuf
+loader, so they are **images only** (the freedesktop `.thumbnailer` files are invisible to it); its
+Devices pane is whatever `udisks2` reports through gvfs' volume monitor (`udisks2` is in
+`uis/sway/packages.list`; `udiskie`, the resident tray daemon, is not), with `autorun` off so a
+card never runs its own contents; and `pcmanfm --desktop` is X11-only, i.e. nothing on sway.
+
 Adopted since this list was written: `swappy` and `wf-recorder` (the capture menu, `rofi-capture`),
-`cliphist` (clipboard history, `rofi-clip`: the one resident process, ~2 MB) and
-`fonts-noto-color-emoji` (the emoji picker's glyphs, `rofi-emoji`). The colour picker needed no
-package at all: `slurp` + `grim` + `ffmpeg` already read a pixel.
+`cliphist` (clipboard history, `rofi-clip`: the one resident process, ~2 MB),
+`fonts-noto-color-emoji` (the emoji picker's glyphs, `rofi-emoji`), `pcmanfm` + `gvfs` (the
+windowed file manager: `Search+Shift`, the launcher's **Files (window)**; the decision is section
+1), and the five names the file story was waiting for: **`mpv` + `mpv-mpris`** (a video plays in a
+real player, and `playerctl`, `rofi-media` and the bar see it because `nureb-view` passes
+`--script=/etc/mpv/scripts/mpris.so` - `--no-config` empties the directory the plugin installs
+into), **`imv`** (the picture viewer, with `chafa` kept as the fallback for a GPU without an EGL
+context), **`papers`** (PDF, DjVu and comics in a reader instead of a browser tab), **`udisks2`**
+(mounting a stick from Places and from pcmanfm's Devices pane; **`udiskie` stays out on purpose** -
+it is a resident tray daemon and this bar has no tray), and **`neovim` + `vim`** (so `EDITOR` and
+`VISUAL` name `nvim` instead of leaving `eff` on nano, and `vim` brings `/usr/bin/vi` with it).
+The colour picker needed no package at all: `slurp` + `grim` + `ffmpeg` already read a pixel - and
+neither did `ffmpegthumbnailer`: `nureb-thumbnail` makes a video's thumbnail with the `ffmpeg` the
+image already has.
 
 ## 2. Covered by something else
 
 | Omarchy | Here |
 |---|---|
-| `chromium` (280 MB) | `firefox-esr` (in `uis/sway/packages.list`), the image's one viewer and browser |
+| `chromium` (280 MB) | `firefox-esr` (in `uis/sway/packages.list`), the image's one browser: documents, pictures and video have viewers of their own now (`papers`, `imv`, `mpv`) |
 | `alacritty`, `kitty` | `foot` - half the memory of an alacritty window on a 4 GB machine |
 | `yaru-theme-icon` | the **Nureb** icon theme, rendered by `scripts/make-icons.sh` from the Font Awesome codepoints used in the menus |
 | `libxkbcommon-tools` (`xkbcli list`) | `keyd` for the keymap and `swaymsg -t get_inputs` + `jq` for the layout indicator |
@@ -71,6 +95,7 @@ package at all: `slurp` + `grim` + `ffmpeg` already read a pixel.
 | `gawk` | Omarchy's theme renderer needs awk's `RT`; this port's theme is a static file, and mawk is faster. |
 | `lua5.4`, `tree-sitter-cli` | Editor and keybindings-view tooling for Omarchy's own components; `rofi-keys` parses sway's config with `awk` instead. |
 | `plocate` | `locate` **plus** `plocate-updatedb.timer` - a systemd timer that indexes the disk. Not on a card that is rewritten on every install. |
+| `nautilus` (+ `gnome-sushi`, `gvfs-backends`) | GTK4 + libadwaita + 38 MB of ICU + GStreamer + 31 MB of `samba-libs`, and a `localsearch` indexer, for a file manager `pcmanfm` does on the GTK3 the image already has (section 1). |
 | `libnotify-bin` | `notify-send` is already pulled in by `grimshot`/mako's client tools. |
 | `power-profiles-daemon` | Omarchy ships it, but `plan-rofi.md` declines it on purpose (a daemon) and the kernel is pinned to `schedutil` (`optimization.md` item 2). |
 | `fwupd`, KDE Connect / GSConnect | `plan-rofi.md` excludes them: this device's firmware is ChromeOS's and is never flashed, and both are resident daemons. |

@@ -1,41 +1,115 @@
 #!/bin/sh
-# The bar's "working on it" card: what busy is doing, as a spinner.
+# The bar's "working on it" card: what busy is doing, as a spinner - and the
+# stop button, because the spinner is the only thing on screen while it runs.
 #
 # busy writes one file per running task in $XDG_RUNTIME_DIR/nureb-busy; this
 # script is the waybar module that reads them.  It prints nothing (an empty
 # module, which style.css collapses) when there is no task, so the bar is
 # unchanged in the common case.
 #
+#   bar-busy        what waybar polls: the card, or nothing
+#   bar-busy stop   stop the task the card is showing (the module's on-click)
+#
 # The spinner is a braille frame picked from the clock: waybar re-runs the
 # module once a second, and a ten-frame cycle is slow enough to read and fast
 # enough to look alive.  Braille is used rather than a Nerd Font glyph because
 # it is one character wide in every monospace font, including the ones the bar
 # falls back to.
+#
+# Which task a click stops: the one the card names, and nothing else.  The
+# module and the stop action walk the same `*.label` glob in tag order and take
+# the first live one, so the click can never stop something other than what is
+# written on the bar.  Two tasks at once are rare here (a menu plus a dictation)
+# and the second one gets its turn on the next click, when the first label is
+# gone.
+#
+# The command that stops it is the one the producer registered in BUSY_STOP
+# (see busy); nothing is inferred from the label, and this script does not try
+# to find the process itself.  A task with none says so in a notification and
+# keeps running: a card that vanished from the bar while its action still ran
+# would be its own kind of lie, and half of them (an apt transaction, a DNS
+# re-activation) are not safe to cut in the first place.
+#
+# The result goes out through `busy end`, so mako morphs the card that said
+# "Scanning for devices…" into "Stopped Bluetooth" instead of stacking a second
+# toast over it, and the state directory is empty again by the time the command
+# runs.  That order matters when the command is the producer itself (dictation
+# re-enters its own script): it has to find a clean slate, not a half-removed
+# card.  waybar spawns an on-click command asynchronously, so a stop that takes
+# a moment (a transcript) never blocks the bar.
 
 set -u
 
-dir=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
+state=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
+bin=$(dirname "$0")
 
-label=
-for f in "$dir"/*.label; do
-	[ -r "$f" ] || continue
-	# A script that died between start and end would leave a spinner forever;
-	# five minutes is longer than any action here and short enough to heal.
-	if [ -n "$(find "$f" -mmin +5 2>/dev/null)" ]; then
-		rm -f "$f" "${f%.label}.id" "${f%.label}.icon"
-		continue
+# stale FILE: a script that died between start and end would leave a spinner
+# forever; five minutes is longer than any action here and short enough to heal.
+stale() {
+	[ -n "$(find "$1" -mmin +5 2>/dev/null)" ]
+}
+
+# drop LABELFILE: the whole task, stop command included, so a stale file can
+# never be the one a click runs.
+drop() {
+	rm -f "$1" "${1%.label}.id" "${1%.label}.icon" "${1%.label}.stop"
+}
+
+# current: sets tag and label to the task the card draws, returns 1 when idle.
+current() {
+	tag=
+	label=
+	for f in "$state"/*.label; do
+		[ -r "$f" ] || continue
+		if stale "$f"; then
+			drop "$f"
+			continue
+		fi
+		_t=$(head -n 1 "$f" 2>/dev/null)
+		[ -n "$_t" ] || continue
+		label=$_t
+		tag=${f##*/}
+		tag=${tag%.label}
+		return 0
+	done
+	return 1
+}
+
+if [ "${1:-}" = stop ] || [ "${1:-}" = --stop ]; then
+	current || exit 0 # nothing running: the module is not even on the bar
+	stopcmd=$(head -n 1 "$state/$tag.stop" 2>/dev/null) || stopcmd=
+	if [ -z "$stopcmd" ]; then
+		# Plain notify-send, not the card's own tag: replacing the toast would
+		# take away the only sign that the task is still going.
+		notify-send -a Nureb -i dialog-information -u low -t 4000 \
+			Nureb "$label cannot be stopped from here" 2>/dev/null || true
+		exit 0
 	fi
-	label=$(head -n 1 "$f" 2>/dev/null)
-	[ -n "$label" ] && break
-done
-
-if [ -z "$label" ]; then
-	printf '{"class":"empty"}\n'
+	# Read above, before end removes the file.  The card becomes the result
+	# first (same mako tag, so nothing stacks) and only then is the command run,
+	# so a producer that starts a card of its own from inside it finds an empty
+	# state instead of racing against the removal of its own.
+	"$bin/busy" end "$tag" "Stopped $label"
+	sh -c "$stopcmd" >/dev/null 2>&1 || true
+	pkill -RTMIN+8 waybar 2>/dev/null || true
 	exit 0
 fi
+
+current || {
+	printf '{"class":"empty"}\n'
+	exit 0
+}
 
 i=$(( $(date +%s) % 10 + 1 ))
 glyph=$(printf '%s\n' ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏ | sed -n "${i}p")
 
+# A label is ours (Wi-Fi, Bluetooth, Dictation, Packages…), but it goes into
+# JSON and into Pango markup twice, so the two characters that would break the
+# first are escaped once here.  The tooltip carries the click, which is the only
+# place the bar can say what the card is for: waybar has no per-module "title".
+esc=$(printf '%s' "$label" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g')
+tip=$esc
+[ -r "$state/$tag.stop" ] && tip="$esc\nclick to stop"
+
 printf '{"text":"<span font_desc=%s>%s</span>  %s","class":"busy","tooltip":"%s"}\n' \
-	"'JetBrains Mono 13'" "$glyph" "$label" "$label"
+	"'JetBrains Mono 13'" "$glyph" "$esc" "$tip"

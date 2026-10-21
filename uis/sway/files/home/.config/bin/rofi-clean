@@ -4,8 +4,8 @@
 # The map of the machine is small (58 GB eMMC, a 4 GB root filesystem), so the
 # things that grow are known: the apt archive, the journal, thumbnails, the
 # trash and the browser/build caches.  This measures them (du is the slow part,
-# hence the spinner on the bar), lists them with their size, and runs the one
-# command that empties each.
+# hence the spinner on the bar - which is also the button that stops the walk),
+# lists them with their size, and runs the one command that empties each.
 #
 # Nothing is deleted without being chosen: there is no "clean everything" row.
 
@@ -52,9 +52,14 @@ measure() {
 	cache=$(cache_mb)
 	# A path that does not exist or is not readable reads as "nothing" rather
 	# than a dash: the row is an action, and "-" looks like a failed measurement.
+	# `|| continue` rather than `&& eval`: as the last command of the loop the
+	# test would return 1 for every value that is not "-", and `set -e` reads
+	# that as the function failing, which is how this menu used to close itself
+	# before the first row was drawn.
 	for _v in trash thumb; do
 		eval "_x=\$$_v"
-		[ "$_x" = '-' ] && eval "$_v='nothing'"
+		[ "$_x" = '-' ] || continue
+		eval "$_v='nothing'"
 	done
 }
 
@@ -75,8 +80,20 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/clean.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
 while :; do
-	"$dir/busy" start clean 'Free space' 'Measuring the caches…' user-trash
+	# The du walk is the slow part and the one thing here that is safe to cut:
+	# nothing is being written, so a kill costs a measurement and nothing else.
+	# The order of measure() is what makes one kill enough - the trash, the
+	# thumbnails, the apt archive and the journal are a walk each, and ~/.cache,
+	# the tree that takes seconds, is measured last.  Bracketed so the pattern
+	# cannot match the `sh -c` line that runs it.
+	BUSY_STOP='pkill -f "[d]u -skx"' \
+		"$dir/busy" start clean 'Free space' 'Measuring the caches…' user-trash
 	measure
+	# A killed du reads as "-", so the card is asked whether this menu is still
+	# wanted before a list of dashes is drawn over it.
+	if "$dir/busy" cancelled clean; then
+		exit 0
+	fi
 	"$dir/busy" stop clean
 	render "$tmp/rows"
 	key=$(ui_pick 'Free space' 'Enter cleans that one · Escape closes' <"$tmp/rows") || exit 0
@@ -84,24 +101,24 @@ while :; do
 	none) : ;;
 	trash)
 		rm -rf "${HOME:?}/.local/share/Trash/files" "${HOME:?}/.local/share/Trash/info" 2>/dev/null || true
-		ui_say 'Free space' 'Trash emptied'
+		ui_say 'Free space' 'Trash emptied' normal user-trash
 		;;
 	thumbnails)
 		rm -rf "${HOME:?}/.cache/thumbnails" 2>/dev/null || true
-		ui_say 'Free space' 'Thumbnails removed'
+		ui_say 'Free space' 'Thumbnails removed' normal user-trash
 		;;
 	apt)
 		if sudo -n apt-get clean >/dev/null 2>&1; then
-			ui_say 'Free space' 'Package cache cleaned'
+			ui_say 'Free space' 'Package cache cleaned' normal package-x-generic
 		else
-			ui_say 'Free space' 'Could not clean the package cache' critical
+			ui_say 'Free space' 'Could not clean the package cache' critical dialog-error
 		fi
 		;;
 	journal)
 		if sudo -n journalctl --vacuum-size=100M >/dev/null 2>&1; then
-			ui_say 'Free space' 'Journal shrunk to 100 MB'
+			ui_say 'Free space' 'Journal shrunk to 100 MB' normal user-trash
 		else
-			ui_say 'Free space' 'Could not vacuum the journal' critical
+			ui_say 'Free space' 'Could not vacuum the journal' critical dialog-error
 		fi
 		;;
 	cache)

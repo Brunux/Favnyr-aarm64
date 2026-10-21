@@ -22,6 +22,14 @@
 # different lookup: it asks the theme for an icon named after the binary it would
 # run, so a second table renders those names (foot, btop, nvim, ...).
 #
+# The third table is the icon *names* the rest of the session asks for by the
+# freedesktop name: the file browser's row icons (folder, text-x-generic,
+# application-pdf, ...) and the ones notify-send/mako draw on a notification
+# (dialog-information, dialog-warning, dialog-error, network-server, ...).
+# mako does not read the theme metadata - it walks the roots in its `icon-path`
+# for categories and sizes - so /usr/share/icons/Nureb has to be one of those
+# roots for these to appear on a notification.
+#
 # The PNGs are committed, so an image build needs no ImageMagick; run this only
 # when a table below changes.  ImageMagick is a *host* tool (scripts/00-deps.sh
 # installs it); the font is the one the image ships.
@@ -57,8 +65,9 @@ command -v convert >/dev/null 2>&1 || {
 
 mkdir -p "$out" "$alt"
 
-# icon name (the Icon= of a .desktop entry, or the binary name of a command) and
-# the Font Awesome 4.7 codepoint.  Two tables, one renderer.
+# icon name (the Icon= of a .desktop entry, the binary name of a command, or a
+# name a notification asks for) and the Font Awesome 4.7 codepoint.  Three
+# tables, one renderer.
 render() {
 	while read -r name code; do
 		case $name in '' | '#'*) continue ;; esac
@@ -111,6 +120,13 @@ utilities-system-monitor           f201
 preferences-system-time            f017
 preferences-system-network         f0ac
 applications-development           f121
+# The viewer packages' launcher rows. Their Icon= is not their binary name, so
+# the command palette's names in table 2 do not cover the .desktop entry: imv
+# asks for multimedia-photo-viewer, papers for org.gnome.Papers, and the second
+# entry papers ships (Print Preview) for document-print-preview.
+org.gnome.Papers                   f02d
+multimedia-photo-viewer            f03e
+document-print-preview             f02f
 TABLE
 
 # 2. The command palette.  rofi's run mode resolves an icon by *asking the icon
@@ -236,5 +252,98 @@ sway-hibernate                     f186
 sway-screensaver                   f070
 wifi.sh                            f1eb
 COMMANDS
+
+# 3. Names the session asks for, not files in a menu.  The file browser draws a
+#    row's icon from one of these (rofi -dmenu resolves `\0icon\x1f<name>` through
+#    the icon theme, exactly like a .desktop entry), and a notification carries
+#    one as its app icon.  The names are the freedesktop ones mako and rofi
+#    expect, so a program that *is* installed and ships its own icon still wins
+#    through the Adwaita/hicolor fallback.
+render <<'NAMES'
+dialog-information                 f05a
+dialog-warning                     f071
+dialog-error                       f06a
+network-server                     f233
+folder                             f07b
+go-up                              f062
+view-hidden                        f070
+text-x-generic                     f15c
+text-html                          f1c9
+application-pdf                    f1c1
+image-x-generic                    f1c5
+video-x-generic                    f1c8
+audio-x-generic                    f1c7
+application-x-executable           f085
+package-x-generic                  f1c6
+x-office-document                  f1c2
+display-brightness                 f185
+input-touchpad                     f245
+input-keyboard                     f11c
+preferences-desktop-theme          f1fc
+preferences-desktop-effects        f0d0
+preferences-system-windows         f009
+NAMES
+
+# 4. The windowed file manager.  pcmanfm draws its places sidebar, its icon view
+#    and its context menus from freedesktop names, and Adwaita 51 ships none of
+#    the full-colour ones ("folder" resolves to nothing, so an icon view would be
+#    a grid of image-missing).  These are the names libfm and pcmanfm actually ask
+#    for: the places (user-home, drive-harddisk, the per-category folders), the
+#    actions (go-previous, edit-copy, folder-new, ...) and the file types that
+#    share no generic icon with the table above.  They are the same cyan glyphs as
+#    everything else, which is what makes the file manager look like the session
+#    it lives in.
+render <<'FILEMANAGER'
+user-home                          f015
+user-desktop                       f108
+user-bookmarks                     f02e
+user-trash-full                    f1f8
+drive-harddisk                     f0a0
+drive-removable-media              f0a0
+media-optical                      f0a0
+computer                           f108
+network-workgroup                  f0c0
+folder-documents                   f15c
+folder-download                    f019
+folder-music                       f001
+folder-pictures                    f03e
+folder-videos                      f03d
+folder-publicshare                 f1e0
+folder-templates                   f0f6
+go-previous                        f060
+go-next                            f061
+go-down                            f063
+go-home                            f015
+view-refresh                       f021
+view-sort-ascending                f160
+view-sort-descending               f161
+edit-copy                          f0c5
+edit-cut                           f0c4
+edit-paste                         f0ea
+edit-delete                        f1f8
+edit-find                          f002
+edit-rename                        f044
+document-new                       f15b
+document-open                      f07c
+document-save                      f0c7
+folder-new                         f114
+list-add                           f055
+list-remove                        f056
+preferences-other                  f013
+help-about                         f05a
+application-exit                   f011
+media-eject                        f052
+process-stop                       f05e
+window-close                       f00d
+dialog-question                    f059
+emblem-symbolic-link               f0c1
+system-search                      f002
+text-x-script                      f120
+font-x-generic                     f031
+application-x-compressed-tar       f1c6
+x-office-spreadsheet               f1c3
+x-office-presentation              f1c4
+inode-directory                    f07b
+FILEMANAGER
 
 echo "make-icons.sh: $out"

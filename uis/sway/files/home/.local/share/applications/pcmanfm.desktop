@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Files (window)
+GenericName=File manager
+Comment=The windowed file manager: drag and drop, rename, trash; the Files menu (Alt+Ctrl+F) is the keyboard one
+Exec=pcmanfm %U
+Icon=system-file-manager
+Terminal=false
+StartupNotify=true
+Categories=GTK;System;Core;FileTools;FileManager;
+MimeType=inode/directory;
+Keywords=files;browse;open;view;directory;folder;manage;copy;move;rename;
+# Same filename as the package's entry on purpose: a desktop file in
+# ~/.local/share/applications shadows the system one of that name, which is how
+# this image renames it to "Files (window)". Without it the launcher lists
+# "Files" (rofi-files, the menu) next to "PCMan File Manager" and the pair looks
+# like two copies of one thing.

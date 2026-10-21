@@ -11,6 +11,11 @@
 # listed by cliphist as `[[ binary data 1234 png 640x480 ]]`, and the pixels are
 # not in the preview - decoding one is what "save the newest image" does.
 #
+# A row is one line and rofi does not scroll it sideways, so an entry longer than
+# the list is cut there with an ellipsis; the notification that confirms the copy
+# prints the whole entry, because this list is the index of the history and not
+# the text itself.
+#
 # cliphist is the one resident process this session has apart from the
 # compositor's own daemons: about 2 MB, and it is what makes a history possible
 # at all (wl-clipboard alone only knows the current selection).
@@ -55,7 +60,14 @@ image_line=$(awk -F'\t' '$2 ~ /^\[\[ binary data/ { print; exit }' "$tmp/data")
 				kind=text
 				;;
 			esac
-			shown=$(printf '%s' "$preview" | cut -c1-64)
+			# The row is one line: a long entry is cut here, at the width the
+			# wide window holds (this is the name column, which ui_row does not
+			# shorten), and the ellipsis says so.  58 characters is what a bold
+			# column holds next to the four-column kind in the 62% window (see
+			# UI_DETAIL_MAX in lib-rofi.sh for the measurement).  The whole entry
+			# is what the notification on selection prints, so nothing is lost -
+			# this list is the index, not the text.
+			shown=$(printf '%s' "$preview" | cut -c1-58)
 			[ "$shown" = "$preview" ] || shown="$shown…"
 			ui_row "$glyph" "${shown:-empty}" "$kind" "id:$id"
 		done <"$tmp/data"
@@ -75,29 +87,37 @@ alt:id:*)
 	id=${key#alt:id:}
 	if awk -F'\t' -v i="$id" '$1 == i { print; exit }' "$tmp/data" |
 		cliphist delete >/dev/null 2>&1; then
-		ui_say Clipboard 'Entry deleted from the history'
+		ui_say Clipboard 'Entry deleted from the history' normal "$UI_ICON_TRASH"
 	else
-		ui_say Clipboard 'Could not delete that entry' critical
+		ui_say Clipboard 'Could not delete that entry' critical "$UI_ICON_ERROR"
 	fi
 	;;
 id:*)
 	id=${key#id:}
 	preview=$(awk -F'\t' -v i="$id" '$1 == i { print $2; exit }' "$tmp/data")
-	shown=$(printf '%s' "$preview" | cut -c1-60)
+	# The row showed the entry cut to one line; this is where all of it is
+	# printed, so the notification is the way to read an entry without pasting it
+	# somewhere first.  Newlines and tabs become spaces (the card is 140 px high,
+	# and a notification body is one paragraph), the text itself is not shortened:
+	# mako clips what does not fit on screen, and its history keeps the whole
+	# thing for rofi-notify.
+	shown=$(printf '%s' "$preview" | tr '\n\t' '  ')
 	if cliphist decode "$id" 2>/dev/null | wl-copy 2>/dev/null; then
 		case $preview in
-		"[[ binary data"*) ui_say Clipboard 'Image copied back to the clipboard' ;;
-		*) ui_say Clipboard "Copied: ${shown:-entry}" ;;
+		"[[ binary data"*)
+			ui_say Clipboard 'Image copied back to the clipboard' normal "$UI_ICON_IMAGE"
+			;;
+		*) ui_say Clipboard "Copied: ${shown:-entry}" normal "$UI_ICON_CLIP" ;;
 		esac
 	else
-		ui_say Clipboard 'Could not copy that entry back' critical
+		ui_say Clipboard 'Could not copy that entry back' critical "$UI_ICON_ERROR"
 	fi
 	;;
 save)
 	id=$(printf '%s' "$image_line" | cut -f1)
 	cliphist decode "$id" >"$tmp/image" 2>/dev/null || : >"$tmp/image"
 	if [ ! -s "$tmp/image" ]; then
-		ui_say Clipboard 'That image could not be decoded' critical
+		ui_say Clipboard 'That image could not be decoded' critical "$UI_ICON_ERROR"
 		exit 1
 	fi
 	ext=$(file --brief --mime-type "$tmp/image" 2>/dev/null | sed 's|.*/||; s|jpeg|jpg|; s|[^a-z0-9]||g')
@@ -106,10 +126,10 @@ save)
 	dest="$HOME/Pictures/clipboard/clip-$(date +%Y%m%d-%H%M%S).$ext"
 	mv -f "$tmp/image" "$dest"
 	setsid xdg-open "$dest" >/dev/null 2>&1 &
-	ui_say Clipboard "Saved to ${dest#"$HOME"/}"
+	ui_say Clipboard "Saved to ${dest#"$HOME"/}" normal "$UI_ICON_FOLDER"
 	;;
 wipe)
 	cliphist wipe >/dev/null 2>&1 || true
-	ui_say Clipboard "History cleared ($count entries)"
+	ui_say Clipboard "History cleared ($count entries)" normal "$UI_ICON_TRASH"
 	;;
 esac

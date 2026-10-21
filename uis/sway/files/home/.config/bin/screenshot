@@ -1,0 +1,49 @@
+#!/bin/sh
+# Where a screenshot lands: ~/Pictures/Screenshots/<the date it was taken>/.
+#
+# grimshot writes its file to ${XDG_SCREENSHOTS_DIR:-${XDG_PICTURES_DIR:-$HOME}},
+# and this image ships no ~/.config/user-dirs.dirs, so that resolved to $HOME and
+# every screenshot - the three keys, the capture menu and the annotate path -
+# landed among the dotfiles.  This wrapper is the one place that decides the
+# folder: one directory per day, and grimshot's own file name inside it
+# ("2026-10-21T18-04-11.png", the same `date -Ins` grimshot would have used), so
+# nothing about the names changes and a picture is still found by the day it was
+# taken.
+#
+#   screenshot [grimshot's own arguments]      e.g. screenshot -n save screen
+#
+# The file is decided here and handed to grimshot as its third positional
+# argument, which is the only channel that cannot be taken away: grimshot's
+# `FILE=${3:-$(getTargetDirectory)/$(date -Ins).png}` reads it before anything
+# else, while getTargetDirectory() re-sources ~/.config/user-dirs.dirs *after*
+# the environment has been read - exporting XDG_SCREENSHOTS_DIR alone loses to
+# a dotfiles file that sets it, which is exactly how a variable-only fix looks
+# correct on this image (no such file) and wrong on someone else's.  The name
+# is the expression grimshot uses as its own default, so both agree; everything
+# else - the flags, `-n` and the notification that names the file and carries
+# the image, the clipboard for a copy, the path on stdout for the caller that
+# annotates - is passed through untouched.  Nothing here waits, holds a window
+# open or changes what is captured; it is only about where the file lands.
+#
+# `copy` writes no file, and `check`/`usage` are not screenshots at all: those
+# run unwrapped, so a copy does not leave an empty day directory behind.
+
+set -eu
+
+_shot=no
+case " $* " in
+*" save "* | *" savecopy "*) _shot=yes ;;
+esac
+if [ "$_shot" = no ]; then
+	exec grimshot "$@"
+fi
+
+_dir=${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots/$(date +%Y-%m-%d)
+mkdir -p "$_dir" 2>/dev/null || {
+	notify-send -a Nureb -i dialog-error Screenshot \
+		"Could not create $_dir" 2>/dev/null || true
+	exit 1
+}
+_file=$_dir/$(date -Ins).png
+
+XDG_SCREENSHOTS_DIR=$_dir exec grimshot "$@" "$_file"

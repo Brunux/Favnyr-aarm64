@@ -18,8 +18,10 @@
 #     silent for seconds, so both go through `busy`: the mako card stays up and
 #     the bar shows the spinner until the text is typed (or the attempt fails).
 #   * it has to be stoppable without remembering the shortcut.  Pressing the key
-#     again stops it, and "Stop dictation" is a row in the root menu
-#     (bar-menu), which is where the states are visible.
+#     again stops it, the bar's spinner is the second button for the same thing
+#     (BUSY_STOP below runs this very script, so there is one way to stop a
+#     recording and not two that can drift), and "Stop dictation" is a row in
+#     the root menu (bar-menu), which is where the states are visible.
 #
 # Safety: recording stops itself after 60 seconds, and the working files live in
 # the runtime directory so a crash cannot leave a growing wav behind.
@@ -33,12 +35,27 @@ model="${DICTATE_MODEL:-${XDG_DATA_HOME:-$HOME/.local/share}/whisper/ggml-tiny.e
 self=$(readlink -f "$0")
 busy="$(dirname "$self")/busy"
 
-notify() { notify-send -a Dictation "$@" 2>/dev/null || true; }
+# notify ICON TITLE [BODY]: the icon names are the ones the Nureb icon theme
+# draws (audio-input-microphone for the recording, dialog-error for a failure,
+# dialog-information for a note); an unknown name falls back through hicolor and
+# Adwaita, so a missing one costs a generic glyph and nothing else.
+notify() { notify-send -a Dictation -i "$1" "$2" "${3:-}" 2>/dev/null || true; }
 mkdir -p "$dir"
 
 # One card per attempt: it appears when recording starts and turns into the
 # result, so there is never a toast that says "working" and then nothing.
-progress() { "$busy" update dictate "$1" 2>/dev/null || true; }
+#
+# `start` rather than `update`, for two sides of the same reason: it rewrites the
+# whole card, including its stop registration.  The stop belongs to the
+# recording - bar-busy stop runs this script, i.e. exactly what the shortcut
+# does - and it must not survive into transcription, where the only cancel is
+# throwing the text away and a click would start a second recording instead.
+# `start` is also what makes the bar-stopped path work: bar-busy removed the card
+# before it ran this script, so there is nothing left to update and this draws a
+# fresh one.  Same mako tag either way, so the toast is replaced, not stacked.
+progress() {
+	"$busy" start dictate 'Dictation' "$1" audio-input-microphone 2>/dev/null || true
+}
 
 if [ -f "$state" ]; then
 	# --- stop and transcribe -------------------------------------------------
@@ -55,8 +72,8 @@ if [ -f "$state" ]; then
 	kill -0 "$pid" 2>/dev/null && kill -TERM "$pid" 2>/dev/null || true
 
 	if [ ! -s "$wav" ]; then
-		"$busy" fail dictate 'Nothing was recorded' 2>/dev/null ||
-			notify "Nothing was recorded"
+		"$busy" fail dictate 'Nothing was recorded' dialog-error 2>/dev/null ||
+			notify dialog-error "Nothing was recorded"
 		exit 1
 	fi
 	progress 'Transcribing…'
@@ -76,8 +93,8 @@ if [ -f "$state" ]; then
 	rm -f "$wav" "$norm"
 
 	if [ -z "$text" ]; then
-		"$busy" fail dictate 'Nothing was recognised' 2>/dev/null ||
-			notify "Nothing recognised"
+		"$busy" fail dictate 'Nothing was recognised' dialog-error 2>/dev/null ||
+			notify dialog-error "Nothing was recognised"
 		exit 1
 	fi
 
@@ -88,26 +105,27 @@ if [ -f "$state" ]; then
 	if command -v wtype >/dev/null 2>&1; then
 		if wtype "$text" 2>/dev/null; then
 			"$busy" end dictate "Typed · $(printf '%s' "$text" | cut -c1-60)" 2>/dev/null ||
-				notify "Typed"
+				notify audio-input-microphone "Typed" "$(printf '%s' "$text" | cut -c1-80)"
 		else
 			"$busy" end dictate "Copied to the clipboard · typing failed" 2>/dev/null ||
-				notify "Copied to the clipboard" "Typing into the focused window failed"
+				notify audio-input-microphone "Copied to the clipboard" "Typing into the focused window failed"
 		fi
 	else
 		"$busy" end dictate 'Copied to the clipboard · wtype is missing' 2>/dev/null ||
-			notify "Copied to the clipboard" "wtype is not installed, so nothing was typed"
+			notify audio-input-microphone "Copied to the clipboard" "wtype is not installed, so nothing was typed"
 	fi
 	exit 0
 fi
 
 # --- start recording --------------------------------------------------------
 [ -r "$model" ] || {
-	notify "Fetching the speech model (78 MB, once)" "Press the shortcut again when it finishes"
+	notify dialog-information "Fetching the speech model (78 MB, once)" \
+		"Press the shortcut again when it finishes"
 	exec foot -T "Dictation · fetching model" -e "$(dirname "$self")/dictate-model"
 }
 
 command -v parecord >/dev/null 2>&1 ||
-	{ notify "parecord is missing" "It ships in pulseaudio-utils"; exit 1; }
+	{ notify dialog-error "parecord is missing" "It ships in pulseaudio-utils"; exit 1; }
 
 playerctl -a pause >/dev/null 2>&1 || true
 rm -f "$wav"
@@ -116,9 +134,14 @@ parecord --rate=16000 --channels=1 --format=s16le --file-format=wav "$wav" \
 printf '%s\n' "$!" >"$state"
 
 # The card is the signal that it is recording, and the bar spins while it lasts.
-"$busy" start dictate 'Dictation' \
-	'Recording · Alt+Ctrl+X stops it (60 s maximum)' audio-input-microphone 2>/dev/null ||
-	notify "Recording…" "Press the shortcut again to stop (60 s maximum)"
+# BUSY_STOP is this script with its own path, quoted for `sh -c`, so the bar's
+# stop does exactly what the shortcut does: stop the recorder (SIGINT, so the
+# wav header is written), transcribe and type.  That is the useful answer to
+# "stop dictating" - a stop that threw the recording away would be a second
+# behaviour to explain - and it keeps one code path for both buttons.
+BUSY_STOP="\"$self\"" "$busy" start dictate 'Dictation' \
+	'Recording · the bar spinner or Alt+Ctrl+X stops it' audio-input-microphone 2>/dev/null ||
+	notify audio-input-microphone "Recording…" "Press the shortcut again to stop (60 s maximum)"
 
 # The safety stop is a single short-lived process, not a watcher.
 ( sleep 60; [ -f "$state" ] && "$self" >/dev/null 2>&1 ) &

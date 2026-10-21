@@ -81,3 +81,9 @@ htop
 less
 # lsusb, for diagnosing USB devices (webcam, docks).
 usbutils
+# dig, nslookup and host, for the question every DNS problem starts with: which
+# server answers, and what does it answer. The card's report asked for them, and
+# `resolv.conf` here is NetworkManager's, not systemd-resolved's, so there is no
+# `resolvectl` to ask instead - DNS is set with `nmcli` (the DNS menu) and read
+# back from the connection's `ipv4.dns`.
+bind9-dnsutils

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Open with Nureb
+Comment=Text in bat, images with chafa, video in mpv, the rest in Firefox - the rules of the Files menu
+Exec=/home/brunux/.config/bin/nureb-view %U
+Icon=system-file-manager
+# The handler, not a menu entry: /etc/xdg/mimeapps.list makes it the default for
+# the types below, so pcmanfm's double click and `gio open` reach the same
+# programs rofi-files uses. It stays out of the launcher because nobody starts a
+# file by name.
+NoDisplay=true
+Terminal=false
+MimeType=text/plain;text/markdown;text/x-markdown;application/pdf;text/html;application/xhtml+xml;image/png;image/jpeg;image/gif;image/webp;image/bmp;image/tiff;image/svg+xml;image/avif;image/heif;image/heic;video/mp4;video/webm;video/x-matroska;video/quicktime;video/x-msvideo;video/mpeg;video/ogg;

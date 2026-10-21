@@ -15,7 +15,7 @@ uis/sway/
 configured `USERNAME` inside the text files.
 
 This desktop was ported from the maintainer's Nura (postmarketOS) session, so it
-keeps the solarized theme, the `Alt` modifier + Search-key launcher, the rofi
+keeps the solarized theme, the `Alt` modifier + Search-key file search, the rofi
 launcher, waybar and the foot terminal.
 
 ## Layout
@@ -23,15 +23,17 @@ launcher, waybar and the foot terminal.
 | Path | What it is |
 |---|---|
 | `etc/sway/config` | System half of the session (replaces Debian's default file). Includes `config.d/*` at the end. |
-| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, idle screensaver. |
-| `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key launcher binding. |
+| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, idle screensaver, clipboard, tablet mode, terminal file search. |
+| `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search key's file-search binding. |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
 | `home/.config/bin/rofi-learn` | **Learn**: the manual, one page at a time. |
-| `home/.config/bin/rofi-keys` | **Keybindings**: every binding, parsed from the configuration. |
+| `home/.config/bin/rofi-keys` | **Keybindings**: every binding, parsed from the configuration, one icon per section. |
 | `home/.config/bin/dictate`, `dictate-model` | Dictation with whisper.cpp; the model is fetched (pinned SHA256) on first use. |
 | `home/.config/bin/sway-hibernate` | Hibernate, gated on a disk swap and `resume=`. |
 | `home/.config/bin/rofi-agents` | **Agents**: launch a coding agent, install one, keep accounts per agent. |
-| `home/.config/bin/rofi-capture`, `rofi-qr` | **Capture** (screenshot, annotate, OCR, QR, record) and the Wi-Fi QR code. |
+| `home/.config/bin/rofi-capture`, `rofi-qr`, `screenshot` | **Capture** (screenshot, annotate, OCR, QR, record), the Wi-Fi QR code, and the one place a screenshot's folder is decided (`~/Pictures/Screenshots/<today>/`). |
+| `home/.config/bin/rofi-files`, `nureb-thumbnail`, `nureb-view` | The file browser, the thumbnail generator it calls, and the "open with Nureb" rule (text/bat, document/papers, image/imv, video/mpv, the rest/Firefox). |
+| `home/.config/bin/nureb-find` | **Alt+Search**: `fd` streamed into `fzf` over the whole home, with a preview pane (see **Files in a terminal**). |
 | `home/.config/bin/rofi-power` | **Power** menu: lock, suspend, hibernate, log out, reboot, shut down (the last three ask first). |
 | `usr/share/doc/nureb/*.md` | The seven manual pages the Learn menu opens. |
 | `home/.config/rofi/config.rasi` | Launcher settings: the three modes, `terminal = foot`, matching. |
@@ -91,10 +93,18 @@ Three jobs, one binary: **rofi** 2.0, themed by `~/.config/rofi/config.rasi` (se
 
 | Binding | Command | What it lists |
 |---|---|---|
-| Search key, `$mod+d` | `rofi -show drun` | the `.desktop` entries, including the port's own session actions in `usr/share/applications/org.nureb.*` |
+| `$mod+d` | `rofi -show drun` | the `.desktop` entries, including the port's own session actions in `usr/share/applications/org.nureb.*` |
+| Search key | `rofi-files --search` | every file under `$HOME`, newest first, narrowed by typing (one bounded `fd` run; see "The file browser") |
 | `$mod+Tab` | `rofi -show window` | the open windows, through wlroots' `zwlr_foreign_toplevel_manager_v1` - sway has no switcher of its own |
 | `$mod+Shift+d` | `rofi -show run` | every executable in `$PATH`; **Enter** runs it, **Shift+Enter** runs it in foot, which is how the TUIs from `packages/tools.list` are started |
 | any bar panel | `bar-pick` → `rofi -dmenu` | the fixed list the bar hands it |
+
+The Search key is the file search and nothing else: it used to open the launcher,
+which made the one key that can find a file behave like the key that already
+opens applications (`$mod+d`). Its binding lives in `~/.config/sway/config` (not
+in `19-launcher.conf`, which documents the launcher alone) and is
+`--release --no-repeat`, because the top row doubles as `F1`-`F10` while Search
+is held down (see *Virtual terminals*).
 
 It replaces **tofi** (launcher) and **fuzzel** (bar popups), so the session runs one picker
 instead of two. Measured on this machine, per process, in the same headless compositor the bar
@@ -123,13 +133,15 @@ not need (mode switcher, message bar, counter) and the box shrinks to the number
 entries it has, up to ten, so a three-item bar menu and the eight-application list both
 get a box that fits them. Matching is fzf-style fuzzy.
 
-**Icons: font glyphs in the lists, images in the launcher.** Every list this port draws itself
-puts a Font Awesome codepoint in the row text (`~/.config/bin/lib-rofi.sh`), the same alphabet
-the bar uses: it costs nothing, follows the palette and is filtered away by typing. The
+**Icons: font glyphs in the lists, images everywhere a name is asked for.** Every list this port
+draws itself puts a Font Awesome codepoint in the row text (`~/.config/bin/lib-rofi.sh`), the same
+alphabet the bar uses: it costs nothing, follows the palette and is filtered away by typing. The
 launcher and the window switcher show the application's real icon, which rofi decodes with
-gdk-pixbuf - about 13 MB while ten rows are on screen and nothing afterwards. The file browser
-is the one list with pictures instead of glyphs: `rofi-files` puts a 32 px thumbnail on every
-row that has one (see "The file browser" below).
+gdk-pixbuf - about 13 MB while ten rows are on screen and nothing afterwards. The file browser is
+the one list with pictures instead of glyphs: `rofi-files` puts a 32 px thumbnail on every row
+that has one, and a theme icon on every row that has not (see "The file browser" below).
+Notifications are a fourth consumer of the same theme, through mako's `icon-path` (see
+"Notifications").
 
 Debian's Adwaita 51 ships only monochrome *symbolic* icons and not one of this session's
 names - a drun row for "Files" had a hole where its icon should be - and the one full-colour
@@ -139,12 +151,21 @@ icon theme (`usr/share/icons/Nureb`), whose `index.theme` inherits Adwaita and h
 application that brings its own icon (foot, btop, htop, anything installed later) still shows
 it in colour. The bar's popups pass `-no-show-icons` because they draw their own glyph.
 
-The command palette needed the same treatment for a reason that is not obvious: rofi's **run**
-mode asks the icon theme for an icon *named after the binary* it would run
+The theme holds **three tables**, because three different things ask it for a name:
+
+| Table | Who asks | Example |
+|---|---|---|
+| `.desktop` names | the launcher (`rofi -show drun`) | `org.nureb.files` |
+| binary names | the command palette (`rofi -show run`) | `foot.png`, `htop.png` |
+| freedesktop names | `rofi-files` rows and mako notifications | `folder`, `text-x-generic`, `application-pdf`, `dialog-error` |
+
+The command palette needed its own table for a reason that is not obvious: rofi's **run** mode
+asks the icon theme for an icon *named after the binary* it would run
 (`rofi_icon_fetcher_query(str[0], …)`), not for a `.desktop` icon, so without an icon called
-`foot.png` a palette row has a blank 26 px column. `make-icons.sh` therefore renders a second
-table under those names, and the fixed column keeps the rows without one aligned.
-`check-system.sh` warns (never fails) when they are missing.
+`foot.png` a palette row has a blank 26 px column. The fixed column keeps the rows without one
+aligned, and `check-system.sh` warns (never fails) when they are missing. The third table is the
+one that grows with a feature: a new row icon or a new notification icon is a name added to
+`make-icons.sh` and a PNG regenerated on the build host (see the icon rule in `AGENTS.md`).
 
 That was measured, not assumed: the first attempt at this theme shipped SVGs with a literal
 private-use character, which does not survive every editor or transport, and the first
@@ -172,13 +193,13 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 
 | Script | Key / entry | What it does |
 |---|---|---|
-| `rofi-quick` | `Alt+Ctrl+O`, Settings | the switches of the session in one list: Wi-Fi and Bluetooth radios (with the pickers one row below), night light, do-not-disturb, touchpad, tablet mode (the on-screen keyboard and the rotation, see the tablet section), rotation, keyboard layout, audio, media, battery. It redraws after every switch, so the state it shows is never stale, and its probes run in parallel (two `bluetoothctl` clients, `nmcli` and `swaymsg` in sequence made it feel broken) |
+| `rofi-quick` | `Alt+Ctrl+O`, Settings | the switches of the session in one list: Wi-Fi and Bluetooth radios (with the pickers one row below), night light, do-not-disturb, touchpad, tablet mode (the on-screen keyboard and the rotation, see the tablet section) and **Calibrate rotation** while the mode is on, rotation, keyboard layout, audio, media, battery. It redraws after every switch, so the state it shows is never stale, and its probes run in parallel (two `bluetoothctl` clients, `nmcli` and `swaymsg` in sequence made it feel broken) |
 | `rofi-power` | `Alt+Escape`, `Alt+Ctrl+P`, Power menu | lock, suspend, hibernate, log out, reboot, shut down; the last three ask once more through `bar-pick` |
 | `rofi-notify` | `Alt+Ctrl+N`, Notifications | mako's history (`makoctl history -j`), Enter copies one, plus restore, dismiss-all and do-not-disturb |
 | `rofi-clean` | Free space | `df` plus what grows (trash, thumbnails, apt cache, journal, `~/.cache`), one action per row, re-measured afterwards |
 | `rofi-kill` | End a process | the heaviest twenty by resident memory; SIGTERM, then an explicit offer of SIGKILL |
 | `rofi-tz` | Time zone | `timedatectl list-timezones` with the current one marked, and the network-clock switch. It restarts waybar afterwards: `timedatectl` only rewrites `/etc/localtime`, and a running process keeps the zone glibc cached the first time it called `localtime()` |
-| `rofi-places` | Places | home, documents, downloads, pictures, the mounted filesystems; Enter browses there with `rofi-files` |
+| `rofi-places` | Places | home, documents, downloads, pictures, every mounted filesystem, and a **Mount** row for each unmounted one (a USB stick, an SD card) through `udisks2`; Enter browses there with `rofi-files`, Alt+1 unmounts the disk under the row |
 | `rofi-media` | Media | the current track and play/pause/next/previous through `playerctl` |
 | `rofi-calc` | `Alt+Ctrl+Q`, Calculator | awk, one prompt; Enter copies the result |
 | `rofi-layout` | Settings → Keyboard layout | every layout in `evdev.lst`, applied to all keyboards and kept in `~/.config/sway/config.d/90-keyboard-layout.conf` |
@@ -187,7 +208,7 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 | `rofi-dns` | DNS | the resolver of the connection that is up: Cloudflare, Google, Quad9, AdGuard, typed servers, or back to DHCP |
 | `rofi-pkg` | Packages | `apt-cache search`, then `apt-get install -y` behind a busy card; installed packages are marked before they are picked |
 | `rofi-color` | Colour | a pixel (`slurp -p` + `grim` + `ffmpeg`), and the sixteen solarized colours as swatch rows |
-| `rofi-remind` | Reminders | transient `systemd-run --user --on-active=` timers, listed back from systemd, cancelled by choosing one |
+| `rofi-remind` | Reminders | transient `systemd-run --user --collect` timers, listed back from systemd, cancelled by choosing one. A title, an **optional** note, then when: five delays or a repeat (a date and time, daily, weekdays, weekly, monthly on a day 1-28). Every custom expression is validated with `systemd-analyze calendar` and the card shows systemd's own next occurrence; title and note ride in the timer's `Description` |
 | `rofi-about` | About | model, revision, kernel, uptime, memory, disk, battery, network, compositor, processes |
 | `rofi-learn` | Learn | the manual, rendered with glow, with a search across every page |
 | `rofi-files`, `rofi-keys`, `rofi-agents` | see below | the file browser, the key view, the agents menu (`nureb-thumbnail` is the helper the first one calls for its row pictures) |
@@ -239,7 +260,7 @@ it says it twice:
   the error in red. Every message carries the same `x-canonical-private-synchronous` tag, so
   mako replaces the card instead of stacking one per step;
 * a **spinner on the bar** (`custom/busy` → `bar-busy`), a braille frame with the task name in
-  yellow, left of the updates indicator.
+  yellow, left of the updates indicator - and it is also a button.
 
 `busy start|update|stop|end|fail TAG LABEL MESSAGE [ICON]` writes one file per task in
 `$XDG_RUNTIME_DIR/nureb-busy` and signals waybar (signal 8, the same mechanism the other `bar-*`
@@ -247,13 +268,28 @@ modules use). `bar-busy` prints `{"class":"empty"}` when there is nothing to sho
 `style.css` collapses to zero width, and it drops a state file older than five minutes so a
 script killed mid-action cannot leave a spinner on the bar forever.
 
+**Clicking the spinner stops what it names.** The producer registers the command in `BUSY_STOP`
+as it starts (`pkill -f "[n]mcli.*device wifi list"` - a pattern, not a pid guessed from the
+label), `busy start` writes that line to `<tag>.stop` (mode 0600), and `bar-busy stop` - the
+module's `on-click` - turns the card into `Stopped Wi-Fi` and runs it. The producer then asks
+`busy cancelled wifi`, which answers 0 once the card is gone, and stays quiet: a killed `nmcli`
+would otherwise be read as an empty network list, or as a failure. A `.stop` from a previous run
+of the same tag is never inherited, so a producer that registers nothing has no button rather
+than the last one's. The tooltip of a stoppable card ends with *click to stop*; clicking one that
+cannot be interrupted safely shows "… cannot be stopped from here" and leaves it running:
+
+| Stoppable | Not stoppable, and why |
+|---|---|
+| the Wi-Fi scan and join, the Bluetooth scan, the `du` walk in Free space, the dictation recording | an `apt` install (dpkg's lock outlives it), the DNS switch (the profile is already written), the radio toggles (milliseconds) |
+
 ![A Wi-Fi scan in progress: the mako card and the bar spinner](../../docs/screenshots/hayato-r1-busy.png)
 
 Wired into: the Wi-Fi rescan, connect, disconnect and radio switch; the Bluetooth scan (three
-seconds), connect, disconnect and radio; the `du` walk in Free space. Two lines per action:
+seconds), connect, disconnect and radio; the `du` walk in Free space; the dictation recording.
+Two lines per action, plus a `BUSY_STOP` when it can be interrupted:
 
 ```sh
-busy start wifi Wi-Fi 'Looking for networks…' network-wireless
+BUSY_STOP=nmcli busy start wifi Wi-Fi 'Looking for networks…' network-wireless
 scan=$(nmcli --terse --fields IN-USE,SSID,SECURITY,SIGNAL device wifi list --rescan yes)
 busy stop wifi
 ```
@@ -272,22 +308,44 @@ never written and every row kept its mimetype icon - and it would replace the ma
 * the name column is padded to the longest name in the listing, which works because the theme
   is monospace, and dmenu matches the text **with the markup stripped** (verified: a filter on
   a tag name finds no row), so typing a name is not disturbed by the styling;
-* **every row that has a picture carries a 32 px thumbnail** (32 px here only - the launcher and
-  the bar popups keep the theme's 26 px). A row is `text\0icon\x1fthumbnail://<path>`, and
-  `-show-icons` with `-preview-cmd` makes rofi call `~/.config/bin/nureb-thumbnail` for the rows
-  it is about to draw, all at once, and only when that picture is not in `~/.cache/thumbnails`
-  yet. The script is ffmpeg for an image or a video frame, `pdftocairo` for a PDF's first page,
-  and nothing at all for a format it does not know (the row then has no icon);
-* Enter opens a directory, reads a text file with `bat --paging=always` (`BAT_THEME=ansi`) inside
-  the floated `popup` foot window, and shows a picture, a video frame or an SVG with **chafa** in
-  that same window: `-f sixels` is a protocol foot renders natively, so looking at an image costs
-  one foot window (16 MB measured for a 24 MP photo) instead of a browser. **firefox-esr** keeps a PDF and the
-  HTML file, because it is the reader with search, zoom and printing. The first 4 kB are checked
-  for a NUL to tell text from binary, because bat would show a binary as an empty page;
+* **every row carries an icon** (32 px here only - the launcher and the bar popups keep the
+  theme's 26 px). A row is `text\0icon\x1fthumbnail://<path>` when a picture can be decoded, and
+  `text\0icon\x1f<theme name>` when it cannot: `folder`, `go-up`, `view-hidden`,
+  `dialog-warning`, `text-x-generic`, `text-html`, `application-pdf`, `image-x-generic`,
+  `video-x-generic`, `audio-x-generic`, `x-office-document`, `package-x-generic`,
+  `application-x-executable`. The name comes from the extension plus the executable bit, both
+  already in the `find` listing, so a directory of source files is a list with a column of icons
+  instead of bare text - the report's "no icons in Files". `-show-icons` with `-preview-cmd`
+  makes rofi call `~/.config/bin/nureb-thumbnail` for the rows it is about to draw, all at once,
+  and only when that picture is not in `~/.cache/thumbnails` yet. The script is ffmpeg for an
+  image or a video frame, `pdftocairo` for a PDF's first page, and nothing at all for a format it
+  does not know (the row then keeps its theme icon);
+* Enter opens a directory and reads a text file with `bat --paging=always` (`BAT_THEME=ansi`)
+  inside the floated `popup` foot window. Anything else goes where its kind belongs, which is
+  the extension's decision: a **document** (PDF, DjVu, a comic) is opened by **papers**, a reader
+  with search, zoom, printing and annotations instead of a 280 MB browser tab; a **picture** is
+  drawn by **imv** on the GPU (zoom, pan, rotation, a slideshow of the folder), with **chafa**'s
+  sixels in one foot window as the fallback for a GPU where imv gets no EGL context (`-f sixels`
+  is a protocol foot renders natively, 16 MB measured for a 24 MP photo); a **video** is played
+  by **mpv** in its own window (`setsid`, seek, subtitles, sound, and `mpv-mpris` loaded so
+  `playerctl` and the Media menu see it); an HTML file opens as text because it *is* text, and a
+  `.deb` is Firefox's download prompt. The image family is decided **before** the text test, or
+  an SVG - a text file - would open as source in bat and never as a picture. The first 4 kB are
+  checked for a NUL to tell text from binary, because bat would show a binary as an empty page;
 * `↑ parent directory` is the first row (and the one that is *not* preselected), the dotfiles
   are toggled by the last row, and a typed path that matches nothing is taken literally, which is
   what makes Ctrl+Return useful;
 * the line under the prompt carries the path, the counts and the free space.
+
+**`rofi-files --search` is the Search key's mode**: one bounded `fd` run over `$HOME`
+(`--type f --max-results 500`, with `.cache`, `.git`, `node_modules` and
+`.local/share/containers` excluded), one `stat` for the metadata of what it found, newest first,
+each row named by its `~/relative/path` and carrying the same icon the browser would draw.
+Enter opens the file exactly as a browser row does; the list is bounded by construction (501
+rows of a 700-file home in 92 ms here, no subprocess per row), so a very broad query is answered
+by typing one more letter. Escape closes either mode with nothing, and a missing `fd` says so
+and opens the browser instead. Debian's binary is `fdfind`; `/usr/local/bin/fd` is the symlink
+the key's command uses.
 
 Thumbnails are generated **lazily and in parallel, which is rofi's doing**: it asks for the rows
 it is about to show and starts one process per row at the same time (8 started within 30 ms), so a
@@ -301,17 +359,137 @@ the command when the file is there, so a picture is decoded once, ever. The cost
 PSS for a window of fourteen thumbnail rows against 17 MB for the same window without them, and
 nothing afterwards; the numbers are in `docs/optimization.md`.
 
-Nothing is resident: the listing is built per run, and the viewer is foot's or Firefox's own
-window. `check-system.sh` fails when the script, the browser, `ffmpeg`, `pdftocairo` or `chafa` is
-missing, because Alt+Ctrl+F and the menu entry would silently do nothing (or answer "no browser is
-installed"), and warns when the thumbnail cache is not writable or the script stops asking for
-pictures.
+Nothing is resident: the listing is built per run, and the viewer is imv's, papers', mpv's,
+foot's or Firefox's own window. `check-system.sh` fails when the script, the browser, `imv`,
+`papers`, `mpv`, `mpv-mpris`'s plugin, `ffmpeg`, `pdftocairo` or `chafa` is missing, because
+Alt+Ctrl+F and the menu entry would silently do nothing (or answer "no browser is installed"),
+and warns when the thumbnail cache is not writable or the script stops asking for pictures.
 
-`usr/local/bin/xdg-open` is two dozen lines around the same binary: a URL goes to Firefox as it
-is and a path becomes a `file://` URL, which is what foot's ctrl+click, `yt-dlp --print-trailer`
-and any script that shells out to `xdg-open` expect. There is no desktop portal in this image.
+`usr/local/bin/xdg-open` is two dozen lines around the same question: a URL goes to Firefox as it
+is, and a path goes to **`nureb-view`** - the same rules a double click in pcmanfm applies - with
+the browser as the answer for a user who has no session `bin` directory (root, an ssh session).
+That is what foot's ctrl+click, `yt-dlp --print-trailer` and any script that shells out to
+`xdg-open` expect, and there is no desktop portal in this image.
+A file opened from **outside** the session - a download manager, a terminal, a `file://` link -
+goes through `~/.config/bin/nureb-view` (`etc/xdg/mimeapps.list` and `org.nureb.view.desktop`),
+which applies the same rules as the browser: text in `bat`, a document in `papers`, a picture in
+`imv` (chafa when imv gets no EGL context), a video in `mpv`, and an HTML page, an EPUB or a
+`.deb` in Firefox - so a double click on a video does not open it in the browser.
 
 ![rofi-files over ~/Documents, with the sizes and dates dimmed](../../docs/screenshots/hayato-r1-files.png)
+
+## Files in a window (pcmanfm)
+
+The mouse half of the same story is **pcmanfm** (`uis/sway/packages.list`, with `gvfs`). It is a
+second entry, not a replacement: the Search key and `Alt+Ctrl+F` keep opening `rofi-files` (one
+process, no window, a list a key opens and a key closes), and `Search+Shift` opens the window for
+what a list cannot do - drag and drop, several files at once, rename in place, the trash. The
+launcher carries both rows (**Files**, **Files (window)**) and so does the root menu.
+
+* **Why not nautilus**: on forky its closure is **504 packages** (GTK4 + libadwaita, 38 MB of ICU,
+  GStreamer, 31 MB of `samba-libs`), it needs a **resident indexer** (`localsearch` crawling
+  `$HOME`) and it decodes thumbnails through glycin's sandboxed helpers. pcmanfm is 229 packages
+  and 4.9 MB, on the GTK3 the image already has for waybar, with no indexer and no
+  daemon. The measurements and the rejected alternative are in `docs/omarchy-gap.md` §1.
+* **A double click opens what the Files list opens.** `/etc/xdg/mimeapps.list` sends the types to
+  `org.nureb.view.desktop`, whose `Exec` is `~/.config/bin/nureb-view` - the same rule table as
+  `rofi-files` (which reads an HTML file as text): text in `bat`, a document in `papers`, a
+  picture in `imv` (or `chafa`'s sixels when imv gets no EGL context), a video in `mpv`, and an
+  HTML page, an EPUB or a `.deb` in Firefox. There is
+  no desktop portal here, so that pair *is* the "open with" mechanism for every GIO program.
+  **A trap worth knowing**: GIO silently drops a `.desktop` whose `Exec` program does not exist,
+  so a missing executable bit on `nureb-view` reads as "no default application" rather than as an
+  error - which is why `check-system.sh` asks `gio mime image/png` *and* checks the mode. No
+  `mimeinfo.cache` regeneration is needed for the associations to resolve (verified).
+* **The GTK3 half of the palette** is two files in `home/.config/gtk-3.0/`: `settings.ini`
+  (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `Nureb`, `JetBrains Mono 10`, animations
+  off) and `gtk.css`, which repaints the surfaces with explicit selectors at the same specificity
+  Adwaita uses and is parsed last. The colours are **opaque**: a translucent window would show the
+  wallpaper through its own text. pcmanfm is the only window whose look comes from the GTK theme
+  (waybar is GTK3 too but paints the bar from its own stylesheet, foot is pixman and rofi draws
+  its own surfaces), so this is a stylesheet, not a theme.
+* **The icon names came with it**: Adwaita 51 ships no full-colour `folder`, `user-home` or
+  `drive-harddisk` at all, so `scripts/make-icons.sh` gained a **fourth table** (the places, the
+  actions and the mimetypes the sidebar and the icon view ask for by name) and the Nureb theme now
+  carries 215 PNGs in `48x48/apps` + `scalable/apps`.
+* **The settings live in `etc/xdg/pcmanfm/default/pcmanfm.conf`**: `terminal=foot` (under
+  `[config]`, which is where libfm reads it, not the `[ui]` section the dialog suggests - the
+  default `x-terminal-emulator` is not installed here, so F4 would do nothing), `use_trash=1`
+  (`gvfsd-trash` is what makes it restorable), `thumbnail_max=4096` **kilobytes** (libfm decodes on
+  the UI thread with gdk-pixbuf, and a 24 MP JPEG costs ~83 MB for a 128 px thumbnail),
+  `bm_open_method=0` (ask GIO, which is how `mimeapps.list` is reached), `autorun=0`, the Network
+  places off (`gvfs-backends` is 31 MB of `samba-libs` and is not installed) and a 900x600 window.
+* **`Search+Shift` is bound on release**, like the Search key next to it: sway matches a release
+  binding against the modifiers held when the key comes up, so Search released with Shift still
+  down lands on pcmanfm and Search alone falls through to the file search. The top row doubles as
+  F1-F10 while Search is held (keyd), which is why neither binding fires on the press.
+* **What it does not do**: its thumbnails are images only (libfm ignores the freedesktop
+  `.thumbnailer` files, so a PDF or a video keeps its mimetype icon there, while `rofi-files`
+  draws both through `nureb-thumbnail`); SMB and phone mounts need `gvfs-backends`; and
+  `pcmanfm --desktop` is X11-only, so nothing starts it on sway. Its Devices pane does mount a
+  USB stick, because `udisks2` is installed and `gvfs`' volume monitor is the client - the same
+  `udisksd` `rofi-places` talks to through `udisksctl`, and there is no `udiskie` (the resident
+  tray daemon) on purpose.
+
+## Files in a terminal (nureb-find)
+
+**Alt+Search** opens `nureb-find`: `fd` streamed into **fzf** in a floated foot window, one row
+per file under `$HOME`, a preview pane on the right, and Enter handing the choice to `nureb-view`
+- the same opener a double click in pcmanfm reaches. It is the third answer to "where is that
+file", and the three are one feature with three shapes: `rofi-files --search` is a *menu* (rows
+with icons and thumbnails, open before you type, one bounded `fd` run, a list you scroll),
+pcmanfm is the *window* (drag and drop, the trash), and this is the *filter* - uncapped, live
+while the walk is still running, with the file's contents beside it.
+
+**Why fzf and nothing new.** It is already in the image for the shell's `Ctrl-R`/`Ctrl-T`/`Alt-C`
+bindings, it matches *while* the producer streams instead of after it, and `--read0`/`--print0`
+make a name with a space, a tab or a newline one row and one argument. Measured on the build host
+(19.4k files after the excludes), prompt to a keystroke, through a pty:
+
+| | first paint | keystroke | PSS while open |
+|---|---|---|---|
+| **fzf 0.74.4** over `fd` | **24 ms** | **5-35 ms** | **35.6 MB** |
+| fzf's own `--walker`, same tree | 9-16 ms | 7-21 ms | the same process |
+| the menu, for comparison | rofi's own start | rofi filters a fixed list | 17-23 MB (`docs/optimization.md` §8) |
+
+* **`skim`** (Debian has it) is the same program in Rust with no advantage here: it would be a
+  second fuzzy finder in a 4 GB image, against one that is already wired into the shell.
+* **`television`/`tv`** is the fast new one and is **not packaged in forky**, so it would mean
+  `cargo` on the device or a vendored binary - the same rule that keeps `workstyle` out.
+* **`fzy`** is tiny and slower than fzf on big lists, with no preview and no bindings to build on.
+* **fzf's built-in `--walker`** would drop the `fd` dependency for this one feature and is 8 ms
+  faster to first paint, but it does **not** read `.gitignore` - on a home full of repos that is
+  build output and vendor trees in the list. `fd` is already installed and already the tree walker
+  of every other file feature, so the list is one tool's answer everywhere.
+* Memory is twice the menu's (17.1 MB of rofi against 35.6 MB of fzf), and that is the trade: 35.6
+  MB of fzf plus foot's ~25 MB while the window is open, nothing afterwards. The menu stays the
+  cheap answer.
+
+Four things that are not obvious, each of them a bug that was caught:
+
+* **`--print0` makes `fd` prefix every relative path with `./`** (it does not in newline mode), so
+  every row and every path handed to the opener carried two characters nobody types.
+  `--strip-cwd-prefix` is what removes them.
+* **Dotfiles are included here and hidden in the menu.** The menu's pool is capped, so a dotfile
+  takes a slot a likely answer could use; here the pool is the whole tree and `~/.config` is a
+  place people look. The four excludes (`.cache`, `.git`, `node_modules`, `.local/share/containers`)
+  are the same ones both use - `.cache` alone is 330k of the 350k files in this home.
+* **The preview draws pictures with `chafa -f symbols`, not sixels.** The preview is a pane of the
+  same terminal, not a window of its own, so a sixel picture would paint over fzf's next redraw.
+  The picture itself is `nureb-thumbnail`'s (the generator the menu uses, into
+  `~/.cache/thumbnails/normal/`), bounded by `timeout 8`: a preview that waits is worse than a
+  preview that says nothing. Text is `bat --line-range=:300` at the pane's own width, taken from
+  the `FZF_PREVIEW_COLUMNS`/`LINES` fzf exports.
+* **`set -e` does not see fzf's Escape.** The status of `fd | fzf | xargs` is `xargs`'s, so
+  cancelling is not an error - and `--no-multi` keeps a Tab that marked three rows from opening
+  one and saying nothing about the others.
+
+The window is floated and centred by `etc/sway/config.d/29-file-search.conf` (`app_id=nureb-find`,
+1200x760), and the binding is on release for the same reason as the Search key beside it: the top
+row doubles as `F1`-`F10` while Search is held. `check-system.sh` asks for the binding, the
+executable bit, `fzf`, the `system-search` notification icon and (through `nureb-view`) the
+opener, because each one on its own makes the key look dead: a missing filter is an *empty list*,
+not an error message.
 
 ## The key scheme
 
@@ -323,7 +501,8 @@ own it. The whole set is the *Shortcuts* page of the manual
 
 | Group | Keys | Where it lives |
 |---|---|---|
-| launcher, switcher, commands | `Search`/`Alt+D`, `Alt+Tab`, `Alt+Shift+D` | `19-launcher.conf` |
+| launcher, switcher, commands | `Alt+D`, `Alt+Tab`, `Alt+Shift+D` | `19-launcher.conf` |
+| file search | `Search` (`rofi-files --search`) and `Alt+Search` (`nureb-find`) | `home/.config/sway/config` |
 | root menu | `Alt+Space` (Omarchy: `Super+Space`) | `24-keys.conf` |
 | panels | `Alt+Ctrl+A/B/W` → audio, Bluetooth, network (Omarchy: `Super+Ctrl+A/B/W`) | `24-keys.conf` |
 | system | `Alt+Escape` and `Alt+Ctrl+P` power menu (`rofi-power`), `Alt+Ctrl+L` lock, `Alt+Shift+Escape` lock+sleep, `Alt+Ctrl+Escape` sleep | `21-lock-screen.conf`, `22-sleep.conf`, `24-keys.conf` |
@@ -711,30 +890,49 @@ that. `etc/sway/config.d/28-tablet.conf` binds the two states to
 | Step | What it does | Why |
 |---|---|---|
 | keyboard | `wvkbd-mobintl`, solarized, `JetBrains Mono`, 300 px portrait / 240 px landscape, radius 8, alpha 242 | the panel is the only input once the keyboard is folded |
+| physical keyboard | `swaymsg input type:keyboard events disabled` (re-enabled by `off`) | the folded keys are under the screen, and a keystroke there is a keystroke. It is switched off **only after the on-screen keyboard is confirmed alive**: from that moment the touchscreen is the only input, so a wvkbd that failed must leave the physical keyboard on. The Lock key still suspends, because logind reads `/dev/input` itself and the switch is a separate device |
 | touchpad | `swaymsg input type:touchpad events disabled` | it is on the back of the screen now, and pressure on it is input nobody meant |
 | rotation | a 1 Hz poller over `cros-ec-accel`'s `in_accel_{x,y,z}_raw` applying `swaymsg output <focused> transform <t>` | the accelerometer is in the kernel; no package, no D-Bus service |
 
-`off` undoes the three in reverse (keyboard gone, touchpad back, `transform
+`off` undoes the three in reverse (keyboard gone, both inputs back, `transform
 normal`), and `status` prints `on · screen <transform>` or `off` - which is what
 the Settings row shows. `toggle` is the Settings row itself, for a mode that did
-not follow the switch.
+not follow the switch. `off` also restores the inputs when the state directory is
+gone, which is the path a person cannot reach without a mouse.
 
-The mapping is the panel frame ChromeOS uses (X to the right, Y to the top of
-the screen) over a reading where the screen faces up gives `+Z`:
+The mapping is a table in `orient()`, and **the card's first report said the screen
+came up upside down**: the accelerometer in this panel sits 180° around from the
+frame the first table assumed, so an upright device reads `-Y`, not `+Y`, and the
+four in-plane rules are the mirror image of the assumption (the flat rule is
+unchanged). Screen-up gives `+Z`:
 
 | Device | Reading | `transform` |
 |---|---|---|
 | flat, screen up | `+Z` | `normal` |
-| upright, landscape | `+Y` | `normal` |
-| upside down | `-Y` | `180` |
-| turned clockwise | `-X` | `90` |
-| turned counter-clockwise | `+X` | `270` |
+| upright, landscape (facing you) | `-Y` | `normal` |
+| upside down | `+Y` | `180` |
+| turned clockwise | `+X` | `90` |
+| turned counter-clockwise | `-X` | `270` |
 | no axis dominant (in the hand, mid-turn) | - | keep the current one |
 
-The thresholds are `0.85` for the flat check and `0.75` for an axis (about 40°
+The thresholds are `0.85` for the flat check and `0.75` for an axis (about 41°
 off vertical), so tilting the device does not flip the screen; only a real turn
-does. If the screen turns the wrong way on some unit, the four values in
-`orient()` are the whole fix.
+does. **A sign in a table is a guess until it is checked on a unit**, which is why
+there is a calibration instead of a hardcoded frame: `tablet-mode calibrate`
+(Settings → **Calibrate rotation**, only listed while the mode is on) reads the
+accelerometer in the pose the person is holding - upright, screen facing them -
+and writes the direction that must look upright to
+`~/.config/nureb/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on
+every pass and derives all four positions from the one reference: the readings run
+around the device in the counter-clockwise order `+X, +Y, -X, -Y`, so each 90° the
+reading turns is 90° of transform, the reference getting `normal` and the rest
+90/180/270 in that order. The file is **optional** (no file means the table
+above), a malformed one is ignored silently (`orient()` runs once a second, where a
+notification would be the wrong answer), and deleting it is the way back.
+`tablet-mode calibration` prints which mapping is in use, `calibrate` refuses to
+store anything while the device is flat or halfway between two positions (both say
+"hold the screen upright"), and it applies `normal` at once, because the pose that
+was just calibrated is the one that has to look upright.
 
 Nothing about this is resident in laptop mode: the state is a directory in
 `$XDG_RUNTIME_DIR/nureb-tablet` holding the two pids and the output name, so a
@@ -746,7 +944,9 @@ uses (`-H`, `-L`, `-R`, `--fn`, the colours, `--alpha`); it has no `--dock` or
 layer-shell surface at the bottom edge, which is what `--dock` would do.
 
 Settings (`Alt+Ctrl+O`) carries **Tablet mode** next to **Rotation**: the second
-is the manual turn (`rofi-quick --rotation-menu`), the first is this script. The
+is the manual turn (`rofi-quick --rotation-menu`), the first is this script, and
+**Calibrate rotation** (only while the mode is on) is the pose the person is
+holding. The
 on-screen keyboard's layout is the mobile-international one compiled into
 `wvkbd-mobintl`, where each key's variants are one `Cmp` away: `Cmp` then `a`
 opens `á à â ä …` and the one you tap is inserted (`Cmp` then `?` reaches `¿`).

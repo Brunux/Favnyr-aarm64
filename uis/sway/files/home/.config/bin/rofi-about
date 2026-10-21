@@ -4,7 +4,9 @@
 # Deboma has an "About" window from its shell; the honest version here is the
 # same facts as a rofi list (`fastfetch` in a terminal is one row away, and it is
 # what paints the logo).  Everything is read, nothing is changed - the rows have
-# no action, so Enter closes the list.
+# no action, so Enter closes the list.  The fastfetch window is the exception to
+# "nothing stays": it is a terminal, held open until it is closed, because a
+# program that draws one picture and exits takes the window with it.
 #
 # The values come from the kernel and from procfs/sysfs, not from a package: a
 # system that answers "which kernel am I running" without inxi is a system that
@@ -89,7 +91,7 @@ trap 'rm -f "$tmp"' EXIT
 	ui_row "$UI_I_CODE" 'Processes' "$(ps -e --no-headers 2>/dev/null | wc -l) processes" -
 	ui_heading 'more'
 	ui_row "$UI_I_CLIPBOARD" 'Copy this summary' 'the same lines as text' copy
-	ui_row "$UI_I_TERM" 'The full picture' 'fastfetch, in a terminal' fastfetch
+	ui_row "$UI_I_TERM" 'The full picture' 'fastfetch, until you close it' fastfetch
 } >"$tmp"
 
 key=$(ui_pick 'About' 'Enter closes · the last two rows copy or open' <"$tmp") || exit 0
@@ -98,8 +100,16 @@ case ${key:-} in
 copy) ui_copy "$summary" 'System summary copied' ;;
 fastfetch)
 	if have fastfetch; then
-		exec foot --app-id=popup -e fastfetch
+		# --hold: fastfetch draws once and exits, and without this the window it
+		# was drawing in closes with it - "the full picture" flashed for a tenth
+		# of a second.  The app-id stays `popup`, which is the float rule in
+		# /etc/sway/config.d/25-bar-panels.conf; the closing line says why the
+		# window is still there and how to be rid of it, since holding it is new
+		# (foot's own binding, Control+Shift+W: there is no [key-bindings] section
+		# in ~/.config/foot/foot.ini to change it).
+		exec foot --app-id=popup --hold -e sh -c \
+			'fastfetch; printf "\n  fastfetch has finished · close this window with Ctrl+Shift+W\n"'
 	fi
-	ui_say About 'fastfetch is not installed (packages/tools.list)' critical
+	ui_say About 'fastfetch is not installed (packages/tools.list)' critical "$UI_ICON_ERROR"
 	;;
 esac

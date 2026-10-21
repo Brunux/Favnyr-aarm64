@@ -4,9 +4,15 @@
 # Deboma's capture menu is a Quickshell panel; here it is a rofi list over tools
 # the image already has.  Every row is one command that ends before the list is
 # closed again: grimshot takes the picture (screen, area or window, saved under
-# ~/Pictures and named in a notification), swappy annotates one, tesseract reads
-# the text out of a region and zbarimg reads a QR or barcode out of one.  Both
-# of those copy the result to the clipboard and say so.
+# ~/Pictures/Screenshots/<date> and named in a notification), swappy annotates
+# one, tesseract reads the text out of a region and zbarimg reads a QR or
+# barcode out of one.  Both of those copy the result to the clipboard and say
+# so.
+#
+# grimshot is never called directly from here: ~/.config/bin/screenshot is the
+# wrapper that decides the folder (one directory per day, so a picture is found
+# by the day it was taken) and hands grimshot its arguments unchanged, including
+# -n and the path on stdout that annotate reads.
 #
 # Recording is the exception on purpose: wf-recorder keeps running after the
 # menu closes, so it is started here, announced on the bar and in a mako card,
@@ -38,16 +44,19 @@ recording() {
 
 # grimshot writes the file itself and prints its path; `-n` makes it announce
 # where it went, which is also how a screenshot is found again (the
-# notification carries the image).
+# notification carries the image).  Through the wrapper, so "where it went" is
+# ~/Pictures/Screenshots/<today>, and the name grimshot generates there is the
+# one the notification shows.
 screenshot() { # ACTION TARGET
-	grimshot -n "$1" "$2" || ui_say Capture 'Nothing was captured' critical
+	"$dir/screenshot" -n "$1" "$2" || ui_say Capture 'Nothing was captured' critical
 }
 
 # Annotate: grimshot saves the region, swappy opens it in a window and writes
 # the edits back over the same file.  It exits only when that window closes, so
-# the notification that follows is the confirmation.
+# the notification that follows is the confirmation.  The wrapper prints the
+# path on stdout, which is the one thing this needs from it.
 annotate() {
-	_path=$(grimshot save area) || exit 0
+	_path=$("$dir/screenshot" save area) || exit 0
 	[ -n "$_path" ] || exit 0
 	swappy -f "$_path" || true
 	if [ -s "$_path" ]; then
@@ -166,13 +175,19 @@ stop_recording() {
 tmp=$(mktemp "${TMPDIR:-/tmp}/capture.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
 
+# Where the screenshots are (the date directory when one exists), for the rows
+# and for the row that opens it.  It is the folder the wrapper writes to.
+_shotdir=$HOME/Pictures/Screenshots
+[ -d "$_shotdir" ] || _shotdir=$HOME/Pictures
+
 {
 	if recording; then
 		ui_heading 'recording'
 		ui_row "$UI_I_STOP" 'Stop recording' "$(basename "$(cat "$rec_file" 2>/dev/null || echo recording)")" stop "$UI_RED"
 	else
-		ui_row "$UI_I_CAMERA" 'Screenshot · the whole screen' "$HOME/Pictures" 'shot:save:screen'
-		ui_row "$UI_I_CROP" 'Screenshot · an area' 'saved to ~/Pictures' 'shot:save:area'
+		_day=$(date +%Y-%m-%d)
+		ui_row "$UI_I_CAMERA" 'Screenshot · the whole screen' "saved to ~/Pictures/Screenshots/$_day" 'shot:save:screen'
+		ui_row "$UI_I_CROP" 'Screenshot · an area' "saved to ~/Pictures/Screenshots/$_day" 'shot:save:area'
 		ui_row "$UI_I_CROP" 'Screenshot · an area, to the clipboard' 'paste it anywhere' 'shot:copy:area'
 		ui_row "$UI_I_IMAGE" 'Screenshot · a window' 'pick one with the pointer' 'shot:save:window'
 		ui_row "$UI_I_CAMERA" 'Annotate an area' 'arrows, text, crop (swappy)' annotate
@@ -183,7 +198,7 @@ trap 'rm -f "$tmp"' EXIT
 	ui_row "$UI_I_FILE" 'Text from an area' 'OCR (tesseract) → clipboard' ocr
 	ui_row "$UI_I_QR" 'QR code from an area' 'zbarimg → clipboard' qr
 	ui_row "$UI_I_QR" 'Make a QR code' 'the Wi-Fi password, or any text' make-qr "$UI_DIM"
-	ui_row "$UI_I_FILES" 'Open the pictures folder' "$HOME/Pictures" folder "$UI_DIM"
+	ui_row "$UI_I_FILES" 'Open the pictures folder' "$_shotdir" folder "$UI_DIM"
 } >"$tmp"
 
 key=$(ui_pick 'Capture' 'Enter runs · Escape closes' <"$tmp") || exit 0
@@ -205,5 +220,5 @@ rec:area)
 	;;
 stop) stop_recording ;;
 make-qr) exec "$dir/rofi-qr" ;;
-folder) exec "$dir/rofi-files" "$HOME/Pictures" ;;
+folder) exec "$dir/rofi-files" "$_shotdir" ;;
 esac

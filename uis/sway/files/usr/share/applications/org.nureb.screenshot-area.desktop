@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
 Name=Screenshot (area)
-Comment=Select an area with slurp and save it with grim
-Exec=grimshot save area
+Comment=Select an area with slurp and save it with grim, into Pictures/Screenshots/<today>/
+Exec=/home/brunux/.config/bin/screenshot save area
 Icon=applets-screenshooter
 Terminal=false
 Categories=Graphics;

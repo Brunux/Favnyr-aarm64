@@ -44,6 +44,23 @@ access point sets one; it is not a failure. A saved profile that never connects
 is usually bound to an interface name (`interface-name=wlan0`) - the profiles
 this image imports have that line stripped on purpose.
 
+## DNS: what a name resolves to
+
+The resolver is NetworkManager's (`/etc/resolv.conf` is written from the active
+connection), so **there is no `resolvectl`** here: systemd-resolved is not
+installed and asking it answers *command not found*, which is not a fault. The
+two questions, and the tools that answer them:
+
+```sh
+dig example.com +short          # what the current server answers (bind9-dnsutils)
+dig @1.1.1.1 example.com        # what a specific server answers
+nmcli -f ipv4.dns,ipv4.ignore-auto-dns connection show "$(nmcli -g GENERAL.CONNECTION device show wlp1s0)"
+```
+
+The DNS menu (`Alt+Space` → **DNS**) writes the first two properties and brings
+the connection back up; the profile holds the same values afterwards, so reading
+them back is the check, not `resolv.conf` (which is regenerated).
+
 ## Bluetooth
 
 ```sh
@@ -105,13 +122,20 @@ glow /usr/share/doc/nureb/01-welcome.md    # the message names the problem
 
 ## A file does not open, or opens in the wrong place
 
-The file browser reads text with `bat` and hands everything else to
-**firefox-esr**; `xdg-open` is a two-dozen-line shim around the same binary. If a
-file only produces a notification, the browser is gone:
+The file browser picks the program by what the file is: text goes to `bat`, a
+document (PDF, DjVu, a comic) to **papers**, a picture to **imv** (or `chafa`,
+drawn in a foot window, when imv cannot get a graphics context), a video to
+**mpv**, and an EPUB, a `.deb` or anything else to **firefox-esr**; `xdg-open`
+is a two-dozen-line shim that sends a URL to the browser and a path to the same
+rules. If a file only produces a notification, the program is gone:
 
 ```sh
-command -v firefox-esr || sudo apt install firefox-esr
+command -v firefox-esr papers imv mpv chafa bat
 ```
+
+A video that opens in Firefox instead of mpv means mpv is missing; a document
+that opens in the browser means `papers` is; a picture that opens in the browser
+means both `imv` and `chafa` are.
 
 ## The bar shows a spinner that never ends
 
@@ -133,6 +157,14 @@ disappear with no log line:
 busctl --user list | grep Notifications
 pgrep -a mako || exec mako
 ```
+
+A card **without its picture** is a different fault with no log line either: the
+notification arrived, but mako could not resolve the icon name the sender gave
+it. mako reads no icon-theme metadata - it walks the roots named by
+`icon-path` in `~/.config/mako/config`, which is where the session's own
+`/usr/share/icons/Nureb` has to be. `check-system.sh` reports both halves
+(`icons=1` and an existing `icon-path`), and the names themselves are rendered by
+`scripts/make-icons.sh` on the build host.
 
 ## Icons render as boxes
 
@@ -178,9 +210,29 @@ The mode can be switched by hand - `Settings` → **Tablet mode**, or
 arrive but the screen is folded. If the keyboard comes up and the screen stays
 sideways, the accelerometer is the missing half: the poller reads
 `/sys/bus/iio/devices/iio:device*/in_accel_*_raw` of the `cros-ec-accel` device,
-and `check-system.sh` reports its absence as a FAIL. If the screen turns the
-wrong way, the four `transform` values in `orient()` are the whole mapping - see
-the table at the top of `~/.config/bin/tablet-mode`.
+and `check-system.sh` reports its absence as a FAIL.
+
+**The screen is upside down, or turns the wrong way.** The built-in mapping is
+one guess about how the panel's accelerometer is mounted, and units differ.
+Hold the card upright in your hands, screen facing you, in tablet mode, and run
+`~/.config/bin/tablet-mode calibrate` (or **Settings → Calibrate rotation**, which
+is only listed while the mode is on): it reads the sensor there and stores
+`normal=<axis><sign>` in `~/.config/nureb/tablet.conf`, one line, and the four
+positions are derived from it at once. `~/.config/bin/tablet-mode calibration`
+says `calibrated y-` or `default y-`; deleting the file goes back to the built-in
+mapping, and `check-system.sh` reports a calibration file that does not parse,
+because `orient()` ignores it silently. Calibrating while the device lies flat is
+refused on purpose: flat says nothing about which way is up. The four
+`transform` values in `orient()` are the mapping itself - see the table at the
+top of `~/.config/bin/tablet-mode`.
+
+**The physical keyboard still types in tablet mode.** It should not: the mode
+switches `type:keyboard` off with the touchpad, after the on-screen keyboard has
+started. `swaymsg -t get_inputs -r | grep -c '"type": "keyboard"'` and
+`~/.config/bin/tablet-mode status` are the two readings; if the keyboard is off
+and the on-screen one never appeared, `tablet-mode off` (or folding the keyboard
+back) restores it, and the reason is in what wvkbd printed - usually no Wayland
+session for that process.
 
 Nothing about this runs in laptop mode: one process for the keyboard and one
 sleeping for a second at a time for the rotation, both gone when the keyboard is

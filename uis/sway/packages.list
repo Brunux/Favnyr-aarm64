@@ -65,8 +65,75 @@ poppler-utils
 # chafa draws a picture, a video frame or an SVG with sixels, which foot renders
 # natively, so looking at one costs a foot window (~16 MB measured for a 24 MP
 # photo) instead of a browser. 281 kB plus 421 kB of libchafa0t64, and nothing
-# resident: the window is the viewer. rofi-files is what starts it.
+# resident: the window is the viewer. It was the image viewer until imv arrived
+# and is now the *fallback*: imv needs a working EGL context, and a GPU where it
+# does not get one (Panfrost is the case this port has hit before) still shows
+# the picture in sixels instead of nothing. rofi-files and nureb-view try imv
+# first and fall back here.
 chafa
+# The image viewer: imv 5.0.1 draws the picture on the GPU (one texture, scaled
+# by the renderer), zooms, pans, rotates, plays an animated GIF and steps through
+# the directory it was given, so looking at a photo is a viewer and not a
+# terminal full of sixels. 375 kB, and it reads PNG/JPEG/GIF/TIFF/WebP/BMP/
+# farbfeld plus SVG, HEIF, AVIF and JXL through libraries the image already has
+# (librsvg2-2, libheif1, libjxl0.11). Debian installs no /usr/bin/imv - the
+# package ships imv-wayland and imv-x11 plus a /usr/libexec/imv/imv wrapper that
+# picks one - so scripts/rootfs-setup.sh adds the short name, the same way it
+# does for bat and fd. rofi-files, nureb-view and xdg-open all call `imv`.
+imv
+# The player: mpv 0.41 decodes anything ffmpeg does (ffmpeg is already in
+# packages/tools.list for yt-dlp), seeks, shows subtitles, takes the XF86Audio*
+# keys and draws through libplacebo360 (installed) on the Wayland context. 3.5 MB
+# plus libass, libsixel1, libbluray/libdvdnav/libcdio, libva and friends. Before
+# this, a video container fell through chafa's "unknown file format" to Firefox,
+# which cannot play it either; rofi-files and nureb-view now hand it to mpv,
+# detached with setsid so the menu exits instead of waiting for the film.
+mpv
+# 83 kB, and it installs /etc/mpv/scripts/mpris.so: without it mpv is invisible
+# to playerctl, so rofi-media says "nothing is playing" and the bar's player
+# module stays empty. It is a plugin mpv loads from its script directory, and
+# nureb-view starts mpv with --no-config (so a profile from another machine
+# cannot decide what the session does) which empties those directories - the
+# script is therefore passed explicitly as --script=/etc/mpv/scripts/mpris.so.
+mpv-mpris
+# The document viewer: PDF, DjVu and comics (CBZ/CBR/CB7/CBT), TIFF and
+# Illustrator, 7.2 MB plus libppsdocument/libppsview and the GTK4 stack they need
+# (libadwaita-1-0, libgtksourceview-5 for annotations, libspelling/libenchant for
+# the note spell check, libdjvulibre for DjVu). A reader with search, zoom,
+# printing and annotations, where a PDF used to be a 280 MB browser tab. It does
+# NOT open EPUB - papers 49's MimeType list has no application/epub+zip, whatever
+# docs/omarchy-gap.md said - so an EPUB still goes to the browser, and foliate
+# (12.4 MB, in forky) is the package that would fix that if it is wanted.
+papers
+# Mounting removable media as an unprivileged session, which until now was not
+# possible at all: udisks2 3.2 MB plus libblockdev (eight modules) and
+# libcryptsetup/libnvme, providing /usr/bin/udisksctl and the
+# org.freedesktop.UDisks2 service on the system bus. It is D-Bus activated -
+# nothing runs until something asks - and it is what pcmanfm's Devices pane and
+# gvfs' volume monitor talk to; rofi-places calls udisksctl to mount and unmount.
+# udiskie is deliberately NOT installed: it is a resident Python daemon
+# (python3-gi + gir1.2-gtk-3.0 + python3-docopt/python3-yaml, none of them here)
+# whose remaining job would be a tray icon this bar does not have. On-demand
+# udisksctl in rofi-places is the same result with no daemon.
+udisks2
+# The file manager, for the mouse: drag and drop, multi-select, rename and trash
+# in place are what rofi-files does not do (it is a list and a key). pcmanfm is
+# GTK3 - which waybar and rofi already pull in - so this costs 4.9 MB of pcmanfm
+# plus libfm and no new toolkit at all; GTK4's nautilus is the same job for a
+# 504-package closure, 38 MB of ICU, 31 MB of samba-libs and a localsearch
+# indexer that crawls $HOME (docs/omarchy-gap.md has both measurements). Three
+# things it does not do, all of them documented at the setting: thumbnails are
+# images only (libfm's own gdk-pixbuf loader, it ignores .thumbnailer files),
+# the Devices pane needs udisks2, and it has no desktop mode on Wayland. A double
+# click resolves through /etc/xdg/mimeapps.list -> ~/.config/bin/nureb-view, so
+# it opens what rofi-files opens; /etc/xdg/pcmanfm/default/pcmanfm.conf sets
+# terminal=foot and bounds a thumbnail decode at 4 MB.
+pcmanfm
+# gvfs is what gives pcmanfm a working Trash (gvfsd-trash) and a local volume
+# monitor: 431 kB, plus gvfs-daemons and gvfs-libs. gvfs-backends is deliberately
+# not here - it is where samba-libs (31 MB) and the mtp/gphoto/cdio device
+# backends come from, and pcmanfm.conf turns the Network places off instead.
+gvfs
 # foot is the session terminal: no GPU renderer and no Rust runtime, so a window
 # costs about half the memory of an alacritty one on a 4 GB machine. The bar's
 # popups run here as well (with --app-id=popup, see bar-panels.conf), and

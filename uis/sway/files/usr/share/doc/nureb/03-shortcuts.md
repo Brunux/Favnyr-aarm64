@@ -12,7 +12,10 @@ the command. This page is the tour.
 
 | Keys | Does |
 |---|---|
-| Search key (or Alt+D) | launcher: applications |
+| Search key | file search: every file under your home, narrowed by typing (Enter opens it, Enter on a folder browses there) |
+| Alt+Search | the same files in a terminal (`nureb-find`): live filtering as you type, a preview on the right, Enter opens the file |
+| Search+Shift | the file manager in a window (pcmanfm): drag and drop, several files at once, rename, the trash |
+| Alt+D | launcher: applications |
 | Alt+Space | the root menu (the bar's menu button, on the keyboard) |
 | Alt+Tab | window switcher |
 | Alt+Shift+D | command palette (`$PATH`; Shift+Enter runs it in foot) |
@@ -30,6 +33,36 @@ the command. This page is the tour.
 | Alt+Shift+E | exit the session (asks first) |
 | Alt+grave / Alt+Shift+grave | scratchpad: show the hidden window / send the focused one there |
 | Alt+R | resize mode (arrows, Return or Escape to leave) |
+
+The **Search key** is the file search; the applications are **Alt+D**, one key
+away. The search is one `fd` run over your home (queues, caches and build trees
+left out), listed with the same icons the file browser draws, so typing
+`invoice` finds the file by its name wherever it is.
+
+**Alt+Search is the same search in a terminal.** It opens `nureb-find`: `fzf`
+over every file under your home - the same four exclusions, but with the dotfiles
+included, since the whole tree is the pool and `~/.config` is a place people look
+for things. The list narrows as you type and the pane on the right previews the
+row under the cursor: text is read in place, a picture or the first page of a PDF
+is decoded once and drawn in the terminal, anything else is named by its type and
+size. Enter opens the choice with the same rules the file browser uses (text in
+`bat`, a picture in `imv`, a video in `mpv`, a PDF in the reader); **Ctrl+Y**
+copies its path instead, which is what a search in a terminal can do that a menu
+cannot, and Escape closes it.
+
+The two keys sit next to each other because they answer different questions. The
+Search key opens a *menu* - rows with icons and thumbnails, ready before you can
+type, one bounded run over the tree, and a list you scroll. Alt+Search *filters
+everything*, uncapped, while the walk is still running, and shows you the file
+before you open it. Neither stays resident: one process while its window is open.
+
+**Search+Shift** is the same key with Shift held: it opens the file manager in a
+window (**pcmanfm**), which is what a list cannot do - drag a file onto a folder,
+select several, rename in place, send to the trash. Both are bound on *release*,
+so which one fires is decided by whether Shift is still down when Search comes
+up; releasing Shift first gives you the file search, which answers a narrower
+question rather than the wrong one. The same window is on the root menu
+(**Alt+Space**) as **Files (window)**, and on the launcher.
 
 ## Panels, lock and power
 
@@ -79,6 +112,10 @@ with `Super+Ctrl`:
 | Alt+Shift+S / Alt+Shift+F / Alt+Ctrl+S | screenshot area / full screen / copy area (each one says so in a notification: the file, or the clipboard) |
 | Alt+Ctrl+C | capture menu: screenshot, annotate, OCR, QR code, record the screen |
 
+A saved screenshot goes to **`~/Pictures/Screenshots/<today>/`**, under the name
+grimshot generates (`2026-10-21T18-04-11.png`), which is the name the
+notification shows. The capture menu's last row opens that folder.
+
 Dictation (`Alt+Ctrl+X`) records up to 60 seconds and types what it heard into
 the focused window. It says what it is doing: the notification stays up while it
 records ("Alt+Ctrl+X stops it"), becomes "Transcribing…" while whisper works, and
@@ -94,17 +131,34 @@ F1-F10. Without keyd there would be no way to reach a VT on this machine.
 ## Tablet mode
 
 Fold the keyboard all the way back and the machine becomes a tablet: the
-on-screen keyboard comes up over the bottom of the screen, the touchpad is
-turned off (it is on the back now), and the screen turns with the device. The
-rotation is read from the accelerometer once a second and only while the
-keyboard is detached, so nothing about it runs in laptop mode. Fold it back and
-all three undo themselves, with the screen upright again.
+on-screen keyboard comes up over the bottom of the screen, the touchpad **and
+the physical keyboard** are turned off (the touchpad is on the back now, and the
+folded keys are under the screen, where a keystroke is a keystroke), and the
+screen turns with the device. The rotation is read from the accelerometer once a
+second and only while the keyboard is detached, so nothing about it runs in
+laptop mode. Fold it back and all of it undoes itself, with the screen upright
+again.
+
+The keyboard is only switched off once the on-screen one is confirmed running,
+so a keyboard that fails to start leaves you the physical one instead of only
+the touchscreen. Lock still suspends the machine in tablet mode (the Lock key is
+read from the power-button device, not from a keyboard).
+
+If the screen comes up **upside down**, or turns the wrong way, the accelerometer
+in your unit's panel disagrees with the built-in mapping: **Settings → Calibrate
+rotation** (only listed while tablet mode is on) reads the sensor in the pose you
+are holding - screen facing you, upright - and stores it in
+`~/.config/nureb/tablet.conf`, so the four positions are derived from your unit
+from then on. It needs no rebuild. `~/.config/bin/tablet-mode calibrate` is the
+same thing from a terminal, `tablet-mode calibration` says which mapping is in
+use, and deleting the file goes back to the built-in one.
 
 | Action | Does |
 |---|---|
-| the keyboard folded back | on-screen keyboard up, touchpad off, the screen follows the device |
-| the keyboard back in place | keyboard gone, touchpad back, screen upright |
+| the keyboard folded back | on-screen keyboard up, touchpad and keyboard off, the screen follows the device |
+| the keyboard back in place | keyboard gone, both inputs back, screen upright |
 | Settings → Tablet mode | the same switch from the mouse, when the keyboard is already detached and the mode did not follow |
+| Settings → Calibrate rotation | (tablet mode only) teach it which way your unit's accelerometer says is up |
 | Settings → Rotation | turn the screen by hand, four positions (this is not tablet mode, and it stays) |
 
 The keyboard is `wvkbd` drawn in the session's palette and font. Its letters
@@ -122,7 +176,7 @@ wherever sway does not already own the key.
 | Action | Omarchy | Here |
 |---|---|---|
 | terminal | Super+Return | Alt+Return |
-| apps | Super+Alt+Space | Search key / Alt+D |
+| apps | Super+Alt+Space | Alt+D (the Search key is the file search) |
 | root menu | Super+Space | **Alt+Space** |
 | window switcher | Alt+Tab | **Alt+Tab** (rofi's window mode) |
 | keybindings | Super+K | **Alt+Ctrl+K** (Alt+K is vim focus up, Alt+Shift+K moves the window) |
@@ -143,7 +197,7 @@ wherever sway does not already own the key.
 | browser | no key (its launcher) | **Alt+Shift+Return** (firefox-esr) |
 | screenshot | Super+Shift+S, Print | Alt+Shift+S, Alt+Shift+F, Alt+Ctrl+S |
 | capture menu (screenshot, OCR, QR, recording) | Super+Ctrl+C | **Alt+Ctrl+C** |
-| files | Super+Shift+F opens the file manager | Alt+Ctrl+F: `rofi-files` |
+| files | Super+Shift+F opens the file manager | Alt+Ctrl+F or the Search key: `rofi-files` (a list); **Search+Shift**: pcmanfm, the same files in a window; **Alt+Search**: `nureb-find`, the same files in a terminal |
 | fullscreen | Super+F | Alt+F |
 | volume, brightness, media keys | XF86 keys | the same keys |
 | workspaces | Super+Tab cycles | Alt+1..0 and three-finger swipe |

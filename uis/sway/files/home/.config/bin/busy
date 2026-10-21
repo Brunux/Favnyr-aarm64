@@ -12,7 +12,8 @@
 #   busy update TAG MESSAGE                same toast, new text
 #   busy stop   TAG                        dismiss quietly (the menu is the answer)
 #   busy end    TAG MESSAGE                replace with the result (4 s)
-#   busy fail   TAG MESSAGE                replace with an error (critical, 6 s)
+#   busy fail   TAG MESSAGE [ICON]          replace with an error (critical, 6 s)
+#   busy cancelled TAG                     exit 0 when this tag has no card left
 #
 # The notification is replaced rather than stacked because every message carries
 # the same mako tag (`string:x-canonical-private-synchronous:nureb-<tag>`), so a
@@ -21,11 +22,32 @@
 # ends are signalled through waybar's signal 8, so the card appears and
 # disappears at the same moment as the toast.
 #
+# A running card can also be *stopped* from the bar, because the spinner is the
+# only thing on screen while the task runs and clicking it is the one gesture
+# that suggests itself.  The producer is the only thing that knows how to stop
+# its own action, so it registers one shell line in the environment:
+#
+#   BUSY_STOP='pkill -f "[n]mcli.*device wifi list"' \
+#       busy start wifi Wi-Fi 'Looking for networks…' network-wireless
+#
+# `busy start` writes that line next to the label, so the click never has to
+# guess a pid or a pattern from the text on screen, and bar-busy runs it (see
+# there for which card it picks).  The file is 0600: it is a shell line that
+# something else executes.  A task that registers nothing is unchanged - the
+# card appears and turns into its result exactly as before, and a click says
+# that it cannot be stopped from here instead of pretending.
+#
+# The other half of the protocol is `busy cancelled TAG`, which exits 0 when
+# this tag no longer has a card, i.e. bar-busy took it away.  The producer asks
+# it right after its slow step, because a killed command otherwise reads as a
+# result (a partial list of networks) or as a failure ("Wi-Fi: "), and a menu
+# that opens on half a scan is worse than one that closes with it.
+#
 # Nothing here fails the caller: a session without mako gets no toast, and the
 # action itself still runs.
 #
-# State lives in $XDG_RUNTIME_DIR/nureb-busy (<tag>.id, .label, .icon), so it
-# dies with the session rather than surviving in the home directory.
+# State lives in $XDG_RUNTIME_DIR/nureb-busy (<tag>.id, .label, .icon, .stop),
+# so it dies with the session rather than surviving in the home directory.
 
 set -u
 
@@ -42,20 +64,23 @@ icon=$(cat "$dir/$tag.icon" 2>/dev/null || true)
 
 # One toast per tag: notify-send's -p prints the id mako assigned, -r replaces
 # that exact notification, and the synchronous hint is what makes mako treat a
-# new one with the same tag as a replacement even without the id.
-send() { # TIMEOUT URGENCY MESSAGE
+# new one with the same tag as a replacement even without the id.  The icon is
+# the one the task registered unless the caller names another (fail does, so a
+# failure reads as one at a glance instead of as another step of the action).
+send() { # TIMEOUT URGENCY MESSAGE [ICON]
+	_icon=${4:-${icon:-dialog-information}}
 	if [ -n "$id" ]; then
-		notify-send -a Nureb -i "${icon:-dialog-information}" -u "$2" -t "$1" \
+		notify-send -a Nureb -i "$_icon" -u "$2" -t "$1" \
 			-r "$id" -h "string:x-canonical-private-synchronous:nureb-$tag" \
 			"$label" "$3" 2>/dev/null || true
 	else
-		notify-send -a Nureb -i "${icon:-dialog-information}" -u "$2" -t "$1" \
+		notify-send -a Nureb -i "$_icon" -u "$2" -t "$1" \
 			-h "string:x-canonical-private-synchronous:nureb-$tag" \
 			"$label" "$3" 2>/dev/null || true
 	fi
 }
 
-forget() { rm -f "$dir/$tag.id" "$dir/$tag.label" "$dir/$tag.icon"; }
+forget() { rm -f "$dir/$tag.id" "$dir/$tag.label" "$dir/$tag.icon" "$dir/$tag.stop"; }
 
 case $cmd in
 start)
@@ -68,6 +93,15 @@ start)
 		rm -f "$dir/$tag.icon"
 	fi
 	icon=${5:-}
+	# The stop command belongs to this run, never to the previous one with the
+	# same tag: a producer that does not register one must not inherit the last
+	# one's button.
+	if [ -n "${BUSY_STOP:-}" ]; then
+		( umask 077; printf '%s\n' "$BUSY_STOP" >"$dir/$tag.stop" ) 2>/dev/null ||
+			rm -f "$dir/$tag.stop"
+	else
+		rm -f "$dir/$tag.stop"
+	fi
 	# -p prints the id; a session without a notification daemon prints nothing,
 	# which is why the id is optional everywhere below.
 	id=$(notify-send -p -a Nureb -i "${5:-dialog-information}" -u low -t 0 \
@@ -83,6 +117,15 @@ start)
 update)
 	[ -n "$label" ] || exit 0
 	send 0 low "${3:-}"
+	;;
+cancelled)
+	# Asked by a producer after its slow step: 0 means "the bar stopped this,
+	# do not report anything".  No card at all (never started, or already
+	# ended) counts as cancelled too - the caller is done either way.
+	if [ -f "$dir/$tag.label" ]; then
+		exit 1
+	fi
+	exit 0
 	;;
 stop)
 	# mako can drop a notification by id; older versions only know "-a", which
@@ -101,12 +144,12 @@ end)
 	;;
 fail)
 	[ -n "$label" ] || label=Error
-	send 6000 critical "${3:-}"
+	send 6000 critical "${3:-}" "${4:-}"
 	forget
 	pkill -RTMIN+8 waybar 2>/dev/null || true
 	;;
 *)
-	printf 'usage: busy start|update|stop|end|fail TAG ...\n' >&2
+	printf 'usage: busy start|update|cancelled|stop|end|fail TAG ...\n' >&2
 	exit 2
 	;;
 esac

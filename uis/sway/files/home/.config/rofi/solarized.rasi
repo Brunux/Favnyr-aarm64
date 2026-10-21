@@ -6,6 +6,13 @@
  * the bar's dmenu popups all look the same. The layout hides everything rofi
  * shows by default and does not need here: no mode switcher, no message bar, no
  * counter - one row of input and the list.
+ *
+ * One width for every window: 45% is the launcher's, sized for an application
+ * name and nothing beside it. The menus built by lib-rofi.sh carry a name and a
+ * detail, and a list whose rows do not fit asks for one of 62%, 76% or 88% for
+ * that one run (-theme-str from ui_width, which measures the longest row), because
+ * rofi cannot scroll a row sideways: a text wider than the box is cut by rofi
+ * itself, and the end of a path is the part that identifies it.
  */
 
 * {
@@ -81,10 +88,11 @@ element {
     border-radius: 6px;
 }
 
-/* Used by the two modes that show application icons (drun and window, see
- * show-icons in config.rasi).  The lists this port draws itself pass
- * -no-show-icons and put a font glyph in the text instead, so they never
- * reserve this column. */
+/* Used by the modes that show real images: drun and window (config.rasi), the
+ * file browser (32 px, per menu) and rofi-keys, which asks the theme for one icon
+ * per category.  The lists built by lib-rofi.sh keep a font glyph in the text
+ * instead and bar-pick passes -no-show-icons, so they never reserve this
+ * column. */
 element-icon {
     size: 26px;
     padding: 0 6px 0 0;
