@@ -46,7 +46,7 @@ with `Super+Ctrl`:
 | Alt+Ctrl+L | lock the screen (the Lock key does the same and then suspends) |
 | Alt+Ctrl+X | dictation on/off (the notification stays while it records; press again to stop) |
 | Alt+Ctrl+Shift+A | agents (launch, accounts, install) |
-| Alt+Ctrl+O | settings: Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, rotation |
+| Alt+Ctrl+O | settings: Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation |
 | Alt+Ctrl+N | notifications: history, do-not-disturb, copy |
 | Alt+Ctrl+Q | calculator |
 | Alt+Ctrl+V | clipboard history (Enter copies back, Alt+1 deletes the entry) |
@@ -90,6 +90,28 @@ from the mouse. The text is also left on the clipboard, because a few surfaces
 The top row of this keyboard sends action keys, not F1-F12: keyd turns
 **Ctrl+Alt+top row** into virtual terminals 1-10 and **Search+top row** into
 F1-F10. Without keyd there would be no way to reach a VT on this machine.
+
+## Tablet mode
+
+Fold the keyboard all the way back and the machine becomes a tablet: the
+on-screen keyboard comes up over the bottom of the screen, the touchpad is
+turned off (it is on the back now), and the screen turns with the device. The
+rotation is read from the accelerometer once a second and only while the
+keyboard is detached, so nothing about it runs in laptop mode. Fold it back and
+all three undo themselves, with the screen upright again.
+
+| Action | Does |
+|---|---|
+| the keyboard folded back | on-screen keyboard up, touchpad off, the screen follows the device |
+| the keyboard back in place | keyboard gone, touchpad back, screen upright |
+| Settings → Tablet mode | the same switch from the mouse, when the keyboard is already detached and the mode did not follow |
+| Settings → Rotation | turn the screen by hand, four positions (this is not tablet mode, and it stays) |
+
+The keyboard is `wvkbd` drawn in the session's palette and font. Its letters
+layer is the mobile-international one, so accented characters come from the
+**Cmp** key: `Cmp` then `a` gives `á`, `Cmp` then `n` gives `ñ`, `Cmp` then `?`
+gives `¿`. It types into the focused window through the virtual-keyboard
+protocol, which is why it works in foot, Firefox and the rofi prompts alike.
 
 ## What was copied from Omarchy, and what differs
 

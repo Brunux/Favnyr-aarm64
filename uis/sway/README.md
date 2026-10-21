@@ -171,7 +171,7 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 
 | Script | Key / entry | What it does |
 |---|---|---|
-| `rofi-quick` | `Alt+Ctrl+O`, Settings | the switches of the session in one list: Wi-Fi and Bluetooth radios (with the pickers one row below), night light, do-not-disturb, touchpad, rotation, keyboard layout, audio, media, battery. It redraws after every switch, so the state it shows is never stale, and its probes run in parallel (two `bluetoothctl` clients, `nmcli` and `swaymsg` in sequence made it feel broken) |
+| `rofi-quick` | `Alt+Ctrl+O`, Settings | the switches of the session in one list: Wi-Fi and Bluetooth radios (with the pickers one row below), night light, do-not-disturb, touchpad, tablet mode (the on-screen keyboard and the rotation, see the tablet section), rotation, keyboard layout, audio, media, battery. It redraws after every switch, so the state it shows is never stale, and its probes run in parallel (two `bluetoothctl` clients, `nmcli` and `swaymsg` in sequence made it feel broken) |
 | `rofi-power` | `Alt+Escape`, `Alt+Ctrl+P`, Power menu | lock, suspend, hibernate, log out, reboot, shut down; the last three ask once more through `bar-pick` |
 | `rofi-notify` | `Alt+Ctrl+N`, Notifications | mako's history (`makoctl history -j`), Enter copies one, plus restore, dismiss-all and do-not-disturb |
 | `rofi-clean` | Free space | `df` plus what grows (trash, thumbnails, apt cache, journal, `~/.cache`), one action per row, re-measured afterwards |
@@ -676,3 +676,53 @@ Notes:
   (`chvt` needs root or a controlling tty on the active VT), and you come back
   with `chvt 7`.
 
+## Tablet mode
+
+The keyboard folds all the way back and the machine is then a tablet, which the
+kernel already reports: `cros_ec_buttons` carries `SW_LID` and
+`SW_TABLET_MODE` (`SW=3`), and sway has `bindswitch`/`unbindswitch` for exactly
+that. `etc/sway/config.d/28-tablet.conf` binds the two states to
+`~/.config/bin/tablet-mode on|off`, which:
+
+| Step | What it does | Why |
+|---|---|---|
+| keyboard | `wvkbd-mobintl`, solarized, `JetBrains Mono`, 300 px portrait / 240 px landscape, radius 8, alpha 242 | the panel is the only input once the keyboard is folded |
+| touchpad | `swaymsg input type:touchpad events disabled` | it is on the back of the screen now, and pressure on it is input nobody meant |
+| rotation | a 1 Hz poller over `cros-ec-accel`'s `in_accel_{x,y,z}_raw` applying `swaymsg output <focused> transform <t>` | the accelerometer is in the kernel; no package, no D-Bus service |
+
+`off` undoes the three in reverse (keyboard gone, touchpad back, `transform
+normal`), and `status` prints `on · screen <transform>` or `off` - which is what
+the Settings row shows. `toggle` is the Settings row itself, for a mode that did
+not follow the switch.
+
+The mapping is the panel frame ChromeOS uses (X to the right, Y to the top of
+the screen) over a reading where the screen faces up gives `+Z`:
+
+| Device | Reading | `transform` |
+|---|---|---|
+| flat, screen up | `+Z` | `normal` |
+| upright, landscape | `+Y` | `normal` |
+| upside down | `-Y` | `180` |
+| turned clockwise | `-X` | `90` |
+| turned counter-clockwise | `+X` | `270` |
+| no axis dominant (in the hand, mid-turn) | - | keep the current one |
+
+The thresholds are `0.85` for the flat check and `0.75` for an axis (about 40°
+off vertical), so tilting the device does not flip the screen; only a real turn
+does. If the screen turns the wrong way on some unit, the four values in
+`orient()` are the whole fix.
+
+Nothing about this is resident in laptop mode: the state is a directory in
+`$XDG_RUNTIME_DIR/nureb-tablet` holding the two pids and the output name, so a
+session that dies takes the keyboard and the poller with it, and the next
+`tablet:off` still restores the touchpad (`off` runs its undo even when the
+state is gone). `wvkbd` 0.15 from Debian is the version that ships the flags this
+uses (`-H`, `-L`, `-R`, `--fn`, the colours, `--alpha`); it has no `--dock` or
+`--auto`, which arrived later, and the keyboard is placed by the compositor as a
+layer-shell surface at the bottom edge, which is what `--dock` would do.
+
+Settings (`Alt+Ctrl+O`) carries **Tablet mode** next to **Rotation**: the second
+is the manual turn (`rofi-quick --rotation-menu`), the first is this script. The
+on-screen keyboard's layout is the mobile-international one compiled into
+`wvkbd-mobintl`, with the accent layer reachable from its own `Cmp` key
+(`Cmp`+`a` → `á`, `Cmp`+`n` → `ñ`).

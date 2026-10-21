@@ -857,6 +857,44 @@ else
 	skip "fc-match is not installed"
 fi
 
+# Tablet mode: the keyboard folded back. Four pieces have to be there for it to
+# do anything - the switch, the script, the on-screen keyboard and the
+# accelerometer - and each missing half is silent: no bindswitch means detaching
+# the keyboard changes nothing, no wvkbd means the screen has no way to type, no
+# accelerometer means the screen stays sideways. The accelerometer is read the
+# same way the poller reads it (cros-ec-accel, in_accel_*_raw), so a kernel that
+# renames or reorganises the devices is noticed here.
+_tablet=""
+have wvkbd-mobintl || _tablet="$_tablet wvkbd-mobintl"
+[ -x "$HOME/.config/bin/tablet-mode" ] || _tablet="$_tablet bin/tablet-mode"
+grep -rqs 'bindswitch tablet:' /etc/sway/config.d/ ||
+	_tablet="$_tablet config.d/28-tablet.conf(bindswitch)"
+if [ -z "$_tablet" ]; then
+	ok "tablet mode wired (wvkbd-mobintl, tablet-mode, bindswitch tablet:on/off)"
+else
+	fail "tablet mode incomplete:$_tablet (detaching the keyboard does nothing, or the screen cannot type)"
+fi
+_accel=""
+for _d in /sys/bus/iio/devices/iio:device*; do
+	[ -r "$_d/name" ] || continue
+	[ "$(cat "$_d/name" 2>/dev/null)" = cros-ec-accel ] || continue
+	[ -r "$_d/in_accel_x_raw" ] && _accel=$_d && break
+done
+if [ -n "$_accel" ]; then
+	ok "accelerometer present ($_accel, cros-ec-accel) for tablet rotation"
+else
+	fail "no cros-ec-accel with in_accel_*_raw: tablet mode starts but the screen never turns"
+fi
+# The keyboard belongs to tablet mode and nowhere else. One that is already
+# running while the mode is off is either a leftover from a session that was
+# killed mid-mode or something starting it at login; either way it covers the
+# bottom of the screen for no reason.
+if [ ! -d "${XDG_RUNTIME_DIR:-/tmp}/nureb-tablet" ]; then
+	if pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
+		warn "wvkbd-mobintl is running outside tablet mode (config.d/28-tablet.conf starts it on the switch only)"
+	fi
+fi
+
 # The manual is rendered with glow, and both the binary and the glamour style
 # are needed: without the style glow prints an error and exits, and rofi-learn
 # opens a foot window that closes immediately, which reads as "nothing happened".

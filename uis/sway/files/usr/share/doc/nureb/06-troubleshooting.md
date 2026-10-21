@@ -160,7 +160,33 @@ with the session; a session older than that line has no history. The list also
 says so itself when `cliphist` is missing. `Alt+Ctrl+V` → **Clear the history**
 empties it, and the database is `~/.cache/cliphist/db`.
 
-## A terminal starts with "not a UTF-8 locale"
+## Tablet mode: no keyboard, or the screen does not turn
+
+Detaching the keyboard is what turns tablet mode on: `cros_ec_buttons` reports
+`SW_TABLET_MODE` and sway answers with `bindswitch tablet:on/off` from
+`etc/sway/config.d/28-tablet.conf`, which runs `~/.config/bin/tablet-mode`. So
+the first question is whether the switch arrived:
+
+```sh
+grep -A5 cros_ec_buttons /proc/bus/input/devices   # SW=3: lid + tablet
+test -x ~/.config/bin/tablet-mode && echo 'the script is there'
+~/.config/bin/tablet-mode status                     # on · screen normal | off
+```
+
+The mode can be switched by hand - `Settings` → **Tablet mode**, or
+`~/.config/bin/tablet-mode on` - which is what to use when the switch did not
+arrive but the screen is folded. If the keyboard comes up and the screen stays
+sideways, the accelerometer is the missing half: the poller reads
+`/sys/bus/iio/devices/iio:device*/in_accel_*_raw` of the `cros-ec-accel` device,
+and `check-system.sh` reports its absence as a FAIL. If the screen turns the
+wrong way, the four `transform` values in `orient()` are the whole mapping - see
+the table at the top of `~/.config/bin/tablet-mode`.
+
+Nothing about this runs in laptop mode: one process for the keyboard and one
+sleeping for a second at a time for the rotation, both gone when the keyboard is
+back in place.
+
+
 
 ```
 warning: foot: 'C' is not a UTF-8 locale, falling back to 'C.UTF-8'

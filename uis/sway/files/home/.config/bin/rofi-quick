@@ -108,6 +108,11 @@ rotation_name() {
 		head -1
 }
 
+tablet_mode_detail() {
+	_t=$("$dir/tablet-mode" status 2>/dev/null || true)
+	printf '%s' "${_t:-off}"
+}
+
 audio_detail() {
 	# One call (wireplumber's own client) instead of pactl's three.
 	_v=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null || true)
@@ -225,6 +230,7 @@ render() { # OUTFILE
 		fi
 		ui_row "$UI_I_MOUSE" 'Touchpad' "$_tp" touchpad "$_tpc"
 		ui_row "$UI_I_ROTATE" 'Rotation' "$(rotation_name)" rotation
+		ui_row "$UI_I_KEYBOARD" 'Tablet mode' "$(tablet_mode_detail)" tablet
 		ui_row "$UI_I_KEYBOARD" 'Keyboard layout' "$(layout_name)" layout
 	) >"$_s/4" &
 	(
@@ -294,6 +300,7 @@ while :; do
 	notify) exec "$dir/rofi-notify" ;;
 	touchpad) swaymsg input type:touchpad events toggle >/dev/null 2>&1 || true ;;
 	rotation) exec "$dir/rofi-quick" --rotation-menu ;;
+	tablet) "$dir/tablet-mode" toggle ;;
 	layout) exec "$dir/rofi-layout" ;;
 	audio) exec "$dir/bar-audio" ;;
 	media) exec "$dir/rofi-media" ;;

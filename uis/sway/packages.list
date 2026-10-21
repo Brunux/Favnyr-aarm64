@@ -31,6 +31,13 @@ wl-clipboard
 # including anything secret that passed through the clipboard.
 cliphist
 
+# the on-screen keyboard of tablet mode (etc/sway/config.d/28-tablet.conf):
+# wvkbd, 826 kB, cairo and pango only, typing through
+# zwp_virtual_keyboard_manager_v1, which libwlroots-0.20 exposes and sway
+# creates. `tablet-mode on` starts it when cros_ec_buttons reports
+# SW_TABLET_MODE and nothing runs it the rest of the time.
+wvkbd
+
 # what /etc/sway/config and the drop-ins actually invoke
 waybar
 # rofi is the launcher (Search key, $mod+d), the command palette ($mod+Shift+d)

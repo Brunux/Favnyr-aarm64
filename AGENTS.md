@@ -428,7 +428,30 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `zwp_virtual_keyboard_manager_v1` and sway creates it (`wlr_virtual_keyboard_manager_v1_create`),
   so `wvkbd` (826 kB, binary `wvkbd-mobintl`, cairo/pango only) types into the focused client.
   `iio-sensor-proxy` (236 kB) is packaged if the D-Bus orientation API is preferred over reading
-  sysfs. None of this is implemented yet - the design is the tablet section of `docs/plan-rofi.md`.
+  sysfs, and it stays out: the poller this port uses costs nothing outside tablet mode.
+- **Tablet mode is `~/.config/bin/tablet-mode`, driven by two `bindswitch` lines**
+  (`etc/sway/config.d/28-tablet.conf`): `on` starts `wvkbd-mobintl` (solarized colours, `JetBrains
+  Mono`, `-H 300`/`-L 240`, `-R 8`, `--alpha 242`), turns the touchpad off (`swaymsg input
+  type:touchpad events disabled` - it is on the back of the screen now) and starts its own **1 Hz
+  poller** (`tablet-mode poller`) over the accelerometer; `off` kills both, re-enables the touchpad
+  and puts `transform normal` back. The state is a directory in `$XDG_RUNTIME_DIR/nureb-tablet`
+  holding the keyboard pid, the poller pid and the output name, so a session that dies removes all
+  three, and `off` still restores the touchpad when the state is gone. **The keyboard belongs to
+  tablet mode and nowhere else** - `check-system.sh` warns when `wvkbd-mobintl` runs while the mode
+  is off, because nothing else starts it. `wvkbd` 0.15 is the version in forky: it has `-H`, `-L`,
+  `-R`, `--fn`, the colour flags and `--alpha`, and **no `--dock`/`--ratio`/`--auto`** (later
+  releases); the compositor places it as a layer-shell surface at the bottom edge. Its layout is the
+  mobile-international one, and there is **no `latin-american` layer** among `--list-layers` (`full`,
+  `fullwide`, `special`, `simple`, `dialer`, cyrillic/arabic/persian/greek/georgian/hebrew, `emoji`,
+  `nav`, `landscape`, …) - accents come from its `Cmp` compose key (`Cmp`+`a` → `á`, `Cmp`+`n` →
+  `ñ`). **The rotation mapping is a table in `orient()`**: screen-up gives `+Z` (the accelerometer
+  reports the reaction to gravity), so flat `+Z` → `normal`, upright `+Y` → `normal`, `-Y` → `180`,
+  `-X` → `90` (`transform` is clockwise), `+X` → `270`, and no axis dominant → keep the current one;
+  the thresholds are `0.85` (flat) and `0.75` (an axis, ~41° off vertical) so tilting does not flip
+  the screen. It assumes the panel frame ChromeOS uses; an inverted unit is fixed by swapping the
+  four `transform` values. **Nothing here has run on hardware yet** (no Wayland session in the shell
+  that wrote it): the switch, the keyboard and the rotation are the acceptance test, and the manual
+  section is `03-shortcuts.md` § Tablet mode.
 - **Nerd Fonts / waybar icons**: Debian has no Nerd-patched Adwaita Mono, so the theme uses
   `JetBrains Mono` for the text. Beware `fonts-nerd-symbols`: it is **DFSG-stripped** and only
   ships Octicons, Codicons, Devicons, Seti and Powerline. It has **no Font Awesome
@@ -560,7 +583,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
 - **The key scheme mirrors Omarchy's**, with `Alt` where Omarchy uses `Super`: the panels are
   `Alt+Ctrl+A/B/W` (audio, Bluetooth, network - the same scripts the bar's indicators run),
   `Alt+Ctrl+O` is **Settings** (`rofi-quick`: the radio switches, night light, do-not-disturb,
-  touchpad, rotation), `Alt+Ctrl+N` the **Notifications** history, `Alt+Ctrl+Q` the
+  touchpad, tablet mode, rotation), `Alt+Ctrl+N` the **Notifications** history, `Alt+Ctrl+Q` the
   **calculator**, `Alt+Ctrl+V` the **clipboard history** and `Alt+Ctrl+E` the **emoji picker**,
   the root menu is `Alt+Space` (Omarchy's `Super+Space`; sway's `focus mode_toggle` had that key and
   was dropped), the scratchpad is `Alt+grave` (`Alt+minus` stays as an alias), lock is

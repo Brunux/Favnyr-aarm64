@@ -153,13 +153,14 @@ current track (selecting the track copies it).
 
 ## Status
 
-**The menus are done.** `rofi-quick` (settings: radios, night light, DND, touchpad, rotation,
-layout), `rofi-notify` (history), `rofi-clean` (free space), `rofi-kill`, `rofi-tz`, `rofi-places`,
-`rofi-media`, `rofi-calc`, `rofi-layout` and `rofi-learn`, all on `lib-rofi.sh` (row style, palette,
-glyphs) and all reachable from `bar-menu` and the launcher; new keys `Alt+Ctrl+O/N/Q` and
-`Alt+Ctrl+K` for the key view. Slow actions report through `busy` (a mako toast that becomes the
-result) and `bar-busy` (a spinner on the bar), which is the new convention for anything that takes
-seconds: the Wi-Fi scan, the Bluetooth scan, connecting, and the `du` walk in Free space.
+**The menus are done.** `rofi-quick` (settings: radios, night light, DND, touchpad, tablet mode,
+rotation, layout), `rofi-notify` (history), `rofi-clean` (free space), `rofi-kill`, `rofi-tz`,
+`rofi-places`, `rofi-media`, `rofi-calc`, `rofi-layout` and `rofi-learn`, all on `lib-rofi.sh` (row
+style, palette, glyphs) and all reachable from `bar-menu` and the launcher; new keys
+`Alt+Ctrl+O/N/Q` and `Alt+Ctrl+K` for the key view. Slow actions report through `busy` (a mako toast
+that becomes the result) and `bar-busy` (a spinner on the bar), which is the new convention for
+anything that takes seconds: the Wi-Fi scan, the Bluetooth scan, connecting, and the `du` walk in
+Free space.
 
 The manual is rendered by **glow** instead of shown as bat source, the launcher shows real icons
 (the **Nureb** theme, rendered from the same Font Awesome codepoints by `scripts/make-icons.sh`),
@@ -280,8 +281,25 @@ touchpad, and starts a **1 Hz accelerometer poller** that applies `swaymsg outpu
 keyboard is detached, nothing resident otherwise, and "Rotate screen" in quick settings covers the
 manual case. `wvkbd-mobintl` is the mobile-international layout; another layout is a one-line change.
 
+**Done** (this batch): `uis/sway/files/home/.config/bin/tablet-mode` (`on`, `off`,
+`toggle`, `status`, and its own `poller` mode), `uis/sway/files/etc/sway/config.d/28-tablet.conf`
+(the two `bindswitch` lines), the **Tablet mode** row in `rofi-quick`, `wvkbd` in
+`uis/sway/packages.list`, the checks in `scripts/check-system.sh` (the binary, the script, the
+`bindswitch` pair, the accelerometer, and a WARN when the keyboard runs outside tablet mode), the
+manual sections and the README. Two details were settled while writing it:
+
+* **The poller is the script itself** (`tablet-mode poller`), not a second file: one state directory
+  in `$XDG_RUNTIME_DIR` holding the keyboard pid, the poller pid and the output name, so a session
+  that dies removes all three at once, and `off` restores the touchpad even when the state is gone.
+* **The mapping is a table in `orient()`** (flat `+Z` → normal, upright `+Y` → normal, `-Y` → 180,
+  `-X` → 90, `+X` → 270, no dominant axis → keep), with `0.85`/`0.75` thresholds so tilting does not
+  flip the screen. Derived from the panel frame ChromeOS uses over a reading where screen-up is
+  `+Z`; if it is inverted on the unit, the four `transform` values are the whole fix.
+
 Acceptance: detach the keyboard → the keyboard appears, typing reaches a foot window, the screen
-turns with the device; reattach → keyboard gone, touchpad back, orientation normal.
+turns with the device; reattach → keyboard gone, touchpad back, orientation normal. **Not yet run on
+hardware**: this shell has no Wayland session, so the script, the mapping (`orient()` unit-tested
+with synthetic values) and the wiring were verified, not the switch itself.
 
 ## Deliberately not doing
 
@@ -294,16 +312,20 @@ a sway concept) · a theme *store* (the theme switcher is its own project).
 
 | Round | Contents | Effort |
 |---|---|---|
-| 1 | Batch A (ten menus, no packages) + the manual page for them | ~1 day |
-| 2 | Batch B (emoji, clipboard, calculator, snippets, pass, swappy, wlr-randr, units, recording, translate, weather, world clock, ncdu) | ~1 day |
-| 3 | Tablet mode + on-screen keyboard + rotation | ~half day; needs the keyboard detached to test |
+| 1 | Batch A (ten menus, no packages) + the manual page for them | done |
+| 2 | Batch B (emoji, clipboard, calculator, snippets, pass, swappy, wlr-randr, units, recording, translate, weather, world clock, ncdu) | partly: emoji, clipboard, calculator, annotation, recording and the manual rotation are done; snippets, `pass`, units, translate, weather, world clock and `ncdu` remain |
+| 3 | Tablet mode + on-screen keyboard + rotation | done; **the switch itself is untested on hardware** |
 | 4 | Agents usage (local logs), recording with audio, theme switcher | open |
 
 ## Decisions open
 
 1. **Password store**: `pass` (129 kB, GPG installed) or `rbw` (15 MB, Bitwarden)?
-2. **Clipboard watcher**: accept `wl-paste --watch cliphist store` (the only resident process in this
-   plan, ~2 MB) or skip clipboard history?
-3. **Rotation**: sysfs poller while in tablet mode (no extra package) or `iio-sensor-proxy` +
-   `monitor-sensor` (D-Bus activated)?
-4. **On-screen keyboard layout**: `wvkbd-mobintl` as shipped, or latin-american?
+2. **Clipboard watcher**: accepted - `wl-paste --watch cliphist store`, the only resident process in
+   this plan (~2 MB).
+3. **Rotation**: resolved - **sysfs poller while in tablet mode** (no package, no D-Bus service, and
+   it only runs with the keyboard detached). `iio-sensor-proxy` stays out.
+4. **On-screen keyboard layout**: resolved - **`wvkbd-mobintl` as shipped**. There is no
+   `latin-american` layer among its layers (`full`, `fullwide`, `special`, `simple`, `dialer`,
+   `cyrillic`, `arabic`, `persian`, `greek`, `georgian`, `hebrew`, `emoji`, `nav`, `landscape`, …);
+   the accents come from the `Cmp` compose key, which is the mobile-international layout's own way
+   of typing them.
