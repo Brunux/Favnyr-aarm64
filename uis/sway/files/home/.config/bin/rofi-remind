@@ -112,8 +112,18 @@ when=$(ui_pick 'When' "“$(printf '%s' "$text" | cut -c1-48)”" <"$tmp/when") 
 
 unit="$prefix$(date +%H%M%S)-$$"
 if [ "$when" = 0900 ]; then
+	# A concrete date, not `*-*-* 09:00:00`: that expression repeats every
+	# morning, and "at 09:00" means the next nine, once (systemd-analyze
+	# calendar shows no iteration for a fully specified date).
+	target=$(date -d 'today 09:00' '+%Y-%m-%d %H:%M:00' 2>/dev/null) || target=
+	[ -n "$target" ] || {
+		ui_say Reminders 'Could not work out the next nine in the morning' critical
+		exit 1
+	}
+	[ "$(date -d "$target" +%s)" -gt "$(date +%s)" ] ||
+		target=$(date -d 'tomorrow 09:00' '+%Y-%m-%d %H:%M:00')
 	out=$(systemd-run --user --collect --unit="$unit" --description="$text" \
-		--on-calendar='*-*-* 09:00:00' \
+		--on-calendar="$target" \
 		notify-send -a Nureb 'Reminder' "$text" 2>&1) || {
 		ui_say Reminders "$(printf '%s' "$out" | tail -2 | tr '\n' ' ')" critical
 		exit 1
