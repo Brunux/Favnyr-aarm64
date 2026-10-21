@@ -839,7 +839,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   this is a stylesheet, not a theme package. Adwaita 51 ships no full-colour `folder`,
   `user-home` or `drive-harddisk` at all, which is why `scripts/make-icons.sh` grew a **fourth
   table** (50 names: the places, the actions and the mimetypes the sidebar and the icon view ask
-  for by name; the theme is 215 PNGs in `48x48/apps` + `scalable/apps`), and `check-system.sh`
+  for by name; the theme is 219 PNGs in `48x48/apps` + `scalable/apps`), and `check-system.sh`
   asks the theme for the names pcmanfm draws instead of trusting the picture.
 - **`Search+Shift` is the window, and both halves are release bindings**: sway matches a release
   binding against the modifiers held when the key comes up, so Search released with Shift still

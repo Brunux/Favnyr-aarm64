@@ -420,7 +420,7 @@ launcher carries both rows (**Files**, **Files (window)**) and so does the root 
 * **The icon names came with it**: Adwaita 51 ships no full-colour `folder`, `user-home` or
   `drive-harddisk` at all, so `scripts/make-icons.sh` gained a **fourth table** (the places, the
   actions and the mimetypes the sidebar and the icon view ask for by name) and the Nureb theme now
-  carries 215 PNGs in `48x48/apps` + `scalable/apps`.
+  carries 219 PNGs in `48x48/apps` + `scalable/apps`.
 * **The settings live in `etc/xdg/pcmanfm/default/pcmanfm.conf`**: `terminal=foot` (under
   `[config]`, which is where libfm reads it, not the `[ui]` section the dialog suggests - the
   default `x-terminal-emulator` is not installed here, so F4 would do nothing), `use_trash=1`
