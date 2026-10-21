@@ -262,8 +262,10 @@ Rows are classified by their content: text, a link (starts with `http`) or an
 image. An image is listed by what `cliphist` knows about it (`[[ binary data 64000
 png 640x480 ]]`) rather than by a thumbnail, because a rofi row is one line of
 text. **Save the newest image** decodes it into `~/Pictures/clipboard/` with the
-extension its MIME type implies and opens it in Firefox; the decoded file is what
-survives, the entry itself stays in the history until deleted or cleared.
+extension its MIME type implies and hands it to `xdg-open`, which is the same
+`nureb-view` a double click in pcmanfm uses — so a picture opens in **imv**, not
+in a browser tab; the decoded file is what survives, and the entry itself stays
+in the history until deleted or cleared.
 
 ## Emoji
 

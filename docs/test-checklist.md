@@ -30,13 +30,15 @@ cat /etc/debian-aarch64-revision      # commit, device, UI, kernel, build date
 | copy a line in a terminal (`echo hello-paste \| wl-copy`), then `Alt+Ctrl+V` | a row with the text and its kind (`text`) in the dim column |
 | Enter on that row, then paste in foot (`Ctrl+Shift+V`) | `hello-paste` |
 | copy a region to the clipboard (`Alt+Ctrl+S`), reopen the list | an image row, plus **Save the newest image** |
-| Enter on **Save the newest image** | `~/Pictures/clipboard/<date>.<ext>`, opened in Firefox; notification names the file |
+| Enter on **Save the newest image** | `~/Pictures/clipboard/clip-<date>.<ext>`, opened in **imv** (a picture is the viewer's job now); the notification names the file. A foot window drawing the picture in sixels is `chafa`'s fallback for a GPU with no EGL context, not a failure |
 | `Alt+1` on a row | "Entry deleted from the history" and the row is gone when the list reopens |
 | last row, **Clear the history** | the list says nothing has been copied yet |
 
 An **empty** list is the watcher, not the menu: `pgrep -fx 'wl-paste --watch cliphist store'`
 (`etc/sway/config.d/27-clipboard.conf` starts it once per session). An image
-that does not open is `xdg-open`/`firefox-esr`.
+that does not open is `~/.config/bin/nureb-view` (not executable) or `imv`; a
+saved file ending in `.bin` means `file` is missing and the extension could not
+be read from the contents.
 
 ## Emoji - `Alt+Ctrl+E`
 
@@ -103,7 +105,7 @@ the reason, and the menu shows it instead of claiming success.
 |---|---|
 | open it | model, revision, kernel, uptime, memory, disk, battery, network, session, processes |
 | **Copy this summary** | the same lines are on the clipboard |
-| **The full picture** | fastfetch in a foot window |
+| **The full picture** | fastfetch in a foot window that **stays open** and ends with `fastfetch has finished · close this window with Ctrl+Shift+W`; a window that flashed for a tenth of a second is `--hold` missing from `rofi-about` |
 | **Errors this boot** | `journalctl -p err -b` in a foot window (the same lines the report calls a problem) |
 | **Boot time** | `systemd-analyze blame` in a foot window, longest first |
 | **Devices** | `lspci` then `lsusb` in a foot window |
@@ -121,7 +123,9 @@ the reason, and the menu shows it instead of claiming success.
 | Enter on a PDF, a DjVu or a comic | **papers**, with search, zoom and print. Firefox means papers is missing |
 | Enter on an EPUB | Firefox: `papers` reads no EPUB |
 | Enter on an HTML file | `bat` (it is text), not Firefox |
+| Enter on a `.deb` | Firefox, as a download prompt: the browser is what a package is for here |
 | Enter on a text file | `bat` in the popup window (`BAT_THEME=ansi`, solarized) |
+| open a deep path (`~/Dev/Nureb/uis/sway/files/home/.config/bin`) | the window is drawn wide enough that the **end** of the name is readable: rofi cannot scroll a row sideways, so `lib-rofi.sh`'s `ui_width` sizes the list instead of letting rofi cut it with `…` |
 | spam `Alt+Ctrl+F` on a directory of large photos | the application keeps responding while the rows fill in (four decoders at a time) |
 | **Alt+1** on a directory | the actions for it: disk usage, compress, copy the path, a terminal here. Enter still *opens* the row; only Alt+1 asks |
 | **Alt+1** → **Compress** on a folder | a `busy` card, then `folder.tar.xz` beside it, and the bar spinner while it packs (click the spinner to stop it) |
@@ -215,7 +219,7 @@ correctly absent.
 | hold **Shift**, tap **Search**, release Search then Shift | pcmanfm opens on `$HOME`, in the solarized palette (base03 window, cyan selection), JetBrains Mono, Nureb icons |
 | tap **Search** on its own | the file search, not the window (`rofi-files --search`) |
 | hold **Search**, tap a top-row key | an F-key reaches the focused window; no menu opens on the way |
-| right-click a file -> **Open With** | the first entry is what the Files list does: text in `bat`, a document in `papers`, a picture in `imv` (or `chafa`), a video in `mpv`, an HTML page or an EPUB in Firefox |
+| right-click a file -> **Open With** | the first entry is what a double click does: text in `bat`, a document in `papers`, a picture in `imv` (or `chafa`), a video in `mpv`. Two deliberate exceptions: an HTML page is text to the Files list (`bat`) and a page to a double click (**Firefox**), and an EPUB goes to Firefox because `papers` reads none |
 | press **F4** | `foot` opens in the current directory (not an error about `x-terminal-emulator`) |
 | delete a file | it goes to the Trash and **Restore** puts it back (`gvfsd-trash`) |
 | look at a folder of photos | thumbnails; a PDF or a video keeps its mimetype icon (libfm decodes images only - that is not a bug) |
@@ -325,6 +329,9 @@ What a failure means:
 | root menu (`Alt+Space`) | **Colour**, **DNS**, **Packages**, **Reminders**, **About**, **Download**, **Password** and **Search inside files** are all there |
 | `Alt+Ctrl+G` and then `Alt+1` inside that menu | nothing is taken by sway: the menu answers, the workspace does not change |
 | `Alt+Ctrl+F`, then `Alt+1` | the actions menu, not workspace 1 (the `global-kb` fix reached both menus) |
+| `gio mime image/png`, `gio mime application/pdf`, `gio mime inode/directory` | `org.nureb.view.desktop`, `org.gnome.Papers.desktop`, `pcmanfm.desktop`. This is GIO's own answer, not the file read back: a `nureb-view` without its executable bit makes GIO say "no default application" |
+| `dig +short example.com` and `host example.com` | an address. `dig` comes from `bind9-dnsutils`; `resolvectl` is deliberately absent because NetworkManager owns `resolv.conf`, and its absence is not a gap |
+| a menu whose rows are long (Files on a deep path, a grep match with a long line) | the window is wide enough for the end of the path; a row cut with `…` mid-detail means `ui_width` stopped sizing that list |
 | lock (`Alt+Ctrl+L`) and unlock | swaylock, then back to the session, no leftover screensaver |
 | shut down from the power menu | the machine powers off (the question is asked once) |
 
