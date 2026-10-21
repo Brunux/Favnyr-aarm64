@@ -667,6 +667,27 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   missing fd falls back to browsing with a notification. The cost is bounded by construction:
   501 rows (500 matches + the dotfile switch) of a 700-file `$HOME`, 92 ms end to end on this
   machine, no subprocess per row.
+- **`Alt+1` in the file browser acts on the row, and it needs two halves.** `rofi -dmenu
+  -kb-custom-1 Alt+1` exits **10** instead of 0 when that key is used, so `rofi-files` reads `rc`
+  (`rc=0; choice=$(...) || rc=$?; case $rc in 0|10) ;; *) exit 0 ;; esac`) and only then decides
+  between Enter and the action; the key is resolved *after* a typed path has been turned into a
+  row, so both routes reach the same dispatch. `~/.config/bin/rofi-file-actions FILE` is the other
+  half: a note naming the path, then only the rows that fit it - `du -sh` for a directory, pack
+  into `name.tar.xz` beside it, unpack an archive into a folder named after it, `udisksctl
+  loop-setup` + `mount` for an image (and the browser opens where it landed), ffmpeg to MP4 or MP3
+  for a video or a song, the path to the clipboard, a terminal in the directory. Three rules hold
+  it together: **nothing is touched until a row is picked** (the menu is built from the listing, no
+  probe runs per row), **an existing name is refused rather than overwritten** - including the
+  conversion whose output would be its own input, which becomes `name-converted.ext` instead of
+  writing over the film - and **the failed output is removed**, so a half-written file is never
+  left looking finished. The four long ones (`du` on a tree, packing, unpacking, converting) are
+  `busy` cards with the bar spinner and each carries its own `BUSY_STOP` pattern (`pkill -f
+  "[t]ar -caf"; pkill -f "[x]z"`), because the script is blocked on that child and a pattern is
+  the one handle it can leave behind: the click kills the tool, the step fails, `busy cancelled`
+  answers 0 and the menu reports nothing instead of half a result. The rest (copy the path, a
+  terminal, the `udisksctl` mount) finish in milliseconds and would only flash a card. `rofi-files` asks for
+  `$HOME/.config/bin/rofi-file-actions` and not `$dir`, the same convention it already uses for
+  `nureb-thumbnail`, because a row must not depend on which directory is being browsed.
 - **A thumbnail is rofi's own cache plus one script.** A row is
   `text\0icon\x1fthumbnail://<abs path>`; with `-show-icons` and
   `-preview-cmd 'nureb-thumbnail {input} {output} {size}'` rofi calls that script for the rows it
@@ -782,6 +803,23 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   No userspace filesystem helper is needed either: the kernel has `VFAT_FS=y` and
   `EXFAT_FS=m`/`NTFS3_FS=m`, so a stick from any other machine mounts, and `dosfstools` is
   already in `packages/base.list` for the `fsck.vfat` udisks runs before mounting one.
+- **Format a disk is the one destructive menu, so the list is the safety, not the question.**
+  `rofi-format` is reached from the last row of Places and offers only disks where **nothing is
+  mounted** and **no partition carries the ChromeOS kernel type**
+  (`fe3a2a5d-4f32-41a7-b725-accc3285a309`, p1 of the layout in `scripts/lib-cgpt.sh`). Those two
+  rules are what exclude the eMMC, the card that wrote the system and the card the system is
+  running from - however they are named, and with no device name hardcoded - and they also exclude
+  every stick udisks already mounted, which would fail halfway anyway. zram, loop and optical
+  devices are not disks a person formats. What is left has nothing this system needs, and the
+  confirmation still names the device, its model and its size, with **Cancel as the first row**
+  so a stray Enter does nothing; the filesystem is FAT32 (label `NUREB`) or ext4, and the whole
+  disk becomes one partition (`parted -s mktable gpt` + `mkpart primary`, then `mkfs`). **It is
+  not stoppable on purpose**, like the apt install: a killed `mkfs` leaves a disk that looks
+  formatted and is not, which is worse than a wait. The step chain is linear (`rc`/`step`) rather
+  than nested `if`s because `set -e` exits from inside an `if` *body* on a failed command - a
+  failing `mkfs` would leave the `busy` card spinning with no reason in it. `parted`, `mkfs.vfat`
+  and `mkfs.ext4` are already in the image (`parted` in `packages/base.list`), so the menu adds
+  no package; `check-system.sh` FAILs when any of the three or the script is missing.
 - **The GTK3 half of the palette is two files** in `uis/sway/files/home/.config/gtk-3.0/`:
   `settings.ini` (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `Nureb`,
   `JetBrains Mono 10`, animations off) and `gtk.css`, which repaints the surfaces with explicit
@@ -844,6 +882,26 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   missing `fzf` (an empty list reads as "no such file", never as a missing package) and on a
   missing `nureb-view`, and warns on the icon. Nothing is resident: one fzf process while the
   window is open.
+- **`Alt+Ctrl+G` searches the text inside the files** (`rofi-grep`, and "Search inside files" in
+  the root menu). It is the third question in the family and each one is a different tool on
+  purpose: `rofi-files --search` asks *which file was it* (bounded, 500 rows, icons), `nureb-find`
+  asks *I will know it when I see it* (uncapped, fzf, a preview), and this asks *where did I write
+  this* - one `rg --line-number --no-heading` run over `$HOME`, one row per match with the matching
+  **text** on the row (the text is what tells two matches apart) and `path:line` in the dim
+  colour. It is bounded the same way the list is (`--max-count 3` per file, the same four
+  excludes, `--max-columns 200`, 400 rows) because a home directory is not a repository: a file
+  that says "error" forty times is one row of context and thirty-nine of noise. **Enter opens the
+  match, not the file**: `bat --highlight-line N` colours the line but bat's own pager always
+  starts at the top, so its output is piped into `less -R +N` - less is told the line to start at
+  and `-R` keeps the colours bat wrote - inside the floated `popup` foot window. A pattern
+  ripgrep cannot parse is reported in ripgrep's own words (`regex parse error`) instead of an
+  empty list, and the walk is a `busy` card whose `BUSY_STOP` is `pkill -f "[r]g ..."`, so a
+  search that is taking too long is one click away from stopping. The binding lives in
+  `etc/sway/config.d/24-keys.conf` next to the Files keys and not in `19-launcher.conf`, because
+  it is a file question, not the launcher. The rows carry no glyph - a dmenu row without
+  `-show-icons` has no icon column, and foot cannot draw a Font Awesome codepoint anyway - so the
+  picture this feature has is the text on the row, and the notification that says "nothing
+  matches" carries `system-search` from the theme.
 - **Capture is a menu over commands that already exist** (`rofi-capture`, `Alt+Ctrl+C`, "Capture"
   in the root menu and the launcher entry `org.nureb.capture.desktop`):
   `screenshot -n save|copy screen|area|window` for the screenshot, where
@@ -875,6 +933,24 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   The active connection is resolved **by device name** (`nmcli -g GENERAL.CONNECTION device show`)
   because a connection name may contain a colon and `nmcli -t` escapes it. `check-system.sh` FAILs
   when any of the tools or the two scripts is missing.
+- **Download is `yt-dlp` with three decisions** (`rofi-download`, the root menu's "Download" row
+  and the launcher entry `org.nureb.download.desktop`): a link is pasted (or taken from the
+  clipboard when it holds one), the kind is video or **audio only**, and the file lands in
+  `~/Downloads` under yt-dlp's own `Title [id].ext` name. `--no-playlist` keeps a shared link to a
+  video inside a playlist from turning into a thousand files on a 58 GB eMMC; `--no-mtime` keeps
+  the newest download the newest file (yt-dlp otherwise stamps it with the upload date); and
+  `--no-simulate` is **not** optional even though `--print after_move:filepath` implies a dry run
+  on its own - without it yt-dlp prints the path and downloads nothing, which reads as a silent
+  success. `ffmpeg` (in `packages/tools.list`) merges the streams, and **node is why YouTube
+  offers the high-quality formats at all**: yt-dlp 2026 needs a JS runtime for its "EJS"
+  challenges, enables only `deno` by default and Debian ships none, so `/etc/yt-dlp.conf` names
+  `--js-runtimes node` and the debug line goes from `JS runtimes: none` to
+  `[jsc:node] Solving JS challenges using node` - the visible symptom without it is *some formats
+  may be missing*, which reads as a site problem, never as a missing package. A download is a
+  `busy` card whose `BUSY_STOP` is `pkill -f "[y]t-dlp"`; stopped, the card says the `.part` file
+  is still in `~/Downloads` instead of claiming a file, and a failure is the last lines of
+  yt-dlp's own message rather than a traceback. `~/Downloads` is created by `rootfs-setup.sh` (git
+  cannot carry an empty directory) and by the script itself if it is gone.
 - **The card's shortcut feedback, fixed where it was** (the 2026-10-20 report): `Alt+Escape` and
   `Alt+Ctrl+P` open the **power menu** (`rofi-power`: lock, suspend, hibernate, log out, reboot,
   shut down), which is what the manual claimed they did - both keys ran `bar-power`, the *battery*
@@ -920,7 +996,8 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
 - **The menus are one-shot rofi scripts, and slow actions say so twice.** `~/.config/bin/rofi-*`
   are the menus behind the root menu (`rofi-quick`, `rofi-notify`, `rofi-clean`, `rofi-kill`,
   `rofi-tz`, `rofi-places`, `rofi-media`, `rofi-calc`, `rofi-layout`, `rofi-learn`, `rofi-emoji`,
-  `rofi-clip`, `rofi-about`, `rofi-dns`, `rofi-pkg`, `rofi-color`, `rofi-remind`); they share
+  `rofi-clip`, `rofi-about`, `rofi-dns`, `rofi-pkg`, `rofi-color`, `rofi-remind`, `rofi-download`,
+  `rofi-grep`, `rofi-format`, `rofi-file-actions`); they share
   `lib-rofi.sh` (`ui_row` glyph+bold+dim row, `ui_pick` table-and-key round trip because rofi hands
   back the rendered row, `ui_pick_alt` when a second action sits on Alt+1 - it returns `alt:KEY` and
   rofi exits 10 for that, `ui_say` for results) and each is one process while open. **A slow action
@@ -945,6 +1022,13 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   toggles (they finish in milliseconds). Wired into the Wi-Fi scan/join, the Bluetooth scan, the
   `du` walk in Free space and the dictation recording; a new slow action gets the same two lines
   and, when it can be interrupted safely, one more.
+  **The root menu's Password row is `openssl rand -hex 16`**, and the three choices in it are
+  deliberate: **hex** has no shift key, no `+`, `/` or `=` to re-quote when it is pasted into a
+  file, a URL or a `.env`, and 32 characters of hex is still 128 bits; the value goes **straight
+  into the clipboard** and **never into the notification body**, because mako keeps a history and
+  a password printed in a toast is a password in `~/.cache/mako` - the card says only that it is
+  copied. Nothing is stored: the row is one `openssl` process, and the clipboard is the clipboard
+  (where `rofi-clip`'s last row clears it).
 - **Clipboard history and emoji are the two exceptions that were worth it.** `rofi-clip`
   (`Alt+Ctrl+V`) lists what `cliphist` kept, which is fed by
   `exec wl-paste --watch cliphist store` in `config.d/27-clipboard.conf` - **the only resident
@@ -1002,7 +1086,13 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   the rendered result is verified by capturing glow's output in a pty and checking for `38;2;`
   (truecolour) instead of `38;5;<six hex digits>`.
   The first row of the menu searches
-  every page with `rg`. Nothing stays after the page closes. `rofi-keys` (Alt+Ctrl+K,
+  every page with `rg`; the second lists the machine's **own** manuals - `apropos -- "$q"` over
+  the whatis database man-db builds, one row per page with `name (section)` and its description,
+  and Enter running `man SECTION NAME` in foot, where `MANPAGER` renders it in the same palette.
+  That second row is what `man-db` in `packages/tools.list` is for, and why
+  `check-system.sh` FAILs without `apropos`/`man`: the row would otherwise answer a search that
+  found nothing. Nothing stays
+  after the page closes. `rofi-keys` (Alt+Ctrl+K,
   Omarchy's Super+K) is *generated* from `/etc/sway/config`, `config.d/*.conf` and
   `~/.config/sway/config`: it expands `set $var`, takes the comment above each binding as its
   description, and shows the list with `rofi -dmenu -markup-rows` (bold keys, dim descriptions); the

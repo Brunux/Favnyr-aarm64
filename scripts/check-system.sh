@@ -918,6 +918,89 @@ fi
 [ -r /usr/share/icons/Nureb/48x48/apps/system-search.png ] ||
 	warn "the Nureb theme has no system-search icon: nureb-find's notifications are text-only"
 
+# Search inside files (Alt+Ctrl+G) is the other half of the Search key: rofi-files
+# finds a file by its name, rofi-grep by what is written in it. Two things take it
+# away and neither says so - a missing binding (the key does nothing) or a missing
+# ripgrep (the menu opens, refuses, and reads as "no matches").
+if grep -rqs 'Ctrl+g exec .*rofi-grep' /etc/sway/config.d/; then
+	ok "Alt+Ctrl+G searches inside the files (rofi-grep)"
+else
+	fail "no 'Ctrl+g exec ...rofi-grep' binding in /etc/sway/config.d/: the key does nothing"
+fi
+have rg && ok "ripgrep present, which the search inside files runs" ||
+	fail "ripgrep is missing (package ripgrep): Alt+Ctrl+G finds nothing"
+
+# Download (the root menu and the launcher) is yt-dlp plus the two things that
+# make it useful: ffmpeg to merge a video stream with its audio, and node as the
+# JavaScript runtime /etc/yt-dlp.conf names for YouTube's challenges. Without node
+# yt-dlp still runs and warns that "some formats may be missing", which reads as a
+# site problem instead of a missing package.
+_missing_dl=""
+for _c in yt-dlp ffmpeg node; do have "$_c" || _missing_dl="$_missing_dl $_c"; done
+[ -x "$HOME/.config/bin/rofi-download" ] || _missing_dl="$_missing_dl bin/rofi-download"
+if [ -z "$_missing_dl" ]; then
+	ok "download complete (yt-dlp, ffmpeg, node, rofi-download)"
+else
+	fail "download incomplete:$_missing_dl (the row opens a menu that cannot fetch)"
+fi
+grep -qs 'js-runtimes node' /etc/yt-dlp.conf && ok "yt-dlp is told to use node (JS runtimes)" ||
+	warn "/etc/yt-dlp.conf does not name node: yt-dlp logs 'JS runtimes: none' and YouTube may withhold formats"
+
+# The home folders the manual and the menus name (Documents, Downloads, Music,
+# Videos) are created by rootfs-setup.sh rather than shipped in the tree, because
+# git cannot carry an empty directory. A missing Downloads only moves the download
+# (rofi-download creates it), so this warns instead of failing.
+_missing_home=""
+for _d in Documents Downloads Music Videos; do
+	[ -d "$HOME/$_d" ] || _missing_home="$_missing_home $_d"
+done
+[ -z "$_missing_home" ] && ok "the home folders are there (Documents, Downloads, Music, Videos)" ||
+	warn "home folders missing:$_missing_home (rootfs-setup.sh creates them; a download recreates Downloads)"
+
+# Alt+1 in the file browser is rofi's -kb-custom-1 and needs two halves: the flag
+# in rofi-files and bin/rofi-file-actions behind it. Without the flag rofi exits 0
+# and Enter's action runs instead - the row opens when the person asked to act on
+# it - which is silent.
+if grep -qs -- '-kb-custom-1 Alt+1' "$HOME/.config/bin/rofi-files"; then
+	ok "the file browser passes Alt+1 through to rofi (-kb-custom-1)"
+else
+	warn "bin/rofi-files no longer passes -kb-custom-1 Alt+1: Alt+1 opens the row instead of acting on it"
+fi
+_missing_actions=""
+for _c in tar unzip ffmpeg udisksctl; do have "$_c" || _missing_actions="$_missing_actions $_c"; done
+[ -x "$HOME/.config/bin/rofi-file-actions" ] || _missing_actions="$_missing_actions bin/rofi-file-actions"
+if [ -z "$_missing_actions" ]; then
+	ok "the file actions have their tools (tar, unzip, ffmpeg, udisksctl)"
+else
+	fail "file actions incomplete:$_missing_actions (Alt+1 offers rows that cannot run)"
+fi
+
+# Format a disk writes a partition table and a filesystem, so both halves have to
+# be there before the menu is allowed to list anything - and the menu is reached
+# from Places, where a missing script is a row that does nothing.
+_missing_fmt=""
+for _c in parted mkfs.vfat mkfs.ext4; do have "$_c" || _missing_fmt="$_missing_fmt $_c"; done
+[ -x "$HOME/.config/bin/rofi-format" ] || _missing_fmt="$_missing_fmt bin/rofi-format"
+if [ -z "$_missing_fmt" ]; then
+	ok "format a disk complete (parted, mkfs.vfat, mkfs.ext4, rofi-format)"
+else
+	fail "format a disk incomplete:$_missing_fmt (the Places row does nothing)"
+fi
+
+# The Learn menu's second row is the machine's own documentation: apropos searches
+# the whatis database man-db builds, and man renders the page. Without man-db both
+# are absent and the row reports a search that found nothing.
+if have apropos && have man; then
+	ok "manual pages searchable (apropos, man), which the Learn menu's second row opens"
+else
+	fail "man-db is missing (apropos/man): the Learn menu cannot show a program's own manual"
+fi
+
+# Password (the root menu) is openssl's random bytes, and a missing openssl is a
+# row that answers "openssl is not installed" instead of a password.
+have openssl && ok "openssl present, which the Password row generates with" ||
+	fail "openssl is missing (package openssl): the Password row cannot generate anything"
+
 # dig is the first step of every DNS problem in the manual, and there is no
 # resolvectl here (the resolver is NetworkManager's, not systemd-resolved's), so
 # without bind9-dnsutils that section begins with "command not found".
