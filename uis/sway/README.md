@@ -31,7 +31,9 @@ launcher, waybar and the foot terminal.
 | `home/.config/bin/dictate`, `dictate-model` | Dictation with whisper.cpp; the model is fetched (pinned SHA256) on first use. |
 | `home/.config/bin/sway-hibernate` | Hibernate, gated on a disk swap and `resume=`. |
 | `home/.config/bin/rofi-agents` | **Agents**: launch a coding agent, install one, keep accounts per agent. |
-| `usr/share/doc/nureb/*.md` | The six manual pages the Learn menu opens. |
+| `home/.config/bin/rofi-capture`, `rofi-qr` | **Capture** (screenshot, annotate, OCR, QR, record) and the Wi-Fi QR code. |
+| `home/.config/bin/rofi-power` | **Power** menu: lock, suspend, hibernate, log out, reboot, shut down (the last three ask first). |
+| `usr/share/doc/nureb/*.md` | The seven manual pages the Learn menu opens. |
 | `home/.config/rofi/config.rasi` | Launcher settings: the three modes, `terminal = foot`, matching. |
 | `home/.config/rofi/solarized.rasi` | The solarized look, shared by the launcher, the window switcher and the bar's dmenu. |
 | `home/.config/foot/foot.ini` | Solarized palette, JetBrains Mono and the Nerd Font fallback for the session terminal and the bar's popups. |
@@ -67,10 +69,11 @@ binary, `/etc/sway` and the greeter's `sway` command are the same either way, bu
 | `corner_radius 6` + `smart_corner_radius` | on | The corner is cut out of the window's buffer when it is committed; with the 8 px inner gap the radius is visible and nothing is done per frame. |
 | `shadows` | on | One blurred texture per window, drawn once per frame. |
 | `default_dim_inactive 0.0` | off | The solarized palette already dims unfocused borders; dimming a terminal turns its text grey. |
-| `blur` | on | A tiled window samples a buffer blurred once from the wallpaper (one bilinear tap, 0.07-0.11 ms full screen); only a floating window is re-blurred live from what is behind it (2.1-2.2 ms, scaling with its area). |
+| `blur` | on | A tiled window samples a buffer blurred once from the wallpaper (one bilinear tap, 0.07-0.11 ms full screen); a floating window, and any window for the duration of its animation, is re-blurred live from what is behind it (2.1-2.2 ms, scaling with its area). |
 | `blur_xray` | off | On, every surface would sample the cached wallpaper, including a floating window - cheapest, but the wallpaper shows through it instead of the window behind. |
 | `blur_passes 2` / `blur_radius 4` | | A 32 px sample instead of the shipped 80 px, and the distance a live blur grows its damage by. |
 | `blur_noise 0`, neutral brightness/contrast/saturation | | SceneFX skips its second full-screen pass when nothing is tinted; noise would also be visible grain. |
+| `animation_duration_ms 150` | on | The only animation knob swayfx 0.6 has (no per-event directives, one fixed ease-out-cubic): open/close, tiling moves and the workspace cross-fade, ~9 frames at 60 Hz. It sends each animating window down the live blur path for that duration. |
 | `layer_effects` | bar + launcher | The bar only has the wallpaper behind it and takes the cached path; rofi floats over windows and takes the live one. |
 
 Blur is drawn *behind* a surface, so it only exists under one with alpha < 1: the terminal
@@ -135,6 +138,13 @@ icon theme (`usr/share/icons/Nureb`), whose `index.theme` inherits Adwaita and h
 application that brings its own icon (foot, btop, htop, anything installed later) still shows
 it in colour. The bar's popups pass `-no-show-icons` because they draw their own glyph.
 
+The command palette needed the same treatment for a reason that is not obvious: rofi's **run**
+mode asks the icon theme for an icon *named after the binary* it would run
+(`rofi_icon_fetcher_query(str[0], …)`), not for a `.desktop` icon, so without an icon called
+`foot.png` a palette row has a blank 26 px column. `make-icons.sh` therefore renders a second
+table under those names, and the fixed column keeps the rows without one aligned.
+`check-system.sh` warns (never fails) when they are missing.
+
 That was measured, not assumed: the first attempt at this theme shipped SVGs with a literal
 private-use character, which does not survive every editor or transport, and the first
 `make-icons.sh` ran `printf` under dash, which has no `\u` escape - both produced a row of
@@ -161,11 +171,12 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 
 | Script | Key / entry | What it does |
 |---|---|---|
-| `rofi-quick` | `Alt+Ctrl+O`, Settings | the switches of the session in one list: Wi-Fi and Bluetooth radios (with the pickers one row below), night light, do-not-disturb, touchpad, rotation, keyboard layout, audio, media, battery. It redraws after every switch, so the state it shows is never stale |
+| `rofi-quick` | `Alt+Ctrl+O`, Settings | the switches of the session in one list: Wi-Fi and Bluetooth radios (with the pickers one row below), night light, do-not-disturb, touchpad, rotation, keyboard layout, audio, media, battery. It redraws after every switch, so the state it shows is never stale, and its probes run in parallel (two `bluetoothctl` clients, `nmcli` and `swaymsg` in sequence made it feel broken) |
+| `rofi-power` | `Alt+Escape`, `Alt+Ctrl+P`, Power menu | lock, suspend, hibernate, log out, reboot, shut down; the last three ask once more through `bar-pick` |
 | `rofi-notify` | `Alt+Ctrl+N`, Notifications | mako's history (`makoctl history -j`), Enter copies one, plus restore, dismiss-all and do-not-disturb |
 | `rofi-clean` | Free space | `df` plus what grows (trash, thumbnails, apt cache, journal, `~/.cache`), one action per row, re-measured afterwards |
 | `rofi-kill` | End a process | the heaviest twenty by resident memory; SIGTERM, then an explicit offer of SIGKILL |
-| `rofi-tz` | Time zone | `timedatectl list-timezones` with the current one marked, and the network-clock switch |
+| `rofi-tz` | Time zone | `timedatectl list-timezones` with the current one marked, and the network-clock switch. It restarts waybar afterwards: `timedatectl` only rewrites `/etc/localtime`, and a running process keeps the zone glibc cached the first time it called `localtime()` |
 | `rofi-places` | Places | home, documents, downloads, pictures, the mounted filesystems; Enter browses there with `rofi-files` |
 | `rofi-media` | Media | the current track and play/pause/next/previous through `playerctl` |
 | `rofi-calc` | `Alt+Ctrl+Q`, Calculator | awk, one prompt; Enter copies the result |
@@ -253,8 +264,9 @@ own it. The whole set is the *Shortcuts* page of the manual
 |---|---|---|
 | launcher, switcher, commands | `Search`/`Alt+D`, `Alt+Tab`, `Alt+Shift+D` | `19-launcher.conf` |
 | root menu | `Alt+Space` (Omarchy: `Super+Space`) | `24-keys.conf` |
-| panels | `Alt+Ctrl+A/B/W/P` → audio, Bluetooth, network, power (Omarchy: `Super+Ctrl+A/B/W/P`) | `24-keys.conf` |
-| system | `Alt+Escape` power panel, `Alt+Ctrl+L` lock, `Alt+Shift+Escape` lock+sleep, `Alt+Ctrl+Escape` sleep | `21-lock-screen.conf`, `22-sleep.conf` |
+| panels | `Alt+Ctrl+A/B/W` → audio, Bluetooth, network (Omarchy: `Super+Ctrl+A/B/W`) | `24-keys.conf` |
+| system | `Alt+Escape` and `Alt+Ctrl+P` power menu (`rofi-power`), `Alt+Ctrl+L` lock, `Alt+Shift+Escape` lock+sleep, `Alt+Ctrl+Escape` sleep | `21-lock-screen.conf`, `22-sleep.conf`, `24-keys.conf` |
+| browser | `Alt+Shift+Return` opens `firefox-esr` | `19-launcher.conf` |
 | windows | `Alt+Q` close, `Alt+T` float, `Alt+F` fullscreen, `Alt+grave` scratchpad, `Alt+R` resize | `config`, `24-keys.conf` |
 | views | `Alt+Ctrl+K` every binding, `Alt+Ctrl+X` dictation, `Alt+Ctrl+Shift+A` agents | `24-keys.conf` |
 | files | `Alt+Ctrl+F` (`rofi-files`) | `24-keys.conf` |
@@ -264,7 +276,10 @@ next to the binding: close is `Alt+Q` because `Alt+W` is sway's tabbed layout, t
 `Alt+Ctrl+K` because `Alt+K` is vim focus up and `Alt+Shift+K` moves the window, and there is no "cycle layout" key because
 sway's layouts are stacking/tabbed/split rather than Hyprland's dwindle/master/scrolling.
 The panel keys run the very scripts the bar's indicators run (`bar-audio`, `bar-bt`,
-`bar-net`, `bar-power`), so a panel has one implementation and two ways to reach it.
+`bar-net`), so a panel has one implementation and two ways to reach it. The power menu is the
+one exception: the key opens `rofi-power` (actions, and a yes/no on the three that cannot be
+undone) while the bar's battery indicator still opens `bar-power` (numbers), because those are
+two different questions and one script answering the wrong one is what made both keys look dead.
 
 ![The key view: categories, keys and the description from the comment above each binding](../../docs/screenshots/hayato-r1-keys.png)
 
@@ -304,11 +319,16 @@ list would drift the first time someone edits the configuration.
 
 **Dictation** (`Alt+Ctrl+X`, matching Omarchy's `Super+Ctrl+X`) is `parecord` at 16 kHz mono while
 it records, then `whisper-cli` for the transcription, then `wtype` into the focused window (and the
-clipboard as a fallback). The model is fetched on first use by `dictate-model` - 78 MB for the
+clipboard as a fallback). The level is normalised with `ffmpeg -af dynaudnorm` before whisper: the
+internal microphone records quietly and whisper is sensitive to that. The model is fetched on first
+use by `dictate-model` - 78 MB for the
 default `ggml-tiny.en.bin`, 148 MB for `base.en` - verified against a pinned SHA256 and kept in
 `~/.local/share/whisper/`. Recording stops itself after 60 seconds and the state is a pid file in
-`$XDG_RUNTIME_DIR`, so nothing survives a crash. Omarchy uses voxtype (a Rust daemon with a state
-file); this is the same interaction without the daemon.
+`$XDG_RUNTIME_DIR`, so nothing survives a crash. Both silent phases report through `busy`: the
+notification says it is recording ("Alt+Ctrl+X stops it"), becomes "Transcribing…" and ends as the
+text it typed or the reason it failed, and the bar shows its spinner. Pressing the key again - or
+the root menu's Dictation row - stops it (SIGINT, which is what finalises the wav). Omarchy uses
+voxtype (a Rust daemon with a state file); this is the same interaction without the daemon.
 
 **Agents** (`Alt+Ctrl+Shift+A`, Omarchy's `Super+Shift+Ctrl+A`) is `rofi-agents`: it lists the
 coding-agent CLIs it knows (Claude Code, Codex, OpenCode, Gemini, Copilot), launches the installed
@@ -337,7 +357,7 @@ instead, and nothing survives the click:
 
 | Indicator | Left click | Right click | Scroll |
 |---|---|---|---|
-| menu | root menu (terminal, Wi-Fi, Bluetooth, audio output, lock, suspend, log out, reboot, power off) | terminal | – |
+| menu | root menu (terminal, Wi-Fi, Bluetooth, audio output, dictation, capture, lock, suspend, the power menu) | terminal | – |
 | workspaces | focus / move (sway) | – | disabled |
 | clock | switch format (date + time / seconds) | – | previous / next month (hover shows the month grid) |
 | updates | apt updater in a floating terminal (the module only exists while something is pending) | – | – |
@@ -421,7 +441,10 @@ Deboma runs a screensaver 150 s after the last input and locks at 300 s
   that is 78 MB of Python plus a full 1920x1200 repaint 120 times a second on the Mali-G57, for as
   long as the screen is idle. `sway-screensaver` runs `tte` once, then prints the static logo and
   waits for one keypress: the effect keeps its (~10 s) animation, and what stays on screen is a
-  single foot window, about 25 MB and no CPU.
+  single foot window, about 25 MB and no CPU. The animation is `tte`'s **stdout**: the first
+  version sent it to `/dev/null` while silencing its log, so the screen stayed black and only the
+  logo appeared ("nothing moves"). The effects are curated (`decrypt print sweep wipe slide`, the
+  ones that end with the text in place) and the frame rate is 30, not 120.
 * **No per-monitor launcher.** Deboma's launcher walks `hyprctl monitors`, opens a terminal per
   monitor in a special workspace and listens on Hyprland's socket; here the session has one output
   and the window rule in `23-screensaver.conf` fullscreens `[app_id="org.nureb.screensaver"]` on the

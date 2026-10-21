@@ -84,7 +84,7 @@ menu=$(
 
 "$dir/busy" stop wifi
 choice=$(
-	printf '%s\n' "$menu" 'Turn Wi-Fi off' 'Network settings (nmtui)' |
+	printf '%s\n' "$menu" 'Turn Wi-Fi off' 'Show the password as a QR' 'Network settings (nmtui)' |
 		"$dir/bar-pick" 'Wi-Fi'
 ) || exit 0
 
@@ -101,6 +101,7 @@ case $choice in
 		exit 0
 		;;
 	'Network settings (nmtui)') exec foot --app-id=popup nmtui ;;
+	'Show the password as a QR') exec "$dir/rofi-qr" --wifi ;;
 esac
 
 ssid=${choice#??}

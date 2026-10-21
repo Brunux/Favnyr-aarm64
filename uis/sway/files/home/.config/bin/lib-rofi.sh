@@ -81,6 +81,13 @@ UI_I_MOUSE=$(printf '\357\211\205')   # f245
 UI_I_BATTERY=$(printf '\357\211\200')   # f240
 UI_I_BOX=$(printf '\357\206\207')   # f187
 UI_I_CODE=$(printf '\357\204\241')   # f121
+UI_I_CAMERA=$(printf '\357\200\260')   # f030
+UI_I_CROP=$(printf '\357\204\245')   # f125
+UI_I_QR=$(printf '\357\200\251')   # f029
+UI_I_CLIPBOARD=$(printf '\357\203\252')   # f0ea
+UI_I_SMILE=$(printf '\357\204\230')   # f118
+UI_I_INFO=$(printf '\357\201\232')   # f05a
+UI_I_CLOUD=$(printf '\357\203\202')   # f0c2
 
 
 # Pango treats &, < and > as markup; a tab or a newline would break the TSV or

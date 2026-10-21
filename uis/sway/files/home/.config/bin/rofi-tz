@@ -28,16 +28,16 @@ timedatectl list-timezones 2>/dev/null >"$tmp/zones" || : >"$tmp/zones"
 	while IFS= read -r zone; do
 		[ -n "$zone" ] || continue
 		if [ "$zone" = "$current" ]; then
-			ui_row "$ICON_ON" "$zone" 'current' "set:$zone"
+			ui_row "$UI_ON" "$zone" 'current' "set:$zone"
 		else
-			ui_row "$ICON_OFF" "$zone" '' "set:$zone"
+			ui_row "$UI_OFF" "$zone" '' "set:$zone"
 		fi
 	done <"$tmp/zones"
 
 	if [ "$ntp" = yes ]; then
-		ui_row "$ICON_ON" 'Set the clock from the network' 'on' ntp:on
+		ui_row "$UI_ON" 'Set the clock from the network' 'on' ntp:on
 	else
-		ui_row "$ICON_OFF" 'Set the clock from the network' 'off' ntp:off
+		ui_row "$UI_OFF" 'Set the clock from the network' 'off' ntp:off
 	fi
 } >"$tmp/rows"
 
@@ -47,7 +47,18 @@ case $key in
 set:*)
 	zone=${key#set:}
 	if sudo -n timedatectl set-timezone "$zone" 2>/dev/null; then
-		ui_say 'Time zone' "Now $zone"
+		# timedatectl rewrites /etc/localtime, and that is all it does for a
+		# running session: glibc caches the zone the first time localtime() is
+		# called in a process, so the bar's clock kept showing the old time and
+		# the menu looked like it had done nothing.  Restart the bar (it is the
+		# one long-lived process in the session that displays the time), and put
+		# the new local time in the notification so the change is visible even
+		# before the bar is back.
+		if pgrep -x waybar >/dev/null 2>&1; then
+			pkill -x waybar 2>/dev/null || true
+			setsid waybar >/dev/null 2>&1 &
+		fi
+		ui_say 'Time zone' "Now $zone · $(TZ="$zone" date '+%H:%M')"
 	else
 		ui_say 'Time zone' "Could not set $zone (timedatectl needs root)" critical
 	fi

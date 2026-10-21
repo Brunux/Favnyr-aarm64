@@ -247,7 +247,8 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   and is also how far a live blur grows its damage; `blur_noise 0` with neutral
   brightness/contrast/saturation skips SceneFX's second full-screen pass (0.6 ms/frame, and the
   visible grain). Blur is drawn *behind* a surface, so the effect only exists under one with
-  alpha < 1: foot 0.92, rofi 0.88 and waybar 0.78/0.86 are the three carriers, and
+  alpha < 1: foot 0.87, rofi 0.82 (0.88 on the selected row), waybar 0.71 (0.80 on the
+  cards) and mako 0.88 are the carriers, and
   `layer_effects` gives the bar the cached path (only the wallpaper is behind it) and the launcher
   the live one (it floats over windows). Numbers, method and the renderer facts are in
   `docs/optimization.md` §7: PanVK answers *Mali-G57 not supported*, and SceneFX creates its own
@@ -498,14 +499,61 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `uis/sway/files/usr/local/bin/xdg-open` opens for URLs and paths, the two dozen lines that foot's
   ctrl+click and the CLI tools expect (there is no desktop portal here). `check-system.sh` fails
   when the browser or the shim is missing.
+- **Capture is a menu over commands that already exist** (`rofi-capture`, `Alt+Ctrl+C`, "Capture"
+  in the root menu and the launcher entry `org.nureb.capture.desktop`): `grimshot -n save|copy
+  screen|area|window` for the screenshot (it prints and announces the path; the notification
+  carries the image), `swappy -f FILE` to annotate, which writes the edits back over the same file
+  and exits when its window closes, `slurp -d` + `grim -g` for one region that `tesseract FILE
+  stdout -l eng` (English is the only `tesseract-ocr-*` the image ships) or `zbarimg -q --raw`
+  reads, the result copied with `ui_copy` and the first line in the notification.
+  **`wf-recorder` is the one action that outlives the menu**, so it is started and stopped from the
+  same list and its pid and file name live in `$XDG_RUNTIME_DIR/nureb-capture`: a session that dies
+  takes the state with it (a stale pid is `kill -0`-tested), the `.mp4` stays. x264 on the CPU
+  (`-c libx264 -p preset=veryfast -p crf=28 -r 30`) because the MT8192 has no hardware encoder and
+  four cores are the frame budget, **no audio track** because that needs a PipeWire monitor source
+  nothing here wires (`-a` would record the microphone), and Stop is SIGINT, which is what
+  finalises the container; a recorder that had to be SIGTERMed leaves a file the notification calls
+  empty instead of claiming success. The `busy` toast is the persistent one and the bar shows the
+  spinner while it runs. `rofi-qr` (root menu, the Wi-Fi panel's last row) draws
+  `WIFI:T:WPA;S:<ssid>;P:<password>;;` with `\`, `;`, `,` and `:` escaped as ZXing expects, the
+  password read with `sudo -n nmcli -s`, the payload written to a `0600` temp file and drawn by
+  `qrencode -t ANSIUTF8` inside the floated `popup` foot window - no image viewer, no file left.
+  The active connection is resolved **by device name** (`nmcli -g GENERAL.CONNECTION device show`)
+  because a connection name may contain a colon and `nmcli -t` escapes it. `check-system.sh` FAILs
+  when any of the tools or the two scripts is missing.
+- **The card's shortcut feedback, fixed where it was** (the 2026-10-20 report): `Alt+Escape` and
+  `Alt+Ctrl+P` open the **power menu** (`rofi-power`: lock, suspend, hibernate, log out, reboot,
+  shut down), which is what the manual claimed they did - both keys ran `bar-power`, the *battery*
+  banner, so the key looked dead. The three destructive rows go through a `bar-pick` yes/no, and the
+  root menu's `Log out`/`Reboot`/`Power off` rows are gone for the same reason: a stray Enter there
+  rebooted the machine with no question. `Alt+Shift+F`/`Alt+Shift+S`/`Alt+Ctrl+S` run `grimshot -n`
+  (the flag that prints and notifies the file, or that the region is on the clipboard); without it
+  the screenshot keys are silent. `Alt+Shift+Return` opens `firefox-esr`. **Night light**: the login
+  line is `wlsunset -t 4000`, because 5500 K is close enough to daylight that the switch looked
+  broken, and the manual toggle strips the `-t` from that same line (one copy of the coordinates)
+  and forces `-T 4000 -t 4000`: a toggle that only takes effect after sunset does nothing when it is
+  tried at 17:00. **Time zone**: `timedatectl set-timezone` rewrites `/etc/localtime` and nothing
+  else, and glibc caches the zone the first time a process calls `localtime()`, so the bar kept the
+  old time and the menu looked inert; `rofi-tz` restarts `waybar` and puts the new local time in the
+  notification. **Settings** (`rofi-quick`): six probe groups render in parallel (it was the sum of
+  two `bluetoothctl` clients, two `nmcli` calls and three `swaymsg` round trips), the SSID comes from
+  `iw dev <if> link` because `nmcli device wifi` blocks until a scan already in progress finishes,
+  and the sink from one `wpctl get-volume` instead of three `pactl` calls. **Command palette**
+  (`Alt+Shift+D`): rofi's run mode asks the icon theme for an icon *named after the binary*
+  (`rofi_icon_fetcher_query(str[0], …)`), which Adwaita has for none of them, so `make-icons.sh`
+  renders a second table under those names; the element is a fixed 26 px column, so the binaries
+  without an icon keep their text aligned. `check-system.sh` warns, never FAILs, when those PNGs are
+  missing.
 - **The key scheme mirrors Omarchy's**, with `Alt` where Omarchy uses `Super`: the panels are
-  `Alt+Ctrl+A/B/W/P` (audio, Bluetooth, network, power - the same scripts the bar's indicators run),
+  `Alt+Ctrl+A/B/W` (audio, Bluetooth, network - the same scripts the bar's indicators run),
   `Alt+Ctrl+O` is **Settings** (`rofi-quick`: the radio switches, night light, do-not-disturb,
   touchpad, rotation), `Alt+Ctrl+N` the **Notifications** history and `Alt+Ctrl+Q` the
   **calculator**,
   the root menu is `Alt+Space` (Omarchy's `Super+Space`; sway's `focus mode_toggle` had that key and
   was dropped), the scratchpad is `Alt+grave` (`Alt+minus` stays as an alias), lock is
-  `Alt+Ctrl+L`, and `Alt+Escape` opens the **power** panel (Omarchy's system menu). Three deliberate
+  `Alt+Ctrl+L`, and `Alt+Escape` **and** `Alt+Ctrl+P` open `rofi-power` (Omarchy's system menu and
+  Super+Ctrl+P), while `bar-power` stays the *battery* panel behind the bar's indicator - a banner of
+  numbers under a key documented as a menu of actions read as "does not work". Three deliberate
   deviations, each because a sway default owns Omarchy's letter: close is `Alt+Q` (`Alt+W` is
   tabbed), the key view is `Alt+Ctrl+K` (`Alt+K` is vim focus up, `Alt+Shift+K` moves the window), and there is no "cycle layout"
   key (sway's layouts are stacking/tabbed/split, not dwindle/master/scrolling).
@@ -532,7 +580,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   shortcuts, software, the system, troubleshooting, agents) is opened by `rofi-learn` with **glow**
   (`packages/tools.list`), styled by `~/.config/glow/solarized.json` - a *glamour* style, unrelated
   to the rofi theme; glow lives in `~/.config/glow/glow.yml`, whose `style:` must be an absolute
-  path because glow treats a bare name as one of its built-ins. The first row of the menu searches
+  path because glow treats a bare name as one of its built-ins. The style gives the headings a `▌`
+  bar and carries a full `chroma` map for fenced code: without one glamour paints code blocks in the
+  document colour, so a page with commands in it was a wall of base1 text (the "ugly" rendering).
+  The first row of the menu searches
   every page with `rg`. Nothing stays after the page closes. `rofi-keys` (Alt+Ctrl+K,
   Omarchy's Super+K) is *generated* from `/etc/sway/config`, `config.d/*.conf` and
   `~/.config/sway/config`: it expands `set $var`, takes the comment above each binding as its
@@ -540,12 +591,19 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   row-to-command mapping lives in a temp TSV because a markup string cannot be parsed back, and Enter
   copies the command. A hand-written list would drift the first time someone edits the configuration,
   which is why this one is parsed. `dictate` (Alt+Ctrl+X, Omarchy's Super+Ctrl+X) records with
-  `parecord` at 16 kHz, transcribes with `whisper-cli` and types with `wtype` (clipboard as the
+  `parecord` at 16 kHz, **normalises the level with `ffmpeg -af dynaudnorm`** (the internal DMIC is
+  quiet and whisper is very sensitive to it, which is what "a little bit low" meant),
+  transcribes with `whisper-cli -t $(nproc)` and types with `wtype` (clipboard as the
   fallback when the focused surface refuses a virtual keyboard); the model is fetched by
   `dictate-model` on first use - 78 MB tiny.en, 148 MB base.en - **verified against a pinned SHA256**
   and kept in `~/.local/share/whisper/`, so it survives a rebuilt image. Recording stops itself after
-  60 s and its state is a pid file in `$XDG_RUNTIME_DIR`, never a watcher. Omarchy runs voxtype (a
-  Rust daemon) for the same interaction. `sway-hibernate` refuses unless three things hold, each with
+  60 s and its state is a pid file in `$XDG_RUNTIME_DIR`, never a watcher. Both silent phases
+  (recording, transcribing) are `busy` cards: the toast stays up saying "Alt+Ctrl+X stops it", turns
+  into "Transcribing…" and then into the typed text or the reason it failed, and the bar spins while
+  either runs - the seconds of silence were the other half of the complaint. Stopping is **SIGINT**
+  (what makes `parecord` write the final wav header), with SIGTERM after two seconds so the menu
+  never hangs, and the root menu keeps a **Dictation** row so the mouse can stop it too.
+  Omarchy runs voxtype (a Rust daemon) for the same interaction. `sway-hibernate` refuses unless three things hold, each with
   its own message: `/sys/power/state` has `disk`, a **disk** swap (not zram) of at least 2/5 of RAM
   exists, and the kernel command line carries `resume=`. `resume=LABEL=nureb_swap` is the intended
   wiring (initramfs-tools resolves the label through udev, so an SD swap partition labelled
@@ -599,7 +657,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   panfrost, which is what the battery notices. `~/.config/bin/sway-screensaver` therefore plays
   `tte` **once** (`timeout 25`, no `--reuse-canvas`), then clears and prints the static logo centred
   and waits for one byte: the animation is kept and what stays on screen is one foot window (~25 MB,
-  no CPU). Deboma's launcher (`hyprctl monitors`, a special workspace per monitor, its socket2 event
+  no CPU). Its stdout **is** the animation: the first version redirected `tte` to `/dev/null` while
+  silencing its log, so the screen stayed black for the whole 25 s and only the static logo appeared -
+  "the screensaver does not work, nothing moves". The effects are curated (`decrypt print sweep wipe
+  slide`) to the ones that end with the text in place, and the frame rate is 30, not 120. Deboma's launcher (`hyprctl monitors`, a special workspace per monitor, its socket2 event
   stream) has no sway equivalent worth building: there is one output, and
   `config.d/23-screensaver.conf` fullscreens `[app_id="org.nureb.screensaver"]` on the current
   workspace. That drop-in also starts `swayidle -w` (150 s screensaver, 300 s

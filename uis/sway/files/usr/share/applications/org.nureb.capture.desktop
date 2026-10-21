@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Capture
+GenericName=Screenshot and recording
+Comment=Screenshot, annotate, read the text or a QR code, and record the screen
+Exec=/home/brunux/.config/bin/rofi-capture
+Icon=applets-screenshooter
+Terminal=false
+Categories=Graphics;Utility;
+Keywords=capture;screenshot;record;ocr;text;qr;grim;swappy;wf-recorder;

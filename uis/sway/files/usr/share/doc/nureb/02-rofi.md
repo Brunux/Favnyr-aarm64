@@ -12,7 +12,9 @@ daemon).
 | **Alt+Space** | `bar-menu` | the root menu: what opens something, the system panels, and the session actions |
 | **Alt+Ctrl+K** | `rofi-keys` | every key binding this session defines, parsed from `/etc/sway` and `~/.config/sway`. Enter copies the command |
 | **Alt+Ctrl+F** | `rofi-files` | the filesystem: directories first, sizes and dates dimmed. Enter opens a directory or reads a text file in foot; the dotfiles are one row away |
+| **Alt+Ctrl+C** | `rofi-capture` | **capture**: a screenshot (screen, area or window), annotate it, read the text or a QR code out of a region, and start or stop a recording |
 | **Alt+Ctrl+O** | `rofi-quick` | **Settings**: the switches (Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, rotation) and the panels, in one list |
+| **Alt+Ctrl+P** or **Alt+Escape** | `rofi-power` | **power**: lock, suspend, hibernate, log out, reboot, shut down - the last three ask once more |
 | **Alt+Ctrl+N** | `rofi-notify` | the notification history, with do-not-disturb and "copy this notification" |
 | **Alt+Ctrl+Q** | `rofi-calc` | a calculator: type `(3*4)/2`, Enter copies `6` |
 | any bar module click | `bar-pick` → `rofi -dmenu` | the fixed list that module hands it (Wi-Fi networks, sinks, devices, power actions, …) |
@@ -80,13 +82,49 @@ CLI tools that print a URL call.
 It is the same trade as everything else here: 16 MB while open, nothing
 afterwards.
 
+## Capture: the screen as a picture, as text, or as a video
+
+**Alt+Ctrl+C** (`rofi-capture`, and "Capture" in the root menu and the launcher)
+is the list behind the screenshot keys. Everything on it is one command that
+ends before the list closes again:
+
+| Row | What it does |
+|---|---|
+| **Screenshot** · the whole screen / an area / a window | `grimshot` saves it under `~/Pictures` and names the file in a notification, which also carries the image |
+| **Screenshot · an area, to the clipboard** | the same, straight to the clipboard (what **Alt+Ctrl+S** also does) |
+| **Annotate an area** | `grimshot` saves it and **swappy** opens it: arrows, rectangles, text, blur, crop. Enter saves back over the same file |
+| **Text from an area** | `slurp` picks the region, `tesseract` reads it, and the text lands in the clipboard, with the first line in the notification. English is what the image ships (`tesseract-ocr-eng`); other languages are one `apt install` away |
+| **QR code from an area** | `zbarimg` reads a QR code (or an EAN/Code-128 barcode) from the region and copies what it says |
+| **Make a QR code** | the Wi-Fi network's password (read from the saved profile, so it is not typed again) or any text, drawn in a floating terminal by `qrencode`; nothing is left on disk |
+| **Record** · the whole screen / an area | `wf-recorder` starts writing an `.mp4` into `~/Videos`, and the same menu row turns into **Stop recording** |
+
+The recording is the one thing that outlives the list, so it says so twice: the
+mako card stays until it is stopped, and the bar shows the spinner with
+`Recording` in it. It encodes with x264 on the CPU because this SoC has no
+hardware encoder (`veryfast`, crf 28, 30 fps - the point where a full-screen
+recording still leaves the compositor its frame budget). There is **no audio
+track**: that needs a PipeWire monitor source and nothing here wires one, so
+`wf-recorder -a` would record the microphone instead. The file is finalised on
+SIGINT, which is what Stop sends; a recorder that had to be killed leaves a file
+the notification calls empty rather than claiming success.
+
+The QR the Wi-Fi row shows is the phone-readable `WIFI:T:WPA;S:…;P:…;;`, with
+`\`, `;`, `,` and `:` escaped. It contains the password, so the temporary file it
+is drawn from is created `0600` and removed when the window closes.
+
+Everything this menu needs is already in the image: `grimshot`, `swappy`,
+`tesseract`, `zbar-tools`, `qrencode` and `wf-recorder`; `check-system.sh`
+fails when one of them is missing, because a row that does nothing is worse than
+a row that is not there.
+
 ## The manual, rendered
 
 `rofi-learn` lists `usr/share/doc/nureb/*.md` and opens the chosen page with
 **glow**, so it is a document (headings, tables, inline code, lists) instead of
 markdown source. The style is `~/.config/glow/solarized.json`, the same palette
-as everything else. The first row searches all pages with ripgrep and opens the
-one that matches.
+as everything else: headings carry a cyan/blue bar, inline code and fenced
+blocks sit on base02, and code is highlighted with the solarized token colours.
+The first row searches all pages with ripgrep and opens the one that matches.
 
 `glow -p` pages through `less`, so the page scrolls with the usual keys and
 leaves nothing behind when it closes.

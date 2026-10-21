@@ -2,9 +2,9 @@
 Type=Application
 Name=Power menu
 GenericName=Session and power
-Comment=Battery, draw and the session actions (lock, suspend, log out, reboot, power off)
-Exec=/home/brunux/.config/bin/bar-power
+Comment=Lock, suspend, hibernate, log out, reboot, shut down
+Exec=/home/brunux/.config/bin/rofi-power
 Icon=system-shutdown
 Terminal=false
 Categories=System;
-Keywords=power;battery;shutdown;reboot;logout;suspend;
+Keywords=power;battery;shutdown;reboot;logout;suspend;hibernate;

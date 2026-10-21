@@ -60,6 +60,13 @@ jq
 grimshot
 grim
 slurp
+# swappy annotates a screenshot (arrows, text, crop). grimshot only saves or
+# copies; Debian has no satty, and swappy is the 179 kB substitute.
+swappy
+# wf-recorder is screen recording (the capture menu, Alt+Ctrl+C): x264 on the
+# CPU, since this SoC has no hardware encoder. It needs ffmpeg, which
+# packages/tools.list already installs for yt-dlp.
+wf-recorder
 wlsunset
 brightnessctl
 # pactl(1) for the XF86Audio* keys; pipewire-pulse provides the server only.

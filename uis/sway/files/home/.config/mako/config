@@ -15,7 +15,7 @@
 # cyan border. Notifications hang under the 30 px bar (outer-margin top = bar +
 # the 4 px gap), so they never cover it.
 font=JetBrains Mono 11
-background-color=#002b36f2
+background-color=#002b36e0
 text-color=#93a1a1
 border-color=#2aa198
 border-size=2

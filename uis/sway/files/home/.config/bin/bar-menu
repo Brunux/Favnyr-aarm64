@@ -29,6 +29,7 @@ while :; do
 		ui_row "$UI_I_TERM" 'Terminal' 'foot' terminal
 		ui_row "$UI_I_FILES" 'Files' 'browse the filesystem' files
 		ui_row "$UI_I_DISK" 'Places' 'home, disks, the configuration' places
+		ui_row "$UI_I_CAMERA" 'Capture' 'screenshot, OCR, QR, recording' capture
 		ui_row "$UI_I_COG" 'Settings' 'Wi-Fi, Bluetooth, night light, rotation' settings
 		ui_row "$UI_I_BOOK" 'Learn' 'the manual, with search' learn
 		ui_row "$UI_I_KEYBOARD" 'Keybindings' 'every binding, from the configuration' keys
@@ -38,6 +39,7 @@ while :; do
 
 		ui_heading 'system'
 		ui_row "$UI_I_WIFI" 'Wi-Fi' 'pick a network' wifi
+		ui_row "$UI_I_QR" 'QR code' 'this network, or any text' qr
 		ui_row "$UI_I_BT" 'Bluetooth' 'pick a device' bt
 		ui_row "$UI_I_VOLUME" 'Audio output' 'sinks and volume' audio
 		ui_row "$UI_I_MUSIC" 'Media' 'play, pause, next' media
@@ -52,9 +54,10 @@ while :; do
 		ui_row "$UI_I_EYE" 'Screensaver' 'the idle screen, now' screensaver
 		ui_row "$UI_I_PAUSE" 'Suspend' 'sleep until asked' suspend
 		ui_row "$UI_I_MOON" 'Hibernate' 'needs a disk swap and resume=' hibernate
-		ui_row "$UI_I_OUT" 'Log out' 'back to the greeter' logout "$UI_DIM"
-		ui_row "$UI_I_REBOOT" 'Reboot' '' reboot "$UI_DIM"
-		ui_row "$UI_I_POWER" 'Power off' '' poweroff "$UI_RED"
+		# Log out, reboot and shut down live in rofi-power: they are the three
+		# rows that cannot be undone, and that menu asks once more.  Keeping a
+		# second, unconfirmed copy here is how a stray Enter reboots the machine.
+		ui_row "$UI_I_POWER" 'Power' 'log out, reboot, shut down' power "$UI_RED"
 	} >"$tmp"
 
 	key=$(ui_pick 'Menu' 'Enter opens · Escape closes' <"$tmp") || exit 0
@@ -63,6 +66,7 @@ while :; do
 	terminal) exec foot ;;
 	files) exec "$dir/rofi-files" ;;
 	places) exec "$dir/rofi-places" ;;
+	capture) exec "$dir/rofi-capture" ;;
 	settings) exec "$dir/rofi-quick" ;;
 	learn) exec "$dir/rofi-learn" ;;
 	keys) exec "$dir/rofi-keys" ;;
@@ -70,6 +74,7 @@ while :; do
 	calc) exec "$dir/rofi-calc" ;;
 	ssh) exec rofi -show ssh ;;
 	wifi) exec "$dir/bar-net" ;;
+	qr) exec "$dir/rofi-qr" ;;
 	bt) exec "$dir/bar-bt" ;;
 	audio) exec "$dir/bar-audio" ;;
 	media) exec "$dir/rofi-media" ;;
@@ -82,9 +87,7 @@ while :; do
 	screensaver) exec "$dir/sway-screensaver" ;;
 	suspend) exec "$dir/sway-suspend" ;;
 	hibernate) exec "$dir/sway-hibernate" ;;
-	logout) exec swaymsg exit ;;
-	reboot) exec systemctl reboot ;;
-	poweroff) exec systemctl poweroff ;;
+	power) exec "$dir/rofi-power" ;;
 	none) continue ;;
 	*) exit 0 ;;
 	esac

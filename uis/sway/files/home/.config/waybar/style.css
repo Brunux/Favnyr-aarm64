@@ -16,7 +16,7 @@
    base1 text to stay readable over any wallpaper; the blur shows through the
    bar itself and between the cards. */
 window#waybar {
-    background: rgba(0, 43, 54, 0.78); /* base03 */
+    background: rgba(0, 43, 54, 0.71); /* base03 */
     color: #93a1a1;      /* base1 */
     border-bottom: 1px solid #073642; /* base02 */
 }
@@ -47,7 +47,7 @@ tooltip label {
 #battery {
     margin: 4px 0;
     padding: 0 9px;
-    background: rgba(7, 54, 66, 0.86); /* base02, translucent for the blur */
+    background: rgba(7, 54, 66, 0.80); /* base02, translucent for the blur */
     border: 1px solid rgba(9, 64, 76, 0.9);
     border-radius: 5px;
 }
@@ -85,7 +85,7 @@ tooltip label {
 #pulseaudio:hover,
 #backlight:hover,
 #battery:hover {
-    background: rgba(11, 70, 82, 0.92);
+    background: rgba(11, 70, 82, 0.86);
 }
 
 /* The StatusNotifier icons keep their own colours; only the slot is themed. */
@@ -136,7 +136,7 @@ tooltip label {
     min-width: 22px;
     padding: 0 7px;
     margin: 0 2px;
-    background: rgba(7, 54, 66, 0.86); /* base02, translucent for the blur */
+    background: rgba(7, 54, 66, 0.80); /* base02, translucent for the blur */
     color: #93a1a1;      /* base1 */
     border: 1px solid rgba(9, 64, 76, 0.9);
     border-radius: 5px;

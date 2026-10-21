@@ -86,8 +86,8 @@ has that are still missing:
 |---|---|---|
 | **Emoji picker** (`Super+Ctrl+E`) | none | A data file (or a generated TSV) → `rofi -dmenu` → `wl-copy` + `wtype -M shift -k Insert`; `wtype` is installed. Needs `fonts-noto-color-emoji` to render. |
 | **Clipboard history** (`Super+Ctrl+V`) | none | `cliphist` + `wl-paste --watch`, a `rofi` list, `Alt+1` to delete. The only resident process in this list. |
-| **Capture menu** (`OCR`, `QR`, `record`) | `grimshot` save/copy only | `grim -g "$(slurp)" \| tesseract - - \| wl-copy` (OCR), `grim … \| zbarimg -q --raw -` (QR), `wf-recorder` for video. **`tesseract-ocr`, `zbar-tools` and `qrencode` are already installed** - this is wiring, not packages. |
-| **Wi-Fi QR** | none | `nmcli -s -g 802-11-wireless-security.psk` + `qrencode -t ANSIUTF8` in foot. `qrencode` is installed. |
+| **Capture menu** (`OCR`, `QR`, `record`) | **done**: `rofi-capture` (Alt+Ctrl+C) does screenshot, annotate, OCR (`tesseract`), QR (`zbarimg`) and start/stop recording (`wf-recorder`); `rofi-qr` draws a Wi-Fi QR | — |
+| **Wi-Fi QR** | **done**: `rofi-qr` (root menu, and the last row of the Wi-Fi panel) | — |
 | **Package search/install** | none | `apt-cache search` → `rofi` → `foot -e sudo apt install`. Debian's archive, not AUR. |
 | **DNS switcher** | none | `nmcli connection modify <active> ipv4.dns …` + a `rofi` list of common resolvers. |
 | **Reminders** | none | A text file + `systemd-run --user --on-active=` (a transient timer, not a service). |

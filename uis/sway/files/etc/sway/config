@@ -239,7 +239,10 @@ mode "resize" {
     bindsym $mod+r mode "resize"
 
 # Night colour temperature (follows sunset at the maintainer's location).
-exec wlsunset -l 20.67 -L -103.35 -t 5500
+# -t is the warmest it gets, and 5500 K was so close to daylight that the
+# Settings switch looked broken: the same coordinates at 4000 K are visibly
+# warm, which is also what the switch forces when it is turned on by hand.
+exec wlsunset -l 20.67 -L -103.35 -t 4000
 
 # Include the system drop-ins (bar, waybar, brightness, volume, gestures,
 # screenshots, solarized theme, touchpad, systemd user environment, ...).

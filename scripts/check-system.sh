@@ -774,13 +774,31 @@ fi
 # from a static list) and choosing it does nothing at all.
 _missing_menus=""
 for _s in rofi-quick rofi-notify rofi-clean rofi-kill rofi-tz rofi-places \
-	rofi-media rofi-calc rofi-layout lib-rofi.sh; do
+	rofi-media rofi-calc rofi-layout rofi-power lib-rofi.sh; do
 	[ -r "$HOME/.config/bin/$_s" ] || _missing_menus="$_missing_menus bin/$_s"
 done
 if [ -z "$_missing_menus" ]; then
-	ok "session menus complete (settings, notifications, free space, processes, time zone, places, media, calculator, layout)"
+	ok "session menus complete (settings, notifications, free space, processes, time zone, places, media, calculator, layout, power)"
 else
 	fail "session menus missing:$_missing_menus (those root-menu rows do nothing)"
+fi
+
+# The capture menu (Alt+Ctrl+C) is a list over external tools: grimshot for the
+# screenshot, swappy to annotate, tesseract and zbarimg to read a region, and
+# wf-recorder for the one action that outlives the menu. A missing binary is a
+# row that does nothing when chosen, and a missing script is a key that does
+# nothing at all, so both are FAILs.
+_missing_capture=""
+for _c in grimshot grim slurp tesseract zbarimg qrencode swappy wf-recorder; do
+	have "$_c" || _missing_capture="$_missing_capture $_c"
+done
+for _s in rofi-capture rofi-qr; do
+	[ -x "$HOME/.config/bin/$_s" ] || _missing_capture="$_missing_capture bin/$_s"
+done
+if [ -z "$_missing_capture" ]; then
+	ok "capture menu complete (grimshot, swappy, tesseract, zbarimg, wf-recorder, qrencode)"
+else
+	fail "capture menu incomplete:$_missing_capture (Alt+Ctrl+C loses those rows)"
 fi
 
 # The manual is rendered with glow, and both the binary and the glamour style
@@ -814,6 +832,8 @@ fi
 # The model is fetched on first use, so its absence is not a failure.
 if have whisper-cli && have wtype && have parecord; then
 	ok "dictation tools present (whisper-cli, wtype, parecord)"
+	have ffmpeg && ok "dictation normalises the level (ffmpeg dynaudnorm)" ||
+		warn "ffmpeg is missing: the internal microphone records quietly and the wav is transcribed raw"
 else
 	warn "dictation incomplete:$(have whisper-cli || echo ' whisper-cli')$(have wtype || echo ' wtype')$(have parecord || echo ' parecord')"
 fi
@@ -848,7 +868,7 @@ for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_
 # list simply has fewer rows and nobody notices.
 _missing_desktop=""
 for _d in wifi wifi-nmtui bluetooth audio-output power lock screensaver suspend \
-	screenshot-area lazygit tmux files; do
+	screenshot-area capture lazygit tmux files; do
 	[ -r "/usr/share/applications/org.nureb.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
 done
 if [ -z "$_missing_desktop" ]; then
@@ -921,6 +941,20 @@ elif [ -z "$_icons" ]; then
 else
 	fail "icon theme incomplete:$_icons (the launcher shows empty spaces)"
 fi
+# rofi's run mode (Alt+Shift+D) asks the icon theme for an icon *named after the
+# binary* it would run, not for a .desktop icon (source/modes/run.c), so the
+# command palette only has icons because make-icons.sh renders them under those
+# names too.  Missing ones are a blank 26 px column, not an error.
+_runless=""
+for _c in foot btop htop lazygit tmux nvim fzf rg bat eza mpv imv firefox-esr; do
+	[ -r "/usr/share/icons/Nureb/48x48/apps/$_c.png" ] || _runless="$_runless $_c"
+done
+if [ -z "$_runless" ]; then
+	ok "command palette icons present (the run mode resolves binaries by name)"
+else
+	warn "command palette icons missing for:$_runless (blank column, not a failure)"
+fi
+
 if have grep; then
 	_cfg_rasi="$HOME/.config/rofi/config.rasi"
 	if [ -r "$_cfg_rasi" ]; then

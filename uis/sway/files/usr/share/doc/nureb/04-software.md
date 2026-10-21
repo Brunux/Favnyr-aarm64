@@ -64,6 +64,8 @@ Also there: `btop`, `lazygit`, `tmux`, `gum`, `tldr` (cached cheat sheets),
 `fastfetch`, `inxi`, `tmux`, `yt-dlp` (with `ffmpeg` to merge streams), `node`
 and `npm`, `tesseract` (OCR), `zbarimg` (QR/barcode), `qrencode`, `socat`,
 `inotifywait`, `whois`, `unzip`, `jq`, `less`, `man` (pages go through bat).
+`swappy` annotates a screenshot and `wf-recorder` records the screen, both
+through the capture menu (Alt+Ctrl+C).
 
 `man <command>` and `tldr <command>` are the two fastest ways to learn a tool;
 `tldr` needs one fetch the first time (`tldr --update`).
@@ -92,6 +94,8 @@ a PDF, a photo or a downloaded page had no way to open at all.
   this image.
 * It is a normal Wayland client here (no Xwayland needed), and its icon is its
   own: the launcher shows Firefox's icon, not a substitute.
+* **Alt+Shift+Return** opens it from anywhere - the one program that earns a key
+  of its own (Omarchy has none; its launcher is the way there).
 
 ## What is deliberately not installed
 

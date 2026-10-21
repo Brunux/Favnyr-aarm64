@@ -22,6 +22,7 @@ the command. This page is the tour.
 | Alt+Ctrl+N | notifications: the history, do-not-disturb, copy one |
 | Alt+Ctrl+Q | calculator: type it, Enter copies the result |
 | Alt+Return | terminal (foot) |
+| Alt+Shift+Return | the browser (firefox-esr; Omarchy has no key for it) |
 | Alt+Q (or Alt+Shift+Q) | close the focused window |
 | Alt+Shift+C | reload the configuration |
 | Alt+Shift+E | exit the session (asks first) |
@@ -38,10 +39,10 @@ with `Super+Ctrl`:
 | Alt+Ctrl+A | audio output (sinks, and the two mutes) |
 | Alt+Ctrl+B | Bluetooth (scan, connect, disconnect) |
 | Alt+Ctrl+W | network (Wi-Fi list, strongest first) |
-| Alt+Ctrl+P | power panel (charge, draw, time left) |
-| Alt+Escape | system panel (lock, suspend, log out, reboot, power off) |
+| Alt+Ctrl+P | power menu: lock, suspend, hibernate, log out, reboot, shut down |
+| Alt+Escape | the same power menu (Omarchy's Super+Escape) |
 | Alt+Ctrl+L | lock the screen (the Lock key does the same and then suspends) |
-| Alt+Ctrl+X | dictation on/off |
+| Alt+Ctrl+X | dictation on/off (the notification stays while it records; press again to stop) |
 | Alt+Ctrl+Shift+A | agents (launch, accounts, install) |
 | Alt+Ctrl+O | settings: Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, rotation |
 | Alt+Ctrl+N | notifications: history, do-not-disturb, copy |
@@ -71,7 +72,16 @@ with `Super+Ctrl`:
 | the volume keys (or F1/F2 with the Search key) | volume -5% / +5% |
 | Mute | mute · **Shift+Mute**: switch the audio output |
 | the brightness keys (or F3/F4 with Search) | brightness -5% / +5% |
-| Alt+Shift+S / Alt+Shift+F / Alt+Ctrl+S | screenshot area / full screen / copy area |
+| Alt+Shift+S / Alt+Shift+F / Alt+Ctrl+S | screenshot area / full screen / copy area (each one says so in a notification: the file, or the clipboard) |
+| Alt+Ctrl+C | capture menu: screenshot, annotate, OCR, QR code, record the screen |
+
+Dictation (`Alt+Ctrl+X`) records up to 60 seconds and types what it heard into
+the focused window. It says what it is doing: the notification stays up while it
+records ("Alt+Ctrl+X stops it"), becomes "Transcribing…" while whisper works, and
+turns into the text it typed - or the reason it could not. Pressing the key again
+**stops and transcribes**, and the root menu's **Dictation** row does the same
+from the mouse. The text is also left on the clipboard, because a few surfaces
+(a launcher, a fullscreen game) refuse typed input.
 
 The top row of this keyboard sends action keys, not F1-F12: keyd turns
 **Ctrl+Alt+top row** into virtual terminals 1-10 and **Search+top row** into
@@ -98,9 +108,12 @@ wherever sway does not already own the key.
 | close window | Super+Q (or Super+W) | Alt+Q (Alt+W is sway's tabbed layout) |
 | scratchpad | Super+grave | Alt+grave |
 | lock | Super+Ctrl+L | Alt+Ctrl+L (and the Lock key) |
-| system menu | Super+Escape | Alt+Escape → the power panel |
-| audio / Bluetooth / network / power panels | Super+Ctrl+A/B/W/P | Alt+Ctrl+A/B/W/P |
+| system menu | Super+Escape | Alt+Escape → the power menu |
+| audio / Bluetooth / network panels | Super+Ctrl+A/B/W | Alt+Ctrl+A/B/W |
+| power menu | Super+Ctrl+P | **Alt+Ctrl+P** |
+| browser | no key (its launcher) | **Alt+Shift+Return** (firefox-esr) |
 | screenshot | Super+Shift+S, Print | Alt+Shift+S, Alt+Shift+F, Alt+Ctrl+S |
+| capture menu (screenshot, OCR, QR, recording) | Super+Ctrl+C | **Alt+Ctrl+C** |
 | files | Super+Shift+F opens the file manager | Alt+Ctrl+F: `rofi-files` |
 | fullscreen | Super+F | Alt+F |
 | volume, brightness, media keys | XF86 keys | the same keys |
@@ -113,11 +126,11 @@ is `Alt+Q` (not `Alt+W`, which is the tabbed layout), and there is no single
 "cycle layout" key because sway's layouts are stacking/tabbed/split rather than
 dwindle/master/scrolling.
 
-Not built yet: clipboard manager `Alt+Ctrl+V`, emoji `Alt+Ctrl+E` and the
-capture menu `Alt+Ctrl+C` - the same letters as Omarchy. The capture menu is
-only wiring (`tesseract`, `zbar-tools` and `qrencode` are already installed);
-clipboard history needs `cliphist`, and the emoji picker needs
-`fonts-noto-color-emoji` to draw a glyph at all. `docs/omarchy-gap.md` has the
+Not built yet: clipboard manager `Alt+Ctrl+V` and emoji `Alt+Ctrl+E` - the same
+letters as Omarchy. Clipboard history needs `cliphist` (one small resident
+process) and the emoji picker needs `fonts-noto-color-emoji` to draw a glyph at
+all. The capture menu `Alt+Ctrl+C` is built (screenshots, annotation, OCR, QR and
+recording). `docs/omarchy-gap.md` has the
 full list.
 
 Everything else lives in the root menu instead of on a key: Places, Media, Time

@@ -27,9 +27,20 @@ dir=$(dirname "$0")
 
 wifi_on() { [ "$(nmcli radio wifi 2>/dev/null || true)" = enabled ]; }
 
+# The interface name, not `nmcli device wifi`: listing access points blocks
+# until a scan NetworkManager had already started finishes, which is seconds,
+# and this panel only needs the network it is on.  `iw dev link` is a netlink
+# query with no scan behind it.
+wifi_if() {
+	nmcli -t -f DEVICE,TYPE device status 2>/dev/null |
+		awk -F: '$2 == "wifi" { print $1; exit }'
+}
+
 ssid() {
-	nmcli -t -f ACTIVE,SSID device wifi 2>/dev/null |
-		awk -F: '$1 == "yes" { print $2; exit }'
+	_if=$(wifi_if)
+	[ -n "$_if" ] || return 0
+	iw dev "$_if" link 2>/dev/null |
+		sed -n 's/^[[:space:]]*SSID:[[:space:]]*//p' | head -1
 }
 
 wifi_detail() {
@@ -46,6 +57,15 @@ wifi_detail() {
 }
 
 bt_on() {
+	# busctl is one property read; bluetoothctl connects a whole D-Bus client
+	# and asks bluez for everything, which is the slow half of this panel.
+	_powered=$(busctl --system get-property org.bluez /org/bluez/hci0 \
+		org.bluez.Adapter1 Powered 2>/dev/null |
+		sed -n 's/^b \(true\|false\)$/\1/p')
+	if [ -n "$_powered" ]; then
+		[ "$_powered" = true ]
+		return
+	fi
 	[ "$(bluetoothctl show 2>/dev/null |
 		sed -n 's/^[[:space:]]*Powered:[[:space:]]*//p' | head -1)" = yes ]
 }
@@ -89,14 +109,19 @@ rotation_name() {
 }
 
 audio_detail() {
-	_sink=$(pactl get-default-sink 2>/dev/null || true)
-	if pactl get-sink-mute "$_sink" 2>/dev/null | grep -q 'yes'; then
-		printf 'muted'
+	# One call (wireplumber's own client) instead of pactl's three.
+	_v=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null || true)
+	if [ -z "$_v" ]; then
+		printf 'unknown'
 		return 0
 	fi
-	_vol=$(pactl get-sink-volume "$_sink" 2>/dev/null |
-		sed -n 's/.* \([0-9]*\)%.*/\1/p' | head -1)
-	printf '%s%%' "${_vol:-?}"
+	case $_v in
+	*MUTED*) printf 'muted' ;;
+	*)
+		printf '%s%%' "$(printf '%s' "$_v" |
+			sed -n 's/^Volume: //p' | awk '{ printf "%d", ($1 * 100) + 0.5 }')"
+		;;
+	esac
 }
 
 media_detail() {
@@ -112,12 +137,16 @@ battery_detail() {
 }
 
 # The night light is whatever /etc/sway/config starts at login, so turning it
-# back on reuses that exact command line instead of a second copy of the
-# coordinates.
+# back on reuses that command line instead of a second copy of the coordinates -
+# with one deliberate change: the toggle forces the warm end of the range
+# (-T = -t).  Reusing the sunset schedule unchanged did nothing when the switch
+# was tried at 17:00, when wlsunset still has the screen at daylight colour, and
+# a switch that visibly does nothing reads as a broken switch.
 night_start() {
 	_cmd=$(sed -n 's/^exec \(wlsunset .*\)$/\1/p' /etc/sway/config 2>/dev/null | head -1)
-	[ -n "$_cmd" ] || _cmd='wlsunset -t 5500'
-	setsid $_cmd >/dev/null 2>&1 &
+	[ -n "$_cmd" ] || _cmd='wlsunset -t 4000'
+	_cmd=${_cmd%% -t *}
+	setsid $_cmd -T 4000 -t 4000 >/dev/null 2>&1 &
 }
 
 # --- rotation --------------------------------------------------------------
@@ -147,8 +176,14 @@ fi
 
 # --- the list --------------------------------------------------------------
 
-render() {
-	{
+render() { # OUTFILE
+	_s=$(mktemp -d "${TMPDIR:-/tmp}/quick.XXXXXX") || return 1
+
+	# Six probes, six processes, joined in list order.  They used to run one
+	# after another, and the panel was reported as "very slow to load": the cost
+	# was the sum of a bluetoothctl (a whole D-Bus client), two nmcli calls and
+	# three swaymsg round trips.  In parallel it is the slowest of them.
+	(
 		if wifi_on; then
 			ui_row "$UI_I_WIFI" 'Wi-Fi radio' on wifi-radio "$UI_CYAN"
 			ui_row "$UI_I_GLOBE" 'Wi-Fi networks' "$(wifi_detail)" wifi
@@ -156,6 +191,8 @@ render() {
 			ui_row "$UI_I_WIFI" 'Wi-Fi radio' off wifi-radio "$UI_DIM"
 			ui_row "$UI_I_GLOBE" 'Wi-Fi networks' "$(wifi_detail)" wifi "$UI_DIM"
 		fi
+	) >"$_s/1" &
+	(
 		if bt_on; then
 			ui_row "$UI_I_BT" 'Bluetooth radio' on bt-radio "$UI_BLUE"
 			ui_row "$UI_I_LINK" 'Bluetooth devices' "$(bt_detail)" bt
@@ -163,6 +200,8 @@ render() {
 			ui_row "$UI_I_BT" 'Bluetooth radio' off bt-radio "$UI_DIM"
 			ui_row "$UI_I_LINK" 'Bluetooth devices' "$(bt_detail)" bt "$UI_DIM"
 		fi
+	) >"$_s/2" &
+	(
 		if night_on; then
 			ui_row "$UI_I_MOON" 'Night light' on night "$UI_YELLOW"
 		else
@@ -175,14 +214,30 @@ render() {
 			ui_row "$UI_I_BELL" 'Notifications' allowed notify
 			ui_row "$UI_I_BELL" 'Do not disturb' off dnd "$UI_DIM"
 		fi
-		ui_row "$UI_I_MOUSE" 'Touchpad' "$(touchpad_on && printf enabled || printf disabled)" touchpad \
-			"$(touchpad_on && printf '%s' "$UI_CYAN" || printf '%s' "$UI_DIM")"
+	) >"$_s/3" &
+	(
+		if touchpad_on; then
+			_tp=enabled
+			_tpc=$UI_CYAN
+		else
+			_tp=disabled
+			_tpc=$UI_DIM
+		fi
+		ui_row "$UI_I_MOUSE" 'Touchpad' "$_tp" touchpad "$_tpc"
 		ui_row "$UI_I_ROTATE" 'Rotation' "$(rotation_name)" rotation
 		ui_row "$UI_I_KEYBOARD" 'Keyboard layout' "$(layout_name)" layout
+	) >"$_s/4" &
+	(
 		ui_row "$UI_I_VOLUME" 'Audio output' "$(audio_detail)" audio
 		ui_row "$UI_I_MUSIC" 'Media' "$(media_detail)" media
+	) >"$_s/5" &
+	(
 		ui_row "$UI_I_BATTERY" 'Battery' "$(battery_detail)" power
-	} >"$1"
+	) >"$_s/6" &
+
+	wait || true
+	cat "$_s/1" "$_s/2" "$_s/3" "$_s/4" "$_s/5" "$_s/6" >"$1"
+	rm -rf "$_s"
 }
 
 tmp=$(mktemp "${TMPDIR:-/tmp}/quick.XXXXXX")

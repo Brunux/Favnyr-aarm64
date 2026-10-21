@@ -165,9 +165,15 @@ The manual is rendered by **glow** instead of shown as bat source, the launcher 
 and the image now carries **firefox-esr** as its one viewer, which is what `rofi-files` hands
 anything that is not text to, plus a two-dozen-line `xdg-open`.
 
-Still open from this plan: emoji (#1), clipboard history (#2), QR (#6), OCR (#7), QR capture (#8),
-about (#9), DNS (#13), screen recording (#14), reminders (#16), package search (#17), colour picker
-(#18) - and the tablet work in its own section below.
+Still open from this plan: emoji (#1), clipboard history (#2), about (#9), DNS (#13), reminders
+(#16), package search (#17), colour picker (#18) - and the tablet work in its own section below.
+QR (#6), OCR (#7), QR capture (#8) and screen recording (#14) landed with the **capture menu**:
+`rofi-capture` (`Alt+Ctrl+C`) takes the screenshot (screen, area, window), annotates one with
+`swappy`, reads a region with `tesseract` or `zbarimg` into the clipboard, and starts and stops
+`wf-recorder` from the same list; `rofi-qr` draws the active Wi-Fi network's password (the ZXing
+`WIFI:` payload, read with `nmcli -s`) or any text with `qrencode` inside a foot popup. The
+recording has no audio track on purpose: that is a PipeWire monitor source, and it is Batch C's
+"recording with audio".
 
 Done in the first batch: **Learn** (seven pages in `usr/share/doc/nureb` + `rofi-learn`, opened with
 bat in foot), the **key view** (`rofi-keys`, generated from the configuration, `Alt+Ctrl+K` as
@@ -185,6 +191,18 @@ still had a `filebrowser` mode; it does not (its modes are drun, run, window and
 has no `xdg-open`, so the view is a script over `rofi -dmenu -markup-rows` that reopens itself in
 the chosen directory and reads text files with `bat` in the floated foot window. No new package:
 it is the same "rofi plus a script, nothing resident" shape as the rest of the plan.
+
+Added with the first card feedback (2026-10-20): **`rofi-power`** (`Alt+Escape` and `Alt+Ctrl+P`:
+lock, suspend, hibernate, log out, reboot, shut down, the last three behind a yes/no), because both
+keys ran `bar-power`, the battery banner, and the manual described them as the system menu. The
+same batch fixed the reported regressions rather than adding menus: the screenshot keys now carry
+`grimshot -n` (a silent key reads as a broken one), `Alt+Shift+Return` opens `firefox-esr`, the
+night light went to 4000 K and its toggle forces it, `rofi-tz` restarts the bar (glibc caches the
+zone in a running process, so the clock never moved), `rofi-quick` renders its probes in parallel
+with `iw`/`wpctl` instead of `nmcli device wifi`/three `pactl` calls, the command palette got icons
+named after the binaries `make-icons.sh` renders, dictation normalises its level and reports both
+silent phases through `busy`, and the screensaver's `tte` writes to the terminal again instead of
+`/dev/null`.
 
 ## Agreed scope: three batches
 
@@ -217,10 +235,10 @@ filtered by "can it be a rofi list plus a script, with no resident process". Cos
 | Calculator | none | script mode, recomputed per keystroke with `awk` |
 | Snippets | none | `~/.config/snippets.tsv` → rofi → `wtype`/`wl-copy` |
 | Password store | `pass` (129 kB; `gnupg` is installed) or `rbw` (15 MB, Bitwarden) | `passmenu`-style; decision open |
-| Screenshot annotation | `swappy` (179 kB) | `grimshot save area` → `swappy -f` |
+| Screenshot annotation | `swappy` (179 kB) | **done**: `grimshot save area` → `swappy -f` from `rofi-capture` |
 | Rotation (manual) | `wlr-randr` (81 kB) | output transform; see the tablet section |
 | Unit conversion | `units` (917 kB) or a python table | script mode like the calculator |
-| Screen recording | `wf-recorder` (220 kB) | region or full, start/stop via a pid file, mako notification; audio later |
+| Screen recording | `wf-recorder` (220 kB) | **done**, without audio: full screen or region, pid file in `$XDG_RUNTIME_DIR`, start/stop from `rofi-capture`; audio later |
 | Translate | `translate-shell` (277 kB) | network; to a notification and the clipboard |
 | Weather | none (`curl`) | `wttr.in` in foot |
 | World clock | none | `TZ=… date` list |

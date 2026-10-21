@@ -9,13 +9,13 @@
  */
 
 * {
-    /* 0.88/0.94 rather than opaque: rofi is a layer-shell client and swayfx
+    /* 0.82/0.88 rather than opaque: rofi is a layer-shell client and swayfx
      * draws the blur behind it (layer_effects "rofi" in
      * /etc/sway/config.d/26-swayfx.conf). The selected row stays darker and
      * more opaque than the list so the choice is unambiguous over any
      * wallpaper, and the accent rim is unchanged. */
-    bg: rgba(0, 43, 54, 0.88);
-    bg-alt: rgba(7, 54, 66, 0.94);
+    bg: rgba(0, 43, 54, 0.82);
+    bg-alt: rgba(7, 54, 66, 0.88);
     fg: #93a1a1;
     fg-strong: #eee8d5;
     accent: #2aa198;
