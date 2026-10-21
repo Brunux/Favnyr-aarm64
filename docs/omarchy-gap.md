@@ -61,7 +61,7 @@ Adopted since this list was written: `swappy` and `wf-recorder` (the capture men
 `fonts-noto-color-emoji` (the emoji picker's glyphs, `rofi-emoji`), `pcmanfm` + `gvfs` (the
 windowed file manager: `Search+Shift`, the launcher's **Files (window)**; the decision is section
 1), and the five names the file story was waiting for: **`mpv` + `mpv-mpris`** (a video plays in a
-real player, and `playerctl`, `rofi-media` and the bar see it because `nureb-view` passes
+real player, and `playerctl`, `rofi-media` and the bar see it because `lazyos-view` passes
 `--script=/etc/mpv/scripts/mpris.so` - `--no-config` empties the directory the plugin installs
 into), **`imv`** (the picture viewer, with `chafa` kept as the fallback for a GPU without an EGL
 context), **`papers`** (PDF, DjVu and comics in a reader instead of a browser tab), **`udisks2`**
@@ -69,7 +69,7 @@ context), **`papers`** (PDF, DjVu and comics in a reader instead of a browser ta
 it is a resident tray daemon and this bar has no tray), and **`neovim` + `vim`** (so `EDITOR` and
 `VISUAL` name `nvim` instead of leaving `eff` on nano, and `vim` brings `/usr/bin/vi` with it).
 The colour picker needed no package at all: `slurp` + `grim` + `ffmpeg` already read a pixel - and
-neither did `ffmpegthumbnailer`: `nureb-thumbnail` makes a video's thumbnail with the `ffmpeg` the
+neither did `ffmpegthumbnailer`: `lazyos-thumbnail` makes a video's thumbnail with the `ffmpeg` the
 image already has.
 
 ## 2. Covered by something else

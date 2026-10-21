@@ -33,7 +33,7 @@ still no daemon, and no new toolchain to build and carry.
 * `rofi-agents`: a rofi menu listing the agents it knows (Claude Code, Codex, OpenCode, Gemini CLI,
   GitHub Copilot); launch in foot from `~/Work`; install the missing ones with
   `npm install -g --prefix ~/.local <pkg>` (no root, no writes to `/usr/local`); set the default.
-* Binding `Alt+Ctrl+Shift+A` (Omarchy's `Super+Shift+Ctrl+A`), an `org.nureb.agents.desktop` entry,
+* Binding `Alt+Ctrl+Shift+A` (Omarchy's `Super+Shift+Ctrl+A`), an `org.lazyos.agents.desktop` entry,
   a root-menu entry, a page in the manual (`07-agents.md`).
 * `PATH` must be forced to include `~/.local/bin` inside the script: sway's environment does not have
   it (only login/interactive shells get it from `profile.d`), which was already a real bug in the

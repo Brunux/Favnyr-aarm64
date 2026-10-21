@@ -361,7 +361,7 @@ from `/proc/<pid>/status` while the decode ran, which is the number that decides
 can run at once.
 
 The fan-out that makes it fast is also what would make it heavy: eight 24 MP PNGs at once is
-~1 GB on a 4 GB machine. `nureb-thumbnail` therefore gates itself to **four** decoders with `flock`
+~1 GB on a 4 GB machine. `lazyos-thumbnail` therefore gates itself to **four** decoders with `flock`
 slots (measured: max 4 concurrent ffmpeg over 8 requests), which is ~200 MB for the realistic case
 (12 MP phone JPEGs, ~50 MB each at `-lowres 2`) and finishes a screenful in about a second. `flock`
 releases the slot when the process dies, so a killed listing cannot leave the browser waiting on a
@@ -390,7 +390,7 @@ host with forky's rofi 2.0.0-0.2:
 
 ### The rules that follow
 
-* **Four decoders, not eight.** `SLOTS=4` in `nureb-thumbnail`; the constant is the knob if a bigger
+* **Four decoders, not eight.** `SLOTS=4` in `lazyos-thumbnail`; the constant is the knob if a bigger
   folder ever feels slow, and it is bounded by the worst decode (131 MB for a 24 MP PNG) rather
   than the average.
 * **`-lowres 2` for JPEG only.** It is a quarter-size decode in one step (53 ms against 179 ms and
@@ -409,7 +409,7 @@ host with forky's rofi 2.0.0-0.2:
 
 ## 9. The terminal file search
 
-`Alt+Search` runs `~/.config/bin/nureb-find`, which is `fd` piped into `fzf` with a preview pane.
+`Alt+Search` runs `~/.config/bin/lazyos-find`, which is `fd` piped into `fzf` with a preview pane.
 It answers the same question the Search key does, in a different way: `rofi-files --search` is
 bounded (500 rows, 92 ms end to end, icons and thumbnails) and lives in a menu, while this one is
 uncapped with a preview and lives in a terminal. The numbers below decide the settings that are not
@@ -459,7 +459,7 @@ seventh row is a browser cache entry.
 The pane is 55 % of the width and shows one of three things: the first 300 lines of a text file
 through `bat` (`--paging=never`, `--style=numbers`, `BAT_THEME=ansi`), a picture or a PDF page, or
 `file`'s mimetype plus `du` for anything else. A preview is drawn **for the row under the cursor
-only**, so the cost is one decode of the 128 px thumbnail `nureb-thumbnail` already keeps for
+only**, so the cost is one decode of the 128 px thumbnail `lazyos-thumbnail` already keeps for
 `rofi-files`: the same cache path (`~/.cache/thumbnails/normal/<md5>.png`), the same generator, and
 a picture is decoded once ever, whichever of the two asked for it.
 

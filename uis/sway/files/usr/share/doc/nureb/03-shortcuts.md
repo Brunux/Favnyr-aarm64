@@ -13,7 +13,7 @@ the command. This page is the tour.
 | Keys | Does |
 |---|---|
 | Search key | file search: every file under your home, narrowed by typing (Enter opens it, Enter on a folder browses there) |
-| Alt+Search | the same files in a terminal (`nureb-find`): live filtering as you type, a preview on the right, Enter opens the file |
+| Alt+Search | the same files in a terminal (`lazyos-find`): live filtering as you type, a preview on the right, Enter opens the file |
 | Search+Shift | the file manager in a window (pcmanfm): drag and drop, several files at once, rename, the trash |
 | Alt+D | launcher: applications |
 | Alt+Space | the root menu (the bar's menu button, on the keyboard) |
@@ -40,7 +40,7 @@ away. The search is one `fd` run over your home (queues, caches and build trees
 left out), listed with the same icons the file browser draws, so typing
 `invoice` finds the file by its name wherever it is.
 
-**Alt+Search is the same search in a terminal.** It opens `nureb-find`: `fzf`
+**Alt+Search is the same search in a terminal.** It opens `lazyos-find`: `fzf`
 over every file under your home - the same four exclusions, but with the dotfiles
 included, since the whole tree is the pool and `~/.config` is a place people look
 for things. The list narrows as you type and the pane on the right previews the
@@ -198,7 +198,7 @@ wherever sway does not already own the key.
 | browser | no key (its launcher) | **Alt+Shift+Return** (firefox-esr) |
 | screenshot | Super+Shift+S, Print | Alt+Shift+S, Alt+Shift+F, Alt+Ctrl+S |
 | capture menu (screenshot, OCR, QR, recording) | Super+Ctrl+C | **Alt+Ctrl+C** |
-| files | Super+Shift+F opens the file manager | Alt+Ctrl+F or the Search key: `rofi-files` (a list); **Search+Shift**: pcmanfm, the same files in a window; **Alt+Search**: `nureb-find`, the same files in a terminal |
+| files | Super+Shift+F opens the file manager | Alt+Ctrl+F or the Search key: `rofi-files` (a list); **Search+Shift**: pcmanfm, the same files in a window; **Alt+Search**: `lazyos-find`, the same files in a terminal |
 | fullscreen | Super+F | Alt+F |
 | volume, brightness, media keys | XF86 keys | the same keys |
 | workspaces | Super+Tab cycles | Alt+1..0 and three-finger swipe |

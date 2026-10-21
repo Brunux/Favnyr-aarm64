@@ -28,7 +28,7 @@ fd-find
 ripgrep
 # Fuzzy finder, for the Ctrl-R/Ctrl-T/Alt-C bindings (~/.bashrc sources
 # /usr/share/fzf/key-bindings.bash), the `ff` preview picker, and the terminal
-# file search nureb-find (Alt+Search), which is why it is a hard dependency of a
+# file search lazyos-find (Alt+Search), which is why it is a hard dependency of a
 # key rather than only of the shell.
 fzf
 # cd, by frecency (`z`, `zi`); ~/.bashrc wraps `cd` so real paths still work.

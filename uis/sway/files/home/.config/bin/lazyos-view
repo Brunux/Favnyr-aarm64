@@ -1,11 +1,11 @@
 #!/bin/sh
-# nureb-view FILE - open one file the way the Files menu (rofi-files) does.
+# lazyos-view FILE - open one file the way the Files menu (rofi-files) does.
 #
 # This is the handler the *desktop* needs, not the one the menu needs: there is
 # no xdg-desktop-portal in this image, so an application that asks "open this
 # for me" (pcmanfm's double click, "Open With" in any GIO program, `gio open`)
 # resolves it through /etc/xdg/mimeapps.list, which points the types below at
-# org.nureb.view.desktop -> this script. rofi-files keeps its own copy of the
+# org.lazyos.view.desktop -> this script. rofi-files keeps its own copy of the
 # same rules on purpose: it is the tested path and does not start a process to
 # decide what to start, but the rules are identical, so a photo costs imv either
 # way and never a browser.
@@ -23,7 +23,7 @@
 set -eu
 
 usage() {
-	printf 'usage: nureb-view FILE\n' >&2
+	printf 'usage: lazyos-view FILE\n' >&2
 	exit 2
 }
 

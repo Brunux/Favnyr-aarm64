@@ -36,7 +36,7 @@ cat /etc/debian-aarch64-revision      # commit, device, UI, kernel, build date
 
 An **empty** list is the watcher, not the menu: `pgrep -fx 'wl-paste --watch cliphist store'`
 (`etc/sway/config.d/27-clipboard.conf` starts it once per session). An image
-that does not open is `~/.config/bin/nureb-view` (not executable) or `imv`; a
+that does not open is `~/.config/bin/lazyos-view` (not executable) or `imv`; a
 saved file ending in `.bin` means `file` is missing and the extension could not
 be read from the contents.
 
@@ -140,7 +140,7 @@ that opens the row means `-kb-custom-1 Alt+1` was dropped from `rofi-files`.
 `check-system.sh` warns about both.
 
 A list with no pictures at all means `-show-icons`/`thumbnail://` was dropped from
-`rofi-files`, or `nureb-thumbnail` is not executable; `check-system.sh` warns
+`rofi-files`, or `lazyos-thumbnail` is not executable; `check-system.sh` warns
 about both. A row with **no** icon in a text-only directory means the theme is
 missing that name (`check-system.sh` checks the table against the PNGs).
 
@@ -204,9 +204,9 @@ with files means `fd`/`fdfind` is missing (`check-system.sh` FAILs).
 | type `config` | dotfiles are found here (`~/.config/...`), unlike the Search key's list |
 | Escape | the window closes and nothing opens |
 | press Alt+Search twice in a row | two windows, and no `fzf` process left after both close |
-| `nureb-find` from a foot prompt | the same search runs *in that terminal* instead of a new window |
+| `lazyos-find` from a foot prompt | the same search runs *in that terminal* instead of a new window |
 
-A window that flashes and closes means `bin/nureb-find` lost its executable
+A window that flashes and closes means `bin/lazyos-find` lost its executable
 bit; an empty list on a home with files means `fzf` is missing
 (`check-system.sh` FAILs both). `fd`'s `.cache`, `.git`, `node_modules` and
 `.local/share/containers` are excluded, so a file inside one of them is
@@ -229,8 +229,8 @@ correctly absent.
 A window that looks like Adwaita's light grey means `~/.config/gtk-3.0/gtk.css` is
 missing; icons that are empty squares mean a name the Nureb theme does not carry
 (`check-system.sh` warns with the list). A double click that does nothing means
-`~/.config/bin/nureb-view` is not executable: `gio mime image/png` then answers
-"no default application" instead of naming `org.nureb.view.desktop`.
+`~/.config/bin/lazyos-view` is not executable: `gio mime image/png` then answers
+"no default application" instead of naming `org.lazyos.view.desktop`.
 
 ## USB sticks and SD cards - Places
 
@@ -329,7 +329,7 @@ What a failure means:
 | root menu (`Alt+Space`) | **Colour**, **DNS**, **Packages**, **Reminders**, **About**, **Download**, **Password** and **Search inside files** are all there |
 | `Alt+Ctrl+G` and then `Alt+1` inside that menu | nothing is taken by sway: the menu answers, the workspace does not change |
 | `Alt+Ctrl+F`, then `Alt+1` | the actions menu, not workspace 1 (the `global-kb` fix reached both menus) |
-| `gio mime image/png`, `gio mime application/pdf`, `gio mime inode/directory` | `org.nureb.view.desktop`, `org.gnome.Papers.desktop`, `pcmanfm.desktop`. This is GIO's own answer, not the file read back: a `nureb-view` without its executable bit makes GIO say "no default application" |
+| `gio mime image/png`, `gio mime application/pdf`, `gio mime inode/directory` | `org.lazyos.view.desktop`, `org.gnome.Papers.desktop`, `pcmanfm.desktop`. This is GIO's own answer, not the file read back: a `lazyos-view` without its executable bit makes GIO say "no default application" |
 | `dig +short example.com` and `host example.com` | an address. `dig` comes from `bind9-dnsutils`; `resolvectl` is deliberately absent because NetworkManager owns `resolv.conf`, and its absence is not a gap |
 | a menu whose rows are long (Files on a deep path, a grep match with a long line) | the window is wide enough for the end of the path; a row cut with `…` mid-detail means `ui_width` stopped sizing that list |
 | lock (`Alt+Ctrl+L`, the Lock key, and the 300 s idle timer) | the wallpaper on base03, then back to the session; no idle screen left behind (it is stopped before the lock) |

@@ -109,7 +109,7 @@ EPUB, a `.deb`, or anything whose own viewer is missing.
   about.
 * `xdg-open` exists (`/usr/local/bin/xdg-open`, two dozen lines): a URL goes to
   Firefox, and a path goes to the same rule table a double click in pcmanfm uses
-  (`nureb-view`), so a file opened from a script lands where it would land from
+  (`lazyos-view`), so a file opened from a script lands where it would land from
   the desktop. That is what foot's ctrl+click and the command-line tools that
   print a URL call - there is no desktop portal in this image.
 * It is a normal Wayland client here (no Xwayland needed), and its icon is its
@@ -147,8 +147,8 @@ one: tile it, move it to another workspace, close it with **Alt+Q**.
 * **A double click opens what the Files menu opens.** `/etc/xdg/mimeapps.list`
   decides, and it names the same programs the list does: a document (PDF, DjVu, a
   comic) goes to `papers`, a directory to pcmanfm, a page or a `.deb` to Firefox,
-  and text, pictures and video to `org.nureb.view.desktop` ->
-  `~/.config/bin/nureb-view`, which is the rule table `rofi-files` follows (text
+  and text, pictures and video to `org.lazyos.view.desktop` ->
+  `~/.config/bin/lazyos-view`, which is the rule table `rofi-files` follows (text
   in `bat`, a picture in `imv` - sixels in a foot window when imv cannot start - a
   video in `mpv`, an EPUB in Firefox; the list reads an HTML file as text where a
   double click opens the page). There is no desktop portal in this image, so those

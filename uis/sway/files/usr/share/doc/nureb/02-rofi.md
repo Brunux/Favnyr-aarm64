@@ -141,7 +141,7 @@ script says so and opens the browser instead.
 
 **Alt+Search: the same files, in a terminal.** The 500-row cap is the list's
 trade - it is what makes it open like a menu - so the question "where is the file
-I would recognise but cannot name" has a different answer: `nureb-find` streams
+I would recognise but cannot name" has a different answer: `lazyos-find` streams
 the whole tree through `fd` into `fzf`, with the same four exclusions and the
 dotfiles included, a preview pane on the right (text read with `bat`, a picture
 or a PDF page decoded once and drawn with `chafa`) and Enter handing the choice
@@ -164,7 +164,7 @@ stop button.
 
 `xdg-open` exists too (`/usr/local/bin/xdg-open`, two dozen lines): a URL goes to
 Firefox, and a path goes to the same rule table a double click in the window uses
-(`nureb-view`), so a file opened from a script lands where it would from the
+(`lazyos-view`), so a file opened from a script lands where it would from the
 desktop. That is what foot's ctrl+click and the CLI tools that print a URL call.
 
 It is the same trade as everything else here: 16 MB while open, nothing
@@ -174,7 +174,7 @@ afterwards.
 (window)** row, `Files (window)` in the launcher) is a real file manager for the
 things a list cannot do - drag a file onto a folder, select several, rename in
 place, send to the trash - and it opens a file with exactly the rules above: a
-double click reaches `~/.config/bin/nureb-view` through
+double click reaches `~/.config/bin/lazyos-view` through
 `/etc/xdg/mimeapps.list`, so text goes to `bat`, a document to `papers`, a picture
 to `imv` (or `chafa`'s sixels when imv cannot start), a video to `mpv` and an
 HTML page, an EPUB or a `.deb` to Firefox (the list itself reads an HTML file as
@@ -263,7 +263,7 @@ image. An image is listed by what `cliphist` knows about it (`[[ binary data 640
 png 640x480 ]]`) rather than by a thumbnail, because a rofi row is one line of
 text. **Save the newest image** decodes it into `~/Pictures/clipboard/` with the
 extension its MIME type implies and hands it to `xdg-open`, which is the same
-`nureb-view` a double click in pcmanfm uses — so a picture opens in **imv**, not
+`lazyos-view` a double click in pcmanfm uses — so a picture opens in **imv**, not
 in a browser tab; the decoded file is what survives, and the entry itself stays
 in the history until deleted or cleared.
 
@@ -394,7 +394,7 @@ need an icon column.
 
 * **An application**: drop a `.desktop` file in `~/.local/share/applications/`.
   For a terminal program, `Terminal=true` is enough - rofi starts it in foot.
-  This is how `org.nureb.*` entries are made (they live in
+  This is how `org.lazyos.*` entries are made (they live in
   `/usr/share/applications/`, shipped by the image).
 * **An icon for it**: put the name in its `Icon=`, and either let the
   application ship the image or add a line to `scripts/make-icons.sh` (a Font
@@ -418,7 +418,7 @@ need an icon column.
   indistinguishable from a hang; the scripts are written to exit instead.
 * **A row of empty space where an icon should be**: the `.desktop` names an icon
   that no installed theme has. `check-system.sh` verifies the Nureb theme and
-  every `org.nureb.*` icon.
+  every `org.lazyos.*` icon.
 * **A list opens no window at all, and the journal has a line about a binding**:
   the menu was given an `Alt+1` action whose value was a sentence.
   `-kb-custom-1` accepts a keybinding and nothing else; `lib-rofi.sh` passes one

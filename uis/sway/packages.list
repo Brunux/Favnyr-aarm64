@@ -55,7 +55,7 @@ rofi
 # reach a browser instead of failing. 280 MB installed is the largest single
 # addition in this list, and nothing while it is closed.
 firefox-esr
-# The file browser's thumbnails are made by ~/.config/bin/nureb-thumbnail, and
+# The file browser's thumbnails are made by ~/.config/bin/lazyos-thumbnail, and
 # for a PDF the first page comes from poppler: 1.1 MB for pdftocairo (plus
 # pdftotext and pdftoppm), and it is the only PDF renderer besides Firefox's. No
 # XDG thumbnailer package is in this list on purpose - rofi's -preview-cmd runs
@@ -68,7 +68,7 @@ poppler-utils
 # resident: the window is the viewer. It was the image viewer until imv arrived
 # and is now the *fallback*: imv needs a working EGL context, and a GPU where it
 # does not get one (Panfrost is the case this port has hit before) still shows
-# the picture in sixels instead of nothing. rofi-files and nureb-view try imv
+# the picture in sixels instead of nothing. rofi-files and lazyos-view try imv
 # first and fall back here.
 chafa
 # The image viewer: imv 5.0.1 draws the picture on the GPU (one texture, scaled
@@ -79,20 +79,20 @@ chafa
 # (librsvg2-2, libheif1, libjxl0.11). Debian installs no /usr/bin/imv - the
 # package ships imv-wayland and imv-x11 plus a /usr/libexec/imv/imv wrapper that
 # picks one - so scripts/rootfs-setup.sh adds the short name, the same way it
-# does for bat and fd. rofi-files, nureb-view and xdg-open all call `imv`.
+# does for bat and fd. rofi-files, lazyos-view and xdg-open all call `imv`.
 imv
 # The player: mpv 0.41 decodes anything ffmpeg does (ffmpeg is already in
 # packages/tools.list for yt-dlp), seeks, shows subtitles, takes the XF86Audio*
 # keys and draws through libplacebo360 (installed) on the Wayland context. 3.5 MB
 # plus libass, libsixel1, libbluray/libdvdnav/libcdio, libva and friends. Before
 # this, a video container fell through chafa's "unknown file format" to Firefox,
-# which cannot play it either; rofi-files and nureb-view now hand it to mpv,
+# which cannot play it either; rofi-files and lazyos-view now hand it to mpv,
 # detached with setsid so the menu exits instead of waiting for the film.
 mpv
 # 83 kB, and it installs /etc/mpv/scripts/mpris.so: without it mpv is invisible
 # to playerctl, so rofi-media says "nothing is playing" and the bar's player
 # module stays empty. It is a plugin mpv loads from its script directory, and
-# nureb-view starts mpv with --no-config (so a profile from another machine
+# lazyos-view starts mpv with --no-config (so a profile from another machine
 # cannot decide what the session does) which empties those directories - the
 # script is therefore passed explicitly as --script=/etc/mpv/scripts/mpris.so.
 mpv-mpris
@@ -125,7 +125,7 @@ udisks2
 # things it does not do, all of them documented at the setting: thumbnails are
 # images only (libfm's own gdk-pixbuf loader, it ignores .thumbnailer files),
 # the Devices pane needs udisks2, and it has no desktop mode on Wayland. A double
-# click resolves through /etc/xdg/mimeapps.list -> ~/.config/bin/nureb-view, so
+# click resolves through /etc/xdg/mimeapps.list -> ~/.config/bin/lazyos-view, so
 # it opens what rofi-files opens; /etc/xdg/pcmanfm/default/pcmanfm.conf sets
 # terminal=foot and bounds a thumbnail decode at 4 MB.
 pcmanfm
@@ -137,7 +137,7 @@ gvfs
 # `gio` is libglib2.0-bin's CLI, and it is what answers "what opens this file"
 # the way the application itself answers it - `gio mime` also proves the
 # .desktop entry is accepted, because GIO silently drops one whose Exec program
-# does not exist (a nureb-view without its executable bit reads as "no default
+# does not exist (a lazyos-view without its executable bit reads as "no default
 # application", never as an error). check-system.sh asks the same question, and
 # without the binary its fallback only reads the file. 0.9 MB, no daemon.
 libglib2.0-bin

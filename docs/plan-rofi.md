@@ -43,11 +43,11 @@ Grouped by verdict. "Effort" is implementation + test on the card, not reading.
 |---|---|
 | Apps (`omarchy.dock apps`) | `rofi -show drun` |
 | Window list | `rofi -show window` (`$mod+Tab`; Omarchy has no equivalent in the menu) |
-| Power / Lock / Screensaver / Suspend | `bar-power`, `sway-lock`, `lazyos-screensaver`, `sway-suspend` (+ the `org.nureb.*` and `org.lazyos.*` entries) |
+| Power / Lock / Screensaver / Suspend | `bar-power`, `sway-lock`, `lazyos-screensaver`, `sway-suspend` (+ the `org.lazyos.*` and `org.lazyos.*` entries) |
 | Wi-Fi / Bluetooth / audio panels | `bar-net`, `bar-bt`, `bar-audio` |
 | Notifications | mako |
 | Clipboard *panel* (QML grid) | `rofi-clip`: the same history as a list, not a grid - see P0 #2 |
-| Screenshot (`omarchy-capture-screenshot`) | `grimshot` + `org.nureb.screenshot-area` |
+| Screenshot (`omarchy-capture-screenshot`) | `grimshot` + `org.lazyos.screenshot-area` |
 
 ### P0 - cheap, high value, no new daemon
 
@@ -202,7 +202,7 @@ dropped its `filebrowser` mode; it had not (2.0.0-0.2 has it, with sorting, hidd
 the markup rows and the `bat`/popup behaviour, so the view is a script over
 `rofi -dmenu -markup-rows` that reopens itself in the chosen directory, reads text files with `bat`
 and draws pictures with `chafa` in the floated foot window. The thumbnails came after that: rofi's
-own cache (`~/.cache/thumbnails`, 128 px) fed by `~/.config/bin/nureb-thumbnail`, which is why the
+own cache (`~/.cache/thumbnails`, 128 px) fed by `~/.config/bin/lazyos-thumbnail`, which is why the
 batch cost two packages (`poppler-utils` for a PDF's first page, `chafa` for the picture fallback) and why
 `bubblewrap` left the list - it was there for a glycin that this rofi does not use (AGENTS.md).
 

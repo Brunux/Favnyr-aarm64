@@ -544,7 +544,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `~/.config/workstyle/config.toml` is kept so `cargo install workstyle` is enough to enable it.
 - **The launcher, the window switcher and the bar's dmenu are all `rofi` 2.0** (Debian's `rofi`;
   +6 packages / 1.75 MB over the previous set). `$mod+d` = `rofi -show drun` (the
-  `.desktop` entries, including the port's own `usr/share/applications/org.nureb.*`), `$mod+Tab` =
+  `.desktop` entries, including the port's own `usr/share/applications/org.lazyos.*`), `$mod+Tab` =
   `rofi -show window` (wlroots foreign-toplevel; sway has no switcher of its own), `$mod+Shift+d` =
   `rofi -show run` (`$PATH`; **Shift+Enter** runs the choice in foot - rofi's own binding, and the
   only way the TUIs from `packages/tools.list` start, since a TUI without a tty exits), and
@@ -640,7 +640,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   text file - would open as source in `bat` and could never be looked at. The details that make
   the rows work: `rofi -dmenu`
   draws a row's icon from the `\0icon\x1f<value>` suffix, and a value that starts with
-  `thumbnail://<path>` makes rofi call `-preview-cmd` (`nureb-thumbnail`) for the rows it is
+  `thumbnail://<path>` makes rofi call `-preview-cmd` (`lazyos-thumbnail`) for the rows it is
   about to draw and keep the result in `~/.cache/thumbnails/normal/<md5 of the path>.png`,
   skipping the call when that file exists (verified: two runs, one call); **every** row also
   carries a theme icon name when it has no thumbnail, because a row without one loses the 32 px
@@ -650,7 +650,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   directory, `go-up` for the parent, `view-hidden` for the dotfile switch, `dialog-warning` for
   a broken link, `thumbnail://` for jpg/jpeg/png/gif/webp/bmp/tif/tiff/avif, the video containers
   (mp4/mkv/webm/mov/avi/m4v/mpg/mpeg/ogv/wmv/flv/3gp) and pdf, `application-pdf` for the
-  formats papers reads but nureb-thumbnail has no decoder for (djvu/djv/cbz/cbr/cb7/cbt/ai),
+  formats papers reads but lazyos-thumbnail has no decoder for (djvu/djv/cbz/cbr/cb7/cbt/ai),
   `text-html` for
   html/htm/xhtml/shtml, `x-office-document` for odt/ods/odp/odg/doc/docx/xls/xlsx/ppt/pptx/rtf/
   epub, `application-x-executable` for sh/bash/zsh/fish/py/pl/rb/lua/awk/deb/appimage/run/bin/
@@ -696,13 +696,13 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   answers 0 and the menu reports nothing instead of half a result. The rest (copy the path, a
   terminal, the `udisksctl` mount) finish in milliseconds and would only flash a card. `rofi-files` asks for
   `$HOME/.config/bin/rofi-file-actions` and not `$dir`, the same convention it already uses for
-  `nureb-thumbnail`, because a row must not depend on which directory is being browsed.
+  `lazyos-thumbnail`, because a row must not depend on which directory is being browsed.
 - **A thumbnail is rofi's own cache plus one script.** A row is
   `text\0icon\x1fthumbnail://<abs path>`; with `-show-icons` and
-  `-preview-cmd 'nureb-thumbnail {input} {output} {size}'` rofi calls that script for the rows it
+  `-preview-cmd 'lazyos-thumbnail {input} {output} {size}'` rofi calls that script for the rows it
   is about to draw and keeps the result in `~/.cache/thumbnails/normal/<md5 of the path>.png`
   (128 px), **skipping the call when the file already exists** (verified: two runs, one call), so
-  a picture is decoded once, ever. `~/.config/bin/nureb-thumbnail` is the whole generator -
+  a picture is decoded once, ever. `~/.config/bin/lazyos-thumbnail` is the whole generator -
   ffmpeg for an image or a video frame (`-ss 1`, one frame, retried at 0 for a clip shorter than
   a second), `pdftocairo` page 1 for a PDF, nothing for a format it does not know (that row then
   has no icon) - and three things about it are not obvious. rofi starts **one process per visible
@@ -728,7 +728,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   starts at 80x24 and resizes only after the window is mapped, so chafa would measure the wrong
   size and paint into a corner (the same lesson as the screensaver), and `--hold` keeps the
   window up after chafa has drawn once and exited. `uis/sway/files/usr/local/bin/xdg-open` is the
-  two dozen lines that send a URL to `firefox-esr` and a path to `nureb-view` (the same rule
+  two dozen lines that send a URL to `firefox-esr` and a path to `lazyos-view` (the same rule
   table a double click uses, so a file opened from a script lands where it would from the
   desktop); it is what foot's ctrl+click and the CLI tools expect, and there is no desktop portal
   here. `check-system.sh` fails when the browser, the shim, `imv`, `papers`, `mpv`, the
@@ -752,7 +752,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   on the UI thread with gdk-pixbuf and ignores `.thumbnailer` files, so thumbnails are images
   only, and a 24 MP JPEG costs ~83 MB for a 128 px thumbnail), `autorun=0`, a 900x600 window.
 - **A double click in pcmanfm resolves through `/etc/xdg/mimeapps.list` ->
-  `org.nureb.view.desktop` -> `~/.config/bin/nureb-view`**, which applies exactly the rules
+  `org.lazyos.view.desktop` -> `~/.config/bin/lazyos-view`**, which applies exactly the rules
   `rofi-files` applies (text in `bat`; a document - PDF, DjVu, a comic - in `papers`; a picture
   in `imv` with `chafa`'s sixels as the fallback when imv gets no EGL context; a video in `mpv`;
   and an HTML page, an EPUB or a `.deb` in `firefox-esr`), so a file opens the same way from the
@@ -760,10 +760,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   text in `bat` and a double click takes to the browser, because that is what a page is.
   `inode/directory` stays `pcmanfm.desktop`. There is no `xdg-desktop-portal` in the image, so this pair *is* the
   open-with mechanism for every GIO program. **GIO silently drops a `.desktop` whose `Exec`
-  program does not exist**: with `nureb-view` not executable (or absent) `gio mime image/png`
+  program does not exist**: with `lazyos-view` not executable (or absent) `gio mime image/png`
   answers "no default application" instead of an error, which looks like a broken association -
   so the `check-system.sh` line is both the association test and the mode test
-  (`LC_ALL=C gio mime image/png` must say `Default application: org.nureb.view.desktop`, and
+  (`LC_ALL=C gio mime image/png` must say `Default application: org.lazyos.view.desktop`, and
   `gio mime inode/directory` must say `pcmanfm.desktop`). That CLI is **`libglib2.0-bin`**
   (0.9 MB, no daemon) and it is in `uis/sway/packages.list` for exactly this: `pcmanfm` and
   `gvfs` link libgio but ship no `/usr/bin/gio`, and without it the check can only read
@@ -785,7 +785,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   chafa; and **`mpv --no-config` empties the script directory too**, so `mpv-mpris` (which is
   what makes `playerctl`, the Media menu and the bar see the film at all) has to be passed as
   `--script=/etc/mpv/scripts/mpris.so`, guarded by `-r` so a tree without the plugin still
-  plays. `rofi-files` and `nureb-view` carry the same table on purpose (the menu does not start a
+  plays. `rofi-files` and `lazyos-view` carry the same table on purpose (the menu does not start a
   process to decide what to start), so a change to one belongs in the other; `check-system.sh`
   FAILs on a missing `imv`/`papers`/`mpv`, on the missing `/usr/local/bin/imv`, on a missing
   `mpris.so`, and warns when `application/pdf` does not resolve to
@@ -849,9 +849,9 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   search rather than the window, which answers a narrower question instead of the wrong one.
   Nothing of this is resident: the menu is one rofi process while it is open, and the window is
   the window.
-- **`Alt+Search` is the same question in a terminal** (`~/.config/bin/nureb-find`): `fd` streams
+- **`Alt+Search` is the same question in a terminal** (`~/.config/bin/lazyos-find`): `fd` streams
   the whole tree under `$HOME` into **fzf**, the fruit of typing narrows it while the walk is
-  still running, the right 55 % is a preview pane, and Enter hands the choice to **`nureb-view`**
+  still running, the right 55 % is a preview pane, and Enter hands the choice to **`lazyos-view`**
   - the same opener a double click in pcmanfm uses - so the list, the window and the key never
   disagree about where a file goes. The two searches are deliberately different questions:
   `rofi-files --search` is **bounded** (500 rows, sorted newest, icons and thumbnails, up in a
@@ -877,23 +877,23 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   the flag every row is shifted two characters nobody types and every path handed to the opener
   is wrong. **The preview draws with `chafa -f symbols`, never sixels**: the pane is part of
   fzf's own terminal, not a window, so a sixel image is painted over by the next redraw, while a
-  symbols image survives it (and reuses the same `nureb-thumbnail` cache, so a picture is
+  symbols image survives it (and reuses the same `lazyos-thumbnail` cache, so a picture is
   decoded once, as in the browser). **No glyph column**: foot cannot render a Font Awesome
   codepoint (its fallback font is Symbols Nerd Font Mono), so a row carries no icon and the
   picture is **the preview pane** - which is why this feature satisfies the picture rule without
   a name in `scripts/make-icons.sh`; the notification that a failed search raises does carry
   `system-search`, and `check-system.sh` warns when the theme loses it. **`--no-multi`** because
   the opener takes one file: a Tab that marked three rows would open the first and say nothing
-  about the other two. The window is a foot with `--app-id=nureb-find`, floated and centred by
+  about the other two. The window is a foot with `--app-id=lazyos-find`, floated and centred by
   `etc/sway/config.d/29-file-search.conf`, and started from a shell it runs in that shell
   instead - the key and the command are the same program. `check-system.sh` FAILs on a missing
   binding, on a script that lost its executable bit (the window would flash and close), on a
   missing `fzf` (an empty list reads as "no such file", never as a missing package) and on a
-  missing `nureb-view`, and warns on the icon. Nothing is resident: one fzf process while the
+  missing `lazyos-view`, and warns on the icon. Nothing is resident: one fzf process while the
   window is open.
 - **`Alt+Ctrl+G` searches the text inside the files** (`rofi-grep`, and "Search inside files" in
   the root menu). It is the third question in the family and each one is a different tool on
-  purpose: `rofi-files --search` asks *which file was it* (bounded, 500 rows, icons), `nureb-find`
+  purpose: `rofi-files --search` asks *which file was it* (bounded, 500 rows, icons), `lazyos-find`
   asks *I will know it when I see it* (uncapped, fzf, a preview), and this asks *where did I write
   this* - one `rg --line-number --no-heading` run over `$HOME`, one row per match with the matching
   **text** on the row (the text is what tells two matches apart) and `path:line` in the dim
@@ -912,7 +912,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   picture this feature has is the text on the row, and the notification that says "nothing
   matches" carries `system-search` from the theme.
 - **Capture is a menu over commands that already exist** (`rofi-capture`, `Alt+Ctrl+C`, "Capture"
-  in the root menu and the launcher entry `org.nureb.capture.desktop`):
+  in the root menu and the launcher entry `org.lazyos.capture.desktop`):
   `screenshot -n save|copy screen|area|window` for the screenshot, where
   `~/.config/bin/screenshot` is the one place that decides where a picture lands -
   `~/Pictures/Screenshots/<the date>/`, one folder per day, under grimshot's own `date -Ins`
@@ -943,7 +943,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   because a connection name may contain a colon and `nmcli -t` escapes it. `check-system.sh` FAILs
   when any of the tools or the two scripts is missing.
 - **Download is `yt-dlp` with three decisions** (`rofi-download`, the root menu's "Download" row
-  and the launcher entry `org.nureb.download.desktop`): a link is pasted (or taken from the
+  and the launcher entry `org.lazyos.download.desktop`): a link is pasted (or taken from the
   clipboard when it holds one), the kind is video or **audio only**, and the file lands in
   `~/Downloads` under yt-dlp's own `Title [id].ext` name. `--no-playlist` keeps a shared link to a
   video inside a playlist from turning into a thousand files on a 58 GB eMMC; `--no-mtime` keeps
@@ -1046,7 +1046,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   are text, link or image by content; an image is listed by what `cliphist` knows about it, not by
   a thumbnail (a rofi row is one line), and "Save the newest image" decodes it into
   `~/Pictures/clipboard/<date>.<ext>` (extension from `file --mime-type`) and opens it with
-  `xdg-open`, which routes a path through `nureb-view` and therefore shows it in `imv` now that
+  `xdg-open`, which routes a path through `lazyos-view` and therefore shows it in `imv` now that
   the viewer is in the image. The database is `~/.cache/cliphist/db` and
   holds everything copied, secrets included, so the menu's last row clears it.
   `rofi-emoji` (`Alt+Ctrl+E`) reads `~/.config/emojis.tsv`, **generated on the build host by

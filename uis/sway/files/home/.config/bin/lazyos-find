@@ -1,10 +1,10 @@
 #!/bin/sh
 # The terminal file search behind Alt+Search: every file under $HOME (or DIR)
 # in one fzf, narrowed by typing, with a preview pane, and Enter hands the
-# choice to nureb-view - the same program a double click in pcmanfm uses.
+# choice to lazyos-view - the same program a double click in pcmanfm uses.
 #
-#   nureb-find            search $HOME
-#   nureb-find <dir>      search that directory instead
+#   lazyos-find            search $HOME
+#   lazyos-find <dir>      search that directory instead
 #
 # The session has two answers to "where is that file", and they are different
 # questions. The Search key opens `rofi-files --search`, one bounded fd run
@@ -31,7 +31,7 @@
 # the list.
 set -eu
 
-prog=nureb-find
+prog=lazyos-find
 bin=$HOME/.config/bin
 self=$(command -v "$0" 2>/dev/null || printf '%s' "$0")
 case $self in
@@ -94,7 +94,7 @@ if [ "$mode" = preview ]; then
 			cache=$HOME/.cache/thumbnails/normal/$(printf '%s' "$media" | md5sum | cut -d' ' -f1).png
 			mkdir -p -- "${cache%/*}" 2>/dev/null || :
 			if [ ! -s "$cache" ]; then
-				timeout 8 "$bin/nureb-thumbnail" "$media" "$cache" 128 >/dev/null 2>&1 || :
+				timeout 8 "$bin/lazyos-thumbnail" "$media" "$cache" 128 >/dev/null 2>&1 || :
 			fi
 			if [ -s "$cache" ] && command -v chafa >/dev/null 2>&1; then
 				exec chafa -f symbols --size "${cols}x${lines}" -- "$cache" 2>/dev/null
@@ -147,7 +147,7 @@ esac
 if [ ! -t 0 ] || [ ! -t 1 ]; then
 	command -v foot >/dev/null 2>&1 ||
 		fail "No terminal to search in" "foot is missing, so the search has nowhere to draw"
-	exec foot --app-id=nureb-find --title="Find files" -e "$self" "$root"
+	exec foot --app-id=lazyos-find --title="Find files" -e "$self" "$root"
 fi
 
 # fd, fzf and the opener are the three ways this can come up empty, and each of
@@ -157,8 +157,8 @@ fd=$(command -v fd || command -v fdfind || :)
 [ -n "$fd" ] || fail "Search is not available" "fd is missing (package fd-find)"
 command -v fzf >/dev/null 2>&1 ||
 	fail "Search is not available" "fzf is missing (package fzf)"
-[ -x "$bin/nureb-view" ] ||
-	fail "Search cannot open files" "bin/nureb-view is missing or not executable"
+[ -x "$bin/lazyos-view" ] ||
+	fail "Search cannot open files" "bin/lazyos-view is missing or not executable"
 
 # fd prints NUL-separated paths relative to the root (the rows stay short and
 # the scheme=path matcher works on them), so the search runs from the root and
@@ -187,4 +187,4 @@ hint='Enter opens - Ctrl+Y copies the path - Esc closes'
 		--preview-window=right:55%:wrap:border-left \
 		--bind="change:change-header($hint)" \
 		--bind="ctrl-y:execute-silent(realpath -- {} | wl-copy)+change-header(copied the path)" |
-	xargs -0 -r "$bin/nureb-view"
+	xargs -0 -r "$bin/lazyos-view"

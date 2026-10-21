@@ -923,21 +923,21 @@ else
 	fail "fd is missing (package fd-find): rofi-files --search falls back to browsing"
 fi
 
-# Alt+Search asks the same question in a terminal: nureb-find streams fd into
-# fzf and hands the choice to nureb-view. There are four separate ways for that
+# Alt+Search asks the same question in a terminal: lazyos-find streams fd into
+# fzf and hands the choice to lazyos-view. There are four separate ways for that
 # key to look dead - no binding, a script without its executable bit, no fzf, no
 # opener - and the fzf one is a FAIL rather than a warning because a missing
 # filter is an *empty list*: the window opens, prints nothing, and reads as "no
 # such file" instead of as a missing package.
-if grep -qs 'Super_L+Mod1 exec .*nureb-find' "$HOME/.config/sway/config"; then
-	ok "Alt+Search opens the terminal file search (nureb-find)"
+if grep -qs 'Super_L+Mod1 exec .*lazyos-find' "$HOME/.config/sway/config"; then
+	ok "Alt+Search opens the terminal file search (lazyos-find)"
 else
-	fail "Alt+Search does not run 'nureb-find' in ~/.config/sway/config"
+	fail "Alt+Search does not run 'lazyos-find' in ~/.config/sway/config"
 fi
-if [ -x "$HOME/.config/bin/nureb-find" ]; then
-	ok "terminal file search (nureb-find) is executable"
+if [ -x "$HOME/.config/bin/lazyos-find" ]; then
+	ok "terminal file search (lazyos-find) is executable"
 else
-	fail "bin/nureb-find is missing or not executable: Alt+Search opens a foot window that closes at once"
+	fail "bin/lazyos-find is missing or not executable: Alt+Search opens a foot window that closes at once"
 fi
 if have fzf; then
 	ok "fzf present, which the terminal file search filters with"
@@ -947,7 +947,7 @@ fi
 # Its notifications carry the search glyph, and a name mako cannot resolve draws
 # no picture at all: the card is text-only with no log line.
 [ -r /usr/share/icons/Nureb/48x48/apps/system-search.png ] ||
-	warn "the Nureb theme has no system-search icon: nureb-find's notifications are text-only"
+	warn "the Nureb theme has no system-search icon: lazyos-find's notifications are text-only"
 
 # Search inside files (Alt+Ctrl+G) is the other half of the Search key: rofi-files
 # finds a file by its name, rofi-grep by what is written in it. Two things take it
@@ -1200,10 +1200,10 @@ grep -qs 'bin/screenshot' /etc/sway/config.d/90-screenshot-shortcuts.conf &&
 grep -qs -- '"$dir/screenshot"' "$HOME/.config/bin/rofi-capture" &&
 	ok "the capture menu saves through bin/screenshot" ||
 	fail "rofi-capture calls grimshot directly: its screenshots land in \$HOME"
-if [ -r /usr/share/applications/org.nureb.screenshot-area.desktop ]; then
-	grep -qs 'Exec=.*bin/screenshot' /usr/share/applications/org.nureb.screenshot-area.desktop &&
+if [ -r /usr/share/applications/org.lazyos.screenshot-area.desktop ]; then
+	grep -qs 'Exec=.*bin/screenshot' /usr/share/applications/org.lazyos.screenshot-area.desktop &&
 		ok "the Screenshot (area) launcher entry uses bin/screenshot" ||
-		fail "org.nureb.screenshot-area.desktop still runs grimshot: that entry saves into \$HOME"
+		fail "org.lazyos.screenshot-area.desktop still runs grimshot: that entry saves into \$HOME"
 fi
 
 # Clipboard history (Alt+Ctrl+V) and the emoji picker (Alt+Ctrl+E): each is a
@@ -1359,7 +1359,7 @@ else
 	fail "/usr/local/bin/xdg-open is missing: ctrl+click in foot and URL-printing tools fail"
 fi
 # Thumbnails in the file browser: rofi draws a row's picture through
-# nureb-thumbnail, which is ffmpeg for images and video and pdftocairo for a
+# lazyos-thumbnail, which is ffmpeg for images and video and pdftocairo for a
 # PDF's first page. A missing binary is silent - the row simply has no picture -
 # so the two tools are a FAIL; the cache directory (rofi's own, under
 # ~/.cache/thumbnails) only warns, because it is created on first use.
@@ -1394,7 +1394,7 @@ fi
 if [ -x /usr/local/bin/imv ]; then
 	ok "the imv short name resolves (/usr/local/bin/imv -> the package dispatcher)"
 else
-	fail "/usr/local/bin/imv is missing: rofi-files and nureb-view cannot start the viewer"
+	fail "/usr/local/bin/imv is missing: rofi-files and lazyos-view cannot start the viewer"
 fi
 # mpv-mpris is a plugin file, not a program, so nothing else notices it: without
 # it the film plays and playerctl, the Media menu and the bar see no player.
@@ -1514,10 +1514,10 @@ if [ -z "$_missing" ]; then
 else
 	warn "the Nureb theme has no icon for:$_missing (holes in pcmanfm's sidebar and icon view)"
 fi
-if [ -x "$HOME/.config/bin/nureb-view" ]; then
-	ok "open-with handler installed (nureb-view: bat, imv, papers, mpv, firefox-esr)"
+if [ -x "$HOME/.config/bin/lazyos-view" ]; then
+	ok "open-with handler installed (lazyos-view: bat, imv, papers, mpv, firefox-esr)"
 else
-	fail "bin/nureb-view is missing or not executable: a double click in pcmanfm opens nothing"
+	fail "bin/lazyos-view is missing or not executable: a double click in pcmanfm opens nothing"
 fi
 # The launcher entry is a shadow of the package's (same file name, so it replaces
 # Debian's "PCMan File Manager"): without it the launcher shows "Files" (the
@@ -1529,7 +1529,7 @@ else
 fi
 # `gio mime` resolves the association exactly like the application does, and it
 # is also a test of the .desktop entry itself: GIO drops an entry whose Exec
-# program does not exist, so a nureb-view without its executable bit reads as
+# program does not exist, so a lazyos-view without its executable bit reads as
 # "no default application" instead of as an error. LC_ALL=C so the label is the
 # one this greps for, not a translation.
 #
@@ -1540,7 +1540,7 @@ fi
 # the same variable: the desktop id, nothing else.
 _mime_default() { # MIME-TYPE
 	if have gio; then
-		# gio's line is `Default application for “image/png”: org.nureb.view.desktop`
+		# gio's line is `Default application for “image/png”: org.lazyos.view.desktop`
 		# (typographic quotes, and the type before the colon), or
 		# `No default applications for “...”` when there is none - the field
 		# after the last `: ` is the answer in the first shape and absent in
@@ -1553,10 +1553,10 @@ _mime_default() { # MIME-TYPE
 	fi
 }
 _mime=$(_mime_default image/png)
-if [ "$_mime" = org.nureb.view.desktop ]; then
-	ok "a double click on an image reaches nureb-view (mimeapps.list)"
+if [ "$_mime" = org.lazyos.view.desktop ]; then
+	ok "a double click on an image reaches lazyos-view (mimeapps.list)"
 else
-	warn "image/png defaults to '${_mime:-(nothing)}', not org.nureb.view.desktop: a photo opens in the browser or nowhere"
+	warn "image/png defaults to '${_mime:-(nothing)}', not org.lazyos.view.desktop: a photo opens in the browser or nowhere"
 fi
 # A document is papers' job, and the association is the half a package cannot
 # carry: papers ships org.gnome.Papers.desktop, and this file is what points
@@ -1613,12 +1613,12 @@ for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_
 # The session's own launcher entries. They are the only way to reach the bar's
 # panels and the session actions by typing, and a missing one is invisible: the
 # list simply has fewer rows and nobody notices. The idle screen's entry is the
-# one that is not org.nureb.*: its name is LazyOS's (the rest of the distro is
+# one that is not org.lazyos.*: its name is LazyOS's (the rest of the distro is
 # still Nureb until the rename lands).
 _missing_desktop=""
 for _d in wifi wifi-nmtui bluetooth audio-output power lock suspend \
 	screenshot-area capture lazygit tmux files emoji clipboard; do
-	[ -r "/usr/share/applications/org.nureb.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
+	[ -r "/usr/share/applications/org.lazyos.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
 done
 [ -r /usr/share/applications/org.lazyos.screensaver.desktop ] ||
 	_missing_desktop="$_missing_desktop lazyos-screensaver"
@@ -1724,7 +1724,7 @@ fi
 
 # The launcher shows application *images*, and Debian's Adwaita has none of this
 # session's names, so the image ships the small Nureb theme (48x48 PNGs rendered
-# from the Font Awesome codepoints). Without it every org.nureb.* row is a hole.
+# from the Font Awesome codepoints). Without it every org.lazyos.* row is a hole.
 _icons=""
 [ -d /usr/share/icons/Nureb ] || _icons="$_icons /usr/share/icons/Nureb"
 [ -r /usr/share/icons/Nureb/index.theme ] || _icons="$_icons Nureb/index.theme"
@@ -1732,7 +1732,7 @@ _iconless=""
 # The session's own entries, plus the viewer packages': their Icon= is not their
 # binary name (imv asks for multimedia-photo-viewer, papers for org.gnome.Papers)
 # and Adwaita 51 has neither, so the same hole appears on those rows.
-for _d in /usr/share/applications/org.nureb.*.desktop \
+for _d in /usr/share/applications/org.lazyos.*.desktop \
 	/usr/share/applications/org.gnome.Papers.desktop \
 	/usr/share/applications/imv.desktop \
 	/usr/share/applications/mpv.desktop; do
