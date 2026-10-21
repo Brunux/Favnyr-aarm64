@@ -6,14 +6,19 @@
 # ctrl+clicks a URL, `yt-dlp --print-trailer` prints one, a script opens a
 # downloaded file. Without an xdg-open those all fail with "command not found".
 #
-# The browser is the answer to all of it: URLs go to it as they are, and a path
-# becomes a file:// URL (absolute, so Firefox does not have to guess a working
-# directory). The NUL-separated form (`xdg-open` with no arguments, reading
-# paths from stdin) is deliberately not supported - nothing in this image uses
-# it, and guessing would be worse than saying so.
+# The browser is the answer to the URL half: a URL goes to it as it is. A path
+# is "open this file", which is the question ~/.config/bin/nureb-view already
+# answers for a double click in pcmanfm - imv for a picture, papers for a
+# document, mpv for a video, bat for text - so the shell and the desktop cannot
+# disagree, and the browser stays the fallback (and the answer for a user with
+# no session bin directory, e.g. root). A path handed to the browser becomes a
+# file:// URL, absolute, so Firefox does not have to guess a working directory.
+# The NUL-separated form (`xdg-open` with no arguments, reading paths from
+# stdin) is deliberately not supported - nothing in this image uses it, and
+# guessing would be worse than saying so.
 #
-# rofi-files does not call this: it calls firefox-esr directly, so the file
-# browser works even if this script is removed.
+# rofi-files does not call this: it has its own copy of the same rules, so the
+# file browser works even if this script is removed.
 
 set -eu
 
@@ -30,6 +35,11 @@ case ${1:-} in
 	/*) path=$1 ;;
 	*) path=$PWD/$1 ;;
 	esac
+	# The desktop's open-with rules, applied from a shell too. A user without
+	# the session's bin directory (root, an ssh session) still gets the browser.
+	if [ -n "${HOME:-}" ] && [ -x "$HOME/.config/bin/nureb-view" ]; then
+		exec "$HOME/.config/bin/nureb-view" "$path"
+	fi
 	exec firefox-esr "file://$path"
 	;;
 esac

@@ -35,8 +35,6 @@ esac
 
 # User-installed binaries (cargo, pipx, a user-level npm prefix) live here.
 # Appended, so a system package always wins over a user copy of the same name.
-# Deboma exports EDITOR=omarchy-launch-editor at this point; there is no launcher
-# wrapper here, so EDITOR stays unset and the aliases fall back to nano.
 if [ -n "${HOME:-}" ]; then
 	case ":$PATH:" in
 		*":$HOME/.local/bin:"*) ;;
@@ -44,3 +42,16 @@ if [ -n "${HOME:-}" ]; then
 	esac
 fi
 export PATH
+
+# The editor. Deboma exports EDITOR=omarchy-launch-editor here, a wrapper that
+# decides between a TUI and a GUI; there is no such wrapper in this image, so
+# EDITOR and VISUAL name the TUI editor directly. That is nvim (packages/
+# tools.list, Omarchy's editor), and it is what eff, `git commit` and
+# `crontab -e` open. Only when nothing has set them already - an EDITOR from an
+# ssh session or a user's own export wins - and only when the binary is there,
+# because an EDITOR naming a program that does not exist makes those three fail
+# instead of falling back to nano.
+if [ -z "${EDITOR:-}" ] && command -v nvim >/dev/null 2>&1; then
+	export EDITOR=nvim
+	export VISUAL=nvim
+fi

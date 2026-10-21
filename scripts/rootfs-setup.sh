@@ -60,6 +60,15 @@ for _pair in bat:batcat fd:fdfind; do
 done
 unset _pair _name _target
 
+# imv installs no /usr/bin/imv either: Debian's package ships imv-wayland and
+# imv-x11 plus a /usr/libexec/imv/imv wrapper that picks one from
+# $WAYLAND_DISPLAY. rofi-files, nureb-view and xdg-open all call `imv`, and so
+# does anyone typing it, so the short name is a symlink to the package's own
+# dispatcher rather than a guess at which backend this session runs.
+if [ -x /usr/libexec/imv/imv ]; then
+	ln -sfn /usr/libexec/imv/imv /usr/local/bin/imv
+fi
+
 if command -v depthchargectl >/dev/null 2>&1; then
 	log "Disabling depthcharge-tools' system hooks"
 	# depthcharge-tools ships /etc/kernel/postinst.d and

@@ -5,6 +5,15 @@
 # launcher has the same set (home, documents, downloads, pictures, the mounted
 # disks).  Only places that exist are listed, so a system without ~/Videos does
 # not show an empty folder - the list is the filesystem, not an assumption.
+#
+# A disk that is not mounted yet is a row as well ("Mount SANDISK"), and picking
+# it mounts the thing and opens it.  That is the only way a session without root
+# can use a USB stick: mount(8) needs a privilege this user does not have, and
+# udisks2 - D-Bus activated, so nothing runs until something asks - is the
+# service that does it with the right permissions.  Alt+1 is the other half and
+# unmounts the disk under the selected row, because a stick mounted here stays
+# mounted otherwise (and pulling one that is still mounted is how a filesystem
+# gets corrupted).
 
 set -eu
 
@@ -38,23 +47,87 @@ ui_place() {
 	ui_place "$UI_I_GLOBE" 'Root filesystem' /
 
 	# Removable media and any other mounted real filesystem, minus the ones a
-	# file browser should not start in.
+	# file browser should not start in. These are `disk:` and not `open:` so
+	# Alt+1 knows a disk is under the row; the basename of the mount point is
+	# the label udisks gave it (/run/media/$USER/SANDISK).
 	findmnt -rn -o TARGET,FSTYPE 2>/dev/null |
 		while read -r target fstype; do
 			case $fstype in
-			ext2 | ext3 | ext4 | vfat | exfat | btrfs | xfs | f2fs) ;;
+			ext2 | ext3 | ext4 | vfat | exfat | btrfs | xfs | f2fs | ntfs | ntfs3) ;;
 			*) continue ;;
 			esac
 			case $target in
 			/ | /boot | /boot/*) continue ;;
 			esac
-			ui_place "$UI_I_DISK" "$(basename -- "$target")" "$target"
+			ui_row "$UI_I_DISK" "$(basename -- "$target")" "$target" "disk:$target"
 		done
+
+	# The filesystems nobody has mounted yet: a USB stick, an SD card, a disk
+	# from another machine. lsblk answers type, filesystem, label and mount
+	# point in one call; a partition without a filesystem is not something this
+	# menu can open (it is a kernel partition, a swap or a LUKS container, and
+	# all three are skipped on purpose - udisks would need a passphrase prompt
+	# this menu does not have).
+	if command -v udisksctl >/dev/null 2>&1; then
+		lsblk -rno NAME,TYPE,FSTYPE,LABEL,MOUNTPOINT 2>/dev/null |
+			while read -r name type fstype label mountpoint; do
+				case $type in
+				part | disk) ;;
+				*) continue ;;
+				esac
+				[ -n "$fstype" ] || continue
+				[ -z "$mountpoint" ] || continue
+				case $fstype in
+				swap | crypto_LUKS) continue ;;
+				esac
+				# -r escapes a space as \x20; a label is what a person
+				# recognises, so it is worth the one substitution.
+				_shown=${label:-$name}
+				_shown=$(printf '%s' "$_shown" | sed 's/\\x20/ /g')
+				ui_row "$UI_I_DISK" "Mount $_shown" "/dev/$name" "mount:/dev/$name"
+			done
+	fi
+
 	ui_row "$UI_I_FILES" 'Open a terminal' "$HOME" "term:$HOME"
 } >"$tmp"
 
-key=$(ui_pick 'Places' 'Enter browses there · Escape closes' <"$tmp") || exit 0
+key=$(ui_pick_alt 'Places' 'Enter opens · Alt+1 unmounts a disk · Escape closes' \
+	'Alt+1 unmounts' <"$tmp") || exit 0
+
 case $key in
-open:*) exec "$dir/rofi-files" "${key#open:}" ;;
+open:* | disk:*) exec "$dir/rofi-files" "${key#*:}" ;;
+mount:*)
+	dev=${key#mount:}
+	if out=$(udisksctl mount -b "$dev" 2>&1); then
+		# "Mounted /dev/sda1 at /run/media/brunux/SANDISK." - the path is the
+		# answer, and it is what the browser opens. The full stop is udisksctl's,
+		# not part of the path.
+		mp=${out##* at }
+		mp=${mp%.}
+		exec "$dir/rofi-files" "$mp"
+	fi
+	ui_say Places "$out" critical "$UI_ICON_ERROR"
+	exit 1
+	;;
+alt:disk:*)
+	target=${key#alt:disk:}
+	dev=$(findmnt -rn -o SOURCE -T "$target" 2>/dev/null || true)
+	if [ -z "$dev" ]; then
+		ui_say Places "$target is not a mounted filesystem any more"
+		exit 0
+	fi
+	if out=$(udisksctl unmount -b "$dev" 2>&1); then
+		ui_say Places "Unmounted $(basename -- "$target")"
+		exec "$0"
+	fi
+	# udisks refuses a filesystem it did not mount (an fstab entry, the root
+	# filesystem) and one that is busy, and its own message says which.
+	ui_say Places "$out" critical "$UI_ICON_ERROR"
+	exit 1
+	;;
+alt:*)
+	ui_say Places 'Only a disk can be unmounted'
+	exit 0
+	;;
 term:*) exec foot --working-directory="${key#term:}" ;;
 esac
