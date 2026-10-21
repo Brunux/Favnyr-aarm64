@@ -1,4 +1,0 @@
-Helix
-serie
-frogmouth
-hexyl
