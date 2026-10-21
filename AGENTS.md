@@ -252,7 +252,11 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   the live one (it floats over windows). Numbers, method and the renderer facts are in
   `docs/optimization.md` §7: PanVK answers *Mali-G57 not supported*, and SceneFX creates its own
   GLES renderer (`fx_renderer_create`), so `WLR_RENDERER` never applies. Corners are cut when the
-  buffer is committed and a shadow is a texture.
+  buffer is committed and a shadow is a texture; `animation_duration_ms 0` is written out because
+  any animation would move a window to the live path for its duration. greetd starts `sway` with no
+  `WLR_*`/`MESA_*`/`LIBGL_*` override, the image ships no `mesa-vulkan-drivers`, and
+  `check-system.sh` FAILs when `eglinfo -B` does not name Panfrost - a silent drop to llvmpipe is
+  otherwise invisible.
 - `sway --version` prints `swayfx version 0.6 (based on sway 1.12.0)`; plain sway prints
   `sway version 1.12.0`. `check-system.sh` FAILs on anything that is not swayfx, and the bar's
   `sway -C` check then validates the effects drop-in along with the rest.

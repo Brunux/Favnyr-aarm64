@@ -172,3 +172,140 @@ changed), and **never leave the kernel partition's `tries` counter short** —
 3. **EAS** (DT patch) — battery, needs coefficients and measurement.
 4. **Hibernation / swap layout**, **sched_ext**, **initramfs-free boot** — only
    if wanted.
+
+## 7. Compositor effects: what blur costs, and which renderer
+
+Added when blur was turned on in `uis/sway/files/etc/sway/config.d/26-swayfx.conf`. It is not a
+kernel knob, but it is the same kind of decision: the effect is either affordable on this GPU or it
+is not, and that is a measurement, not an opinion.
+
+### The renderer this device has
+
+* **GLES on panfrost, and nothing else.** swayfx never calls `wlr_renderer_autocreate()` - it
+  creates SceneFX's renderer itself (`fx_renderer_create()` in `sway/server.c`), and SceneFX only
+  implements a GLES renderer. `WLR_RENDERER` therefore does not reach it at all; there is no
+  Vulkan, pixman or "try the other one" path for the session.
+* **Vulkan is not available on this GPU anyway.** `vulkaninfo` with Mesa 26.1.6 answers
+  `Mali-G57 not supported (VK_ERROR_INCOMPATIBLE_DRIVER)` from `panvk_physical_device.c`: PanVK has
+  no support for the Mali-G57. The two facts agree, which is why there is nothing to tune here
+  beyond making sure the GLES driver is the hardware one (it is: EGL driver name `panfrost`,
+  `GL_RENDERER` "Mali-G57 MC5 (Panfrost)", GLES 3.1).
+* **The active mode is 1366x912 at 60.004 Hz** (`wayland-info`; every number below is quoted at that
+  resolution), not the 1920x1200 the old comment in `26-swayfx.conf` claimed. A frame is 16.7 ms.
+* **What the image actually runs, checked rather than assumed.** greetd starts `sway` with no
+  `WLR_*`, `MESA_*` or `LIBGL_*` override anywhere in the tree, so every knob is the default; the
+  rootfs has `libegl-mesa0`, `libgl1-mesa-dri` and `mesa-libgallium` 26.1.6 with `panfrost_dri.so`
+  installed and **no `mesa-vulkan-drivers` at all** (nothing would load it on this GPU anyway).
+  `check-system.sh` now fails when `eglinfo -B` does not name Panfrost, because a forced
+  `LIBGL_ALWAYS_SOFTWARE` or a Mesa regression would otherwise drop the session onto llvmpipe
+  silently, with every frame and the blur drawn on the CPU.
+* **The Mesa tuning variables that exist do not help.** `PAN_MESA_DEBUG` accepts `dump`, `trace`,
+  `sync`, `inorder`, `nocache` and `precompile` - instrumentation, validation, and `inorder`/
+  `nocache` which *cost* performance. There is no "make it faster" switch; the way to make this
+  GPU faster is to draw less, which is what the two blur paths below are about.
+* **Colour management is compiled in and switched off.** SceneFX's meson found `lcms2` and built
+  the colour path, but `fx_renderer.c` sets `features.output_color_transform = false`, so no
+  per-frame conversion happens and there is nothing to disable at runtime.
+
+### The "Mali-G57 PanVK driver" is not a shortcut
+
+Mesa's own matrix (docs.mesa3d.org/drivers/panfrost.html) leaves the Vulkan column empty for
+*Valhall (v9) G57/G68*; Mesa main implements `panvk_v6`, `v7` and `v10`-`v14`, and the G57 is v9.
+`PAN_I_WANT_A_BROKEN_VULKAN_DRIVER=1` does not change that - tested on the device, `vulkaninfo`
+then enumerates only llvmpipe. The binary driver that circulates for this GPU
+(FristOneRR/PanVK, 2026-10) cannot fill the gap:
+
+* it is not a source project - the repository is a README and a license, the releases are a
+  prebuilt 17.6 MB `libvulkan_panfrost.so`;
+* that `.so` is built with the Android NDK ("for Android 24", minApi 33) and needs `liblog.so`,
+  `libhardware.so`, `libnativewindow.so` and `libsync.so` - bionic libraries Debian does not have
+  and cannot substitute at the Vulkan-loader level;
+* it drives **kbase** (`/dev/mali0`, `KBASE_IOCTL_*`, gralloc); this kernel binds the GPU to
+  **panfrost** (`/dev/dri/renderD128`, DRM uAPI - `/dev/mali*` does not exist here), so the
+  interface it was written against is absent;
+* **the source forks add v9 for kbase, not for panfrost.** `apexspan-svg/mesa-panvk-mali-g57` is a
+  full Mesa tree with G57/v9 support and `zenithblue-oss/panvk-kbase-android` a standalone build;
+  both say outright that they target the Arm `kbase` JM interface instead of mainline
+  `panfrost.ko`. `Vtgamer998/PanVK-v9-Driver` even ships a **glibc** build
+  (`zig cc -target aarch64-linux-gnu.2.35`), but it is a Winlator ICD - `pan_kmod_kbase.c` +
+  `kbase_winsys.c` on `/dev/mali0`, XCB WSI - and its README calls it "not a complete driver"
+  (286 stubbed extensions) that "may cause GPU JOB_READ_FAULT". Using any of them means replacing
+  their kernel interface with Mesa's `pan_kmod` DRM backend: a Mesa driver project, not a package
+  drop;
+* even a working Vulkan ICD would not touch this section: swayfx creates SceneFX's **GLES**
+  renderer, so the compositor and its blur would keep using panfrost either way. Vulkan would only
+  matter to Vulkan applications.
+
+If upstream PanVK grows Valhall v9 support on `pan_kmod`'s DRM backend, the answer becomes
+`apt install mesa-vulkan-drivers` on forky - no port and no private driver.
+
+### The two paths SceneFX has
+
+SceneFX (0.5) classifies each blurred node:
+
+* **Cached ("optimized") blur.** A tiled window that cannot overlap another one (and this session
+  has animations off: `animation_duration_ms` stays at its 0 default) samples a buffer that was
+  blurred once, when the wallpaper or the output size changed. Per frame that is one bilinear tap
+  per pixel.
+* **Live blur.** A floating window, or one that can overlap another, is re-blurred from what is
+  actually behind it: `blur_passes` downsample passes (5 taps) and the same number of upsample
+  passes (9 taps), then the full-screen draw of the result.
+
+`blur_xray` chooses between them: enabled, *every* surface uses the cached buffer - including a
+floating window, which then shows the wallpaper through itself instead of the window behind it.
+That is visible (verified with two screenshots of the same scene, one per setting), so the session
+keeps it disabled and only floating windows pay for a live blur.
+
+### Measured
+
+[`bench-blur.c`](bench-blur.c) is the harness: an EGL/GLES2 context on `renderD128`, SceneFX's own
+`blur1.frag`/`blur2.frag` verbatim, `glFinish()` on both sides, best of five runs of 300 iterations,
+at 1366x912:
+
+```sh
+gcc -O2 -o bench-blur docs/bench-blur.c -lEGL -lGLESv2 -lm && ./bench-blur 1366 912
+```
+
+| Path | Work per frame | Time |
+|---|---|---|
+| Cached, full screen | 1 bilinear tap of the cached texture | **0.07-0.11 ms** |
+| Live, radius 4 / 2 passes, full screen | 2 down + 2 up passes + the final draw | **2.1-2.2 ms** |
+| Live plus the post-effects pass (noise/tint) | one more full-screen pass | **+0.6 ms** |
+| Shipped defaults (radius 5, 3 passes, effects) | two more passes than the session's setting | **3.0-3.1 ms** |
+| Building the cached buffer | the same chain, once per wallpaper/resize | ~2.7 ms, once |
+
+The live path scales with the window's area: a 1200x800 floating window is 69 % of the screen, so
+about 1.5 ms. An end-to-end check agrees that this is small: a client repainting a 2600x1700
+window in a headless swayfx held 60 fps with blur off, with the cached path, with the live path and
+with SceneFX's defaults (radius 5, 3 passes, noise). The blur is not what limits this GPU at this
+panel's resolution; it was never the frame-rate cliff the port's earlier notes assumed.
+
+The parameters in `26-swayfx.conf` follow from the table:
+
+* `animation_duration_ms 0` is written out rather than left to its default. A non-zero value makes
+  every moving window "could overlap" for the length of its animation, which sends it down the live
+  path; with animations off the cached path is always the one a tiled window takes.
+* `blur_passes 2` + `blur_radius 4` = a 32 px sample (`2^(passes+1) * radius`; the shipped default
+  is 5 x 3 = 80 px). Passes are the price of a live blur, and the sample size is also how far a
+  *live* blur's damage region is grown, so this is what a floating window re-renders around itself.
+* `blur_noise 0` with brightness/contrast/saturation at 1.0 makes SceneFX skip the post-effects
+  pass entirely; it costs one full-screen pass on a live blur and adds visible grain. For the
+  cached path the pass is baked in when the buffer is built, so `blur_brightness 0.9` is free
+  there - it is the line to add if a dimmer frost is wanted.
+* Blur is drawn *behind* a surface, so it is only visible under one with alpha < 1. The three
+  carriers are `~/.config/foot/foot.ini` (`alpha=0.92`), `~/.config/rofi/solarized.rasi` (0.88) and
+  `~/.config/waybar/style.css` (0.78 for the bar, 0.86 for the cards). The bar is a layer surface
+  that only ever has the wallpaper behind it, so `layer_effects "waybar"` uses the cached path; the
+  launcher floats over windows, so `layer_effects "rofi"` uses the live one (and only repaints
+  while open).
+* Blur does not disable direct scanout by itself: `has_blur` is consulted only to render the cached
+  buffer and to compensate damage, never in `scene_entry_try_direct_scanout`, so an opaque
+  fullscreen buffer can still be scanned out with a blur node underneath it. What does cost scanout
+  is the translucency that makes the blur visible - an `alpha < 1` surface is composited. That is
+  the deliberate trade for the frosted look, and it is cheap in practice because the compositor is
+  damage-driven: an idle translucent terminal produces no frames at all.
+
+`vulkaninfo`, `eglinfo` and `wayland-info` give the facts that bound the options above. One detail the
+harness had to get right, and a naive version gets wrong: every pass must read and write *different*
+buffers. Sampling the target you are writing is a feedback loop, which the driver may legally throw
+away - a first version of it measured a chain that cost less than one of its own passes.

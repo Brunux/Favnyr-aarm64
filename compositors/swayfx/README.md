@@ -47,15 +47,26 @@ Two things about the contents are deliberate:
   they exist in the staging tree for the duration of the build, which is what lets swayfx link
   against the freshly built library.
 
-## Effects policy: blur is off
+## Effects policy: cheap effects, and a blur that is only live where it must be
 
-`uis/sway/files/etc/sway/config.d/26-swayfx.conf` enables rounded corners and shadows and disables
-blur explicitly. A corner cut is done when the window commits its buffer, and a shadow is a texture
-drawn once per frame; blur is a Gaussian pass over the whole damaged region on every frame, and it
-also defeats direct scanout of a fullscreen window. On the Mali-G57 (panfrost) at 1920x1200 that is
-the effect that costs frames and battery, so it stays off. `blur disable` is written out rather than
-left to the default, so that an experiment elsewhere in the configuration cannot turn it back on by
-accident.
+`uis/sway/files/etc/sway/config.d/26-swayfx.conf` enables rounded corners, shadows and blur.
+
+SceneFX produces blur in two ways and the difference is the whole reason it can be on. A tiled
+window that cannot overlap another one samples a buffer that was blurred once, when the wallpaper
+changed: **one bilinear tap per pixel, 0.07-0.11 ms full screen** on this GPU. A floating window (or
+one that can overlap) is re-blurred from what is behind it - two downsample and two upsample passes
+plus the draw - **2.1-2.2 ms full screen at radius 4 / 2 passes**, scaling with its area, and only
+while it is on screen. `blur_xray` decides: enabled, every surface samples the cached wallpaper
+blur, which is cheapest but shows the wallpaper through a floating window instead of the window
+behind (verified with screenshots); the session keeps it disabled, so the common case stays free.
+
+The other knobs follow the measurement: `blur_passes 2` + `blur_radius 4` is a 32 px sample instead
+of the shipped 80 px, `blur_noise 0` with neutral brightness/contrast/saturation skips SceneFX's
+second full-screen pass, and the three surfaces that reveal the effect are translucent (foot 0.92,
+rofi 0.88, waybar 0.78/0.86) because blur is drawn *behind* a surface. `layer_effects` gives the bar
+the cached path (it only has the wallpaper behind it) and the launcher the live one (it floats over
+windows). `docs/optimization.md` has the numbers, the method and why Vulkan is not an option here
+(PanVK refuses the Mali-G57, and SceneFX creates its own GLES renderer regardless).
 
 ## Build and install
 
