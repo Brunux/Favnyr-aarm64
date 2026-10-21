@@ -54,6 +54,17 @@ disk_release() {
 		fi
 		swapoff "$_part" 2>/dev/null || true
 	done
+	# Masking udisks2 does not stop a daemon that is already running, and a
+	# running one auto-mounts the partitions the moment the new table appears:
+	# `parted`/`cgpt` then fail with "unable to inform the kernel of the change,
+	# probably because it/they are in use" *after* the table was replaced, and the
+	# next `partx -a` presents a card whose p2 is already mounted. Refusing here
+	# is the same choice as refusing a mounted partition, one step earlier.
+	if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet udisks2 2>/dev/null; then
+		die "udisks2 is running and auto-mounts a partition as soon as the new table appears,
+leaving the write half done; stop it for the run and start it again afterwards:
+  sudo systemctl stop udisks2"
+	fi
 }
 
 # Create the ChromeOS GPT on <disk> and set the derived geometry in the
@@ -153,7 +164,7 @@ disk_layout_mount() {
 	for _p in "$BOOT_PART" "$ROOT_PART"; do
 		findmnt -rn -S "$_p" >/dev/null 2>&1 &&
 			die "$_p was mounted (udisks2 auto-mounts a new partition); unmount it and run again:
-  udisksctl unmount -b $_p    (or mask udisks2 for the run: systemctl mask --runtime udisks2)"
+  udisksctl unmount -b $_p    (and stop udisks2 for the run: sudo systemctl stop udisks2)"
 	done
 	# The mkfs command lines are the ones format_partition_with_filesystem() in
 	# pmb/install/format.py builds for these two filesystems: mkfs.ext2 for the

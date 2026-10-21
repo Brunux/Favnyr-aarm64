@@ -777,11 +777,16 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   confusing failure looks like: the GPT is rewritten, `partx -a` presents p2/p3, the session's
   udisks2 auto-mounts both within a second, and `mkfs.ext4` stops the run with
   `/dev/mmcblk1p3 is mounted; will not make a filesystem here!` — after the table was already
-  replaced, leaving a half-written card. `disk_release()` cannot catch it because it runs before
-  the partitions exist; `disk_layout_mount()` now checks again and names the fix
-  (`udisksctl unmount -b <part>`, or `systemctl mask --runtime udisks2` for the duration of the
-  write, then `systemctl unmask --runtime udisks2`). Seen while writing this build on the machine
-  itself, where the port's own session is the thing mounting the card.
+  replaced, leaving a half-written card. It can fail one step earlier, which is worse: with p2
+  mounted `parted`/`cgpt` answer *Partition(s) 2 ... have been written, but we have been unable to
+  inform the kernel of the change, probably because it/they are in use*, the kernel keeps the old
+  table and the run stops before anything is formatted (hit on this machine). **`systemctl mask
+  --runtime udisks2` is not enough**: it does not stop a daemon that is already running, and that
+  is the one that mounts the card. `sudo systemctl stop udisks2` is, and it can be started again
+  afterwards (or left to the next boot). Both entry points now refuse rather than half-write:
+  `disk_release()` before the table exists, `disk_layout_mount()` after `partx -a`, each naming the
+  command. Seen while writing this build on the machine itself, where the port's own session is
+  the thing mounting the card.
 - `lsblk -nro PATH <disk>` lists the **disk first**, then its partitions: skip the first line when
   resolving `p1`/`p2`/`p3`. A wrong index here formats the whole disk instead of a partition.
 - The tools needed **on the device** are three separate Debian packages and it is easy to install
