@@ -15,9 +15,10 @@ if [ "$(id -u)" -ne 0 ]; then
 	exec sudo -n "$(readlink -f "$0")" "$@"
 fi
 
-# imagemagick is only needed by scripts/make-icons.sh, which renders the
-# launcher icons from the icon fonts; its PNGs are committed, so a build without
-# it is fine and regenerating the icons is the one case that wants it.
+# imagemagick is only needed by scripts/make-icons.sh and make-brand.sh, which
+# render the launcher icons and the mark; rsvg-convert (librsvg2-bin) and
+# JetBrains Mono are make-brand.sh's, and every PNG both produce is committed,
+# so a build without them still builds - only an edit needs them.
 if command -v apk >/dev/null 2>&1; then
 	log "Installing host build dependencies (apk)"
 	apk add --no-cache \
@@ -39,7 +40,7 @@ if command -v apk >/dev/null 2>&1; then
 		xcb-util-wm-dev xcb-util-dev \
 		debootstrap \
 		cgpt vboot-utils depthcharge-tools \
-		imagemagick \
+		imagemagick librsvg font-jetbrains-mono \
 		e2fsprogs dosfstools parted gptfdisk \
 		util-linux
 elif command -v apt-get >/dev/null 2>&1; then
@@ -80,7 +81,7 @@ elif command -v apt-get >/dev/null 2>&1; then
 		libxcb-errors-dev \
 		debootstrap \
 		cgpt vboot-kernel-utils depthcharge-tools \
-		imagemagick \
+		imagemagick librsvg2-bin fonts-jetbrains-mono \
 		e2fsprogs dosfstools parted gdisk \
 		util-linux
 else

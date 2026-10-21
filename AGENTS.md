@@ -116,12 +116,15 @@ uis/<ui>/                  one directory per graphical shell
   files/                   tree overlaid onto the rootfs; `etc/` is copied as
                            root, `home/` is merged into /home/$USERNAME
   README.md                what the shell ships and how it deviates upstream
+brand/                     the mark, as an SVG source: scripts/make-brand.sh
+                           renders the icon and the wallpaper from it
 packages/                  device-agnostic package lists (base.list: what the
                            system needs; tools.list: the CLI tools)
 scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
                            (the ChromeOS GPT layout), lib-dist.sh (what a
                            published artifact must not carry) + build/install
-                           scripts, including make-image.sh / make-release.sh
+                           scripts, including make-image.sh / make-release.sh and
+                           the two host tools, make-icons.sh / make-brand.sh
 reports/                   check-system.sh output captured on real hardware, kept
                            as evidence for the checks, plus the maintainer's
                            own session feedback from a booted card (see
@@ -143,7 +146,8 @@ automatically. Select the graphical shell with `UI=<name>` (default `sway`).
 
 `build-rootfs.sh` stages the **committed** tree (`git archive HEAD`, so never an untested working
 copy) into the image at `/home/$USERNAME/Dev/<repo directory name>`, next to a `REVISION` file, and
-writes the same information to `/etc/debian-aarch64-revision` (commit, device, UI, kernel, date).
+writes the same information to `/etc/debian-aarch64-revision` (commit, device, UI, kernel,
+version, date).
 It also installs `check-system.sh` as `/usr/local/sbin/check-system.sh`. This is not decoration:
 `install-emmc.sh`, `install-kpart.sh` and the package checks in `check-system.sh` are meant to run
 **on the device**, they source `scripts/lib.sh`, and the card that installs to the eMMC is the same
@@ -309,6 +313,33 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
 
 ### Userspace / UI (Debian forky)
 
+- **The brand is one mark and one wordmark, and each surface asks for the form
+  it can draw.** `brand/lazyos.svg` is the hand-drawn arcade button (cyan bezel,
+  orange dome, base03 crescent, base1 highlight), and `scripts/make-brand.sh`
+  renders it into `lazyos.png` in the LazyOS theme's `48x48/apps` (the About row
+  and anything that asks for `Icon=lazyos`), the SVG in `scalable/apps`, a
+  1366x912 `Pictures/Wallpapers/lazyos.png` (the panel's real mode, so nothing
+  is resampled: the mark, `lazy by design` in cyan and the arcade line in base0)
+  and `~/.config/lazyos/wordmark.txt`, the two-line text fastfetch draws. **The
+  PNGs are committed**, because the image is staged with `git archive HEAD` and
+  a build host without `rsvg-convert` still has to build; only an edit to the
+  SVG needs the script, which is a host tool like `make-icons.sh` - hence
+  `librsvg2-bin`/`fonts-jetbrains-mono` in `00-deps.sh`. **The lock screen keeps
+  `mountains.jpg`**: the desktop is the surface the brand owns, and the
+  photograph is what is up when nobody is looking. **The text is not the
+  picture**: the idle screen draws the ANSI Shadow wordmark (a terminal can draw
+  block art; a PNG cannot become text), fastfetch puts the two-line wordmark
+  next to the facts, and a virtual terminal gets `/etc/issue` - none of them is
+  asked to show the mark. `os-release` (a regular file: Debian's is a
+  base-files-owned symlink, and `check-system.sh` FAILs when the image is back
+  to calling itself Debian), `/etc/issue`, the greeter's `--greeting` and the
+  `lazyos` hostname are the distribution saying its own name, and the version
+  they carry comes from the committed `VERSION` file, read by `build-rootfs.sh`,
+  forwarded through sudo into the chroot and recorded as `version` in
+  `/etc/debian-aarch64-revision` - a build cannot say 0.2 while the tag says
+  v0.3.0. The root menu's `ai` group (Agents and Dictation together, not
+  scattered between the openers and the session actions) is the other statement
+  the brand makes.
 - **greetd**: Debian's package creates the **`_greetd`** system user (upstream docs say
   `greetd`), and its unit declares `Conflicts=getty@tty7.service`, i.e. it expects `vt = 7` in
   `/etc/greetd/config.toml`. With the upstream name the service dies with
@@ -839,7 +870,8 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   this is a stylesheet, not a theme package. Adwaita 51 ships no full-colour `folder`,
   `user-home` or `drive-harddisk` at all, which is why `scripts/make-icons.sh` grew a **fourth
   table** (50 names: the places, the actions and the mimetypes the sidebar and the icon view ask
-  for by name; the theme is 219 PNGs in `48x48/apps` + `scalable/apps`), and `check-system.sh`
+  for by name; the theme is 220 files in each of `48x48/apps` and `scalable/apps` - 219 from
+  `make-icons.sh`, plus the mark from `make-brand.sh`), and `check-system.sh`
   asks the theme for the names pcmanfm draws instead of trusting the picture.
 - **`Search+Shift` is the window, and both halves are release bindings**: sway matches a release
   binding against the modifiers held when the key comes up, so Search released with Shift still
@@ -1417,6 +1449,7 @@ scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initra
 scripts/install-swayfx.sh   # install the compositor .debs (rootfs by default, `/` for a running system)
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
 scripts/make-icons.sh       # Font Awesome glyphs -> the LazyOS icon theme PNGs (host tool, committed output)
+scripts/make-brand.sh       # brand/lazyos.svg -> the icon, the wallpaper and the wordmark (host tool, committed output)
 scripts/make-emojis.sh      # Python's Unicode database -> ~/.config/emojis.tsv (host tool, committed output)
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
 scripts/make-image.sh       # distributable disk image from the rootfs (no card needed)

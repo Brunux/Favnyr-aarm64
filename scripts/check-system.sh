@@ -1616,13 +1616,13 @@ for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_
 # checked apart because it is the one the brand owns: its name is the mark's.
 _missing_desktop=""
 for _d in wifi wifi-nmtui bluetooth audio-output power lock suspend \
-	screenshot-area capture lazygit tmux files emoji clipboard; do
+	screenshot-area capture lazygit tmux files emoji clipboard about; do
 	[ -r "/usr/share/applications/org.lazyos.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
 done
 [ -r /usr/share/applications/org.lazyos.screensaver.desktop ] ||
 	_missing_desktop="$_missing_desktop lazyos-screensaver"
 if [ -z "$_missing_desktop" ]; then
-	ok "launcher entries present (session actions, nmtui, lazygit, tmux)"
+	ok "launcher entries present (session actions, nmtui, lazygit, tmux, about)"
 else
 	fail "launcher entries missing:$_missing_desktop"
 fi
@@ -1647,6 +1647,100 @@ if [ -n "$_bl" ]; then
 	else
 		fail "waybar names backlight device '$_bl'; /sys/class/backlight has: $(ls /sys/class/backlight 2>/dev/null | tr '\n' ' ')"
 	fi
+fi
+
+# ---------------------------------------------------------------------------
+section "The brand"
+# ---------------------------------------------------------------------------
+# /etc/os-release is Debian's symlink to /usr/lib/os-release, and base-files
+# owns that file: a base-files upgrade can put the symlink back and the image
+# then silently calls itself Debian.  The build writes a regular file; this is
+# what notices when it is gone.
+if [ -r /etc/os-release ]; then
+	_os_id=$( (. /etc/os-release 2>/dev/null; printf '%s' "${ID:-}") )
+	_os_name=$( (. /etc/os-release 2>/dev/null; printf '%s' "${PRETTY_NAME:-}") )
+	_os_ver=$( (. /etc/os-release 2>/dev/null; printf '%s' "${VERSION_ID:-}") )
+	if [ "$_os_id" = lazyos ] && [[ $_os_name == LazyOS* ]]; then
+		ok "os-release says $_os_name (ID=$_os_id)"
+	else
+		fail "/etc/os-release is not LazyOS (ID='${_os_id}', PRETTY_NAME='${_os_name}'): base-files may have restored its symlink"
+	fi
+	# The image's own record of what it was built from.  A hand edit of
+	# os-release is allowed; saying a different version than the build did is
+	# what this catches.
+	_rev_ver=$(sed -n 's/^version //p' /etc/debian-aarch64-revision 2>/dev/null)
+	if [ -n "$_rev_ver" ] && [ -n "$_os_ver" ] && [ "$_rev_ver" != "$_os_ver" ]; then
+		warn "os-release says VERSION_ID=$_os_ver, but the image was built from version $_rev_ver"
+	fi
+else
+	fail "/etc/os-release is missing"
+fi
+
+# The wallpaper is the brand's largest surface, and a missing file leaves sway
+# painting a flat colour with no message.  The lock screen deliberately keeps
+# the mountain photograph: it is the surface that is up when nobody is looking.
+if [ -r "$HOME/Pictures/Wallpapers/lazyos.png" ]; then
+	ok "brand wallpaper present"
+else
+	fail "missing Pictures/Wallpapers/lazyos.png: the desktop falls back to a flat colour"
+fi
+if grep -qs 'Pictures/Wallpapers/lazyos.png' /etc/sway/config "$HOME/.config/sway/config" 2>/dev/null; then
+	ok "sway paints the brand wallpaper"
+else
+	fail "sway does not name Pictures/Wallpapers/lazyos.png (output * bg)"
+fi
+if grep -qs 'mountains.jpg' "$HOME/.config/bin/sway-lock" 2>/dev/null; then
+	ok "lock screen keeps the mountain wallpaper"
+else
+	warn "sway-lock no longer names mountains.jpg: the lock is a different surface from the desktop"
+fi
+
+# The mark itself: the About entry asks for Icon=lazyos, and a theme without it
+# draws a hole where a picture should be, quietly.
+_missing_mark=""
+for _f in 48x48/apps/lazyos.png scalable/apps/lazyos.svg; do
+	[ -r "/usr/share/icons/LazyOS/$_f" ] || _missing_mark="$_missing_mark $_f"
+done
+if [ -z "$_missing_mark" ]; then
+	ok "the theme carries the mark (lazyos.png, lazyos.svg)"
+else
+	fail "the theme is missing the mark:$_missing_mark (About LazyOS shows a hole)"
+fi
+
+# The card the launcher's About row opens, and the logo fastfetch draws there.
+if [ -r "$HOME/.config/fastfetch/config.jsonc" ]; then
+	ok "fastfetch config present"
+else
+	warn "no ~/.config/fastfetch/config.jsonc: About shows Debian's swirl"
+fi
+if [ -r "$HOME/.config/lazyos/wordmark.txt" ]; then
+	ok "fastfetch wordmark present"
+else
+	warn "no ~/.config/lazyos/wordmark.txt: fastfetch's logo has nothing to draw"
+fi
+
+# The greeter and the virtual terminals are the first and the cheapest surfaces
+# a person sees, and both are files a later edit can quietly lose.
+grep -qs 'lazy by design' /etc/greetd/config.toml 2>/dev/null &&
+	ok "the greeter greets with lazy by design" ||
+	warn "the greeter no longer greets with lazy by design"
+grep -qs 'LazyOS' /etc/issue 2>/dev/null &&
+	ok "virtual terminals greet LazyOS" ||
+	warn "/etc/issue does not name LazyOS"
+
+# The rename was a clean break, so a surviving old name is a reference that was
+# missed.  Scoped to the shipped surfaces on purpose: ~/Dev/LazyOS carries the
+# frozen release notes of the past, and reports/ is hardware evidence.
+_stale=$(ls /usr/share/applications/org.nureb.*.desktop 2>/dev/null || true)
+if [ -n "$_stale" ]; then
+	fail "old desktop entries survive: $(printf '%s ' $_stale)"
+else
+	ok "no org.nureb.* entries survive"
+fi
+_stale=$(grep -rlis 'nureb' /usr/share/applications /usr/share/icons/LazyOS \
+	/usr/share/doc/lazyos "$HOME/.config/bin" 2>/dev/null || true)
+if [ -n "$_stale" ]; then
+	warn "the old name still appears in: $(printf '%s\n' "$_stale" | sed -n '1,3p' | tr '\n' ' ')"
 fi
 
 # ---------------------------------------------------------------------------

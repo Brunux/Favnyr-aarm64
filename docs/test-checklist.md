@@ -23,6 +23,27 @@ cat /etc/debian-aarch64-revision      # commit, device, UI, kernel, build date
 * `check-system.sh` must end with **0 FAIL**. WARN and SKIP lines are expected
   and explained in `reports/README.md`; anything else stops the run here.
 
+## The brand - wallpaper, About, greeter, console
+
+| Step | Expected |
+|---|---|
+| look at the desktop | the arcade button on base03, `lazy by design` under it and the arcade line at the bottom; the bar, foot, rofi and the menus are still solarized (the brand did not repaint the session) |
+| `Alt+Ctrl+L`, then unlock | the **mountain photograph**, not the brand wallpaper - the lock is deliberately the other surface |
+| `Alt+d`, type `About` | the row has the mark as its icon (not a hole); Enter opens the card with the two-line wordmark on the left, `OS · LazyOS <version>` among the facts, and the 16-colour palette at the bottom |
+| `cat /etc/os-release` | `ID=lazyos`, `PRETTY_NAME="LazyOS <version>"`, and `VERSION_ID` equal to the `version` line of `/etc/debian-aarch64-revision` |
+| `hostname` | `lazyos` |
+| log out to the greeter | the greeting is `LazyOS · lazy by design`, not "Welcome back to Debian" |
+| `Ctrl+Alt+F2` (keyd's VT keys), log in on the text console | the banner is `LazyOS <version> · lazy by design` and `lazyos · tty2` |
+
+A missing wallpaper is `Pictures/Wallpapers/lazyos.png`; regenerate it with
+`scripts/make-brand.sh` on the build host. A hole where the About row's icon
+should be is `lazyos.png` missing from `/usr/share/icons/LazyOS/48x48/apps/`.
+Debian's swirl in the About card is `~/.config/fastfetch/config.jsonc` missing.
+`check-system.sh` FAILs on the first two, on an `os-release` that is Debian's
+again, and on an `org.nureb.*` entry that survived the rename; it WARNs when the
+greeter, `/etc/issue` or the fastfetch files lose the brand, because those are a
+hand-edit away.
+
 ## Clipboard history - `Alt+Ctrl+V`
 
 | Step | Expected |
