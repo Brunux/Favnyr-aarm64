@@ -1,0 +1,49 @@
+alt+ctrl+v -> got error "The following errors were detacted when starting rofi:
+Failed to set binding alt+1 delte for: Custom Keybinding
+1 (kb-custon-1):
+	syntax error in binding 'alt+1 delete': unexpected character
+"
+dig command is missing, do we have all basic gnu tools?
+resolvectl is missing too, not sure if we actually need it
+
+Emoji fails with similar error
+Colour is not show in the main menu
+
+Reminders
+When a reminder is canceled is show an odd string like nureb-33747...
+Lets custom reminders, so a preson can add one at an specific date
+and time with title and description and mark as repetitive offer some
+defualt options for the repetitive days/week/monts etc
+
+about
+Full picture opens and closes really fast
+
+
+Others:
+I notice that some long test does not show intead it shows `...`
+would it be possible that in such cases on selection it auto scrolls
+horizontally?
+
+Files - no icons before files names  when using ls on a terminal files names
+are prefix with icons we need that.
+
+Table mode works but the screen is up-side-down we need to invert on starting it
+possible reverted on end, also the physical keyboad is still active, please disable it like the mouse pad
+
+for the search key lets change the beheivure, lets launch a rofi-files to search for files
+
+no icons on shotcuts alt-ctrl+k lets add some meaninful icons
+when no possible add a generic icon
+
+Lets add icons to notifications if mako supports it, if supported
+review all current/potential notifications and add meanifull icons
+
+also include this new gol so to the project `icon first` the agents
+must include icons if possible when developing a new feature for nureb
+
+Found and error when playing a video from rofi-files
+chafa failed to open file.... unknow file format
+
+images captured goes to the home instead lets organized them in Pictures folder by date taken keep the same name
+
+when an actions take place a notification is launc and an spinner on the way bar, lets use this spiner as a stop button review actions that trigger this spinner and add the corresponance feaure, on stoping notifications should show
