@@ -627,6 +627,14 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   path because glow treats a bare name as one of its built-ins. The style gives the headings a `▌`
   bar and carries a full `chroma` map for fenced code: without one glamour paints code blocks in the
   document colour, so a page with commands in it was a wall of base1 text (the "ugly" rendering).
+  **Every colour in it must carry its `#`**, and that is the second version of the same bug: glamour
+  parses `#rrggbb`, but a bare `839496` is taken as a *256-colour index*, so it emits
+  `\x1b[38;5;839496m`, the terminal ignores the invalid index and the page falls back to its own
+  colours with no error anywhere. The style shipped that way - 23 values bare, 28 hashed, which is
+  why the headings looked right while every inline code span (the `code` colour) was an empty white
+  block and the chroma map was half applied. `check-system.sh` warns when a value loses its `#`;
+  the rendered result is verified by capturing glow's output in a pty and checking for `38;2;`
+  (truecolour) instead of `38;5;<six hex digits>`.
   The first row of the menu searches
   every page with `rg`. Nothing stays after the page closes. `rofi-keys` (Alt+Ctrl+K,
   Omarchy's Super+K) is *generated* from `/etc/sway/config`, `config.d/*.conf` and

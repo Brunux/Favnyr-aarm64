@@ -869,6 +869,15 @@ if [ -z "$_glow" ]; then
 else
 	fail "manual renderer incomplete:$_glow (Learn opens a window that closes at once)"
 fi
+# And the style has to be readable by glamour: a colour written without its "#"
+# is taken as a 256-colour index, so glow emits 38;5;839496, the terminal
+# ignores it and the page falls back to its own colours. Nothing errors, which is
+# why the first version of this style shipped 23 bare values and only looked
+# wrong (inline code as a blank block). Cosmetic, so it warns.
+if [ -r "$HOME/.config/glow/solarized.json" ] &&
+	grep -qE '":[[:space:]]*"[0-9a-fA-F]{6}"' "$HOME/.config/glow/solarized.json"; then
+	warn "glow style: a colour is missing its # (glamour reads it as a 256-colour index; the page loses its palette)"
+fi
 
 # The browser is the image's only viewer: rofi-files hands it anything that is
 # not text and /usr/local/bin/xdg-open is a shim around it. Without it those two

@@ -344,7 +344,10 @@ costs 25 MB while it is open.
 `glow` is `packages/tools.list` (a single binary, no runtime); its style is a glamour description,
 which is why it lives next to `glow.yml` and not in the rofi theme - the two formats are unrelated.
 `glow.yml` has to name the style by **absolute path**: a bare name is looked up among glow's
-built-ins, and `-s solarized` fails with *specified style does not exist*.
+built-ins, and `-s solarized` fails with *specified style does not exist*. Every colour in that
+JSON carries its `#`, because glamour reads a bare `839496` as a 256-colour index, emits
+`38;5;839496`, and the terminal then falls back to its own colours with no error - the page losing
+its palette, inline code included, while still "rendering".
 
 **Keybindings** (`Alt+Ctrl+K`, matching Omarchy's `Super+K`) is generated, not written: `rofi-keys`
 parses every `bindsym`/`bindcode`/`bindswitch`/`bindgesture` line from `/etc/sway/config`,
