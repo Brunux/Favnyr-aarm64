@@ -141,6 +141,16 @@ uncommitted changes, since those do not travel into the image.
 - **Never edit a script while it is executing.** The shell re-reads the file as it goes and can
   die with `unexpected EOF while looking for matching '"'`. Write the new version elsewhere and
   `mv` it into place.
+- **Every script under `uis/sway/files/home/.config/bin/` must be committed `100755`.** The image
+  is staged with `git archive HEAD`, which takes the mode from the index, so a `100644` script
+  arrives in the image readable but not executable; the binding `exec`s it, gets `EACCES`, and the
+  error goes to the journal instead of anywhere a person looks, which reads exactly like "the key
+  does not work". Three menus of the batch that answered the report (`rofi-power`, `rofi-capture`,
+  `rofi-qr`) were committed that way, `check-system.sh` passed them because its menu checks asked
+  for `-r`, and only a built rootfs showed it. Both are fixed at the source: `rootfs-setup.sh`
+  refuses the build when a file in that directory is not executable, and `check-system.sh` asks
+  for `-x` on every one of them, once, instead of in each menu list. `lib-rofi.sh` is sourced, so
+  it is the one exception.
 - **`pipefail` is set in every script here, so never test the status of `producer | grep -q PAT`**:
   `grep -q` exits on the first match, the producer then dies of SIGPIPE (141) and the pipeline -
   and with it the `if` - reports failure although the pattern *was* found. It depends on how far

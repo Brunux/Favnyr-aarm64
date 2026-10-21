@@ -783,6 +783,24 @@ else
 	fail "session menus missing:$_missing_menus (those root-menu rows do nothing)"
 fi
 
+# Presence is not enough: a script in bin/ without the execute bit makes its key
+# do nothing at all, and nothing logs it (sway's `exec` gets EACCES and the line
+# goes to the journal). Three menus of the batch that answered the card's report
+# shipped that way - including this menu list, which passed because it asked for
+# -r - so every file in bin/ is asked for -x here, once, instead of in each list
+# above. lib-rofi.sh is sourced by the others, not run.
+_noexec=""
+for _s in "$HOME"/.config/bin/*; do
+	[ -f "$_s" ] || continue
+	case ${_s##*/} in lib-rofi.sh) continue ;; esac
+	[ -x "$_s" ] || _noexec="$_noexec ${_s##*/}"
+done
+if [ -z "$_noexec" ]; then
+	ok "every script in ~/.config/bin is executable"
+else
+	fail "not executable:$_noexec (the key or menu row that runs them does nothing)"
+fi
+
 # The capture menu (Alt+Ctrl+C) is a list over external tools: grimshot for the
 # screenshot, swappy to annotate, tesseract and zbarimg to read a region, and
 # wf-recorder for the one action that outlives the menu. A missing binary is a

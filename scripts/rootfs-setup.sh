@@ -256,6 +256,25 @@ if [ -d /tmp/ui-files ]; then
 		cp -a /tmp/ui-files/home/. "/home/$USERNAME/"
 		chown -R "$USERNAME:$USERNAME" "/home/$USERNAME"
 	fi
+	# A script without the execute bit is the quietest bug in this tree: it is
+	# in the image, `-r` passes, and the key that runs it does nothing at all
+	# (sway's `exec` gets EACCES and the message goes to the journal, which
+	# nobody reads after a keypress). Three menus of the batch that answered the
+	# card's report were committed that way, and only a booted card found it, so
+	# the build refuses it here. lib-rofi.sh is sourced, not run.
+	if [ -d "/home/$USERNAME/.config/bin" ]; then
+		_noexec=""
+		for _f in "/home/$USERNAME"/.config/bin/*; do
+			[ -f "$_f" ] || continue
+			case ${_f##*/} in lib-rofi.sh) continue ;; esac
+			[ -x "$_f" ] || _noexec="$_noexec ${_f##*/}"
+		done
+		if [ -n "$_noexec" ]; then
+			warn "not executable:$_noexec"
+			warn "the key or menu row that runs one of those would do nothing (exec gets EACCES)"
+			exit 1
+		fi
+	fi
 else
 	warn "no UI files staged for '$UI'"
 fi
