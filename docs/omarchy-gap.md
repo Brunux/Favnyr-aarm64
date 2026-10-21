@@ -16,6 +16,10 @@ deserve a checked answer instead of a feeling.
   reclassified in the tables below.
 * **Features**: the inventory in [`plan-rofi.md`](plan-rofi.md) and the manual's own "not built yet"
   list (`uis/sway/files/usr/share/doc/nureb/03-shortcuts.md`).
+* **Section 5 is not Omarchy parity**: it is what this port's own plans (`plan-rofi.md`'s batches B
+  and C, its tablet section, `plan-agents.md`) already specify and has not been built. It is here so
+  the two questions - "what does Omarchy have that we do not" and "what have we planned and not
+  done" - do not require two documents.
 * Sizes are `Installed-Size` from forky, uncompressed.
 
 ## 1. Missing, and worth adding
@@ -40,7 +44,6 @@ whole image is ~4 GiB.
 | Files | `nautilus` + `python3-nautilus` + `gnome-sushi` + `gvfs-backends` | 4.6 MB | The GUI file manager and its previews. `rofi-files` is the port's answer and covers navigation, but has no thumbnails and no drag and drop. |
 | Secrets | `gnome-keyring` + `libsecret-1-0` | 4.6 MB + 414 kB | Somewhere for applications to store a password/token (Git, Nextcloud, Firefox Sync). |
 | Editor | `neovim` | 9.7 MB | Omarchy's editor. What there is: `nano`, `bat` and the `eff` helper, which edits with `${EDITOR:-nano}` (`EDITOR` is unset on purpose - `90-cli-tools.sh` says why). |
-| Power | `power-profiles-daemon` | 207 kB | The battery profile switch. The kernel is pinned to `schedutil` (`optimization.md` item 2); PPD would expose performance/balanced/power-saver. |
 | Portals | `xdg-desktop-portal-gtk` | 776 kB | The backend for GTK file choosers and the screenshot dialog. With only `xdg-desktop-portal-wlr`, an application that asks the portal for a file has no implementation. |
 | Network | `nm-connection-editor` | 5.5 MB | VPN and 802.1x editing. `bar-net` lists and connects Wi-Fi; it cannot author a VPN profile. |
 | Colour | `hyprpicker` | 408 kB | A colour picker. Debian describes it as wlroots-compatible (it uses wlr-screencopy); the fallback is `grim` + a pixel read. |
@@ -69,6 +72,8 @@ whole image is ~4 GiB.
 | `lua5.4`, `tree-sitter-cli` | Editor and keybindings-view tooling for Omarchy's own components; `rofi-keys` parses sway's config with `awk` instead. |
 | `plocate` | `locate` **plus** `plocate-updatedb.timer` - a systemd timer that indexes the disk. Not on a card that is rewritten on every install. |
 | `libnotify-bin` | `notify-send` is already pulled in by `grimshot`/mako's client tools. |
+| `power-profiles-daemon` | Omarchy ships it, but `plan-rofi.md` declines it on purpose (a daemon) and the kernel is pinned to `schedutil` (`optimization.md` item 2). |
+| `fwupd`, KDE Connect / GSConnect | `plan-rofi.md` excludes them: this device's firmware is ChromeOS's and is never flashed, and both are resident daemons. |
 | Qt6, `qml6-module-*`, `quickshell`, `uwsm`, `hyprland*`, `gir1.2-*`, `liblayershellqt*`, `lxqt-qtplugin`, `qt6ct`, `nwg-look` | The Quickshell shell and its Qt runtime. This port's shell is waybar + rofi + mako, and its theme is static, so there is nothing to configure with a Qt/GTK appearance tool. |
 | `xdg-desktop-portal-hyprland` | Hyprland-specific portal; `-wlr` is the wlroots one. |
 
@@ -88,14 +93,39 @@ has that are still missing:
 | **Reminders** | none | A text file + `systemd-run --user --on-active=` (a transient timer, not a service). |
 | **Theme switcher, appearance, animations, monitor layout** | fixed solarized theme | A real project: the palette lives in waybar CSS, foot.ini, rofi's rasi, mako, sway `client.*` and swaybg. Not a menu. |
 | **OSD (volume/brightness overlay)** | mako + the bar show values | An overlay that must not take focus; `swayosd` is not packaged. |
-| **Weather in the bar** | none | A waybar `custom` module and one HTTP call; the upstream one needs a location and an API key. |
 
 Not portable from Omarchy at all: its **Install/Remove trees** (pacman/AUR/mise for Arch packages -
 on Debian they are `apt` one-liners with different names), its **Quickshell plugins/dock/agents
 panel**, and the **fingerprint/FIDO2/NVIDIA/hybrid-GPU** items, since this Chromebook has none of
 that hardware.
 
-## 5. What this port has and Omarchy does not
+## 5. What the port's own plans call for (not Omarchy parity)
+
+`plan-rofi.md` (batches B/C and the tablet section) and `plan-agents.md` specify work that is not a
+package Omarchy installs, so it did not appear in the diff above. It is still missing, and it is
+listed here so the two lists do not have to be read together to know what is left.
+
+| Feature | Package | Size | Note |
+|---|---|---|---|
+| Tablet mode: on-screen keyboard | `wvkbd` (`wvkbd-mobintl`) | 826 kB | `bindswitch tablet:on` starts it, disables the touchpad and starts a 1 Hz accelerometer poller; `tablet:off` reverses it. `libwlroots` already exposes the virtual keyboard. |
+| Tablet mode: rotation service | `iio-sensor-proxy` | 236 kB | Optional: the poller can read `iio:device1/2` sysfs directly instead, with no package and no daemon. |
+| Manual rotation | `wlr-randr` | 81 kB | The "Rotate screen" row in `rofi-quick`; today it only works through `swaymsg output … transform`. |
+| Snippets | — | — | `~/.config/snippets.tsv` → rofi → `wtype`/`wl-copy`; `wtype` is installed. |
+| Password store | `pass` (or `rbw`) | 129 kB (15.3 MB) | `passmenu`-style, one row per entry; `gnupg` is installed. The choice between the two is still open in the plan. |
+| Unit / currency conversion | `units` (or a python table) | 917 kB | A script mode beside `rofi-calc`. |
+| Translate | `translate-shell` | 277 kB | Network; result to a notification and the clipboard. |
+| Disk usage | `ncdu` | 156 kB | `ncdu` in foot for `/`, `/home` and the card (the Free space menu walks `du`). |
+| Mirror ranking | `netselect-apt` | 35 kB | A system task, last in the plan. |
+| Weather | — (`curl` installed) | — | `wttr.in` in foot. |
+| World clock | — | — | `TZ=… date` list. |
+| About / system | — | — | `fastfetch` in foot plus a read-only list of the same fields (`plan-rofi` P0 #9). |
+| Agents usage (local logs) | — | — | `plan-agents.md` P3: a `python3` one-liner over the CLIs' own session files, on demand. P4 (provider APIs) is deliberately not planned. |
+| Share (clipboard/file/folder) | — | — | `localsend` is not packaged in forky; a decision of its own. |
+
+Not in forky at all, and therefore not a package to add: `rofi-emoji`, `rofi-calc`, `rofi-file-browser`
+(all three are script modes here), `satty` (substituted by `swappy`) and `localsend`.
+
+## 6. What this port has and Omarchy does not
 
 Worth saying, because the gap list is one-directional by nature: `sway-hibernate` gated on a real
 disk swap and `resume=`; `dictate` (whisper.cpp, a pinned model, `wtype`); the agents menu with
