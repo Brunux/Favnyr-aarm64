@@ -8,9 +8,13 @@ set -euo pipefail
 
 UI="${UI:-sway}"
 [ -d "$UI_DIR" ] || die "unknown UI '$UI' (see $UIS_DIR)"
-TARGET_HOSTNAME="${TARGET_HOSTNAME:-$(echo "$DEVICE" | sed 's/.*-//')}"
+TARGET_HOSTNAME="${TARGET_HOSTNAME:-lazyos}"
 USERNAME="${USERNAME:-brunux}"
 USERPASS="${USERPASS:-debian}"
+# The one source of the version the image reports: /etc/os-release's
+# PRETTY_NAME and VERSION_ID come from this file, so a build cannot say 0.2
+# while the tag says v0.3.0.
+VERSION="$(cat "$REPO_DIR/VERSION" 2>/dev/null || echo 0.0.0)"
 
 if [ "$(id -u)" -ne 0 ]; then
 	# Forward every resolved build input: sudo does not preserve the caller's
@@ -21,6 +25,7 @@ if [ "$(id -u)" -ne 0 ]; then
 		DEVICE="$DEVICE" UI="$UI" WIFI_DIR="$WIFI_DIR" \
 		LOCALE="$LOCALE" TIMEZONE="$TIMEZONE" \
 		TARGET_HOSTNAME="$TARGET_HOSTNAME" USERNAME="$USERNAME" USERPASS="$USERPASS" \
+		VERSION="$VERSION" \
 		DEBIAN_SUITE="$DEBIAN_SUITE" DEBIAN_MIRROR="$DEBIAN_MIRROR" \
 		DEBIAN_COMPONENTS="$DEBIAN_COMPONENTS" ROOTFS="$ROOTFS" \
 		"$(readlink -f "$0")" "$@"
@@ -108,6 +113,7 @@ chmod -R u=rwX,go=rX "$ROOTFS/tmp/repo"
 	printf 'device %s\n' "$DEVICE"
 	printf 'ui %s\n' "$UI"
 	printf 'kernel %s\n' "$KERNEL_RELEASE"
+	printf 'version %s\n' "$VERSION"
 	printf 'built %s\n' "$(date -Is)"
 } >"$ROOTFS/etc/debian-aarch64-revision"
 
@@ -122,6 +128,7 @@ chroot "$ROOTFS" env \
 	LOCALE="$LOCALE" \
 	TIMEZONE="$TIMEZONE" \
 	UI="$UI" \
+	VERSION="$VERSION" \
 	REPO_NAME="$(basename "$REPO_DIR")" \
 	/bin/bash /root/rootfs-setup.sh
 

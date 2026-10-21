@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- The LazyOS mark: an arcade button, in the session's own four colours.
+       The base03 crescent behind the dome gives it depth, the base1 ellipse is
+       the highlight, and the cyan ring is the bezel.  Drawn with circles and
+       ellipses only so that every renderer agrees on it (rsvg-convert on the
+       build host, librsvg in the icon theme).  Regenerate the PNGs with
+       scripts/make-brand.sh after editing this file. -->
+  <circle cx="256" cy="272" r="186" fill="#002b36" opacity="0.9"/>
+  <circle cx="256" cy="256" r="186" fill="#cb4b16"/>
+  <ellipse cx="256" cy="196" rx="118" ry="64" fill="#eee8d5" opacity="0.16"/>
+  <circle cx="256" cy="256" r="232" fill="none" stroke="#2aa198" stroke-width="28"/>
+</svg>

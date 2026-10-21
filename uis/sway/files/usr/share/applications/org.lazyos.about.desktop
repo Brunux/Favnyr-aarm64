@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=About LazyOS
+GenericName=System information
+Comment=Kernel, uptime, memory, battery, and the version this image was built from
+Exec=/home/brunux/.config/bin/rofi-about
+Icon=lazyos
+Terminal=false
+Categories=System;
+Keywords=about;version;system;info;lazyos;

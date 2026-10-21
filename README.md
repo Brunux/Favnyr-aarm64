@@ -1,6 +1,7 @@
-# Debian aarch64 for Nura-supported devices
+# LazyOS
 
-A **device-agnostic** Debian port framework that reuses Nura's (postmarketOS') hardware
+**LazyOS** (`lazy by design`) is a Debian (**forky**, arm64) system for Nura-supported devices.
+It is built by a **device-agnostic** port framework that reuses Nura's (postmarketOS') hardware
 support — kernel, device tree, patches, modules and boot flow — instead of Alpine.
 
 First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada`).
@@ -10,7 +11,8 @@ First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada
   booted image comes back clean (kept in [`reports/`](reports/)). The eMMC install works and is
   validated on hardware, and the running installation can be backed up and restored
   (`scripts/backup-system.sh`, `scripts/restore-system.sh`).
-- **Release:** [`v0.2.0`](docs/releases/v0.2.0.md) — the precompiled image, with the session this
+- **Release:** [`v0.3.0`](docs/releases/v0.3.0.md) — the precompiled image, with the **LazyOS**
+  brand (the mark, the wallpaper and the distribution's own identity) and the session this
   repository documents: **swayfx** with blur, **rofi** for the launcher, the window switcher and
   the bar's menus, the file browser and its viewers, the manual, **capture**, **download**,
   **dictation**, **agents**, tablet mode, and the **LazyOS** idle screen and lock (see
@@ -42,7 +44,7 @@ Bluetooth, network, volume, brightness, battery).*
 
 ## Download and flash a precompiled image
 
-The [`v0.2.0`](docs/releases/v0.2.0.md) release publishes the image built from this repository:
+The [`v0.3.0`](docs/releases/v0.3.0.md) release publishes the image built from this repository:
 
 | asset | what it is |
 |---|---|

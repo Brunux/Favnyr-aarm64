@@ -7,10 +7,11 @@
 # needs no menu at all (see waybar `custom/menu`).
 #
 # The list is grouped the way the rest of the session is: what opens something,
-# the switches and panels, the tools that answer a question about the machine,
-# and the session actions.  Every row carries a glyph (lib-rofi.sh), and the
-# rows that open a picker are the same scripts the bar's indicators run, so
-# there is one implementation per action.
+# the AI features (Agents and Dictation together, which is the brand's
+# statement), the switches and panels, the tools that answer a question about
+# the machine, and the session actions.  Every row carries a glyph (lib-rofi.sh),
+# and the rows that open a picker are the same scripts the bar's indicators run,
+# so there is one implementation per action.
 #
 # Every menu in this directory that answers a question about the machine has a
 # row here - DNS, Packages, Colour, About, Reminders - because the root menu is
@@ -42,12 +43,15 @@ while :; do
 		ui_row "$UI_I_COG" 'Settings' 'Wi-Fi, Bluetooth, night light, tablet mode, rotation' settings
 		ui_row "$UI_I_BOOK" 'Learn' 'the manual, with search' learn
 		ui_row "$UI_I_KEYBOARD" 'Keybindings' 'every binding, from the configuration' keys
-		ui_row "$UI_I_USERS" 'Agents' 'Claude Code, Codex and the others' agents
 		ui_row "$UI_I_CALC" 'Calculator' 'type it, Enter copies the result' calc
 		ui_row "$UI_I_SMILE" 'Emoji' 'type a name, insert the glyph' emoji
 		ui_row "$UI_I_CLIPBOARD" 'Clipboard' 'what was copied, back in one pick' clip
 		ui_row "$UI_I_KEY" 'Password' '32 random characters, into the clipboard' password
 		ui_row "$UI_I_TERM" 'SSH' 'hosts from ~/.ssh/config' ssh
+
+		ui_heading 'ai'
+		ui_row "$UI_I_USERS" 'Agents' 'Claude Code, Codex and the others' agents
+		ui_row "$UI_I_MIC" 'Dictation' 'speak, and it is typed' dictate
 
 		ui_heading 'system'
 		ui_row "$UI_I_WIFI" 'Wi-Fi' 'pick a network' wifi
@@ -66,7 +70,6 @@ while :; do
 		ui_row "$UI_I_INFO" 'About' 'kernel, uptime, memory, battery' about
 
 		ui_heading 'session'
-		ui_row "$UI_I_MIC" 'Dictation' 'speak, and it is typed' dictate
 		ui_row "$UI_I_CLOCK" 'Reminders' 'be told about it later' remind
 		ui_row "$UI_I_LOCK" 'Lock' 'the session lock' lock
 		ui_row "$UI_I_EYE" 'Screensaver' 'the idle screen, now' screensaver

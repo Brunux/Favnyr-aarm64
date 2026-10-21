@@ -3,12 +3,13 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-: "${HOSTNAME:=debian}"
+: "${HOSTNAME:=lazyos}"
 : "${USERNAME:=brunux}"
 : "${USERPASS:=debian}"
 : "${DEBIAN_SUITE:=forky}"
 : "${DEBIAN_MIRROR:=http://deb.debian.org/debian}"
 : "${DEBIAN_COMPONENTS:=main contrib non-free non-free-firmware}"
+: "${VERSION:=0.0.0}"
 : "${UI:=sway}"
 : "${REPO_NAME:=debian-aarch64}"
 PKGDIR="/tmp/packages"
@@ -124,6 +125,31 @@ cat >/etc/hosts <<EOF
 ::1		localhost ip6-localhost ip6-loopback
 EOF
 
+# The distribution's identity.  Debian ships /etc/os-release as a symlink to
+# /usr/lib/os-release, which base-files owns: writing through the link would
+# edit a package file, so the link is replaced by a regular file.  A base-files
+# upgrade can put the symlink back, which is why check-system.sh FAILs when the
+# brand disappears instead of trusting this line to have been the last word.
+rm -f /etc/os-release
+cat >/etc/os-release <<EOF
+PRETTY_NAME="LazyOS $VERSION"
+NAME="LazyOS"
+VERSION_ID="$VERSION"
+VERSION="LazyOS $VERSION"
+ID=lazyos
+ID_LIKE=debian
+HOME_URL="https://github.com/Brunux/LazyOS"
+BUG_REPORT_URL="https://github.com/Brunux/LazyOS/issues"
+LOGO=lazyos
+EOF
+
+# The virtual terminals' banner: agetty expands \n (node name) and \l (line).
+# greetd owns vt 7, so the gettys on vt 1-6 are the ones that show this.
+cat >/etc/issue <<EOF
+LazyOS $VERSION · lazy by design
+\n · \l
+EOF
+
 log "Creating user $USERNAME"
 if ! id "$USERNAME" >/dev/null 2>&1; then
 	useradd -m -s /bin/bash -G sudo,video,audio,input,render,netdev "$USERNAME"
@@ -223,7 +249,7 @@ if [ -f "$PKGDIR/$UI.list" ] && [ "$UI" = "sway" ]; then
 vt = 7
 
 [default_session]
-command = "tuigreet --time --time-format '%a, %d %b  %H:%M' --greeting 'Welcome back to Debian' --greet-align center --width 60 --window-padding 2 --container-padding 1 --prompt-padding 1 --asterisks --asterisks-char '*' --kb-command 2 --kb-sessions 3 --kb-power 12 --power-no-setsid --remember --remember-session --theme 'border=cyan;text=white;time=cyan;container=black;title=yellow;greet=cyan;prompt=cyan;input=white;action=blue;button=yellow' --cmd sway"
+command = "tuigreet --time --time-format '%a, %d %b  %H:%M' --greeting 'LazyOS · lazy by design' --greet-align center --width 60 --window-padding 2 --container-padding 1 --prompt-padding 1 --asterisks --asterisks-char '*' --kb-command 2 --kb-sessions 3 --kb-power 12 --power-no-setsid --remember --remember-session --theme 'border=cyan;text=white;time=cyan;container=black;title=yellow;greet=cyan;prompt=cyan;input=white;action=blue;button=yellow' --cmd sway"
 user = "$GREETD_USER"
 EOF
 
