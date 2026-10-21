@@ -80,6 +80,25 @@ configuration {
     /* Keep the history (most used first) in ~/.cache/rofi3.druncache. */
     disable-history: false;
 
+    /* Inhibit the compositor's shortcuts while a rofi window is open, through
+     * zwp_keyboard_shortcuts_inhibit_v1.
+     *
+     * A layer-shell surface with exclusive keyboard interactivity does *not*
+     * get this for free: sway evaluates its bindings before it forwards a key
+     * to the focused surface (sway/input/keyboard.c, handle_key_event), and the
+     * only thing that exempts a key from them is an active shortcuts inhibitor.
+     * rofi asks for one only when this setting is on - `global-kb` defaults to
+     * false (config/config.c) - so without it every binding of the session kept
+     * working *behind* the open menu: Alt+1 switched to workspace 1 instead of
+     * reaching -kb-custom-1, and Alt+q closed the window behind the list. That
+     * is why the Alt+1 second actions (rofi-clip, rofi-emoji, rofi-places,
+     * rofi-files) need this line, and why it is on for every menu and not per
+     * script: the bar's popups have the same problem.
+     *
+     * The inhibition lasts exactly as long as the surface has focus, so it ends
+     * with the window and cannot outlive it. */
+    global-kb: true;
+
 }
 
 /* The look lives in its own file so the bar's dmenu and the launcher cannot drift

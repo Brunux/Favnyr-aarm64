@@ -81,6 +81,12 @@ htop
 less
 # lsusb, for diagnosing USB devices (webcam, docks).
 usbutils
+# file(1): the type of a file from its contents, which is what an extension
+# cannot answer.  ~/.config/bin/rofi-clip asks it for the mime type of the image
+# it saves (`file --brief --mime-type`), and without it the file was written
+# with no extension at all - a picture the viewer then refuses.  It is also the
+# answer to "what is this", which is the first question about a strange file.
+file
 # dig, nslookup and host, for the question every DNS problem starts with: which
 # server answers, and what does it answer. The card's report asked for them, and
 # `resolv.conf` here is NetworkManager's, not systemd-resolved's, so there is no

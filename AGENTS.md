@@ -584,7 +584,17 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   native Wayland layer-shell client - no Xwayland - and, like tofi, not a daemon: nothing stays
   after the window. Two behaviours the configuration depends on were verified, not assumed:
   `rofi -dmenu` exits 1 on Escape (`bar-pick`'s callers' `|| exit 0`), and drun honours
-  `Terminal=true` through the `terminal` setting (`foot`). The theme is
+  `Terminal=true` through the `terminal` setting (`foot`).
+  **A menu has to grab the keyboard, and a layer surface does not do that by itself**: sway
+  evaluates its bindings *before* it forwards a key to the focused surface
+  (`sway/input/keyboard.c`, `handle_key_event`), and the only exemption is an active
+  `zwp_keyboard_shortcuts_inhibitor_v1`. rofi asks for one only when `global-kb` is on, and that
+  defaults to off (`config/config.c`), so before `config.rasi` set `global-kb: true` every binding
+  of the session kept working *behind* the open menu: `Alt+1` switched to workspace 1 instead of
+  reaching `-kb-custom-1`, and `Alt+q` closed the window behind the list. It is one line for the
+  whole session instead of one per script, the inhibition lasts exactly as long as the surface has
+  focus, and `check-system.sh` warns when the line is missing - the failure is otherwise silent,
+  because the menu still opens and answers with the wrong action. The theme is
   `~/.config/rofi/{config,solarized}.rasi`, and **a parse error is only reported when a window
   opens** (a dialog naming file, line and column); `rofi -dump-config` does not report theme parse
   errors, so the check is `rofi -show drun` in the session. `bar-pick` has two modes because rofi's

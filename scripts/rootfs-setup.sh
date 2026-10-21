@@ -265,6 +265,17 @@ if [ -d /tmp/ui-files ]; then
 		cp -a /tmp/ui-files/home/. "/home/$USERNAME/"
 		chown -R "$USERNAME:$USERNAME" "/home/$USERNAME"
 	fi
+	# The folders a desktop is expected to have.  The overlay ships Pictures
+	# (the wallpapers live there) and nothing else, because git cannot carry an
+	# empty directory - and Places lists only what exists, so Documents,
+	# Downloads, Music and Videos were four missing rows, and yt-dlp had no
+	# ~/Downloads to write into.  Created here, owned by the user, so the tree
+	# stays the truth about *files* and the build owns the *folders*.
+	if [ -d "/home/$USERNAME" ]; then
+		for _d in Documents Downloads Music Videos; do
+			install -d -o "$USERNAME" -g "$USERNAME" "/home/$USERNAME/$_d"
+		done
+	fi
 	# A script without the execute bit is the quietest bug in this tree: it is
 	# in the image, `-r` passes, and the key that runs it does nothing at all
 	# (sway's `exec` gets EACCES and the message goes to the journal, which
