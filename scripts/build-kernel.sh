@@ -66,11 +66,14 @@ build_kernel() {
 	make -C "$KERNEL_SRC" ARCH="$KERNEL_ARCH" LLVM=1 olddefconfig </dev/null >/dev/null
 	# The shipped file is the source of truth, so anything that ends up different
 	# is drift worth seeing (compiler-probe symbols embed tool versions and change
-	# on every build, hence the exclusions).
+	# on every build, hence the exclusions).  `CONFIG_LLD_VERSION` is one of those
+	# and needs its own pattern: it records the ld.lld version, so the shipped
+	# file can never carry it, and matching only CONFIG_LD_* left every build
+	# warning about a line that is not a choice.
 	_drift=""
 	while IFS= read -r _line; do
 		case "$_line" in
-			CONFIG_CC_*|CONFIG_AS_*|CONFIG_LD_*|CONFIG_BINDGEN_*|CONFIG_RUSTC_*|CONFIG_CLANG_*|CONFIG_PAHOLE_*) continue ;;
+			CONFIG_CC_*|CONFIG_AS_*|CONFIG_LD_*|CONFIG_LLD_*|CONFIG_BINDGEN_*|CONFIG_RUSTC_*|CONFIG_CLANG_*|CONFIG_PAHOLE_*) continue ;;
 		esac
 		grep -qxF "$_line" "$KERNEL_CONFIG" || _drift="$_drift ${_line%%=*}"
 	done <"$KERNEL_SRC/.config"
