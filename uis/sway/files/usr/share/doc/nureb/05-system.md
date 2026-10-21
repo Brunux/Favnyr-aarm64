@@ -91,8 +91,8 @@ lock instead of a flat colour.
   RAM, so 2 GB is the practical minimum here;
 * `resume=` on the kernel command line, so the next boot restores the image
   instead of starting fresh. Because `resume=` is resolved through udev, a
-  **label** is enough: a swap partition labelled `nureb_swap` plus
-  `resume=LABEL=nureb_swap` in `devices/google-asurada/kernel-cmdline.conf`.
+  **label** is enough: a swap partition labelled `lazyos_swap` plus
+  `resume=LABEL=lazyos_swap` in `devices/google-asurada/kernel-cmdline.conf`.
 
 `sway-hibernate` (in the root menu, and as a launcher entry) checks both and says
 which one is missing. It never hibernates into a swap the machine cannot resume

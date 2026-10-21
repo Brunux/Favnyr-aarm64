@@ -195,7 +195,7 @@ gets corrupted.
 * **Format a disk** is the last row of Places: it offers only disks with nothing
   mounted on them and no ChromeOS kernel partition, so the eMMC and the card this
   system boots from are never candidates, and it asks twice with Cancel first.
-  The filesystem is FAT32 (`NUREB`, for a camera, a TV or a car) or ext4 (for a
+  The filesystem is FAT32 (`LAZYOS`, for a camera, a TV or a car) or ext4 (for a
   Linux machine), and the whole disk becomes one partition. It is not stoppable:
   a killed `mkfs` leaves a disk that looks formatted and is not.
 * A failed mount says why in the notification, in udisks' own words: "not

@@ -468,7 +468,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   too** (`swaymsg input type:keyboard events disabled`, `enabled` on exit; the folded keys are on
   the table and a keystroke there is a keystroke), and starts its own **1 Hz poller**
   (`tablet-mode poller`) over the accelerometer; `off` kills both, re-enables **both** input types
-  and puts `transform normal` back. The state is a directory in `$XDG_RUNTIME_DIR/nureb-tablet`
+  and puts `transform normal` back. The state is a directory in `$XDG_RUNTIME_DIR/lazyos-tablet`
   holding the keyboard pid, the poller pid and the output name, so a session that dies removes all
   three, and `off` still restores the inputs when the state is gone (that path is the one a person
   cannot fix without a mouse, so it exists). **The keyboard is switched off only after `start_kbd`
@@ -497,7 +497,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   calibration instead of a hardcoded frame**: `tablet-mode calibrate` (a row in Settings while the
   mode is on, "Calibrate rotation") reads the accelerometer in the pose the person is holding -
   upright, screen facing them - and writes the direction that must look upright to
-  `$XDG_CONFIG_HOME/nureb/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on every
+  `$XDG_CONFIG_HOME/lazyos/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on every
   pass and derives all four positions from the single reference: the readings run around the device
   in the counter-clockwise order `+X, +Y, -X, -Y`, so each 90 degrees the reading turns is 90 of
   transform, the reference getting `normal` and the rest 90/180/270 in that order - which is
@@ -821,7 +821,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   every stick udisks already mounted, which would fail halfway anyway. zram, loop and optical
   devices are not disks a person formats. What is left has nothing this system needs, and the
   confirmation still names the device, its model and its size, with **Cancel as the first row**
-  so a stray Enter does nothing; the filesystem is FAT32 (label `NUREB`) or ext4, and the whole
+  so a stray Enter does nothing; the filesystem is FAT32 (label `LAZYOS`) or ext4, and the whole
   disk becomes one partition (`parted -s mktable gpt` + `mkpart primary`, then `mkfs`). **It is
   not stoppable on purpose**, like the apt install: a killed `mkfs` leaves a disk that looks
   formatted and is not, which is worse than a wait. The step chain is linear (`rc`/`step`) rather
@@ -928,7 +928,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   stdout -l eng` (English is the only `tesseract-ocr-*` the image ships) or `zbarimg -q --raw`
   reads, the result copied with `ui_copy` and the first line in the notification.
   **`wf-recorder` is the one action that outlives the menu**, so it is started and stopped from the
-  same list and its pid and file name live in `$XDG_RUNTIME_DIR/nureb-capture`: a session that dies
+  same list and its pid and file name live in `$XDG_RUNTIME_DIR/lazyos-capture`: a session that dies
   takes the state with it (a stale pid is `kill -0`-tested), the `.mp4` stays. x264 on the CPU
   (`-c libx264 -p preset=veryfast -p crf=28 -r 30`) because the MT8192 has no hardware encoder and
   four cores are the frame budget, **no audio track** because that needs a PipeWire monitor source
@@ -1014,7 +1014,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   [ICON]` opens a mako toast that does not expire, `busy end`/`fail` turn the same card into the
   result (same `x-canonical-private-synchronous` tag, so mako replaces instead of stacking), and
   `bar-busy` is the waybar `custom/busy` module that shows a braille spinner plus the label in
-  yellow while a state file exists in `$XDG_RUNTIME_DIR/nureb-busy` - zero width when idle, and a
+  yellow while a state file exists in `$XDG_RUNTIME_DIR/lazyos-busy` - zero width when idle, and a
   state file older than five minutes is dropped so a killed script cannot leave a spinner forever.
   **Clicking that spinner stops the task it names**: the producer sets `BUSY_STOP` to the one shell
   line that ends its own slow step (`pkill -f "[n]mcli.*device wifi list"`, a pattern, not a pid
@@ -1122,9 +1122,9 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   never hangs, and the root menu keeps a **Dictation** row so the mouse can stop it too.
   Omarchy runs voxtype (a Rust daemon) for the same interaction. `sway-hibernate` refuses unless three things hold, each with
   its own message: `/sys/power/state` has `disk`, a **disk** swap (not zram) of at least 2/5 of RAM
-  exists, and the kernel command line carries `resume=`. `resume=LABEL=nureb_swap` is the intended
+  exists, and the kernel command line carries `resume=`. `resume=LABEL=lazyos_swap` is the intended
   wiring (initramfs-tools resolves the label through udev, so an SD swap partition labelled
-  `nureb_swap` is enough) - a swap *file* cannot be used for resume because it has no label. The
+  `lazyos_swap` is enough) - a swap *file* cannot be used for resume because it has no label. The
   default image has no disk swap, so the menu entry explains instead of hibernating into a swap the
   machine cannot resume from. `check-system.sh` checks the manual, `rofi-keys`, the dictation tools,
   the model (SKIP when absent) and the hibernate conditions (SKIP/WARN, never FAIL).
@@ -1133,7 +1133,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   trust in `$HOME`), install (`npm install -g --prefix ~/.local <pkg>` - an explicit prefix, so npm
   never needs root and never touches `/usr/local`, and `~/.local/bin` is already on PATH), default
   agent, and accounts. An "account" is a directory under
-  `~/.local/share/nureb/agents/<agent>/<name>` used through the variable the CLI itself documents:
+  `~/.local/share/lazyos/agents/<agent>/<name>` used through the variable the CLI itself documents:
   **`CLAUDE_CONFIG_DIR`** for Claude Code and **`CODEX_HOME`** for Codex. OpenCode, Gemini and
   Copilot have no such variable and the menu says so instead of pretending. A new account is created
   empty on purpose - the first launch there runs the CLI's own sign-in, so two subscriptions never

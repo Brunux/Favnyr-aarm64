@@ -26,7 +26,7 @@ MULTIARCH="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
 LDCONFIG="$(command -v ldconfig || printf /sbin/ldconfig)"
 # Debian packaging revision: a change to the packaging itself (not the upstream
 # source) bumps this, so apt sees an upgrade.
-PACKAGING_REVISION="1nureb1"
+PACKAGING_REVISION="1lazyos1"
 SCENEFX_PKG_VERSION="$SCENEFX_VERSION-$PACKAGING_REVISION"
 COMPOSITOR_PKG_VERSION="$COMPOSITOR_VERSION-$PACKAGING_REVISION"
 

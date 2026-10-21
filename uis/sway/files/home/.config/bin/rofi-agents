@@ -36,8 +36,8 @@ theme="$HOME/.config/rofi/solarized.rasi"
 # already installed.
 PATH="$HOME/.local/bin:$PATH"
 export PATH
-state="${XDG_CONFIG_HOME:-$HOME/.config}/nureb/agents"
-data="${XDG_DATA_HOME:-$HOME/.local/share}/nureb/agents"
+state="${XDG_CONFIG_HOME:-$HOME/.config}/lazyos/agents"
+data="${XDG_DATA_HOME:-$HOME/.local/share}/lazyos/agents"
 default_file="$state/default"
 
 # name | binary | npm package | config-dir env var (empty = no profiles)

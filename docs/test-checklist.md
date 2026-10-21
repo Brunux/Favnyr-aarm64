@@ -174,7 +174,7 @@ missing that name (`check-system.sh` checks the table against the PNGs).
 | open it with only the eMMC and the boot card attached | "Nothing to format": both carry a ChromeOS kernel partition, so neither is offered |
 | insert a USB stick, leave it unmounted | the stick, with its model and size |
 | pick it → **Cancel** | nothing at all is written |
-| pick it → **FAT32** → the confirmation | a card, then "is empty (fat32, label NUREB)"; the stick mounts again from Places |
+| pick it → **FAT32** → the confirmation | a card, then "is empty (fat32, label LAZYOS)"; the stick mounts again from Places |
 | the same with **ext4** | `mkfs.ext4`, and the disk mounts on a Linux machine |
 
 ## Search key - the file search
@@ -289,7 +289,7 @@ Fold the keyboard all the way back.
 | fold it back into a laptop | keyboard gone, touchpad **and keyboard** back (type), screen upright, "Tablet mode off" |
 | `pgrep -x wvkbd-mobintl` and `pgrep -af 'tablet-mode poller'` afterwards | nothing |
 | Settings (`Alt+Ctrl+O`) -> **Tablet mode** | toggles by hand; the row reads `on · screen 90` or `off` |
-| Settings -> **Calibrate rotation** (listed only in tablet mode) | hold it upright and it says so; `~/.config/nureb/tablet.conf` then holds `normal=<axis><sign>` |
+| Settings -> **Calibrate rotation** (listed only in tablet mode) | hold it upright and it says so; `~/.config/lazyos/tablet.conf` then holds `normal=<axis><sign>` |
 | Settings -> **Rotation** | still turns the screen by hand, independently |
 
 What a failure means:
@@ -303,7 +303,7 @@ What a failure means:
 * **rotation inverted or turned the wrong way** (the 2026-10-21 card came up
   upside down): run **Settings → Calibrate rotation** while holding the screen
   upright, or `~/.config/bin/tablet-mode calibrate`. It writes the reference to
-  `~/.config/nureb/tablet.conf` and applies it at once, and it needs no rebuild.
+  `~/.config/lazyos/tablet.conf` and applies it at once, and it needs no rebuild.
   `tablet-mode calibration` says `calibrated …` or `default …`; deleting the file
   goes back to the built-in mapping. The four `transform` values in `orient()`
   are now derived from that one reference.

@@ -753,7 +753,7 @@ esac
 # card and runs it, and `busy cancelled` then answers 0 so the producer reports
 # nothing instead of half a result. The probe is one file in the runtime
 # directory and it is removed before this block ends.
-_busy_rt=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
+_busy_rt=${XDG_RUNTIME_DIR:-/tmp}/lazyos-busy
 _busy_bin="$HOME/.config/bin/busy"
 if [ ! -d "${XDG_RUNTIME_DIR:-/tmp}" ] || [ ! -w "${XDG_RUNTIME_DIR:-/tmp}" ]; then
 	skip "no writable runtime directory: the busy/stop protocol cannot be exercised here"
@@ -1302,7 +1302,7 @@ fi
 # The rotation reference is optional - the built-in -Y table is the default - but a
 # file that does not parse is ignored in silence by orient(), which reads as "the
 # rotation keeps turning back to the old way" after a calibration that claimed to work.
-_calib_pose="${XDG_CONFIG_HOME:-$HOME/.config}/nureb/tablet.conf"
+_calib_pose="${XDG_CONFIG_HOME:-$HOME/.config}/lazyos/tablet.conf"
 if [ ! -f "$_calib_pose" ]; then
 	skip "no rotation calibration ($_calib_pose): the built-in -Y reference is in use"
 else
@@ -1316,7 +1316,7 @@ fi
 # running while the mode is off is either a leftover from a session that was
 # killed mid-mode or something starting it at login; either way it covers the
 # bottom of the screen for no reason.
-if [ ! -d "${XDG_RUNTIME_DIR:-/tmp}/nureb-tablet" ]; then
+if [ ! -d "${XDG_RUNTIME_DIR:-/tmp}/lazyos-tablet" ]; then
 	if pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
 		warn "wvkbd-mobintl is running outside tablet mode (config.d/28-tablet.conf starts it on the switch only)"
 	fi
@@ -1597,7 +1597,7 @@ if [ -n "$_hib_swap" ]; then
 	*) warn "disk swap $_hib_swap is active but the kernel command line has no resume=: hibernate would not resume" ;;
 	esac
 else
-	skip "no disk swap: hibernation needs a swap labelled nureb_swap (see sway-hibernate)"
+	skip "no disk swap: hibernation needs a swap labelled lazyos_swap (see sway-hibernate)"
 fi
 [ -x "$HOME/.config/bin/sway-hibernate" ] || fail "bin/sway-hibernate is missing"
 

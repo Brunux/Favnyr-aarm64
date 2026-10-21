@@ -272,7 +272,7 @@ it says it twice:
   yellow, left of the updates indicator - and it is also a button.
 
 `busy start|update|stop|end|fail TAG LABEL MESSAGE [ICON]` writes one file per task in
-`$XDG_RUNTIME_DIR/nureb-busy` and signals waybar (signal 8, the same mechanism the other `bar-*`
+`$XDG_RUNTIME_DIR/lazyos-busy` and signals waybar (signal 8, the same mechanism the other `bar-*`
 modules use). `bar-busy` prints `{"class":"empty"}` when there is nothing to show, which
 `style.css` collapses to zero width, and it drops a state file older than five minutes so a
 script killed mid-action cannot leave a spinner on the bar forever.
@@ -587,13 +587,13 @@ coding-agent CLIs it knows (Claude Code, Codex, OpenCode, Gemini, Copilot), laun
 one in foot from `~/Work`, offers `npm install -g --prefix ~/.local <package>` for the rest (so npm
 never wants root), and keeps **accounts** for the two that support an alternative config directory -
 Claude Code (`CLAUDE_CONFIG_DIR`) and Codex (`CODEX_HOME`) - as one directory per account under
-`~/.local/share/nureb/agents/`. Omarchy's usage meters are deliberately absent: they read provider
+`~/.local/share/lazyos/agents/`. Omarchy's usage meters are deliberately absent: they read provider
 APIs that change shape, and a broken meter is worse than none; if they return, the fitting shape is a
 `python3` script printing one line for a waybar `custom` module, not a daemon.
 
 **Hibernate** is only offered when it can resume: `/sys/power/state` must contain `disk`, a swap on
 disk (not zram) must be at least ~2/5 of RAM, and the kernel command line must carry `resume=`
-(`resume=LABEL=nureb_swap`, resolved through udev, so a labelled SD swap partition is enough). Each
+(`resume=LABEL=lazyos_swap`, resolved through udev, so a labelled SD swap partition is enough). Each
 missing condition gets its own message; it never hibernates into a swap the machine cannot come back
 from. There is no disk swap in the default image.
 
@@ -952,7 +952,7 @@ there is a calibration instead of a hardcoded frame: `tablet-mode calibrate`
 (Settings → **Calibrate rotation**, only listed while the mode is on) reads the
 accelerometer in the pose the person is holding - upright, screen facing them -
 and writes the direction that must look upright to
-`~/.config/nureb/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on
+`~/.config/lazyos/tablet.conf`, one line, `normal=y-`. `orient()` reads that file on
 every pass and derives all four positions from the one reference: the readings run
 around the device in the counter-clockwise order `+X, +Y, -X, -Y`, so each 90° the
 reading turns is 90° of transform, the reference getting `normal` and the rest
@@ -965,7 +965,7 @@ store anything while the device is flat or halfway between two positions (both s
 was just calibrated is the one that has to look upright.
 
 Nothing about this is resident in laptop mode: the state is a directory in
-`$XDG_RUNTIME_DIR/nureb-tablet` holding the two pids and the output name, so a
+`$XDG_RUNTIME_DIR/lazyos-tablet` holding the two pids and the output name, so a
 session that dies takes the keyboard and the poller with it, and the next
 `tablet:off` still restores the touchpad (`off` runs its undo even when the
 state is gone). `wvkbd` 0.15 from Debian is the version that ships the flags this

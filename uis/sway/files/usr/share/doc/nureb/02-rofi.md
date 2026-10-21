@@ -67,7 +67,7 @@ out=$(nmcli device wifi list --rescan yes)
 busy end wifi '9 networks in range'      # or: busy fail wifi "$out"
 ```
 
-The state is a file per task in `$XDG_RUNTIME_DIR/nureb-busy`, and the bar card
+The state is a file per task in `$XDG_RUNTIME_DIR/lazyos-busy`, and the bar card
 disappears on its own if a script dies without ending it.
 
 The spinner is also a button: **click it to stop what it names**. The card and

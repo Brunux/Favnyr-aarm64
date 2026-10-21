@@ -146,16 +146,16 @@ fi
 if [ "$rc" -eq 0 ]; then
 	step=filesystem
 	if [ "$fs" = fat32 ]; then
-		out=$(sudo -n mkfs.vfat -F32 -n NUREB "$part" 2>&1) || rc=$?
+		out=$(sudo -n mkfs.vfat -F32 -n LAZYOS "$part" 2>&1) || rc=$?
 	else
-		out=$(sudo -n mkfs.ext4 -F -q -L NUREB "$part" 2>&1) || rc=$?
+		out=$(sudo -n mkfs.ext4 -F -q -L LAZYOS "$part" 2>&1) || rc=$?
 	fi
 fi
 
 if [ "$rc" -eq 0 ]; then
-	"$dir/busy" end format "$dev is empty ($fs, label NUREB)"
+	"$dir/busy" end format "$dev is empty ($fs, label LAZYOS)"
 	ui_say 'Format a disk' \
-		"$dev · $fs · label NUREB · mount it from Places when you need it" \
+		"$dev · $fs · label LAZYOS · mount it from Places when you need it" \
 		normal "$UI_ICON_DISK"
 	exit 0
 fi

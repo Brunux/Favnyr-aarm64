@@ -276,7 +276,7 @@ ui_width() {
 
 # ui_pick PROMPT [MESSAGE] < rows: prints the chosen key, exits 1 on Escape.
 ui_pick() {
-	_ui_file=$(mktemp "${TMPDIR:-/tmp}/nureb-menu.XXXXXX") || return 1
+	_ui_file=$(mktemp "${TMPDIR:-/tmp}/lazyos-menu.XXXXXX") || return 1
 	cat >"$_ui_file"
 	_ui_width=$(ui_width "$_ui_file")
 	if [ -n "${2:-}" ]; then
@@ -314,7 +314,7 @@ ui_pick() {
 # binding, which both of this port's callers do ("Alt+1 deletes that entry"), in
 # which case repeating it would be noise.
 ui_pick_alt() {
-	_ui_file=$(mktemp "${TMPDIR:-/tmp}/nureb-menu.XXXXXX") || return 1
+	_ui_file=$(mktemp "${TMPDIR:-/tmp}/lazyos-menu.XXXXXX") || return 1
 	cat >"$_ui_file"
 	_ui_bind=${3:-Alt+1}
 	_ui_bind=${_ui_bind%% *}
@@ -348,8 +348,8 @@ ui_pick_alt() {
 # and the caller that knows better (a copied clipboard entry, a deleted one) says
 # that instead.
 ui_say() {
-	notify-send -a Nureb -i "${4:-$UI_ICON_INFO}" -u "${3:-normal}" \
-		"${1:-Nureb}" "${2:-}" 2>/dev/null || true
+	notify-send -a LazyOS -i "${4:-$UI_ICON_INFO}" -u "${3:-normal}" \
+		"${1:-LazyOS}" "${2:-}" 2>/dev/null || true
 }
 
 # ui_copy TEXT [NOTE]

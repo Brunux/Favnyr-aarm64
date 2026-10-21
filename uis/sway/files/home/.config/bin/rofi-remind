@@ -49,7 +49,7 @@ set -eu
 dir=$(dirname "$0")
 . "$dir/lib-rofi.sh"
 
-prefix=nureb-reminder-
+prefix=lazyos-reminder-
 tab=$(printf '\t')
 
 # The notification icon is a name the icon theme resolves (the Nureb theme
@@ -240,7 +240,7 @@ cancel:*)
 	unit=${key#cancel:}
 	# Read the description *before* stopping: a collected unit has nothing left
 	# to name, and `show` then answers with the unit name - which is exactly the
-	# `nureb-reminder-33747` the cancel notification used to read out.
+	# `lazyos-reminder-33747` the cancel notification used to read out.
 	props=$(systemctl --user show -p LoadState -p Description -p TimersCalendar "$unit" 2>/dev/null) || props=
 	load=$(printf '%s\n' "$props" | sed -n 's/^LoadState=//p')
 	if [ "${load:-}" = loaded ]; then
@@ -451,7 +451,7 @@ fi
 if [ "$mode" = active ]; then
 	out=$(systemd-run --user --collect --unit="$unit" --description="$desc" \
 		--on-active="$expr" \
-		notify-send -a Nureb -i "$icon" 'Reminder' "$body" 2>&1) || {
+		notify-send -a LazyOS -i "$icon" 'Reminder' "$body" 2>&1) || {
 		ui_say 'Could not set the reminder' "$(printf '%s' "$out" | tail -2 | tr '\n' ' ')" critical "$icon"
 		exit 1
 	}
@@ -460,7 +460,7 @@ else
 	# confirmed, so what fires is what the person was shown.
 	out=$(systemd-run --user --collect --unit="$unit" --description="$desc" \
 		--on-calendar="$normal" \
-		notify-send -a Nureb -i "$icon" 'Reminder' "$body" 2>&1) || {
+		notify-send -a LazyOS -i "$icon" 'Reminder' "$body" 2>&1) || {
 		ui_say 'Could not set the reminder' "$(printf '%s' "$out" | tail -2 | tr '\n' ' ')" critical "$icon"
 		exit 1
 	}

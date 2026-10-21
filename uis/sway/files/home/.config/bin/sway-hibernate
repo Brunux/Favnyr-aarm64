@@ -11,15 +11,15 @@
 #      from a cold boot and the saved session is lost; initramfs-tools resolves
 #      resume=LABEL=... through udev, so a label is enough)
 #
-# The swap is meant to live on the microSD, labelled "nureb_swap". It has to be a
+# The swap is meant to live on the microSD, labelled "lazyos_swap". It has to be a
 # partition (or another block device), not a swap file: resume=LABEL= resolves
 # through udev, and a file has no label of its own.
 #
-#   sudo mkswap -L nureb_swap /dev/mmcblk1p4
-#   echo 'LABEL=nureb_swap none swap sw 0 0' | sudo tee -a /etc/fstab
+#   sudo mkswap -L lazyos_swap /dev/mmcblk1p4
+#   echo 'LABEL=lazyos_swap none swap sw 0 0' | sudo tee -a /etc/fstab
 #   sudo swapon -a
 #
-# and the kernel command line gets `resume=LABEL=nureb_swap` the next time the
+# and the kernel command line gets `resume=LABEL=lazyos_swap` the next time the
 # kernel partition is built (scripts/make-kpart.sh + scripts/install-kpart.sh).
 set -eu
 
@@ -36,7 +36,7 @@ fi
 
 swap=$(awk 'NR > 1 && $1 !~ /zram/ { print $4 "\t" $1 }' /proc/swaps | sort -rn | head -n1)
 [ -n "$swap" ] ||
-	refuse "No swap on disk. Hibernation needs a swap partition (2 GB or more) labelled nureb_swap, normally on the microSD."
+	refuse "No swap on disk. Hibernation needs a swap partition (2 GB or more) labelled lazyos_swap, normally on the microSD."
 
 swap_kb=${swap%%	*}
 swap_dev=${swap#*	}
@@ -48,7 +48,7 @@ need_kb=$((mem_kb * 2 / 5))
 case " $(cat /proc/cmdline) " in
 *" resume="*) ;;
 *)
-	refuse "The kernel command line has no resume=, so a hibernated session could not be restored. Add resume=LABEL=nureb_swap to devices/google-asurada/kernel-cmdline.conf and rebuild the kernel partition once (scripts/make-kpart.sh, then scripts/install-kpart.sh)."
+	refuse "The kernel command line has no resume=, so a hibernated session could not be restored. Add resume=LABEL=lazyos_swap to devices/google-asurada/kernel-cmdline.conf and rebuild the kernel partition once (scripts/make-kpart.sh, then scripts/install-kpart.sh)."
 	;;
 esac
 

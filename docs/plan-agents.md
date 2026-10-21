@@ -42,7 +42,7 @@ still no daemon, and no new toolchain to build and carry.
 
 ### P2 - accounts (half-written, untracked)
 
-* An account is a directory under `~/.local/share/nureb/agents/<binary>/<name>`, selected with the
+* An account is a directory under `~/.local/share/lazyos/agents/<binary>/<name>`, selected with the
   variable each CLI documents: **`CLAUDE_CONFIG_DIR`** (Claude Code) and **`CODEX_HOME`** (Codex).
 * Create (empty), use (writes the agent's default), remove, and `--env` for the shell:
   `eval "$(rofi-agents --env 'Claude Code' work)"`.
@@ -66,7 +66,7 @@ still no daemon, and no new toolchain to build and carry.
 
 * Only if P3 is not enough. Needs provider credentials and per-provider endpoints, and it must be
   fail-soft. Keep it out of the bar: run it from the menu on demand, print what answered, cache the
-  last answer in `~/.cache/nureb/agents-usage.json`.
+  last answer in `~/.cache/lazyos/agents-usage.json`.
 * **Effort: unknown, and it is the part that ages badly.** I would not ship it without a reason.
 
 ### P5 - automatic account switching near a limit

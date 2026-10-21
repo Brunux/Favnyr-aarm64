@@ -156,7 +156,7 @@ in range"` turns the card into the answer.*
   via `CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`). Usage meters are planned, not built; see
   [`docs/plan-agents.md`](docs/plan-agents.md).
 * **Hibernate** - refused unless a **disk** swap (not zram) of at least 2/5 of RAM exists *and* the
-  kernel command line carries `resume=` (a swap partition labelled `nureb_swap` is the intended
+  kernel command line carries `resume=` (a swap partition labelled `lazyos_swap` is the intended
   wiring). Each missing condition says what to do.
 * **Screenshots** - region, full screen, or region to the clipboard.
 

@@ -16,7 +16,7 @@
 #   busy cancelled TAG                     exit 0 when this tag has no card left
 #
 # The notification is replaced rather than stacked because every message carries
-# the same mako tag (`string:x-canonical-private-synchronous:nureb-<tag>`), so a
+# the same mako tag (`string:x-canonical-private-synchronous:lazyos-<tag>`), so a
 # scan reads "Looking for networks…" and then the same card reads "9 networks
 # in range".  The bar side is bar-busy, which reads the state written here; both
 # ends are signalled through waybar's signal 8, so the card appears and
@@ -46,12 +46,12 @@
 # Nothing here fails the caller: a session without mako gets no toast, and the
 # action itself still runs.
 #
-# State lives in $XDG_RUNTIME_DIR/nureb-busy (<tag>.id, .label, .icon, .stop),
+# State lives in $XDG_RUNTIME_DIR/lazyos-busy (<tag>.id, .label, .icon, .stop),
 # so it dies with the session rather than surviving in the home directory.
 
 set -u
 
-dir=${XDG_RUNTIME_DIR:-/tmp}/nureb-busy
+dir=${XDG_RUNTIME_DIR:-/tmp}/lazyos-busy
 mkdir -p "$dir" 2>/dev/null || true
 
 cmd=${1:-}
@@ -70,12 +70,12 @@ icon=$(cat "$dir/$tag.icon" 2>/dev/null || true)
 send() { # TIMEOUT URGENCY MESSAGE [ICON]
 	_icon=${4:-${icon:-dialog-information}}
 	if [ -n "$id" ]; then
-		notify-send -a Nureb -i "$_icon" -u "$2" -t "$1" \
-			-r "$id" -h "string:x-canonical-private-synchronous:nureb-$tag" \
+		notify-send -a LazyOS -i "$_icon" -u "$2" -t "$1" \
+			-r "$id" -h "string:x-canonical-private-synchronous:lazyos-$tag" \
 			"$label" "$3" 2>/dev/null || true
 	else
-		notify-send -a Nureb -i "$_icon" -u "$2" -t "$1" \
-			-h "string:x-canonical-private-synchronous:nureb-$tag" \
+		notify-send -a LazyOS -i "$_icon" -u "$2" -t "$1" \
+			-h "string:x-canonical-private-synchronous:lazyos-$tag" \
 			"$label" "$3" 2>/dev/null || true
 	fi
 }
@@ -104,8 +104,8 @@ start)
 	fi
 	# -p prints the id; a session without a notification daemon prints nothing,
 	# which is why the id is optional everywhere below.
-	id=$(notify-send -p -a Nureb -i "${5:-dialog-information}" -u low -t 0 \
-		-h "string:x-canonical-private-synchronous:nureb-$tag" \
+	id=$(notify-send -p -a LazyOS -i "${5:-dialog-information}" -u low -t 0 \
+		-h "string:x-canonical-private-synchronous:lazyos-$tag" \
 		"$label" "${4:-}" 2>/dev/null || true)
 	if [ -n "$id" ]; then
 		printf '%s\n' "$id" >"$dir/$tag.id"

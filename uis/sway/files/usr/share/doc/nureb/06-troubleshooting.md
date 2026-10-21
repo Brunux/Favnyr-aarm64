@@ -140,12 +140,12 @@ means both `imv` and `chafa` are.
 ## The bar shows a spinner that never ends
 
 That card belongs to `~/.config/bin/bar-busy`: one file per running task lives in
-`$XDG_RUNTIME_DIR/nureb-busy`, and a task that is killed without `busy end`
+`$XDG_RUNTIME_DIR/lazyos-busy`, and a task that is killed without `busy end`
 leaves one behind. They expire after five minutes on their own; to clear them at
 once:
 
 ```sh
-rm -rf "$XDG_RUNTIME_DIR/nureb-busy"/* && pkill -RTMIN+8 waybar
+rm -rf "$XDG_RUNTIME_DIR/lazyos-busy"/* && pkill -RTMIN+8 waybar
 ```
 
 ## No notifications
@@ -217,7 +217,7 @@ one guess about how the panel's accelerometer is mounted, and units differ.
 Hold the card upright in your hands, screen facing you, in tablet mode, and run
 `~/.config/bin/tablet-mode calibrate` (or **Settings → Calibrate rotation**, which
 is only listed while the mode is on): it reads the sensor there and stores
-`normal=<axis><sign>` in `~/.config/nureb/tablet.conf`, one line, and the four
+`normal=<axis><sign>` in `~/.config/lazyos/tablet.conf`, one line, and the four
 positions are derived from it at once. `~/.config/bin/tablet-mode calibration`
 says `calibrated y-` or `default y-`; deleting the file goes back to the built-in
 mapping, and `check-system.sh` reports a calibration file that does not parse,

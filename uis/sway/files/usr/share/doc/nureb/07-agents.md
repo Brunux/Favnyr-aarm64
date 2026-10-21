@@ -34,7 +34,7 @@ in the next terminal without logging out.
 
 Claude Code and Codex both support an alternative configuration directory -
 `CLAUDE_CONFIG_DIR` and `CODEX_HOME` - and that is all an "account" is here: a
-directory per account under `~/.local/share/nureb/agents/<agent>/<account>/`,
+directory per account under `~/.local/share/lazyos/agents/<agent>/<account>/`,
 with the last one used recorded next to it. Creating one is empty on purpose:
 the first launch in that account runs the CLI's normal sign-in and the profile is
 created there, so two subscriptions never share a session or a token.

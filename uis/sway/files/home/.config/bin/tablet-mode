@@ -44,7 +44,7 @@
 # `tablet-mode calibrate` (also a row in Settings) reads the accelerometer in
 # the pose the person is holding - screen facing them, upright, tablet mode on -
 # and stores the direction that should look upright in
-# $XDG_CONFIG_HOME/nureb/tablet.conf, one line, `normal=y-`.  orient() then
+# $XDG_CONFIG_HOME/lazyos/tablet.conf, one line, `normal=y-`.  orient() then
 # derives all four positions from that one reference: the four readings run
 # around the device in the counter-clockwise order +X, +Y, -X, -Y, and each 90
 # degrees the reading turns is 90 degrees more transform, so the reference gets
@@ -83,17 +83,17 @@
 set -eu
 
 dir=$(dirname "$0")
-state="${XDG_RUNTIME_DIR:-/tmp}/nureb-tablet"
+state="${XDG_RUNTIME_DIR:-/tmp}/lazyos-tablet"
 kbd_bin=wvkbd-mobintl
 
 # The rotation reference `calibrate` writes, and the icon the mode's own
 # notifications carry (the Nureb theme has the name, Adwaita is the fallback).
-conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/nureb"
+conf_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lazyos"
 conf_file=$conf_dir/tablet.conf
 
 say() { # TITLE [BODY] [ICON]
-	notify-send -a Nureb -i "${3:-preferences-desktop-keyboard}" \
-		"${1:-Nureb}" "${2:-}" 2>/dev/null || true
+	notify-send -a LazyOS -i "${3:-preferences-desktop-keyboard}" \
+		"${1:-LazyOS}" "${2:-}" 2>/dev/null || true
 }
 
 out_name() {

@@ -149,7 +149,7 @@ If the screen comes up **upside down**, or turns the wrong way, the acceleromete
 in your unit's panel disagrees with the built-in mapping: **Settings → Calibrate
 rotation** (only listed while tablet mode is on) reads the sensor in the pose you
 are holding - screen facing you, upright - and stores it in
-`~/.config/nureb/tablet.conf`, so the four positions are derived from your unit
+`~/.config/lazyos/tablet.conf`, so the four positions are derived from your unit
 from then on. It needs no rebuild. `~/.config/bin/tablet-mode calibrate` is the
 same thing from a terminal, `tablet-mode calibration` says which mapping is in
 use, and deleting the file goes back to the built-in one.
