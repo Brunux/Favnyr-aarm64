@@ -243,18 +243,19 @@ If upstream PanVK grows Valhall v9 support on `pan_kmod`'s DRM backend, the answ
 
 SceneFX (0.5) classifies each blurred node:
 
-* **Cached ("optimized") blur.** A tiled window that cannot overlap another one (and this session
-  has animations off: `animation_duration_ms` stays at its 0 default) samples a buffer that was
-  blurred once, when the wallpaper or the output size changed. Per frame that is one bilinear tap
-  per pixel.
+* **Cached ("optimized") blur.** A tiled window that cannot overlap another one - it is neither
+  floating nor animating - samples a buffer that was blurred once, when the wallpaper or the output
+  size changed. Per frame that is one bilinear tap per pixel.
 * **Live blur.** A floating window, or one that can overlap another, is re-blurred from what is
   actually behind it: `blur_passes` downsample passes (5 taps) and the same number of upsample
-  passes (9 taps), then the full-screen draw of the result.
+  passes (9 taps), then the full-screen draw of the result. `could_container_overlap()`
+  (`sway/desktop/output.c`) answers true while the container or its workspace has an animation
+  initialized, so an animating tiled window takes this path for the length of its animation.
 
 `blur_xray` chooses between them: enabled, *every* surface uses the cached buffer - including a
 floating window, which then shows the wallpaper through itself instead of the window behind it.
 That is visible (verified with two screenshots of the same scene, one per setting), so the session
-keeps it disabled and only floating windows pay for a live blur.
+keeps it disabled and only floating and animating windows pay for a live blur.
 
 ### Measured
 
@@ -282,9 +283,15 @@ panel's resolution; it was never the frame-rate cliff the port's earlier notes a
 
 The parameters in `26-swayfx.conf` follow from the table:
 
-* `animation_duration_ms 0` is written out rather than left to its default. A non-zero value makes
-  every moving window "could overlap" for the length of its animation, which sends it down the live
-  path; with animations off the cached path is always the one a tiled window takes.
+* `animation_duration_ms 150` is the one animation setting swayfx 0.6 has: a single float, no
+  per-event directives and one fixed ease-out-cubic, driving open/close (pop-in/out from 80 % size
+  at the centre, with the alpha), every tiling move and resize, and the workspace cross-fade. It
+  is also the price: `could_container_overlap()` counts an initialized animation as "can overlap",
+  so each animating window takes the live path for those ~9 frames at 60 Hz (2.1-2.2 ms/frame
+  full screen, 1.5 ms for 1200x800), and a workspace switch animates both workspaces. Interactive
+  resizing and dragging a floating window are not animated (`seat_is_resizing`/
+  `seat_is_moving_float` bypass it), so the pointer stays 1:1, and `swaymsg animation_duration_ms 0`
+  restores the cached path at runtime.
 * `blur_passes 2` + `blur_radius 4` = a 32 px sample (`2^(passes+1) * radius`; the shipped default
   is 5 x 3 = 80 px). Passes are the price of a live blur, and the sample size is also how far a
   *live* blur's damage region is grown, so this is what a floating window re-renders around itself.
