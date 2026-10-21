@@ -148,7 +148,7 @@ Debian's Adwaita 51 ships only monochrome *symbolic* icons and not one of this s
 names - a drun row for "Files" had a hole where its icon should be - and the one full-colour
 theme in the archive (`papirus-icon-theme`) is 190 MB installed. So `scripts/make-icons.sh`
 renders the same Font Awesome codepoints into 48x48 PNGs and they ship as a small **Nureb**
-icon theme (`usr/share/icons/Nureb`), whose `index.theme` inherits Adwaita and hicolor: an
+icon theme (`usr/share/icons/LazyOS`), whose `index.theme` inherits Adwaita and hicolor: an
 application that brings its own icon (foot, btop, htop, anything installed later) still shows
 it in colour. The bar's popups pass `-no-show-icons` because they draw their own glyph.
 

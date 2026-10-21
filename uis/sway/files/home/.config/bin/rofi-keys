@@ -11,7 +11,7 @@
 # Enter copies the command to the clipboard, Escape closes. $mod is Alt here.
 #
 # Each section gets a picture: rofi's dmenu can draw one image per row by name
-# (`-show-icons -icon-theme Nureb`, the icon marker appended to the row), and a
+# (`-show-icons -icon-theme LazyOS`, the icon marker appended to the row), and a
 # section line is exactly where a picture says what the text repeats - one per
 # section, not one per binding, since nine identical pictures down a column add
 # nothing to the header they sit in.  The names are the ones scripts/make-icons.sh
@@ -164,7 +164,7 @@ choice=$(awk -F'\t' '
     $3 == "" { print $1; next }
     { printf "%s%s\n", $1, sprintf("%cicon%c%s", 0, 31, $3) }' "$table" |
 	rofi -dmenu -markup-rows -theme "$theme" \
-		-show-icons -icon-theme Nureb \
+		-show-icons -icon-theme LazyOS \
 		-p "Keys" -lines 22 -i \
 		-theme-str "window { width: 68%; }
 mainbox { children: [ inputbar, message, listview ]; }" \

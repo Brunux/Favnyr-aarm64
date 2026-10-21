@@ -569,7 +569,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   and not one of this session's names - so the launcher showed a hole where an icon should be, and
   `papirus-icon-theme` is 190 MB installed. `scripts/make-icons.sh` renders the same Font Awesome
   codepoints into 48x48 PNGs that ship as the small **Nureb** theme
-  (`uis/sway/files/usr/share/icons/Nureb`), whose `index.theme` inherits Adwaita and hicolor, so an
+  (`uis/sway/files/usr/share/icons/LazyOS`), whose `index.theme` inherits Adwaita and hicolor, so an
   application that brings its own icon still shows it in colour. The theme carries **three**
   tables now, not two: the launcher's `.desktop` names, the command palette's binary names, and
   the **names the rest of the session asks for by freedesktop name** - the file browser's row
@@ -578,12 +578,12 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   dialog-warning`) and the ones a notification draws (`dialog-information dialog-warning
   dialog-error network-server display-brightness input-touchpad input-keyboard
   preferences-desktop-theme preferences-desktop-effects preferences-system-windows`). rofi's
-  dmenu resolves `\0icon\x1f<name>` through `icon-theme: "Nureb"`, so the launcher and the file
+  dmenu resolves `\0icon\x1f<name>` through `icon-theme: "LazyOS"`, so the launcher and the file
   list share the alphabet. **mako does not**: it reads no theme metadata, it walks the roots of
   its `icon-path` (`mako(5)`: *"This approximates the search algorithm used by the XDG Icon Theme
   Specification, but does not support any of the theme metadata"*), and `/usr/share/icons` is not
   a theme root - so `~/.config/mako/config` has to name
-  `icon-path=/usr/share/icons/Nureb:/usr/share/icons/hicolor` or every notification icon stays
+  `icon-path=/usr/share/icons/LazyOS:/usr/share/icons/hicolor` or every notification icon stays
   blank while `notify-send -i folder` looks perfectly correct on the command line. Two traps that
   cost a round each:
   a literal private-use character does not survive every editor or transport (the first attempt

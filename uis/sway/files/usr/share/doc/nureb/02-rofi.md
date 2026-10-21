@@ -350,7 +350,7 @@ Two files, and everything - launcher, window list, bar panels, key view, the
 manual - reads the same theme:
 
 * `~/.config/rofi/config.rasi` - the settings: the modes, `terminal: "foot"`,
-  fuzzy matching, history, `show-icons: true`, `icon-theme: "Nureb"`.
+  fuzzy matching, history, `show-icons: true`, `icon-theme: "LazyOS"`.
 * `~/.config/rofi/solarized.rasi` - the look: base03 window, 2 px cyan rim,
   JetBrains Mono 12, base02 card on the selected row, the box shrinking to its
   entries.

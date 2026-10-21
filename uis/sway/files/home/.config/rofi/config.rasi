@@ -63,12 +63,12 @@ configuration {
      * *symbolic* icons and not one of the application names this session uses,
      * so the launcher showed a hole where an icon should be. The overlay ships
      * a solarized line icon per session entry (terminal, folder, gear, bell,
-     * power...) in usr/share/icons/Nureb, and its index.theme inherits Adwaita
+     * power...) in usr/share/icons/LazyOS, and its index.theme inherits Adwaita
      * and hicolor, so an application that brings its own icon (foot, btop,
      * htop) still gets it in colour.  scripts/make-icons.sh renders them, both
      * the launcher's names and the category names rofi-keys asks for. */
     show-icons: true;
-    icon-theme: "Nureb";
+    icon-theme: "LazyOS";
 
     /* fzf-style matching, as tofi and fuzzel did. */
     matching: "fuzzy";

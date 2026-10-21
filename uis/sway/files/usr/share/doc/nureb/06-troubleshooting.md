@@ -104,7 +104,7 @@ screen.
   `check-system.sh` fails for each one.
 * **A hole where an icon should be.** The launcher draws application *images*,
   and the session's own entries take theirs from the small **Nureb** theme
-  (`/usr/share/icons/Nureb`, 48x48 PNGs rendered from the icon fonts). If the
+  (`/usr/share/icons/LazyOS`, 48x48 PNGs rendered from the icon fonts). If the
   theme is missing, rebuild it with `sudo ~/Dev/Nureb/scripts/make-icons.sh` - it
   needs ImageMagick - or reinstall the image. An application you installed that
   shows no icon is a packaging problem of that application, not this one.
@@ -162,7 +162,7 @@ A card **without its picture** is a different fault with no log line either: the
 notification arrived, but mako could not resolve the icon name the sender gave
 it. mako reads no icon-theme metadata - it walks the roots named by
 `icon-path` in `~/.config/mako/config`, which is where the session's own
-`/usr/share/icons/Nureb` has to be. `check-system.sh` reports both halves
+`/usr/share/icons/LazyOS` has to be. `check-system.sh` reports both halves
 (`icons=1` and an existing `icon-path`), and the names themselves are rendered by
 `scripts/make-icons.sh` on the build host.
 

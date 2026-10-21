@@ -685,15 +685,15 @@ fi
 # A notification icon is a name mako looks up on its icon-path, and one it cannot
 # find draws nothing at all: the card is text-only, with no log line and no error.
 # The names are lib-rofi.sh's UI_ICON_* constants.
-if [ -r "$HOME/.config/bin/lib-rofi.sh" ] && [ -d /usr/share/icons/Nureb ]; then
+if [ -r "$HOME/.config/bin/lib-rofi.sh" ] && [ -d /usr/share/icons/LazyOS ]; then
 	_missing_icon=
 	for _n in $(sed -n 's/^UI_ICON_[A-Z]*=\([a-z-]*\)$/\1/p' "$HOME/.config/bin/lib-rofi.sh"); do
-		ls /usr/share/icons/Nureb/*/apps/"$_n".png >/dev/null 2>&1 ||
+		ls /usr/share/icons/LazyOS/*/apps/"$_n".png >/dev/null 2>&1 ||
 			_missing_icon="$_missing_icon $_n"
 	done
 	[ -z "$_missing_icon" ] &&
 		ok "notification icons resolve in the Nureb theme" ||
-		warn "notification icon(s) missing from /usr/share/icons/Nureb:$_missing_icon (scripts/make-icons.sh)"
+		warn "notification icon(s) missing from /usr/share/icons/LazyOS:$_missing_icon (scripts/make-icons.sh)"
 fi
 
 # mako reads icon-path itself (no theme metadata), so both halves have to be there
@@ -946,7 +946,7 @@ else
 fi
 # Its notifications carry the search glyph, and a name mako cannot resolve draws
 # no picture at all: the card is text-only with no log line.
-[ -r /usr/share/icons/Nureb/48x48/apps/system-search.png ] ||
+[ -r /usr/share/icons/LazyOS/48x48/apps/system-search.png ] ||
 	warn "the Nureb theme has no system-search icon: lazyos-find's notifications are text-only"
 
 # Search inside files (Alt+Ctrl+G) is the other half of the Search key: rofi-files
@@ -1096,7 +1096,7 @@ _reminder=""
 have systemd-analyze || _reminder="$_reminder systemd-analyze"
 have notify-send || _reminder="$_reminder notify-send"
 have jq || _reminder="$_reminder jq"
-[ -r /usr/share/icons/Nureb/48x48/apps/preferences-system-time.png ] ||
+[ -r /usr/share/icons/LazyOS/48x48/apps/preferences-system-time.png ] ||
 	_reminder="$_reminder preferences-system-time.png"
 [ -x "$HOME/.config/bin/rofi-remind" ] || _reminder="$_reminder bin/rofi-remind"
 if [ -z "$_reminder" ]; then
@@ -1155,10 +1155,10 @@ fi
 # list silently text-only, the same class of bug as the file browser's.
 if [ -r "$HOME/.config/bin/rofi-keys" ] &&
 	grep -qs -- '-show-icons' "$HOME/.config/bin/rofi-keys" &&
-	grep -qs -- '-icon-theme Nureb' "$HOME/.config/bin/rofi-keys"; then
+	grep -qs -- '-icon-theme LazyOS' "$HOME/.config/bin/rofi-keys"; then
 	ok "rofi-keys asks the theme for a picture per section (-show-icons, Nureb)"
 else
-	warn "rofi-keys no longer passes -show-icons/-icon-theme Nureb: the key view shows no pictures"
+	warn "rofi-keys no longer passes -show-icons/-icon-theme LazyOS: the key view shows no pictures"
 fi
 
 # fastfetch exits when it has drawn, so without --hold the About window flashes
@@ -1440,7 +1440,7 @@ _missing_row_icons=""
 for _i in folder go-up view-hidden dialog-warning text-x-generic text-html \
 	application-pdf image-x-generic video-x-generic audio-x-generic \
 	application-x-executable package-x-generic x-office-document; do
-	[ -r "/usr/share/icons/Nureb/48x48/apps/$_i.png" ] || _missing_row_icons="$_missing_row_icons $_i"
+	[ -r "/usr/share/icons/LazyOS/48x48/apps/$_i.png" ] || _missing_row_icons="$_missing_row_icons $_i"
 done
 if [ -z "$_missing_row_icons" ]; then
 	ok "file browser icons present (the Nureb theme has every row name)"
@@ -1507,7 +1507,7 @@ fi
 _missing=
 for _icon in folder user-home user-trash text-x-generic application-pdf \
 	image-x-generic drive-harddisk view-refresh edit-copy folder-new; do
-	[ -r /usr/share/icons/Nureb/48x48/apps/"$_icon".png ] || _missing="$_missing $_icon"
+	[ -r /usr/share/icons/LazyOS/48x48/apps/"$_icon".png ] || _missing="$_missing $_icon"
 done
 if [ -z "$_missing" ]; then
 	ok "the Nureb theme carries every icon the file manager asks for"
@@ -1726,8 +1726,8 @@ fi
 # session's names, so the image ships the small Nureb theme (48x48 PNGs rendered
 # from the Font Awesome codepoints). Without it every org.lazyos.* row is a hole.
 _icons=""
-[ -d /usr/share/icons/Nureb ] || _icons="$_icons /usr/share/icons/Nureb"
-[ -r /usr/share/icons/Nureb/index.theme ] || _icons="$_icons Nureb/index.theme"
+[ -d /usr/share/icons/LazyOS ] || _icons="$_icons /usr/share/icons/LazyOS"
+[ -r /usr/share/icons/LazyOS/index.theme ] || _icons="$_icons LazyOS/index.theme"
 _iconless=""
 # The session's own entries, plus the viewer packages': their Icon= is not their
 # binary name (imv asks for multimedia-photo-viewer, papers for org.gnome.Papers)
@@ -1742,7 +1742,7 @@ for _d in /usr/share/applications/org.lazyos.*.desktop \
 		case $_line in Icon=*) _icon=${_line#Icon=}; break ;; esac
 	done <"$_d"
 	[ -n "$_icon" ] || continue
-	[ -r "/usr/share/icons/Nureb/48x48/apps/$_icon.png" ] && continue
+	[ -r "/usr/share/icons/LazyOS/48x48/apps/$_icon.png" ] && continue
 	# An application's own icon (hicolor, pixmaps) is fine too.
 	[ -n "$(find /usr/share/icons /usr/share/pixmaps -name "$_icon.*" 2>/dev/null | head -1)" ] && continue
 	_iconless="$_iconless $(basename "$_d" .desktop)=$_icon"
@@ -1760,7 +1760,7 @@ fi
 # names too.  Missing ones are a blank 26 px column, not an error.
 _runless=""
 for _c in foot btop htop lazygit tmux nvim fzf rg bat eza mpv imv firefox-esr; do
-	[ -r "/usr/share/icons/Nureb/48x48/apps/$_c.png" ] || _runless="$_runless $_c"
+	[ -r "/usr/share/icons/LazyOS/48x48/apps/$_c.png" ] || _runless="$_runless $_c"
 done
 if [ -z "$_runless" ]; then
 	ok "command palette icons present (the run mode resolves binaries by name)"
@@ -1772,7 +1772,7 @@ if have grep; then
 	_cfg_rasi="$HOME/.config/rofi/config.rasi"
 	if [ -r "$_cfg_rasi" ]; then
 		_show=$(grep -c 'show-icons: *true' "$_cfg_rasi" 2>/dev/null || true)
-		_theme=$(grep -c 'icon-theme: *"Nureb"' "$_cfg_rasi" 2>/dev/null || true)
+		_theme=$(grep -c 'icon-theme: *"LazyOS"' "$_cfg_rasi" 2>/dev/null || true)
 		if [ "${_show:-0}" -ge 1 ] && [ "${_theme:-0}" -ge 1 ]; then
 			ok "rofi shows icons from the Nureb theme (show-icons, icon-theme)"
 		else

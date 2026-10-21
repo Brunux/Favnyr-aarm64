@@ -109,7 +109,7 @@ UI_I_DESKTOP=$(printf '\357\204\210')   # f108
 UI_I_CHIP=$(printf '\357\213\233')   # f2db
 
 # The notification icons are *names*, not glyphs: mako resolves them through the
-# icon theme, and ~/.config/mako/config puts /usr/share/icons/Nureb on its
+# icon theme, and ~/.config/mako/config puts /usr/share/icons/LazyOS on its
 # icon-path.  The names below are the ones scripts/make-icons.sh renders into
 # that theme (its index.theme inherits Adwaita and hicolor for everything it does
 # not ship), so a notification answers "what is this about" the same way a row

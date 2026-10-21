@@ -27,7 +27,7 @@
 # application-pdf, ...) and the ones notify-send/mako draw on a notification
 # (dialog-information, dialog-warning, dialog-error, network-server, ...).
 # mako does not read the theme metadata - it walks the roots in its `icon-path`
-# for categories and sizes - so /usr/share/icons/Nureb has to be one of those
+# for categories and sizes - so /usr/share/icons/LazyOS has to be one of those
 # roots for these to appear on a notification.
 #
 # The PNGs are committed, so an image build needs no ImageMagick; run this only
@@ -43,7 +43,7 @@
 set -eu
 
 here=$(cd "$(dirname "$0")/.." && pwd)
-theme="$here/uis/sway/files/usr/share/icons/Nureb"
+theme="$here/uis/sway/files/usr/share/icons/LazyOS"
 out="$theme/48x48/apps"
 alt="$theme/scalable/apps"
 # rofi asks for its own icon size and GTK only falls back to a *larger* fixed
