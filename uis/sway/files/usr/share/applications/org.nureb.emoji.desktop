@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Emoji
+GenericName=Emoji picker
+Comment=Type a name and the glyph is inserted at the cursor
+Exec=/home/brunux/.config/bin/rofi-emoji
+Icon=emoji-picker
+Terminal=false
+Categories=Utility;
+Keywords=emoji;smiley;symbol;insert;unicode;

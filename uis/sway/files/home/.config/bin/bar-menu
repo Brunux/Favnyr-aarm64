@@ -35,11 +35,14 @@ while :; do
 		ui_row "$UI_I_KEYBOARD" 'Keybindings' 'every binding, from the configuration' keys
 		ui_row "$UI_I_USERS" 'Agents' 'Claude Code, Codex and the others' agents
 		ui_row "$UI_I_CALC" 'Calculator' 'type it, Enter copies the result' calc
+		ui_row "$UI_I_SMILE" 'Emoji' 'type a name, insert the glyph' emoji
+		ui_row "$UI_I_CLIPBOARD" 'Clipboard' 'what was copied, back in one pick' clip
 		ui_row "$UI_I_TERM" 'SSH' 'hosts from ~/.ssh/config' ssh
 
 		ui_heading 'system'
 		ui_row "$UI_I_WIFI" 'Wi-Fi' 'pick a network' wifi
 		ui_row "$UI_I_QR" 'QR code' 'this network, or any text' qr
+		ui_row "$UI_I_CLOUD" 'DNS' 'the resolver this connection uses' dns
 		ui_row "$UI_I_BT" 'Bluetooth' 'pick a device' bt
 		ui_row "$UI_I_VOLUME" 'Audio output' 'sinks and volume' audio
 		ui_row "$UI_I_MUSIC" 'Media' 'play, pause, next' media
@@ -47,9 +50,12 @@ while :; do
 		ui_row "$UI_I_CLOCK" 'Time zone' 'and network time' tz
 		ui_row "$UI_I_TRASH" 'Free space' 'what is using it, and clean up' clean
 		ui_row "$UI_I_BUG" 'End a process' 'the heaviest twenty' kill
+		ui_row "$UI_I_BOX" 'Packages' 'search, then install one' pkg
+		ui_row "$UI_I_INFO" 'About' 'kernel, uptime, memory, battery' about
 
 		ui_heading 'session'
 		ui_row "$UI_I_MIC" 'Dictation' 'speak, and it is typed' dictate
+		ui_row "$UI_I_CLOCK" 'Reminders' 'be told about it later' remind
 		ui_row "$UI_I_LOCK" 'Lock' 'swaylock' lock
 		ui_row "$UI_I_EYE" 'Screensaver' 'the idle screen, now' screensaver
 		ui_row "$UI_I_PAUSE" 'Suspend' 'sleep until asked' suspend
@@ -72,6 +78,12 @@ while :; do
 	keys) exec "$dir/rofi-keys" ;;
 	agents) exec "$dir/rofi-agents" ;;
 	calc) exec "$dir/rofi-calc" ;;
+	emoji) exec "$dir/rofi-emoji" ;;
+	clip) exec "$dir/rofi-clip" ;;
+	dns) exec "$dir/rofi-dns" ;;
+	pkg) exec "$dir/rofi-pkg" ;;
+	about) exec "$dir/rofi-about" ;;
+	remind) exec "$dir/rofi-remind" ;;
 	ssh) exec rofi -show ssh ;;
 	wifi) exec "$dir/bar-net" ;;
 	qr) exec "$dir/rofi-qr" ;;

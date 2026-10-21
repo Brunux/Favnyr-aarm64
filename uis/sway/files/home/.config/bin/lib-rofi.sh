@@ -88,6 +88,10 @@ UI_I_CLIPBOARD=$(printf '\357\203\252')   # f0ea
 UI_I_SMILE=$(printf '\357\204\230')   # f118
 UI_I_INFO=$(printf '\357\201\232')   # f05a
 UI_I_CLOUD=$(printf '\357\203\202')   # f0c2
+UI_I_BRUSH=$(printf '\357\207\274')   # f1fc
+UI_I_TAG=$(printf '\357\200\253')   # f02b
+UI_I_DESKTOP=$(printf '\357\204\210')   # f108
+UI_I_CHIP=$(printf '\357\213\233')   # f2db
 
 
 # Pango treats &, < and > as markup; a tab or a newline would break the TSV or
@@ -139,6 +143,30 @@ ui_pick() {
 	[ -n "${_ui_choice:-}" ] || return 1
 	[ "$_ui_key" = '-' ] && return 1
 	printf '%s\n' "$_ui_key"
+}
+
+# ui_pick_alt PROMPT [MESSAGE] [ALT-LABEL] < rows
+# ui_pick with one extra action: Alt+1 (rofi's -kb-custom-1) exits 10 with the
+# row still on stdout, which is how the emoji picker offers "copy" next to
+# "insert" and the clipboard offers "delete" next to "copy back".  Prints the
+# key for Enter and alt:KEY for Alt+1; exits 1 when the window is dismissed.
+ui_pick_alt() {
+	_ui_file=$(mktemp "${TMPDIR:-/tmp}/nureb-menu.XXXXXX") || return 1
+	cat >"$_ui_file"
+	_ui_rc=0
+	_ui_choice=$(cut -f1 "$_ui_file" |
+		"$UI_BIN/bar-pick" "${1:-Menu}" -markup-rows -mesg "${2:-}" \
+			-kb-custom-1 "${3:-Alt+1}" \
+			-theme-str 'mainbox { children: [ inputbar, message, listview ]; }') || _ui_rc=$?
+	_ui_key=$(awk -F'\t' -v c="${_ui_choice:-}" '$1 == c { print $2; exit }' "$_ui_file")
+	rm -f "$_ui_file"
+	[ -n "${_ui_choice:-}" ] || return 1
+	[ "$_ui_key" = '-' ] && return 1
+	case $_ui_rc in
+	0) printf '%s\n' "$_ui_key" ;;
+	10) printf 'alt:%s\n' "$_ui_key" ;;
+	*) return 1 ;;
+	esac
 }
 
 # ui_say TITLE BODY [URGENCY]

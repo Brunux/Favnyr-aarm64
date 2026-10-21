@@ -1,0 +1,139 @@
+#!/bin/sh
+# Reminders: write it now, be told later.
+#
+# Omarchy's `omarchy-reminder` writes a line to a file and starts a
+# `systemd-run --user --on-active=` timer; this is the same mechanism, and it is
+# not a service in the sense the rest of this port avoids: a transient timer is
+# one unit that fires once, notifies, and is garbage-collected (`--collect`).  It
+# lives as long as the session's user manager, which is the right lifetime for
+# "remind me in 15 minutes".
+#
+# The list is those timers, read from systemd itself, so there is no second store
+# to drift: choosing one cancels it.  Nothing is written to disk.
+#
+# notify-send runs as the transient unit's own process, in the user manager's
+# environment - the same session bus mako listens on.
+
+set -eu
+
+dir=$(dirname "$0")
+. "$dir/lib-rofi.sh"
+
+prefix=nureb-reminder-
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+if ! have systemd-run || ! systemctl --user show-environment >/dev/null 2>&1; then
+	ui_say Reminders 'The user systemd manager is not reachable, so a timer cannot be started' critical
+	exit 1
+fi
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/remind.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+
+# Unit and the epoch second it fires, from systemd's own JSON (the plain columns
+# of list-timers move with the locale, and a date with a space in it cannot be
+# parsed by field position).
+systemctl --user list-timers --all --output=json "${prefix}*" 2>/dev/null |
+	jq -r '.[]? | [.unit, ((.next / 1000000) | floor)] | @tsv' >"$tmp/pending" 2>/dev/null ||
+	: >"$tmp/pending"
+pending=$(grep -c . "$tmp/pending" 2>/dev/null || true)
+
+# left SECONDS: "in 4 min", "in 2 h 10 min", for the row's detail column.
+left() {
+	_s=$1
+	if [ "$_s" -lt 60 ]; then
+		printf 'in less than a minute'
+	elif [ "$_s" -lt 3600 ]; then
+		printf 'in %d min' "$((_s / 60))"
+	elif [ "$_s" -lt 86400 ]; then
+		_h=$((_s / 3600))
+		_m=$(((_s % 3600) / 60))
+		if [ "$_m" -gt 0 ]; then printf 'in %d h %d min' "$_h" "$_m"; else printf 'in %d h' "$_h"; fi
+	else
+		printf 'in %d days' "$((_s / 86400))"
+	fi
+}
+
+now=$(date +%s)
+{
+	if [ "${pending:-0}" -eq 0 ]; then
+		ui_note 'No reminders waiting' 'The row below starts one'
+	else
+		while IFS=$(printf '\t') read -r unit when; do
+			[ -n "$unit" ] || continue
+			text=$(systemctl --user show -p Description --value "$unit" 2>/dev/null) || text=
+			[ -n "$text" ] || text=${unit%.timer}
+			detail="$(left "$((when - now))") · $(date -d "@$when" '+%H:%M' 2>/dev/null || printf '%s' "$when") · Enter cancels"
+			ui_row "$UI_I_CLOCK" "$text" "$detail" "cancel:$unit" "$UI_YELLOW"
+		done <"$tmp/pending"
+	fi
+	ui_heading 'new'
+	ui_row "$UI_I_BELL" 'New reminder' 'write it, then pick when' new
+} >"$tmp/rows"
+
+if [ "${pending:-0}" -eq 0 ]; then
+	mesg='Enter starts a reminder · Escape closes'
+else
+	mesg="$pending waiting · Enter cancels one · Escape closes"
+fi
+key=$(ui_pick 'Reminders' "$mesg" <"$tmp/rows") || exit 0
+[ -n "${key:-}" ] || exit 0
+
+case $key in
+cancel:*)
+	unit=${key#cancel:}
+	if systemctl --user stop "$unit" >/dev/null 2>&1; then
+		ui_say Reminders "Cancelled ${unit%.timer}"
+	else
+		ui_say Reminders 'That reminder was already gone' critical
+	fi
+	exit 0
+	;;
+new) ;;
+*) exit 0 ;;
+esac
+
+text=$("$UI_BIN/bar-pick" 'Reminder' -free -mesg 'What should it say?') || exit 0
+text=$(printf '%s' "$text" | tr '\n\t' '  ' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+[ -n "$text" ] || exit 0
+
+{
+	ui_row "$UI_I_CLOCK" 'In 5 minutes' '' 5min
+	ui_row "$UI_I_CLOCK" 'In 15 minutes' '' 15min
+	ui_row "$UI_I_CLOCK" 'In 30 minutes' '' 30min
+	ui_row "$UI_I_CLOCK" 'In 1 hour' '' 1h
+	ui_row "$UI_I_CLOCK" 'In 4 hours' '' 4h
+	ui_row "$UI_I_CLOCK" 'At 09:00' 'the next nine in the morning' 0900
+} >"$tmp/when"
+
+when=$(ui_pick 'When' "“$(printf '%s' "$text" | cut -c1-48)”" <"$tmp/when") || exit 0
+[ -n "${when:-}" ] || exit 0
+
+unit="$prefix$(date +%H%M%S)-$$"
+if [ "$when" = 0900 ]; then
+	out=$(systemd-run --user --collect --unit="$unit" --description="$text" \
+		--on-calendar='*-*-* 09:00:00' \
+		notify-send -a Nureb 'Reminder' "$text" 2>&1) || {
+		ui_say Reminders "$(printf '%s' "$out" | tail -2 | tr '\n' ' ')" critical
+		exit 1
+	}
+else
+	out=$(systemd-run --user --collect --unit="$unit" --description="$text" \
+		--on-active="$when" \
+		notify-send -a Nureb 'Reminder' "$text" 2>&1) || {
+		ui_say Reminders "$(printf '%s' "$out" | tail -2 | tr '\n' ' ')" critical
+		exit 1
+	}
+fi
+
+# Ask systemd when it will actually fire instead of repeating the delay that was
+# chosen: after a suspend a timer moves, and the notification should say the
+# truth.
+next=$(systemctl --user list-timers --all --output=json "$unit.timer" 2>/dev/null |
+	jq -r '.[0].next // empty' 2>/dev/null | awk '{ printf "%d", $1 / 1000000 }') || next=
+if [ -n "${next:-}" ]; then
+	ui_say Reminders "“$text” · at $(date -d "@$next" '+%H:%M')"
+else
+	ui_say Reminders "“$text” · reminder set"
+fi

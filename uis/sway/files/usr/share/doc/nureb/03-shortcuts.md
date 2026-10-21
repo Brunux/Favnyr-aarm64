@@ -21,6 +21,8 @@ the command. This page is the tour.
 | Alt+Ctrl+O | settings: the radio switches, night light, touchpad, rotation |
 | Alt+Ctrl+N | notifications: the history, do-not-disturb, copy one |
 | Alt+Ctrl+Q | calculator: type it, Enter copies the result |
+| Alt+Ctrl+V | clipboard history: Enter puts an entry back, Alt+1 deletes it |
+| Alt+Ctrl+E | emoji: type a name, Enter inserts the glyph at the cursor |
 | Alt+Return | terminal (foot) |
 | Alt+Shift+Return | the browser (firefox-esr; Omarchy has no key for it) |
 | Alt+Q (or Alt+Shift+Q) | close the focused window |
@@ -47,6 +49,8 @@ with `Super+Ctrl`:
 | Alt+Ctrl+O | settings: Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, rotation |
 | Alt+Ctrl+N | notifications: history, do-not-disturb, copy |
 | Alt+Ctrl+Q | calculator |
+| Alt+Ctrl+V | clipboard history (Enter copies back, Alt+1 deletes the entry) |
+| Alt+Ctrl+E | emoji picker (Enter inserts, Alt+1 copies only) |
 | Alt+Shift+Escape / Alt+Ctrl+Escape | lock then suspend / suspend |
 
 ## Windows
@@ -102,6 +106,8 @@ wherever sway does not already own the key.
 | settings / control centre | Super+Ctrl+O | **Alt+Ctrl+O** (one list of switches and panels) |
 | calculator | Super+Ctrl+Q | **Alt+Ctrl+Q** |
 | notifications | bar panel | **Alt+Ctrl+N** |
+| clipboard history | Super+Ctrl+V | **Alt+Ctrl+V** |
+| emoji picker | Super+Ctrl+E | **Alt+Ctrl+E** |
 | dictation | Super+Ctrl+X | Alt+Ctrl+X |
 | agents | Super+Shift+Ctrl+A | Alt+Ctrl+Shift+A |
 | floating | Super+T | Alt+T |
@@ -126,13 +132,14 @@ is `Alt+Q` (not `Alt+W`, which is the tabbed layout), and there is no single
 "cycle layout" key because sway's layouts are stacking/tabbed/split rather than
 dwindle/master/scrolling.
 
-Not built yet: clipboard manager `Alt+Ctrl+V` and emoji `Alt+Ctrl+E` - the same
-letters as Omarchy. Clipboard history needs `cliphist` (one small resident
-process) and the emoji picker needs `fonts-noto-color-emoji` to draw a glyph at
-all. The capture menu `Alt+Ctrl+C` is built (screenshots, annotation, OCR, QR and
-recording). `docs/omarchy-gap.md` has the
+Clipboard history (`Alt+Ctrl+V`) and emoji (`Alt+Ctrl+E`) use the same letters as
+Omarchy, and both are built: the history is `cliphist`, fed by `wl-paste --watch`
+— the one resident process this session has, about 2 MB — and the picker is a
+rofi list over the table `scripts/make-emojis.sh` generates, inserting with the
+clipboard plus a virtual Shift+Insert. The capture menu `Alt+Ctrl+C` is built too
+(screenshots, annotation, OCR, QR and recording). `docs/omarchy-gap.md` has the
 full list.
 
 Everything else lives in the root menu instead of on a key: Places, Media, Time
-zone, Free space, End a process, SSH and the manual. `Alt+Space` then the first
-letter is usually enough.
+zone, Free space, End a process, SSH, DNS, Packages, Colour, Reminders, About and
+the manual. `Alt+Space` then the first letter is usually enough.

@@ -1,0 +1,105 @@
+#!/bin/sh
+# About: what this machine is, in one list.
+#
+# Deboma has an "About" window from its shell; the honest version here is the
+# same facts as a rofi list (`fastfetch` in a terminal is one row away, and it is
+# what paints the logo).  Everything is read, nothing is changed - the rows have
+# no action, so Enter closes the list.
+#
+# The values come from the kernel and from procfs/sysfs, not from a package: a
+# system that answers "which kernel am I running" without inxi is a system that
+# can be asked that question while it is broken.  inxi and fastfetch stay what
+# they are - the deep and the pretty versions, both in a terminal.
+
+set -eu
+
+dir=$(dirname "$0")
+. "$dir/lib-rofi.sh"
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+model=$(tr -d '\0' <"/sys/firmware/devicetree/base/model" 2>/dev/null || true)
+[ -n "${model:-}" ] || model="$(uname -m)"
+
+revision=$(awk -F' ' '/^commit / { c = $2 } /^ui / { u = $2 } /^kernel / { k = $2 } /^built / { b = $2 }
+	END { printf "%s · %s · %s · %s", c, u, k, b }' /etc/debian-aarch64-revision 2>/dev/null || true)
+
+uptime=$(uptime -p 2>/dev/null | sed 's/^up //') || uptime=unknown
+
+mem=$(free -h 2>/dev/null | awk 'NR == 2 { printf "%s of %s", $3, $2 }')
+swap=$(awk 'NR > 1 { printf " · swap %.1f GiB", $3 / 1048576 }' /proc/swaps 2>/dev/null | head -1)
+
+disk=$(df -h / 2>/dev/null | awk 'NR == 2 { printf "%s of %s used (%s)", $3, $2, $5 }')
+
+# The system battery, not the first cell the kernel happens to enumerate: this
+# machine also exposes the touchpad's own battery (hid-...-battery), which sits at
+# 0% and would be reported as "the battery is empty" if it came first.  The SBS
+# gauge is the one waybar reads too (`"bat": "sbs-8-000b"`).
+batt=
+for _b in /sys/class/power_supply/sbs-* /sys/class/power_supply/BAT* /sys/class/power_supply/*; do
+	[ -r "$_b/capacity" ] || continue
+	[ "$(cat "$_b/type" 2>/dev/null)" = Battery ] || continue
+	case ${_b##*/} in hid-*) continue ;; esac
+	_batt_state=$(cat "$_b/status" 2>/dev/null || true)
+	batt="$(cat "$_b/capacity" 2>/dev/null)%${_batt_state:+ · $_batt_state}"
+	break
+done
+
+# The active connection and its address, through NetworkManager: `ip` is not in
+# the image (netlink is what NM uses) and `iw` only exists for the report, so
+# nmcli is the one tool that answers both questions here.
+dev=$(nmcli -t -f DEVICE,TYPE,STATE device status 2>/dev/null |
+	awk -F: '$3 == "connected" && $2 != "loopback" { print $1; exit }') || true
+if [ -n "${dev:-}" ]; then
+	con=$(nmcli -g GENERAL.CONNECTION device show "$dev" 2>/dev/null | head -1) || true
+	case ${con:-} in
+	'' | --) ;;
+	*) ssid=$(nmcli -g 802-11-wireless.ssid connection show "$con" 2>/dev/null | head -1) || true ;;
+	esac
+	ip=$(nmcli -g IP4.ADDRESS device show "$dev" 2>/dev/null | head -1 |
+		sed 's|/[0-9]*$||') || true
+fi
+
+compositor=$(sway --version 2>/dev/null | head -1) || compositor=unknown
+
+summary="$model
+Host: ${HOSTNAME:-$(uname -n)}
+Revision: ${revision:-unknown}
+Kernel: $(uname -r)
+Uptime: $uptime
+Memory: ${mem:-unknown}${swap}
+Disk /: ${disk:-unknown}
+Battery: ${batt:-none}
+Wi-Fi: ${ssid:-not connected}${ip:+ · $ip}
+Session: ${compositor:-unknown}"
+
+tmp=$(mktemp "${TMPDIR:-/tmp}/about.XXXXXX")
+trap 'rm -f "$tmp"' EXIT
+
+{
+	ui_row "$UI_I_DESKTOP" "$model" "${HOSTNAME:-$(uname -n)}" -
+	ui_row "$UI_I_TAG" 'This image' "${revision:-no revision file}" -
+	ui_row "$UI_I_CHIP" 'Kernel' "$(uname -r)" -
+	ui_row "$UI_I_CLOCK" 'Uptime' "$uptime" -
+	ui_row "$UI_I_BOX" 'Memory' "${mem:-unknown}${swap}" -
+	ui_row "$UI_I_DISK" 'Disk (/)' "${disk:-unknown}" -
+	[ -n "$batt" ] && ui_row "$UI_I_BATTERY" 'Battery' "$batt" -
+	ui_row "$UI_I_WIFI" 'Network' "${ssid:-not connected}${ip:+ · $ip}" -
+	ui_row "$UI_I_EYE" 'Session' "${compositor:-unknown}" -
+	ui_row "$UI_I_CODE" 'Processes' "$(ps -e --no-headers 2>/dev/null | wc -l) processes" -
+	ui_heading 'more'
+	ui_row "$UI_I_CLIPBOARD" 'Copy this summary' 'the same lines as text' copy
+	ui_row "$UI_I_TERM" 'The full picture' 'fastfetch, in a terminal' fastfetch
+} >"$tmp"
+
+key=$(ui_pick 'About' 'Enter closes · the last two rows copy or open' <"$tmp") || exit 0
+
+case ${key:-} in
+copy) ui_copy "$summary" 'System summary copied' ;;
+fastfetch)
+	if have fastfetch; then
+		exec foot --app-id=popup -e fastfetch
+	fi
+	ui_say About 'fastfetch is not installed (packages/tools.list)' critical
+	;;
+esac

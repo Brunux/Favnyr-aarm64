@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Clipboard
+GenericName=Clipboard history
+Comment=What was copied, back on the clipboard in one pick
+Exec=/home/brunux/.config/bin/rofi-clip
+Icon=clipboard-history
+Terminal=false
+Categories=Utility;
+Keywords=clipboard;copy;paste;history;cliphist;

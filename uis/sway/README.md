@@ -181,14 +181,51 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 | `rofi-media` | Media | the current track and play/pause/next/previous through `playerctl` |
 | `rofi-calc` | `Alt+Ctrl+Q`, Calculator | awk, one prompt; Enter copies the result |
 | `rofi-layout` | Settings → Keyboard layout | every layout in `evdev.lst`, applied to all keyboards and kept in `~/.config/sway/config.d/90-keyboard-layout.conf` |
+| `rofi-emoji` | `Alt+Ctrl+E`, Emoji | the table `scripts/make-emojis.sh` generates (`~/.config/emojis.tsv`, ~2000 rows); Enter inserts at the cursor, Alt+1 copies only |
+| `rofi-clip` | `Alt+Ctrl+V`, Clipboard | the `cliphist` history: Enter copies an entry back, Alt+1 deletes it, plus "save the newest image" and "clear the history" |
+| `rofi-dns` | DNS | the resolver of the connection that is up: Cloudflare, Google, Quad9, AdGuard, typed servers, or back to DHCP |
+| `rofi-pkg` | Packages | `apt-cache search`, then `apt-get install -y` behind a busy card; installed packages are marked before they are picked |
+| `rofi-color` | Colour | a pixel (`slurp -p` + `grim` + `ffmpeg`), and the sixteen solarized colours as swatch rows |
+| `rofi-remind` | Reminders | transient `systemd-run --user --on-active=` timers, listed back from systemd, cancelled by choosing one |
+| `rofi-about` | About | model, revision, kernel, uptime, memory, disk, battery, network, compositor, processes |
 | `rofi-learn` | Learn | the manual, rendered with glow, with a search across every page |
 | `rofi-files`, `rofi-keys`, `rofi-agents` | see below | the file browser, the key view, the agents menu |
 
 ![Settings: the session's switches in one list, each row with its state](../../docs/screenshots/hayato-r1-settings.png)
 
 Each one is a single process while its window is open and nothing afterwards. They all end in
-`ui_pick`, which is `bar-pick` (rofi's dmenu) over a table: rofi hands back the *rendered* row,
-so the key of the chosen row travels in a second column that markup cannot be parsed out of.
+`ui_pick` (`ui_pick_alt` when a second action sits on Alt+1), which is `bar-pick` (rofi's dmenu)
+over a table: rofi hands back the *rendered* row, so the key of the chosen row travels in a second
+column that markup cannot be parsed out of.
+
+## Clipboard history and emoji
+
+These two are the batch that took the session its only resident process and its first generated
+data file, and both are worth the exception:
+
+* **`rofi-clip`** (`Alt+Ctrl+V`) is a list over `cliphist`, which is fed by
+  `wl-paste --watch cliphist store` (one `exec` line in
+  `etc/sway/config.d/27-clipboard.conf`). About 2 MB, and there is no history without it:
+  `wl-clipboard` alone only knows the current selection. Rows are classified as text, link or
+  image from what `cliphist` keeps; an image is listed by its size and dimensions, not by a
+  thumbnail, because a rofi row is one line. "Save the newest image" decodes it into
+  `~/Pictures/clipboard/` with the extension its MIME type implies and opens it. The database is
+  `~/.cache/cliphist/db` and holds everything copied, secrets included; the menu's last row
+  clears it.
+* **`rofi-emoji`** (`Alt+Ctrl+E`) reads `~/.config/emojis.tsv`, which `scripts/make-emojis.sh`
+  generates on the build host from Python's Unicode database (name, glyph, block: 1988 rows, the
+  emoji blocks of the standard plus Dingbats and Miscellaneous Symbols). The image needs neither
+  Python nor a package for it — the file is committed and copied with the home directory. Insertion
+  is Omarchy's: the glyph goes to the clipboard and `wtype -M shift -k Insert -m shift` types a
+  virtual Shift+Insert, which every toolkit here understands as paste; `wtype -t "$glyph"` would
+  need a keysym for the codepoint, which most emoji do not have. Alt+1 is the clipboard write
+  alone. `fonts-noto-color-emoji` draws the glyph, and `check-system.sh` asks `fc-match emoji`.
+
+The other five lists (`rofi-dns`, `rofi-pkg`, `rofi-color`, `rofi-remind`, `rofi-about`) are plain
+scripts with no such trade-off: DNS is two `nmcli` properties plus a re-activation, packages are
+`apt-cache`/`apt-get` behind the busy card, colour is `slurp` + `grim` + `ffmpeg -f rawvideo`
+(no ImageMagick), reminders are transient timers that fire `notify-send` once, and about reads
+procfs and sysfs.
 
 ## Something is happening
 

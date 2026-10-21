@@ -774,11 +774,12 @@ fi
 # from a static list) and choosing it does nothing at all.
 _missing_menus=""
 for _s in rofi-quick rofi-notify rofi-clean rofi-kill rofi-tz rofi-places \
-	rofi-media rofi-calc rofi-layout rofi-power lib-rofi.sh; do
+	rofi-media rofi-calc rofi-layout rofi-power rofi-about rofi-dns \
+	rofi-pkg rofi-color rofi-remind lib-rofi.sh; do
 	[ -r "$HOME/.config/bin/$_s" ] || _missing_menus="$_missing_menus bin/$_s"
 done
 if [ -z "$_missing_menus" ]; then
-	ok "session menus complete (settings, notifications, free space, processes, time zone, places, media, calculator, layout, power)"
+	ok "session menus complete (settings, notifications, free space, processes, time zone, places, media, calculator, layout, power, about, DNS, packages, colour, reminders)"
 else
 	fail "session menus missing:$_missing_menus (those root-menu rows do nothing)"
 fi
@@ -817,6 +818,43 @@ if [ -z "$_missing_capture" ]; then
 	ok "capture menu complete (grimshot, swappy, tesseract, zbarimg, wf-recorder, qrencode)"
 else
 	fail "capture menu incomplete:$_missing_capture (Alt+Ctrl+C loses those rows)"
+fi
+
+# Clipboard history (Alt+Ctrl+V) and the emoji picker (Alt+Ctrl+E): each is a
+# script over one tool and one file, and every half of it fails quietly. Without
+# cliphist the list says so; without the watcher the list is simply empty and
+# reads as "nothing was copied"; without the emoji table the picker refuses to
+# open; without wtype the glyph reaches the clipboard but never the cursor.
+_missing_clip=""
+for _c in cliphist wl-paste wl-copy wtype; do
+	have "$_c" || _missing_clip="$_missing_clip $_c"
+done
+[ -r "$HOME/.config/emojis.tsv" ] || _missing_clip="$_missing_clip .config/emojis.tsv"
+for _s in rofi-emoji rofi-clip; do
+	[ -x "$HOME/.config/bin/$_s" ] || _missing_clip="$_missing_clip bin/$_s"
+done
+if [ -z "$_missing_clip" ]; then
+	ok "clipboard history and emoji picker complete (cliphist, wl-clipboard, wtype, emojis.tsv)"
+else
+	fail "clipboard/emoji incomplete:$_missing_clip (Alt+Ctrl+V and Alt+Ctrl+E fail or insert nothing)"
+fi
+# The watcher is the one part a binary cannot prove: it either is running or
+# nothing is being stored.  `-fx` and not `-f`: pgrep -f matches this script's
+# own command line, which contains the pattern, and would always answer "yes".
+if pgrep -fx 'wl-paste --watch cliphist store' >/dev/null 2>&1; then
+	ok "clipboard watcher running (wl-paste --watch cliphist store)"
+else
+	warn "the cliphist watcher is not running: the clipboard list stays empty (config.d/27-clipboard.conf starts it with the session)"
+fi
+# An inserted emoji needs a colour font; fc-match says what would draw it.
+if have fc-match; then
+	_emoji_font=$(fc-match -f '%{family}' 'emoji' 2>/dev/null || true)
+	case ${_emoji_font:-} in
+	*Emoji*) ok "a colour emoji font is installed ($_emoji_font)" ;;
+	*) fail "no colour emoji font (fc-match emoji -> '${_emoji_font:-none}'): every inserted emoji renders as tofu" ;;
+	esac
+else
+	skip "fc-match is not installed"
 fi
 
 # The manual is rendered with glow, and both the binary and the glamour style
@@ -886,7 +924,7 @@ for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_
 # list simply has fewer rows and nobody notices.
 _missing_desktop=""
 for _d in wifi wifi-nmtui bluetooth audio-output power lock screensaver suspend \
-	screenshot-area capture lazygit tmux files; do
+	screenshot-area capture lazygit tmux files emoji clipboard; do
 	[ -r "/usr/share/applications/org.nureb.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
 done
 if [ -z "$_missing_desktop" ]; then

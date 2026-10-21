@@ -89,6 +89,8 @@ help-browser                       f02d
 preferences-desktop-keyboard       f11c
 system-users                       f0c0
 accessories-calculator             f1ec
+emoji-picker                       f118
+clipboard-history                  f0ea
 multimedia-player                  f001
 preferences-system-notifications   f0f3
 network-wireless                   f1eb
@@ -206,6 +208,16 @@ rofi-kill                          f0e7
 rofi-clean                         f1f8
 rofi-agents                        f0c0
 rofi-power                         f011
+rofi-emoji                         f118
+rofi-clip                          f0ea
+rofi-about                         f05a
+rofi-dns                           f0c2
+rofi-pkg                           f187
+rofi-color                         f1fc
+rofi-remind                        f017
+cliphist                           f0ea
+wl-copy                            f0ea
+wl-paste                           f0ea
 bar-menu                           f0c9
 bar-net                            f1eb
 bar-bt                             f293

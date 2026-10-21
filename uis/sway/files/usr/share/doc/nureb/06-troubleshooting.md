@@ -141,6 +141,25 @@ shipped `~/.config/foot/foot.ini` names `Symbols Nerd Font Mono` after JetBrains
 Mono, which is what makes eza's icons, faststart and the starship glyphs render.
 If you replace the font line, keep a symbol font in the list.
 
+Emoji are a second, separate font: `fonts-noto-color-emoji` is what draws them,
+and without it an inserted emoji is a tofu box in the same way an icon without a
+symbol font is. `fc-match emoji` names the font that would be used, and
+`check-system.sh` fails when there is none.
+
+## The clipboard history is empty
+
+The list is only as full as the watcher has made it:
+
+```sh
+pgrep -fx 'wl-paste --watch cliphist store' || echo 'the watcher is not running'
+cliphist list | head
+```
+
+The watcher is one line in `etc/sway/config.d/27-clipboard.conf`, so it starts
+with the session; a session older than that line has no history. The list also
+says so itself when `cliphist` is missing. `Alt+Ctrl+V` → **Clear the history**
+empties it, and the database is `~/.cache/cliphist/db`.
+
 ## A terminal starts with "not a UTF-8 locale"
 
 ```

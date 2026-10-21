@@ -17,6 +17,8 @@ daemon).
 | **Alt+Ctrl+P** or **Alt+Escape** | `rofi-power` | **power**: lock, suspend, hibernate, log out, reboot, shut down - the last three ask once more |
 | **Alt+Ctrl+N** | `rofi-notify` | the notification history, with do-not-disturb and "copy this notification" |
 | **Alt+Ctrl+Q** | `rofi-calc` | a calculator: type `(3*4)/2`, Enter copies `6` |
+| **Alt+Ctrl+V** | `rofi-clip` | **clipboard history**: what was copied, Enter puts it back, Alt+1 deletes that entry |
+| **Alt+Ctrl+E** | `rofi-emoji` | **emoji**: type a name, Enter inserts the glyph at the cursor, Alt+1 only copies it |
 | any bar module click | `bar-pick` → `rofi -dmenu` | the fixed list that module hands it (Wi-Fi networks, sinks, devices, power actions, …) |
 | **Learn** (root menu) | `rofi-learn` | these pages, rendered with glow, plus a search across all of them |
 
@@ -24,7 +26,11 @@ The rest of the menus live in the root menu and the launcher: **Places**
 (home, documents, downloads, pictures, the mounted disks), **Media** (what is
 playing, play/pause/next/previous), **Time zone** (with network time),
 **Free space** (what is using the disk, one action per row), **End a process**
-(the heaviest twenty), **Calculator**, **SSH** (hosts from `~/.ssh/config`).
+(the heaviest twenty), **Calculator**, **SSH** (hosts from `~/.ssh/config`),
+**DNS** (which resolver this connection uses), **Packages** (search the archive
+and install one), **Colour** (the hex of any pixel, and the palette this session
+is drawn with), **Reminders** (be told later), **About** (kernel, uptime,
+memory, battery, the revision this image was built from).
 
 ## Something is happening
 
@@ -116,6 +122,75 @@ Everything this menu needs is already in the image: `grimshot`, `swappy`,
 `tesseract`, `zbar-tools`, `qrencode` and `wf-recorder`; `check-system.sh`
 fails when one of them is missing, because a row that does nothing is worse than
 a row that is not there.
+
+## Clipboard history
+
+**Alt+Ctrl+V** (`rofi-clip`, and "Clipboard" in the root menu and the launcher)
+lists what has been copied since the session started. Enter puts an entry back on
+the clipboard, ready to paste; Alt+1 deletes that one entry.
+
+The history is kept by `cliphist`, which is fed by `wl-paste --watch cliphist
+store` — one line in `etc/sway/config.d/27-clipboard.conf`, and the only
+long-running process this session has (about 2 MB). `wl-clipboard` alone only
+ever knows the current selection, so a history needs something watching it; there
+is no way to have one without that watcher. The database is
+`~/.cache/cliphist/db`, it holds **everything** copied — a password from a
+password manager included — and the last row of the menu clears it.
+
+Rows are classified by their content: text, a link (starts with `http`) or an
+image. An image is listed by what `cliphist` knows about it (`[[ binary data 64000
+png 640x480 ]]`) rather than by a thumbnail, because a rofi row is one line of
+text. **Save the newest image** decodes it into `~/Pictures/clipboard/` with the
+extension its MIME type implies and opens it in Firefox; the decoded file is what
+survives, the entry itself stays in the history until deleted or cleared.
+
+## Emoji
+
+**Alt+Ctrl+E** (`rofi-emoji`, and "Emoji" in the root menu and the launcher) is
+the same list shape over `~/.config/emojis.tsv`: nearly 2000 rows of *name*,
+*glyph* and *block*. Typing filters by any word of the name, and since the block
+is in the row too, `faces`, `transport` or `dingbats` narrow it to a category.
+The table is generated on the build host by `scripts/make-emojis.sh` from
+Python's Unicode database and shipped as a file, so the image needs no Python and
+no extra package for it.
+
+Enter inserts the glyph at the cursor the way Omarchy does it: the glyph goes to
+the clipboard and a virtual **Shift+Insert** is typed with `wtype`, which every
+toolkit here understands as paste. Typing the character itself would need a
+keysym for its codepoint, and most emoji have none in the current keymap. Alt+1
+is the clipboard write alone, for a program that refuses a virtual keyboard. What
+draws the glyph is `fonts-noto-color-emoji`; without it an emoji is a tofu box,
+which is why `check-system.sh` asks `fc-match emoji`.
+
+## Colour, DNS, packages, reminders and about
+
+Five more lists in the root menu, each one screen of answers about the machine:
+
+* **Colour** (`rofi-color`) reads a pixel with `slurp -p` and `grim`, turns the
+  1×1 PNG into three bytes with `ffmpeg` — no ImageMagick, no extra package — and
+  copies `#rrggbb`. The rest of the list is the sixteen solarized colours this
+  session is drawn with, each row a swatch in that colour; Enter copies its hex.
+* **DNS** (`rofi-dns`) points the connection that is up at Cloudflare, Google,
+  Quad9, AdGuard, a list you type, or back at what DHCP hands out. It sets
+  `ipv4.dns`/`ipv4.ignore-auto-dns` on the NetworkManager connection and brings it
+  up again, which is why it shows a busy card and then reads back the servers in
+  use instead of repeating what was asked for. It does not touch IPv6 DNS.
+* **Packages** (`rofi-pkg`) searches the archive with `apt-cache search` and
+  installs what is chosen with `apt-get -y` (noninteractive, keeping existing
+  configuration files), reporting through the busy card; installed packages are
+  marked before they are picked. The last row updates the package lists, which is
+  what to run when a search finds nothing.
+* **Reminders** (`rofi-remind`) writes nothing to disk: it starts a transient
+  `systemd-run --user --on-active=` timer that fires `notify-send` once and is
+  collected afterwards, and the list is read back from systemd, so choosing one
+  cancels it. A reminder lives as long as the session's user manager does.
+* **About** (`rofi-about`) is one screen of read-only facts — model, the revision
+  this image was built from, kernel, uptime, memory and swap, disk, battery,
+  network, compositor, process count — plus two rows: copy the summary as text,
+  or open `fastfetch` in a terminal for the pretty version.
+
+They are all scripts in `~/.config/bin/`, they all use the shared row style from
+`lib-rofi.sh`, and none of them stays running.
 
 ## The manual, rendered
 

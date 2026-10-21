@@ -560,8 +560,8 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
 - **The key scheme mirrors Omarchy's**, with `Alt` where Omarchy uses `Super`: the panels are
   `Alt+Ctrl+A/B/W` (audio, Bluetooth, network - the same scripts the bar's indicators run),
   `Alt+Ctrl+O` is **Settings** (`rofi-quick`: the radio switches, night light, do-not-disturb,
-  touchpad, rotation), `Alt+Ctrl+N` the **Notifications** history and `Alt+Ctrl+Q` the
-  **calculator**,
+  touchpad, rotation), `Alt+Ctrl+N` the **Notifications** history, `Alt+Ctrl+Q` the
+  **calculator**, `Alt+Ctrl+V` the **clipboard history** and `Alt+Ctrl+E` the **emoji picker**,
   the root menu is `Alt+Space` (Omarchy's `Super+Space`; sway's `focus mode_toggle` had that key and
   was dropped), the scratchpad is `Alt+grave` (`Alt+minus` stays as an alias), lock is
   `Alt+Ctrl+L`, and `Alt+Escape` **and** `Alt+Ctrl+P` open `rofi-power` (Omarchy's system menu and
@@ -578,9 +578,11 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   Bindings inside a `mode "..."` block are shown with the mode's name.
 - **The menus are one-shot rofi scripts, and slow actions say so twice.** `~/.config/bin/rofi-*`
   are the menus behind the root menu (`rofi-quick`, `rofi-notify`, `rofi-clean`, `rofi-kill`,
-  `rofi-tz`, `rofi-places`, `rofi-media`, `rofi-calc`, `rofi-layout`, `rofi-learn`); they share
+  `rofi-tz`, `rofi-places`, `rofi-media`, `rofi-calc`, `rofi-layout`, `rofi-learn`, `rofi-emoji`,
+  `rofi-clip`, `rofi-about`, `rofi-dns`, `rofi-pkg`, `rofi-color`, `rofi-remind`); they share
   `lib-rofi.sh` (`ui_row` glyph+bold+dim row, `ui_pick` table-and-key round trip because rofi hands
-  back the rendered row, `ui_say` for results) and each is one process while open. **A slow action
+  back the rendered row, `ui_pick_alt` when a second action sits on Alt+1 - it returns `alt:KEY` and
+  rofi exits 10 for that, `ui_say` for results) and each is one process while open. **A slow action
   needs visible progress**: `busy start TAG LABEL MESSAGE [ICON]` opens a mako toast that does not
   expire, `busy end`/`fail` turn the same card into the result (same
   `x-canonical-private-synchronous` tag, so mako replaces instead of stacking), and `bar-busy` is
@@ -589,6 +591,35 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   than five minutes is dropped so a killed script cannot leave a spinner forever. Wired into the
   Wi-Fi scan/connect/radio, the Bluetooth scan/connect/radio and the `du` walk in Free space; a new
   slow action gets the same two lines.
+- **Clipboard history and emoji are the two exceptions that were worth it.** `rofi-clip`
+  (`Alt+Ctrl+V`) lists what `cliphist` kept, which is fed by
+  `exec wl-paste --watch cliphist store` in `config.d/27-clipboard.conf` - **the only resident
+  process the session has** (~2 MB). There is no history without a watcher: `wl-clipboard` alone
+  only knows the current selection, which is what the "no daemons" rule had to give way to. Rows
+  are text, link or image by content; an image is listed by what `cliphist` knows about it, not by
+  a thumbnail (a rofi row is one line), and "Save the newest image" decodes it into
+  `~/Pictures/clipboard/<date>.<ext>` (extension from `file --mime-type`) and opens it with
+  `xdg-open`, i.e. Firefox - `imv` is not in the image. The database is `~/.cache/cliphist/db` and
+  holds everything copied, secrets included, so the menu's last row clears it.
+  `rofi-emoji` (`Alt+Ctrl+E`) reads `~/.config/emojis.tsv`, **generated on the build host by
+  `scripts/make-emojis.sh`** from Python's `unicodedata` (name, glyph, block; 1988 rows, the emoji
+  blocks plus Dingbats and Miscellaneous Symbols, skin tones and ZWJ sequences left out because
+  they are combinations of rows that already exist). It is committed, so the image carries no
+  Python and no Unicode package. Insertion is Omarchy's: `wl-copy` the glyph and type a virtual
+  **Shift+Insert** with `wtype` (`wtype -t` would need a keysym for the codepoint, which most emoji
+  have not); Alt+1 is the clipboard write alone, for a surface that refuses a virtual keyboard.
+  `fonts-noto-color-emoji` is what draws them - without it every glyph is tofu - and
+  `check-system.sh` asks `fc-match emoji`. The other five lists (`rofi-dns`, `rofi-pkg`,
+  `rofi-color`, `rofi-remind`, `rofi-about`) are plain one-shot scripts and no resident process:
+  DNS sets `ipv4.dns`/`ipv4.ignore-auto-dns` on the connection that is up and brings it back
+  (`nmcli connection up` - hence the busy card and then the read-back, not a claim), packages are
+  `apt-cache search` then `apt-get -y` behind the same card, colour is `slurp -p` + `grim` 1x1 +
+  `ffmpeg -f rawvideo` (no ImageMagick) plus the solarized palette as swatch rows, reminders are
+  transient `systemd-run --user --collect --on-active=`/`--on-calendar=` timers that fire
+  `notify-send` once and are listed back from systemd (nothing on disk, and they die with the
+  session's user manager), and about reads procfs/sysfs. The bar's `sbs-8-000b` gauge is the
+  battery there; a `hid-*` power supply belongs to the touchpad and reads 0%.
+
 - **The manual is rendered, not printed.** `usr/share/doc/nureb/*.md` (seven pages: welcome, rofi,
   shortcuts, software, the system, troubleshooting, agents) is opened by `rofi-learn` with **glow**
   (`packages/tools.list`), styled by `~/.config/glow/solarized.json` - a *glamour* style, unrelated
@@ -860,6 +891,7 @@ scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initra
 scripts/install-swayfx.sh   # install the compositor .debs (rootfs by default, `/` for a running system)
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
 scripts/make-icons.sh       # Font Awesome glyphs -> the Nureb icon theme PNGs (host tool, committed output)
+scripts/make-emojis.sh      # Python's Unicode database -> ~/.config/emojis.tsv (host tool, committed output)
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
 scripts/make-image.sh       # distributable disk image from the rootfs (no card needed)
 scripts/make-release.sh     # every release asset + SHA256SUMS -> $WORK_DIR/release-<device>

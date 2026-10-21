@@ -23,6 +23,13 @@ swaybg
 swayidle
 swaylock
 wl-clipboard
+# clipboard history: cliphist is the one resident process this session has
+# (~2 MB). wl-clipboard alone only knows the current selection, so a history
+# needs something watching the selection, which is `wl-paste --watch cliphist
+# store` in etc/sway/config.d/27-clipboard.conf; Alt+Ctrl+V lists what it kept.
+# The database lives in ~/.cache/cliphist/db and holds everything copied,
+# including anything secret that passed through the clipboard.
+cliphist
 
 # what /etc/sway/config and the drop-ins actually invoke
 waybar
@@ -149,4 +156,9 @@ fonts-adwaita
 fonts-nerd-symbols
 fonts-font-awesome-legacy
 fonts-materialdesignicons-legacy
+# Colour emoji, for the emoji picker (Alt+Ctrl+E). The Nerd Fonts carry
+# monochrome symbol planes, not emoji: without this package an inserted emoji
+# renders as tofu in the terminal and in waybar, so the picker would work and
+# look broken. 10.9 MB installed.
+fonts-noto-color-emoji
 playerctl
