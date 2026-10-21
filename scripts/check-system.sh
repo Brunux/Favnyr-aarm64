@@ -778,18 +778,49 @@ else
 	fi
 fi
 
-# The idle screensaver is a foot window running ~/.config/bin/sway-screensaver:
-# without tte or the logo it still shows the static frame, but the animation
-# (the point of the entry) is silently missing.
+# The idle screen is a foot window running ~/.config/bin/lazyos-screensaver: a
+# loop of tte effects over the LazyOS wordmark, started by swayidle at 150 s.
+# Each piece fails silently on its own: without tte or the art the static frame
+# stays (the loop, which is the point of the entry, is gone), without the
+# launcher the screen never appears, without the lock helper the 300 s timer
+# does nothing, and without swayidle nothing starts at all.
 _saver=""
 have tte || _saver="$_saver tte"
-[ -r "$HOME/.config/nureb/screensaver.txt" ] || _saver="$_saver .config/nureb/screensaver.txt"
-[ -x "$HOME/.config/bin/sway-screensaver" ] || _saver="$_saver bin/sway-screensaver"
+have swayidle || _saver="$_saver swayidle"
+[ -s "$HOME/.config/lazyos/screensaver.txt" ] || _saver="$_saver .config/lazyos/screensaver.txt"
+[ -x "$HOME/.config/bin/lazyos-screensaver" ] || _saver="$_saver bin/lazyos-screensaver"
+[ -x "$HOME/.config/bin/sway-lock" ] || _saver="$_saver bin/sway-lock"
 [ -r "$HOME/.config/foot/screensaver.ini" ] || _saver="$_saver .config/foot/screensaver.ini"
 if [ -z "$_saver" ]; then
-	ok "idle screensaver complete (tte, logo, launcher, terminal profile)"
+	ok "idle screen complete (tte, LazyOS art, launcher, sway-lock, terminal profile)"
 else
-	fail "idle screensaver incomplete:$_saver (the idle screen is blank)"
+	fail "idle screen incomplete:$_saver (the idle screen is blank or never starts)"
+fi
+
+# The chain itself, read from the drop-in that owns it: a missing line means the
+# screen never appears (150 s), the session never locks (300 s) or the machine
+# suspends before the lock is covered (before-sleep).  The numbers are compared,
+# because a different timeout is the same as none.
+_idle_cfg=/etc/sway/config.d/23-lazyos-screensaver.conf
+_idle=""
+[ -r "$_idle_cfg" ] || _idle=" $_idle_cfg"
+if [ -r "$_idle_cfg" ]; then
+	grep -q "timeout 150 .*lazyos-screensaver" "$_idle_cfg" || _idle="$_idle no-150s-screen"
+	grep -q "timeout 300 .*sway-lock" "$_idle_cfg" || _idle="$_idle no-300s-lock"
+	grep -q "before-sleep .*sway-lock --wait" "$_idle_cfg" || _idle="$_idle no-lock-before-sleep"
+fi
+pgrep -x swayidle >/dev/null 2>&1 || _idle="$_idle swayidle-not-running"
+if [ -z "$_idle" ]; then
+	ok "idle chain armed (150 s idle screen, 300 s lock, lock before sleep)"
+else
+	fail "idle chain broken:$_idle"
+fi
+
+# The bug the guard in lazyos-screensaver exists for: a saver left running under
+# an active lock animates to nobody and spends CPU (it used to do exactly that
+# for the 150 s between the two timers).
+if pgrep -x swaylock >/dev/null 2>&1 && pgrep -f org.lazyos.screensaver >/dev/null 2>&1; then
+	warn "the idle screen is running under swaylock (invisible CPU; it should have refused)"
 fi
 
 # The CLI tools of packages/tools.list, wired by /etc/profile.d/90-cli-tools.sh
@@ -1581,12 +1612,16 @@ for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_
 
 # The session's own launcher entries. They are the only way to reach the bar's
 # panels and the session actions by typing, and a missing one is invisible: the
-# list simply has fewer rows and nobody notices.
+# list simply has fewer rows and nobody notices. The idle screen's entry is the
+# one that is not org.nureb.*: its name is LazyOS's (the rest of the distro is
+# still Nureb until the rename lands).
 _missing_desktop=""
-for _d in wifi wifi-nmtui bluetooth audio-output power lock screensaver suspend \
+for _d in wifi wifi-nmtui bluetooth audio-output power lock suspend \
 	screenshot-area capture lazygit tmux files emoji clipboard; do
 	[ -r "/usr/share/applications/org.nureb.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
 done
+[ -r /usr/share/applications/org.lazyos.screensaver.desktop ] ||
+	_missing_desktop="$_missing_desktop lazyos-screensaver"
 if [ -z "$_missing_desktop" ]; then
 	ok "launcher entries present (session actions, nmtui, lazygit, tmux)"
 else

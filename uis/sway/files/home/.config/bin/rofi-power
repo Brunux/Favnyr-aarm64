@@ -10,7 +10,7 @@
 # one script until Alt+Escape and Alt+Ctrl+P were reported as "does not work" -
 # the keys opened a banner of numbers where a menu of actions was expected.
 #
-# Every row ends in a command the image already has: swaylock, sway-suspend (the
+# Every row ends in a command the image already has: sway-lock, sway-suspend (the
 # logind -> sudo -> /sys/power/state chain), sway-hibernate (which refuses with a
 # reason when there is no disk swap), swaymsg exit, systemctl reboot/poweroff.
 # The last two are logind methods: polkit allows them for an active local
@@ -63,7 +63,7 @@ trap 'rm -f "$tmp"' EXIT
 
 {
 	ui_heading "battery $(battery)"
-	ui_row "$UI_I_LOCK" 'Lock' 'swaylock' lock
+	ui_row "$UI_I_LOCK" 'Lock' 'the session lock' lock
 	ui_row "$UI_I_PAUSE" 'Suspend' 'lock, then sleep' suspend
 	ui_row "$UI_I_MOON" 'Hibernate' 'to a disk swap, if there is one' hibernate "$UI_DIM"
 	ui_row "$UI_I_OUT" 'Log out' 'back to the greeter' logout
@@ -74,12 +74,13 @@ trap 'rm -f "$tmp"' EXIT
 key=$(ui_pick 'Power' 'Enter runs · Escape closes' <"$tmp") || exit 0
 
 case $key in
-lock) exec swaylock -f -c 002b36 ;;
+lock) exec "$dir/sway-lock" ;;
 suspend)
 	# Lock first, then sleep: what the session does on Alt+Shift+Escape, for the
-	# same reason (a resume that lands on an unlocked desktop is a hole).
-	swaylock -f -c 002b36 &
-	sleep 1
+	# same reason (a resume that lands on an unlocked desktop is a hole).  `set -e`
+	# stops here if the lock did not report readiness, and sway-lock has already
+	# said so in a notification: suspending over an unlocked screen is the hole.
+	"$dir/sway-lock" --wait
 	exec "$dir/sway-suspend"
 	;;
 hibernate) exec "$dir/sway-hibernate" ;;

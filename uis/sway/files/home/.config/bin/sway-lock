@@ -1,0 +1,94 @@
+#!/bin/bash
+# Lock the session, and wait until the compositor says the screen is covered.
+#
+#   sway-lock           lock now (Lock key, Alt+Ctrl+L, the 300 s idle timer)
+#   sway-lock --wait    ... and wait a little longer, before a suspend
+#
+# Three reasons this is a helper and not `swaylock -f -c 002b36` at each call
+# site:
+#
+#  * **The handshake.** `swaylock -R, --ready-fd` writes one newline to a
+#    descriptor once the compositor guarantees that no sensitive content is
+#    visible. Before that nobody can tell whether the lock is up yet, so
+#    `before-sleep` used to return while the lock was still drawing - which is
+#    how a screen that was on its way to sleep briefly showed the desktop.
+#    swaylock writes the notification *before* daemonizing, so `-f` keeps it.
+#  * **The idle screen goes first.** It is an ordinary fullscreen window; left
+#    running underneath the lock it keeps animating, spending CPU with nobody
+#    watching, and leaves a hidden window behind.
+#  * **One lock, never two.** A second `swaylock` over the first is refused by
+#    the compositor (one ext-session-lock client at a time); asking for a lock
+#    that is already there should just succeed.
+#
+# The waits are short on purpose: systemd-logind's default InhibitDelayMaxUSec
+# is 5 s, so a `before-sleep` command that waited longer would hold the suspend
+# for nothing.  The Lock key needs none of this - logind suspends on KEY_SLEEP
+# itself (see 21-lock-screen.conf) - this is what the idle timer and the two
+# suspend shortcuts call.
+
+set -u
+
+APP_ID="org.lazyos.screensaver"
+# The wallpaper the session draws (etc/sway/config), so locking does not look
+# like another machine.  Missing picture is not fatal: the colour stays.
+WALLPAPER="$HOME/Pictures/Wallpapers/mountains.jpg"
+# Solarized base03, the same backdrop as the terminal and the bar.
+BACKDROP="002b36"
+
+wait_secs=2
+case "${1:-}" in
+--wait) wait_secs=4 ;;
+--*)
+	printf 'sway-lock: unknown option %s\n' "$1" >&2
+	exit 2
+	;;
+esac
+
+# Already locked: nothing to do (and a second surface would be refused).
+if pgrep -x swaylock >/dev/null 2>&1; then
+	exit 0
+fi
+
+# The idle screen is a window; a lock that covers a window leaves the animation
+# running under it.
+if pgrep -f "$APP_ID" >/dev/null 2>&1; then
+	pkill -f "$APP_ID" 2>/dev/null || true
+	for _ in 1 2 3 4 5 6 7 8 9 10; do
+		pgrep -f "$APP_ID" >/dev/null 2>&1 || break
+		sleep 0.05
+	done
+fi
+
+args=(-c "$BACKDROP")
+if [ -r "$WALLPAPER" ]; then
+	# Absolute path: swaylock -f chdirs to / before it daemonizes.
+	args+=(-i "$WALLPAPER" -s fill)
+fi
+
+# A fifo carries the readiness line from swaylock back here.  It is opened
+# read-write so neither side blocks on the open(), and removed from the
+# filesystem as soon as it is open, so a killed run cannot leave it behind.
+runtime="${XDG_RUNTIME_DIR:-/tmp}"
+umask 077
+fifo="$runtime/sway-lock.$$"
+
+if mkfifo "$fifo" 2>/dev/null && exec 3<>"$fifo"; then
+	rm -f "$fifo"
+	swaylock -f "${args[@]}" -R 3
+	if read -t "$wait_secs" -r -u 3 _; then
+		exec 3>&-
+		exit 0
+	fi
+	exec 3>&-
+	# A lock that did not answer is a lock that may not be there; saying so is
+	# the only chance the person has to notice before walking away.
+	if ! pgrep -x swaylock >/dev/null 2>&1 && command -v notify-send >/dev/null 2>&1; then
+		notify-send -u critical -i dialog-error 'Screen not locked' \
+			"swaylock did not come up; check 'journalctl --user -b' for why."
+	fi
+	exit 1
+fi
+
+# No fifo available (unwritable runtime directory): lock the old way, without
+# the readiness guarantee.
+swaylock -f "${args[@]}"

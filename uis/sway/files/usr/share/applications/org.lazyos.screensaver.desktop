@@ -1,9 +1,9 @@
 [Desktop Entry]
 Type=Application
 Name=Screensaver
-Comment=Play the logo animation once and keep it on screen
-Exec=/home/brunux/.config/bin/sway-screensaver
+Comment=The LazyOS idle screen: the wordmark, looping until a key is pressed
+Exec=/home/brunux/.config/bin/lazyos-screensaver
 Icon=preferences-desktop-screensaver
 Terminal=false
 Categories=System;
-Keywords=screensaver;idle;lock;logo;
+Keywords=screensaver;idle;lock;lazyos;logo;

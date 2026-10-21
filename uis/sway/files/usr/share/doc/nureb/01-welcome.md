@@ -28,7 +28,22 @@ everything above the kernel.
 | the terminal | **foot**: solarized palette, no GPU renderer, about half the memory of an Alacritty window |
 | the launcher | **rofi**: applications, windows, commands, and the bar's own menus |
 | notifications | **mako**, bottom of the top-right corner, under the bar |
-| the session | greetd starts sway at boot; swayidle runs the screensaver at 150 s and the lock at 300 s |
+| the session | greetd starts sway at boot; swayidle runs the idle screen at 150 s and the lock at 300 s |
+
+## The idle screen
+
+150 s without input and the screen becomes **LazyOS**: the wordmark, `:: lazy by design ::` and the
+arcade line `» press any key to continue «`, drawn in solarized orange. One terminal-text effect
+rebuilds the letters, then the next one does it differently, and so on while the machine waits. Any
+key returns you to the session and the 150 s starts over.
+
+At 300 s the screen locks instead: the wallpaper inside a base03 frame. The lock stops the animation
+first and refuses to draw a second time over itself, and the suspend shortcuts lock the screen
+*before* the machine sleeps, so nothing behind the lock is ever on screen.
+
+The name is on purpose. The idle screen is the first piece of the **LazyOS** rename (the rest of the
+system still calls itself Nureb), and "lazy by design" is the idea the lazy tools share - lazygit,
+lazydocker: the tool does the boring part, and the thing to press is on the screen.
 
 ## Where things live
 

@@ -1158,28 +1158,59 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `Failed to acquire service name: File exists`. A daemon that is not running loses notifications
   with no log line at all, so `check-system.sh` asks the session bus for
   `org.freedesktop.Notifications` (`busctl --user list`) instead of trusting the package.
-- **The idle screensaver is Deboma's, made cheap.** Deboma runs `omarchy-screensaver` 150 s after the
-  last input and locks at 300 s (`shell.json`); the screensaver is a fullscreen terminal looping
-  `ttfx` (terminaltexteffects) at 120 fps. Measured on this machine that loop is 78 MB of Python and
-  74-86 % of one core on a 200x60 canvas - and 120 full 1920x1200 repaints per second through
-  panfrost, which is what the battery notices. `~/.config/bin/sway-screensaver` therefore plays
-  `tte` **once** (`timeout 25`, no `--reuse-canvas`), then clears and prints the static logo centred
-  and waits for one byte: the animation is kept and what stays on screen is one foot window (~25 MB,
-  no CPU). Its stdout **is** the animation: the first version redirected `tte` to `/dev/null` while
-  silencing its log, so the screen stayed black for the whole 25 s and only the static logo appeared -
-  "the screensaver does not work, nothing moves". The effects are curated (`decrypt print sweep wipe
-  slide`) to the ones that end with the text in place, and the frame rate is 30, not 120. Deboma's launcher (`hyprctl monitors`, a special workspace per monitor, its socket2 event
-  stream) has no sway equivalent worth building: there is one output, and
-  `config.d/23-screensaver.conf` fullscreens `[app_id="org.nureb.screensaver"]` on the current
-  workspace. That drop-in also starts `swayidle -w` (150 s screensaver, 300 s
-  `pkill -f org.nureb.screensaver; swaylock`, `before-sleep` locks, `after-resume` kills a leftover
-  logo), and the lock kills the screensaver first so unlocking does not land on a logo. Two details
-  are not obvious: a terminal allocates an 80x24 pty and resizes it only after the compositor maps
-  the window, so `tte` (which measures the terminal once) has to wait for `stty size` to change -
-  otherwise it paints an 80x24 canvas into the corner; and any-key dismissal needs
-  `stty -icanon min 1` before `dd bs=1`, because canonical mode would wait for Enter. Deboma's
-  `ttfx` shim exists only because Omarchy's scripts call the Rust port by that name: this script
-  calls Debian's `tte` directly, so no shim is shipped.
+- **The idle screen is LazyOS's, and it loops cheaply.** Deboma runs `omarchy-screensaver` 150 s after
+  the last input and locks at 300 s (`shell.json`); that screensaver is a fullscreen terminal looping
+  `ttfx` at 120 fps - measured here, 78 MB of Python and 74-86 % of one core on a 200x60 canvas, i.e.
+  120 full 1920x1200 repaints per second through panfrost, which is what the battery notices. The same
+  chain runs here (`config.d/23-lazyos-screensaver.conf`: `swayidle -w` with 150 s screen, 300 s lock,
+  `before-sleep` lock and `after-resume` cleanup), with Debian's `tte` instead of `ttfx`, at **30 fps**,
+  looping with `--reuse-canvas` over a curated list (`decrypt middleout print sweep wipe slide
+  expand`; the effects that end with the text sitting still, so the next one starts from the wordmark).
+  The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
+  design ::` and the arcade continue line `» press any key to continue «` - the lazy-tools idea
+  (lazygit/lazydocker: the tool does the boring part, the thing to press is on the screen) plus the
+  arcade screen an idle machine deserves. It is the **one surface that says LazyOS** for now: the
+  script is `~/.config/bin/lazyos-screensaver`, the app id `org.lazyos.screensaver`, its drop-in and
+  its launcher entry are named after it, and the rest of the distribution stays Nureb until the later
+  rename. **The frame rate is the whole cost.** Measured on this host with a pty and the real art, one
+  complete cycle of the seven effects is **70 s of wall time and 8.5 s of CPU (~12 % of one core)**,
+  peaking at **49 MB** in `tte` on top of foot's ~25 MB, and costing nothing after it ends; the same
+  cycle at 120 fps takes 20 s and ~6.4 s of CPU, i.e. ~32 % of a core, for an animation three times
+  faster than a screensaver needs. `tte` has no global foreground flag, so the colour lives in
+  the terminal profile (`~/.config/foot/screensaver.ini`, `foreground=cb4b16`, solarized orange) for
+  the effects that paint in the terminal's foreground, and the static frame prints its own SGR.
+  Four things are not obvious. **`tte`'s stdout is the animation** - the first version redirected it
+  to `/dev/null` while silencing the log and the screen stayed black for the whole run ("the
+  screensaver does not work, nothing moves"). **A terminal allocates an 80x24 pty and resizes it only
+  after the compositor maps the window**, so the script waits for `stty size` to change before it
+  starts (`tte` measures the terminal once, and would paint an 80x24 canvas into the corner).
+  **`tte` reads its own stdin**, so the "any key" poll (`read -rsn1 -t 1` in bash, raw mode via
+  `stty -icanon -echo min 1`) only worked at effect boundaries until `tte` was started with stdin on
+  `/dev/null`; before that a key press was swallowed and the screen survived it. And **the art is
+  measured in characters, not bytes** - block and box-drawing glyphs are three bytes each - so
+  `center_logo` runs `LC_ALL=C awk` and strips UTF-8 continuation bytes before `length()`, which is
+  the one form that behaves the same in mawk (the image) and gawk (a build host); a byte-range regex
+  on lifted characters is a *collation error* under a UTF-8 locale, not a width.
+  **The lock is `~/.config/bin/sway-lock`, and its reason is the readiness line.** The idle timer,
+  `Alt+Ctrl+L`, the Lock key and the two suspend shortcuts all call it instead of `swaylock`
+  directly: it passes `-R, --ready-fd` (swaylock's own handshake, written once the compositor
+  guarantees nothing sensitive is visible, and written *before* `-f` daemonizes) through a FIFO in
+  `$XDG_RUNTIME_DIR`, so `before-sleep` waits 4 s (inside logind's 5 s inhibitor budget) instead of
+  returning while the lock is still drawing; the ordinary call waits 2 s. It refuses to stack a
+  second surface when `pgrep -x swaylock` already answers, **kills the idle screen first** (a lock
+  put up with the shortcut at 100 s left the 150 s timer free to start the animation underneath it,
+  where it burned CPU invisibly until the 300 s timer) and puts the session's
+  own wallpaper (`~/Pictures/Wallpapers/mountains.jpg`, `-s fill`) on base03 instead of a flat
+  colour; if swaylock does not report back and is not running at all, it raises a critical
+  `dialog-error` notification, because a lock that failed quietly is the one failure a person must
+  hear. `check-system.sh` FAILs on a missing `tte`/`swayidle`/art/launcher/`sway-lock`/terminal
+  profile, reads the drop-in for the 150 s, 300 s and `before-sleep` lines **and** that `swayidle` is
+  running (a missing chain means no lock at all), and WARNs when an idle screen is found running
+  under `swaylock`. Deboma's launcher (`hyprctl monitors`, a special workspace per monitor, its
+  socket2 event stream) has no sway equivalent worth building: there is one output, and the drop-in
+  fullscreens `[app_id="org.lazyos.screensaver"]` on the current workspace. Deboma's `ttfx` shim
+  exists only because Omarchy's scripts call the Rust port by that name; this script calls Debian's
+  `tte` directly, so no shim is shipped.
 - **The CLI tools are Deboma's, in `packages/tools.list`** (a third list next to base and the UI
   one, installed by `rootfs-setup.sh` between the two). It is deliberately *only* tools: everything
   Deboma installs that is a service, a daemon or a timer stays out, which is why `plocate` is
@@ -1189,7 +1220,11 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   file) are absent. Two Debian renames are the whole trap: **`bat` installs `batcat`** and
   **`fd-find` installs `fdfind`**, so `rootfs-setup.sh` adds `/usr/local/bin/bat` and
   `/usr/local/bin/fd` symlinks (guarded, so a tree without the list still builds) because the
-  aliases, `MANPAGER` and `FZF_DEFAULT_COMMAND` call them by their upstream names.
+  aliases, `MANPAGER` and `FZF_DEFAULT_COMMAND` call them by their upstream names. Which tool
+  gets the list is where the *Icons first, never forced* rule starts: one that draws and reads
+  well in foot (`eza --icons`, `bat`, `glow`, `btop`, `lazygit`) wins over a plainer one that
+  prints the same facts, but nothing is added for looks alone and nothing resident (the reason
+  `plocate` stays out is its timer, not its output).
 - **The editors are `nano` (in `packages/base.list`, the one that is always there) plus
   `neovim` and `vim` (in `packages/tools.list`)**, and `EDITOR`/`VISUAL` name `nvim` - guarded on
   the binary, because an `EDITOR` pointing at a program that is not installed makes `git commit`,

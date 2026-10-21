@@ -165,12 +165,11 @@ brightnessctl
 # pactl(1) for the XF86Audio* keys; pipewire-pulse provides the server only.
 pulseaudio-utils
 
-# screensaver
-# The idle screensaver paints the logo with terminaltexteffects, which Debian
-# ships as python3-terminaltexteffects (binary `tte`; the effect plays once,
-# see ~/.config/bin/sway-screensaver). Deboma needs its `ttfx` shim only
-# because Omarchy's scripts call the Rust port by that name; this port calls
-# `tte` directly, so no shim is involved.
+# the idle screen
+# It loops the LazyOS wordmark with terminaltexteffects, which Debian ships as
+# python3-terminaltexteffects (binary `tte`; see ~/.config/bin/lazyos-screensaver).
+# Deboma needs its `ttfx` shim only because Omarchy's scripts call the Rust port
+# by that name; this port calls `tte` directly, so no shim is involved.
 python3-terminaltexteffects
 
 # notifications

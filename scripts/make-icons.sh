@@ -251,10 +251,11 @@ bar-busy                           f0f3
 busy                               f0f3
 swaymsg                            f085
 swaylock                           f023
+sway-lock                          f023
 swayidle                           f04c
 sway-suspend                       f04c
 sway-hibernate                     f186
-sway-screensaver                   f070
+lazyos-screensaver                 f070
 wifi.sh                            f1eb
 COMMANDS
 

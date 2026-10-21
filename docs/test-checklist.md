@@ -332,7 +332,10 @@ What a failure means:
 | `gio mime image/png`, `gio mime application/pdf`, `gio mime inode/directory` | `org.nureb.view.desktop`, `org.gnome.Papers.desktop`, `pcmanfm.desktop`. This is GIO's own answer, not the file read back: a `nureb-view` without its executable bit makes GIO say "no default application" |
 | `dig +short example.com` and `host example.com` | an address. `dig` comes from `bind9-dnsutils`; `resolvectl` is deliberately absent because NetworkManager owns `resolv.conf`, and its absence is not a gap |
 | a menu whose rows are long (Files on a deep path, a grep match with a long line) | the window is wide enough for the end of the path; a row cut with `…` mid-detail means `ui_width` stopped sizing that list |
-| lock (`Alt+Ctrl+L`) and unlock | swaylock, then back to the session, no leftover screensaver |
+| lock (`Alt+Ctrl+L`, the Lock key, and the 300 s idle timer) | the wallpaper on base03, then back to the session; no idle screen left behind (it is stopped before the lock) |
+| idle for 150 s without touching anything | the **LazyOS** wordmark, the caption and the arcade line, with an effect rebuilding them and another one after it (a still frame means `tte` did not start) |
+| press any key while the idle screen animates | it closes at once, not at the end of the effect |
+| `Alt+Shift+Escape` | the screen locks, *then* the machine suspends; on resume the lock is still up |
 | shut down from the power menu | the machine powers off (the question is asked once) |
 
 ## Writing it down

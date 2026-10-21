@@ -492,3 +492,68 @@ The rules that follow are the four traps, each of them the reason a line in the 
 `--strip-cwd-prefix` (fd's `--print0` prefixes `./`, and the prefix reached both the rows and the
 opener), `--no-multi` (the opener takes one file), `-f symbols` (above) and `--hidden` with the
 excludes (the 2,020-to-19,400 jump is the whole point of asking for the whole tree).
+
+## 10. The idle screen
+
+Deboma's screensaver is `omarchy-screensaver`: a fullscreen terminal looping `ttfx` at 120 fps for as
+long as the machine is idle. Measured on this host, that loop is 78 MB of Python and 74-86 % of one
+core on a 200x60 canvas, which is what the battery notices. This port keeps the animation and changes
+what it costs: Debian's `tte` at **30 fps**, looping the seven curated effects over
+`~/.config/lazyos/screensaver.txt` with `--reuse-canvas`.
+
+### Method
+
+Real art, a real pty (`pty.fork`, 80x24, then resized to 40x100 like a foot window), and `script -c`
+around a shell that runs each effect once in the shipped order. CPU is `getrusage`'s user+sys for the
+whole tree (bash's `time` accumulates each `tte` child), so Python start-up is included; memory is the
+tallest `VmHWM` any `tte` process reaches. Nothing else runs on the machine during the measurement.
+
+One *cycle* below is each effect once, in the order `lazyos-screensaver` draws them.
+
+### What a cycle costs at 30 fps
+
+| Effect | Wall | CPU | Share while it plays |
+|---|---|---|---|
+| `decrypt` | 32.0 s | 2.99 s | 9 % |
+| `middleout` | 4.1 s | 0.91 s | 22 % |
+| `print` | 17.3 s | 1.09 s | 6 % |
+| `sweep` | 8.0 s | 1.97 s | 25 % |
+| `wipe` | 5.0 s | 0.55 s | 11 % |
+| `slide` | 4.5 s | 0.79 s | 18 % |
+| `expand` | 3.0 s | 0.67 s | 22 % |
+| **cycle** | **70.7 s** | **8.47 s** | **12 %** |
+
+So the screen costs about an eighth of one core while it is up, peaks at **49 MB** of `tte` RSS on
+top of foot's ~25 MB, and costs nothing at all once it is dismissed or the lock takes over. The share
+is not the same for every effect: `decrypt` is the longest and the cheapest per second, `sweep` and
+`middleout` are the heaviest.
+
+### The frame rate is the whole cost
+
+`tte`'s effects have a fixed frame count, so the frame rate buys smoothness and pays for it in rate:
+the same cycle at **120 fps** is over in 20.2 s but spends 6.42 s of CPU, i.e. **32 % of one core**.
+30 fps is the point where the animation still moves (a cycle is about a minute) for a third of that.
+
+The temptation is to copy Deboma's 120 and let the numbers be someone else's problem; the two
+measurements above are why not. It is also why the loop never re-prints the art from scratch: with
+`--reuse-canvas` the canvas is drawn once and each effect changes it in place, instead of a full
+clear and repaint between effects.
+
+### Not ported, on purpose
+
+* **Deboma's launcher.** `hyprctl monitors`, a special workspace per monitor and a socket2 event
+  stream for one output. The window rule fullscreens `[app_id="org.lazyos.screensaver"]` instead.
+* **`ttfx` and its shim.** Omarchy's scripts call the Rust port by that name; this one calls Debian's
+  `tte` directly, so there is nothing to shim and no second dependency.
+* **A 120 fps option.** A faster loop would be a setting nobody can see the cost of; the loop is
+  already smooth enough to read the wordmark.
+
+### The two costs that are not CPU
+
+* **Terminal traffic.** `tte` animates by writing ANSI to the pty, and foot repaints the cells that
+  changed; a full repaint at 30 fps would be the thing to avoid, and `--reuse-canvas` is what keeps
+  the writes to the changed cells.
+* **The key that dismisses it.** `tte` reads the terminal for its own controls, so a key press while
+  an effect runs went to `tte` (which ignores it) and not to the script's `read -t 1` poll: the screen
+  survived the key until the effect ended. Starting `tte` with stdin on `/dev/null` gave the poll the
+  only reader, and the dismissal is immediate.

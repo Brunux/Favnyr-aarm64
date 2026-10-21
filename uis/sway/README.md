@@ -23,7 +23,7 @@ launcher, waybar and the foot terminal.
 | Path | What it is |
 |---|---|
 | `etc/sway/config` | System half of the session (replaces Debian's default file). Includes `config.d/*` at the end. |
-| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, idle screensaver, clipboard, tablet mode, terminal file search. |
+| `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, the LazyOS idle screen, clipboard, tablet mode, terminal file search. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search key's file-search binding. |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
 | `home/.config/bin/rofi-learn` | **Learn**: the manual, one page at a time. |
@@ -43,10 +43,11 @@ launcher, waybar and the foot terminal.
 | `home/.config/starship.toml` | Deboma's prompt: directory and git state in the theme's cyan. |
 | `etc/profile.d/90-cli-tools.sh` | The CLI environment (`MANPAGER`, `BAT_THEME`, `PATH`), shared by login shells and `~/.bashrc`. |
 | `etc/yt-dlp.conf` | Names Node as yt-dlp's JS runtime (see **The CLI tools**). |
-| `home/.config/foot/screensaver.ini` | The idle screensaver's terminal: black, no padding, 26 pt. |
+| `home/.config/foot/screensaver.ini` | The idle screen's terminal: black, no padding, 26 pt, solarized orange foreground. |
 | `home/.config/mako/config` | Solarized theme for the notification daemon (`mako-notifier`). |
-| `home/.config/nureb/screensaver.txt` | The logo the idle screensaver animates and then leaves on screen. |
-| `home/.config/bin/sway-screensaver` | Launches the idle screensaver and is also the program that runs inside it (see **The idle screen**). |
+| `home/.config/lazyos/screensaver.txt` | The LazyOS art the idle screen loops: the wordmark, the caption and the arcade line. |
+| `home/.config/bin/lazyos-screensaver` | Launches the idle screen and is also the program that runs inside it (see **The idle screen**). |
+| `home/.config/bin/sway-lock` | Locks the session and waits for swaylock's readiness line; stops the idle screen first (see **The idle screen**). |
 | `home/.config/bin/bar-*` | The menus the bar opens on click: `bar-menu`, `bar-net`, `bar-bt`, `bar-key`, `bar-audio`, `bar-updates`, `bar-power`, plus the shared `bar-pick`. |
 | `home/.config/workstyle/config.toml` | Icon map for workstyle (see below). |
 | `home/Pictures/Wallpapers/mountains.jpg` | Wallpaper referenced by `etc/sway/config`. |
@@ -166,6 +167,14 @@ asks the icon theme for an icon *named after the binary* it would run
 aligned, and `check-system.sh` warns (never fails) when they are missing. The third table is the
 one that grows with a feature: a new row icon or a new notification icon is a name added to
 `make-icons.sh` and a PNG regenerated on the build host (see the icon rule in `AGENTS.md`).
+
+That rule is also an **order**, and the order is what keeps it from being forced: an existing
+`UI_I_*` glyph, then a name an existing table already carries, then a new name plus a regenerated
+PNG, then **text alone**. The last step is a real answer, not a failure to try - the bar's popups
+pass `-no-show-icons` because they draw their own glyph, an fzf row cannot carry a Font Awesome
+codepoint (foot's fallback is Symbols Nerd Font Mono, the row would be a tofu box, and that
+feature's picture is its preview pane), and `check-system.sh`'s report stays plain because other
+scripts grep it. Nothing is installed and nothing stays resident just to draw.
 
 That was measured, not assumed: the first attempt at this theme shipped SVGs with a literal
 private-use character, which does not survive every editor or transport, and the first
@@ -678,27 +687,48 @@ leaves every application's notifications silently lost, with nothing in the jour
 
 Deboma runs a screensaver 150 s after the last input and locks at 300 s
 (`shell.json`: `"idle": {"screensaver": 150, "lock": 300}`). The same chain runs here on `swayidle`
-(`config.d/23-screensaver.conf`), with two differences, both about cost:
+(`config.d/23-lazyos-screensaver.conf`), with two differences:
 
-* **The effect plays once.** Deboma's `omarchy-screensaver` loops `ttfx` at 120 fps; measured here,
-  that is 78 MB of Python plus a full 1920x1200 repaint 120 times a second on the Mali-G57, for as
-  long as the screen is idle. `sway-screensaver` runs `tte` once, then prints the static logo and
-  waits for one keypress: the effect keeps its (~10 s) animation, and what stays on screen is a
-  single foot window, about 25 MB and no CPU. The animation is `tte`'s **stdout**: the first
-  version sent it to `/dev/null` while silencing its log, so the screen stayed black and only the
-  logo appeared ("nothing moves"). The effects are curated (`decrypt print sweep wipe slide`, the
-  ones that end with the text in place) and the frame rate is 30, not 120.
+* **The loop runs at 30 fps, not 120.** Deboma's `omarchy-screensaver` loops `ttfx` at 120 fps;
+  measured here, that is 78 MB of Python plus a full 1920x1200 repaint 120 times a second on the
+  Mali-G57, for as long as the screen is idle. `lazyos-screensaver` loops Debian's `tte` with
+  `--reuse-canvas` over a curated list (`decrypt middleout print sweep wipe slide expand`), so the
+  wordmark never blinks away between effects. One full cycle of those seven effects measures 70 s of
+  wall time and 8.5 s of CPU — about **12 % of one core**, peaking at 49 MB in `tte` on top of foot's
+  ~25 MB, and nothing at all once the screen ends. The same cycle at 120 fps takes 20 s and ~6.4 s of
+  CPU, i.e. ~32 % of a core, for an animation three times faster than a screensaver needs.
 * **No per-monitor launcher.** Deboma's launcher walks `hyprctl monitors`, opens a terminal per
   monitor in a special workspace and listens on Hyprland's socket; here the session has one output
-  and the window rule in `23-screensaver.conf` fullscreens `[app_id="org.nureb.screensaver"]` on the
-  current workspace.
+  and the window rule in `23-lazyos-screensaver.conf` fullscreens
+  `[app_id="org.lazyos.screensaver"]` on the current workspace.
 
-Any key dismisses it and the next keypress goes to whatever is underneath. At 300 s `swayidle` kills
-the screensaver *and* locks, so unlocking does not land back on a logo; `before-sleep` locks before a
-suspend for the same reason. The bar menu has a **Screensaver** entry that starts it on demand.
+The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
+design ::` and the arcade continue line `» press any key to continue «`, drawn in solarized orange
+(`foreground=cb4b16` in `screensaver.ini`, and its own SGR in the static frame). It is the one
+surface that carries the LazyOS name for now — the script, the app id and the launcher entry are
+named after it, and the rest of the distribution still says Nureb.
 
-The logo is `~/.config/nureb/screensaver.txt`, 7 rows of block art invented here (Deboma's is ASCII
-art of the Omarchy mark), printed in solarized cyan at 26 pt.
+Any key dismisses it (`read -rsn1 -t 1` polls while the effect runs, so the dismissal does not wait
+for the effect to end; `tte` gets stdin on `/dev/null`, or it would swallow the key). Three details
+cost a round each and are commented at the line that does them: a terminal allocates an 80x24 pty and
+resizes it only after the window is mapped, so `tte` has to wait for `stty size` to change; `tte`'s
+**stdout** is the animation (the first version sent it to `/dev/null` and the screen stayed black);
+and the art is measured in characters with `LC_ALL=C awk` after stripping UTF-8 continuation bytes,
+which is the same answer in mawk (the image) and gawk (a build host).
+
+**The lock is `~/.config/bin/sway-lock`.** The idle timer, `Alt+Ctrl+L`, the Lock key and the two
+suspend shortcuts call it instead of `swaylock`: it stops the idle screen first (a lock put up with
+the shortcut at 100 s used to leave the 150 s timer free to start the animation underneath it, where
+it burned CPU invisibly until the 300 s timer), refuses to stack a second surface,
+puts the session's own wallpaper on base03 (`-i …/mountains.jpg -s fill -c 002b36`), and waits for
+swaylock's **readiness line** (`-R, --ready-fd`, written once the compositor guarantees that nothing
+sensitive is visible) through a FIFO — 2 s for an ordinary lock, 4 s for `before-sleep`, inside
+logind's 5 s inhibitor budget. If swaylock does not come up at all, a critical notification says so.
+
+The bar menu has a **Screensaver** entry that starts it on demand, and `check-system.sh` FAILs when
+`tte`, `swayidle`, the art, the launcher, `sway-lock` or `screensaver.ini` is missing, reads the
+drop-in for the 150 s / 300 s / `before-sleep` lines, and WARNs when an idle screen is found running
+under `swaylock`.
 
 ## The CLI tools
 

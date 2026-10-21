@@ -73,12 +73,17 @@ different on purpose:
 
 * **The Lock key** is `KEY_SLEEP`, and that is exactly the key systemd-logind
   turns into a suspend on its own. It needs no polkit, no session and no helper,
-  which is why it always works. The same key is bound to `swaylock`, so the
-  screen is locked a fraction of a second before the machine sleeps.
+  which is why it always works. The same key runs `~/.config/bin/sway-lock`, so
+  the screen is locked a fraction of a second before the machine sleeps.
 * `sway-suspend` (Alt+Shift+Escape locks first, Alt+Ctrl+Escape suspends
   directly) goes through `loginctl suspend`, a D-Bus method guarded by polkit. It
   has a fallback chain and logs to `~/.cache/sway-suspend.log`, so if the session
   is in a state logind does not consider active, it still works.
+
+`sway-lock` is the lock every path goes through, including the 300 s idle timer:
+it stops the idle screen first, waits (up to 4 s before a suspend) for
+`swaylock`'s own readiness signal, and puts the session's wallpaper behind the
+lock instead of a flat colour.
 
 **Hibernate** is offered when it can actually resume:
 

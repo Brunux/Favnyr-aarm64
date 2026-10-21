@@ -1,54 +1,90 @@
-#!/bin/sh
-# The idle screensaver: a fullscreen terminal that plays the logo animation once
-# and leaves the last frame on screen.
+#!/bin/bash
+# The LazyOS idle screen: a fullscreen terminal that loops the wordmark until a
+# key is pressed.
 #
-#   sway-screensaver          launch it (idempotent; also the bar menu entry)
-#   sway-screensaver --run    what runs *inside* the terminal (do not call)
+#   lazyos-screensaver          launch it (idempotent; also the bar menu entry)
+#   lazyos-screensaver --run    what runs *inside* the terminal (do not call)
 #
-# Deboma draws this with Quickshell and a looping ttfx at 120 fps. Quickshell's
-# shell process alone is 361 MB of PSS, and a 120 fps loop repaints 1920x1200
-# 120 times a second on the Mali-G57 - that is the part the battery notices, not
-# the picture. Here the effect plays once (terminaltexteffects, measured 78 MB
-# while it runs), exits, and what stays on screen is one foot window (~25 MB)
-# with a static frame: no CPU, no redraws, until a key is pressed.
+# The idle screen is the one surface that carries the LazyOS name and art; the
+# rest of the distribution still calls itself Nureb until the rename lands. The
+# idea behind it is the lazy-tools family (lazygit, lazydocker and friends): the
+# tool does the boring part, the thing you can press is on the screen, and the
+# machine is allowed to look like it is having fun while it waits. Hence the
+# wordmark and the arcade continue line underneath it.
 #
-# The window is placed and made fullscreen by etc/sway/config.d/23-screensaver.conf,
-# which also starts swayidle: 150 s to the screensaver, 300 s to the lock.
+# The chain lives in etc/sway/config.d/23-lazyos-screensaver.conf: swayidle runs
+# this at 150 s and ~/.config/bin/sway-lock at 300 s.
+#
+# The animation is terminaltexteffects (`tte`), looping with --reuse-canvas so
+# the wordmark never blinks between effects. Deboma loops ttfx at 120 fps; the
+# frame rate is the whole cost here, so it is 30 (docs/optimization.md has the
+# numbers: a full cycle of the seven effects is 70 s of wall time and 8.5 s of
+# CPU, ~12 % of one core, where the same cycle at 120 fps takes 20 s and ~6.4 s
+# of CPU, ~32 % of a core). tte's stdout *is* the animation: the first version
+# of this script sent it to /dev/null while silencing the log, so the screen
+# stayed black for the whole run ("the screensaver does not work, nothing
+# moves").
 
-set -eu
+set -u
 
-APP_ID="org.nureb.screensaver"
-LOGO="${XDG_CONFIG_HOME:-$HOME/.config}/nureb/screensaver.txt"
+APP_ID="org.lazyos.screensaver"
+LOGO="${XDG_CONFIG_HOME:-$HOME/.config}/lazyos/screensaver.txt"
 FOOT_INI="${XDG_CONFIG_HOME:-$HOME/.config}/foot/screensaver.ini"
+# 30, because the frame rate is the whole cost of the loop: at 120 fps the same
+# cycle is over in a third of the time, at three times the share of a core.
+FPS=30
+# The effects that end with the text sitting still (plus --reuse-canvas, which
+# keeps the canvas between them). Anything heavier belongs in an animation, not
+# in something that runs for the whole idle period on a battery.
+EFFECTS="decrypt middleout print sweep wipe slide expand"
 
 have_tte() {
 	command -v tte >/dev/null 2>&1
 }
 
 center_logo() {
-	# Print the logo centred in the terminal. tte centres its own canvas, but
-	# this also has to work when tte is missing or the effect is interrupted.
+	# Print the art centred in the terminal, one line at a time: the captions
+	# are narrower than the wordmark and must sit under it, not against the
+	# left edge.
 	#
-	# The width comes from wc -L (display columns), never from awk's length():
-	# the art is full-block characters, three bytes each, so a byte count is
-	# almost three times the column count and the logo was painted against the
-	# left edge instead of the middle.
-	rows=$(stty size 2>/dev/null | cut -d' ' -f1)
-	cols=$(stty size 2>/dev/null | cut -d' ' -f2)
-	width=$(wc -L <"$LOGO" 2>/dev/null || echo 0)
-	lines=$(wc -l <"$LOGO" 2>/dev/null || echo 0)
-	awk -v rows="${rows:-24}" -v cols="${cols:-80}" \
-		-v width="${width:-0}" -v lines="${lines:-0}" '
-		BEGIN {
-			pad = int((cols - width) / 2); if (pad < 0) pad = 0
-			top = int((rows - lines) / 2); if (top < 0) top = 0
-			for (i = 0; i < top; i++) print ""
+	# The width is counted in *characters*, not bytes: the art is full-block and
+	# box-drawing characters, three bytes each, so a byte count is almost three
+	# times the column count and the logo ends up against the left edge instead
+	# of the middle.  The regex strips UTF-8 continuation bytes, which is the one
+	# way to do it identically in mawk (the image) and gawk (a build host); a
+	# byte-range regex on lifted characters is a collation error, not a count.
+	local rows cols
+	read -r rows cols < <(stty size 2>/dev/null) || { rows=24; cols=80; }
+	# A pty can report 0 0 before the compositor has given the window its size;
+	# that is not a terminal to centre in.
+	[ "${rows:-0}" -gt 0 ] 2>/dev/null || rows=24
+	[ "${cols:-0}" -gt 0 ] 2>/dev/null || cols=80
+	LC_ALL=C awk -v rows="${rows:-24}" -v cols="${cols:-80}" '
+		function width(s,   t) {
+			t = s
+			gsub(/[\200-\277]/, "", t)
+			return length(t)
 		}
-		{ printf "%*s%s\n", pad, "", $0 }' "$LOGO"
+		{ lines[++n] = $0 }
+		END {
+			top = int((rows - n) / 2); if (top < 0) top = 0
+			for (i = 0; i < top; i++) print ""
+			for (i = 1; i <= n; i++) {
+				pad = int((cols - width(lines[i])) / 2); if (pad < 0) pad = 0
+				printf "%*s%s\n", pad, "", lines[i]
+			}
+		}' "$LOGO"
 }
 
-case "${1:-}" in
---run)
+static_frame() {
+	clear
+	# No cursor, and the art in solarized orange (#cb4b16): the wordmark is the
+	# one warm surface in the session, and it reads as "alive" on base03.
+	printf '\033[?25l\033[38;2;203;75;22m'
+	center_logo
+}
+
+run() {
 	[ -t 0 ] || exit 1
 	# Nothing is going to move for a while; let sway hide the pointer.
 	swaymsg seat - hide_cursor 1 >/dev/null 2>&1 || true
@@ -57,56 +93,107 @@ case "${1:-}" in
 	# told the window how big it is; tte measures the terminal once, at startup,
 	# so starting it earlier paints an 80x24 canvas into the corner
 	# (omarchy-screensaver waits the same way).
-	deadline=$(( $(date +%s) + 2 ))
-	while [ "$(date +%s)" -lt "$deadline" ] && [ "$(stty size 2>/dev/null)" = "24 80" ]; do
-		sleep 0.02
+	deadline=$((SECONDS + 2))
+	while [ "$SECONDS" -lt "$deadline" ]; do
+		size=$(stty size 2>/dev/null) || break
+		case "$size" in
+		"24 80"|"0 0"|"") sleep 0.02 ;;
+		*) break ;;
+		esac
 	done
 
-	# One shot: no --reuse-canvas, so the effect ends instead of repainting
-	# forever. `timeout` is the safety net for an effect that does not end on
-	# its own; the static frame below covers that case.
-	#
-	# stdout is the animation: the first version of this line sent it to
-	# /dev/null (the redirection was meant to silence tte's logging) and the
-	# screen stayed black for 25 s, which is exactly "the screensaver does not
-	# work, nothing moves".  stderr is the only thing silenced here.
-	#
-	# 30 fps, not 120: tte draws text on the CPU, and Deboma's 120 fps loop is
-	# the part of its screensaver that costs battery.  The effects are curated to
-	# the ones that end with the text sitting still, so the static frame below is
-	# a change of colour, not a jump.
-	if have_tte && [ -r "$LOGO" ]; then
-		# `--include-effects` takes the rest of the command line as its list
-		# (argparse's nargs='+'), so it stays the last option here.
-		timeout 25 tte -i "$LOGO" --frame-rate 30 \
-			--canvas-width 0 --canvas-height 0 \
-			--anchor-canvas c --anchor-text c \
-			--random-effect \
-			--no-eol --no-restore-cursor 2>/dev/null \
-			--include-effects decrypt print sweep wipe slide || true
+	# Any key ends it, one byte at a time: canonical mode would wait for Enter.
+	stty -icanon -echo min 1 time 0 2>/dev/null || true
+	# And no cursor: tte is told not to restore it, and nothing else draws.
+	printf '\033[?25l'
+
+	trap 'exit 0' INT TERM HUP
+
+	if ! have_tte || [ ! -r "$LOGO" ]; then
+		# The animation is what is missing, not the screen: leave the art up.
+		static_frame
+		read -rsn1 || true
+		exit 0
 	fi
 
-	clear
-	# No cursor, and the art in solarized cyan (#2aa198).
-	printf '\033[?25l\033[38;2;42;161;152m'
-	center_logo
-	# Any key ends it. The terminal is in canonical mode, where a read waits for
-	# Enter, so switch to one byte at a time first.
-	stty -icanon -echo min 1 time 0 2>/dev/null || true
-	dd bs=1 count=1 of=/dev/null 2>/dev/null || true
-	exit 0
+	failures=0
+	while :; do
+		# `--include-effects` takes the rest of the command line as its list
+		# (argparse's nargs='+'), so it stays the last option here.
+		#
+		# stdin comes from /dev/null on purpose: tte reads the terminal for its
+		# own controls and would swallow the key that is meant to dismiss this
+		# (a key pressed during an effect reached tte, not the read below, and
+		# the screen only ended when the next effect boundary came around).
+		tte -i "$LOGO" --frame-rate "$FPS" \
+			--reuse-canvas \
+			--canvas-width 0 --canvas-height 0 \
+			--anchor-canvas c --anchor-text c \
+			--random-effect --no-eol --no-restore-cursor 2>/dev/null \
+			--include-effects $EFFECTS </dev/null &
+		pid=$!
+		# Poll for a key while the effect runs: killing tte is what makes the
+		# dismissal immediate instead of waiting for the effect to end.  A read
+		# that times out (bash answers >128) means "no key yet"; anything else is
+		# eof or an error, i.e. the terminal is gone, and a loop that kept
+		# restarting tte against a closed pty would spin.
+		while kill -0 "$pid" 2>/dev/null; do
+			read -rsn1 -t 1
+			rc=$?
+			if [ "$rc" -eq 0 ]; then
+				kill "$pid" 2>/dev/null
+				wait "$pid" 2>/dev/null
+				exit 0
+			fi
+			if [ "$rc" -le 128 ]; then
+				kill "$pid" 2>/dev/null
+				wait "$pid" 2>/dev/null
+				exit 0
+			fi
+		done
+		wait "$pid" 2>/dev/null
+		# A tte that cannot draw (a broken font, a missing shared library) would
+		# otherwise restart forever; after three failures the static frame is
+		# still a screensaver.
+		if [ $? -ne 0 ]; then
+			failures=$((failures + 1))
+			if [ "$failures" -ge 3 ]; then
+				static_frame
+				read -rsn1 || true
+				exit 0
+			fi
+		else
+			failures=0
+		fi
+	done
+}
+
+case "${1:-}" in
+--run)
+	run
+	;;
+--*)
+	printf 'lazyos-screensaver: unknown option %s\n' "$1" >&2
+	exit 2
 	;;
 esac
 
-# Launcher: one screensaver, no stacking.
+# Never draw over a locked session: swayidle keeps running while swaylock holds
+# the screen, so at 150 s the idle screen would start *underneath* the lock,
+# burn CPU invisibly and leave a hidden window behind.
+if pgrep -x swaylock >/dev/null 2>&1; then
+	exit 0
+fi
+
+# One idle screen, no stacking.
 if pgrep -f "$APP_ID" >/dev/null 2>&1; then
 	exit 0
 fi
 
 if [ ! -r "$LOGO" ]; then
-	printf 'sway-screensaver: %s is missing\n' "$LOGO" >&2
+	printf 'lazyos-screensaver: %s is missing\n' "$LOGO" >&2
 	exit 1
 fi
 
-exec foot --app-id="$APP_ID" --config="$FOOT_INI" --title screensaver \
+exec foot --app-id="$APP_ID" --config="$FOOT_INI" --title LazyOS \
 	"$(readlink -f "$0")" --run

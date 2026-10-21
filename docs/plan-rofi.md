@@ -43,7 +43,7 @@ Grouped by verdict. "Effort" is implementation + test on the card, not reading.
 |---|---|
 | Apps (`omarchy.dock apps`) | `rofi -show drun` |
 | Window list | `rofi -show window` (`$mod+Tab`; Omarchy has no equivalent in the menu) |
-| Power / Lock / Screensaver / Suspend | `bar-power`, `swaylock`, `sway-screensaver`, `sway-suspend` (+ `org.nureb.*` entries) |
+| Power / Lock / Screensaver / Suspend | `bar-power`, `sway-lock`, `lazyos-screensaver`, `sway-suspend` (+ the `org.nureb.*` and `org.lazyos.*` entries) |
 | Wi-Fi / Bluetooth / audio panels | `bar-net`, `bar-bt`, `bar-audio` |
 | Notifications | mako |
 | Clipboard *panel* (QML grid) | `rofi-clip`: the same history as a list, not a grid - see P0 #2 |

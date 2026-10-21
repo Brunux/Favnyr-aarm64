@@ -67,7 +67,7 @@ while :; do
 		ui_heading 'session'
 		ui_row "$UI_I_MIC" 'Dictation' 'speak, and it is typed' dictate
 		ui_row "$UI_I_CLOCK" 'Reminders' 'be told about it later' remind
-		ui_row "$UI_I_LOCK" 'Lock' 'swaylock' lock
+		ui_row "$UI_I_LOCK" 'Lock' 'the session lock' lock
 		ui_row "$UI_I_EYE" 'Screensaver' 'the idle screen, now' screensaver
 		ui_row "$UI_I_PAUSE" 'Suspend' 'sleep until asked' suspend
 		ui_row "$UI_I_MOON" 'Hibernate' 'needs a disk swap and resume=' hibernate
@@ -129,8 +129,8 @@ while :; do
 	clean) exec "$dir/rofi-clean" ;;
 	kill) exec "$dir/rofi-kill" ;;
 	dictate) exec "$dir/dictate" ;;
-	lock) exec swaylock -c 002b36 ;;
-	screensaver) exec "$dir/sway-screensaver" ;;
+	lock) exec "$dir/sway-lock" ;;
+	screensaver) exec "$dir/lazyos-screensaver" ;;
 	suspend) exec "$dir/sway-suspend" ;;
 	hibernate) exec "$dir/sway-hibernate" ;;
 	power) exec "$dir/rofi-power" ;;
