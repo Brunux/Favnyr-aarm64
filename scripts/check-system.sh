@@ -1359,6 +1359,30 @@ if have fc-match; then
 else
 	skip "fc-match is not installed"
 fi
+# The table is filtered against the font that draws it, and ~/.config/emojis.font
+# pins the font it was built from. A font upgrade does not break an existing row,
+# but the table stops offering the glyphs the new font added, and the pin is the
+# only place that difference is visible.
+if have fc-match && have sha256sum; then
+	if [ ! -r "$HOME/.config/emojis.font" ]; then
+		warn "$HOME/.config/emojis.font is missing: the emoji table cannot be compared with the font (regenerate it with scripts/make-emojis.sh)"
+	else
+		_emoji_file=$(fc-match -f '%{file}' emoji 2>/dev/null || true)
+		_emoji_pin=$(sed -n 's/^sha256=//p' "$HOME/.config/emojis.font" 2>/dev/null || true)
+		_emoji_sum=""
+		if [ -n "$_emoji_file" ] && [ -r "$_emoji_file" ]; then
+			_emoji_sum=$(sha256sum "$_emoji_file" 2>/dev/null || true)
+			_emoji_sum=${_emoji_sum%% *}
+		fi
+		if [ -n "$_emoji_sum" ] && [ "$_emoji_sum" = "$_emoji_pin" ]; then
+			ok "the emoji table matches the font it was filtered against"
+		else
+			warn "the emoji font changed since ~/.config/emojis.font was written: re-run scripts/make-emojis.sh on the build host to pick up its new glyphs"
+		fi
+	fi
+else
+	skip "fc-match or sha256sum is not installed"
+fi
 
 # Tablet mode: the keyboard folded back. Four pieces have to be there for it to
 # do anything - the switch, the script, the on-screen keyboard and the

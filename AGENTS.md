@@ -1151,15 +1151,23 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   the viewer is in the image. The database is `~/.cache/cliphist/db` and
   holds everything copied, secrets included, so the menu's last row clears it.
   `rofi-emoji` (`Alt+Ctrl+E`) reads `~/.config/emojis.tsv`, **generated on the build host by
-  `scripts/make-emojis.sh`** from Python's `unicodedata` (name, glyph, block; 1988 rows, the emoji
-  blocks plus Dingbats and Miscellaneous Symbols, skin tones and ZWJ sequences left out because
-  they are combinations of rows that already exist). It is committed, so the image carries no
-  Python and no Unicode package. Insertion is Omarchy's: `wl-copy` the glyph and type a virtual
+  `scripts/make-emojis.sh`** from Python's `unicodedata` (name, glyph, block; the emoji blocks plus
+  Dingbats and Miscellaneous Symbols, skin tones and ZWJ sequences left out because they are
+  combinations of rows that already exist) **and then filtered against the character map of the
+  font fontconfig resolves for `emoji`** (`fc-match -f '%{file}' emoji` + `fc-query
+  --format='%{charset}'`): 692 of the 1988 rows named codepoints `fonts-noto-color-emoji` does not
+  draw (chess pieces, arrows, alchemical signs, several ballot boxes), and every one of them was a
+  tofu box in the picker. The table is 1296 rows and pure data - no comment line - and the sidecar
+  `~/.config/emojis.font` pins the font's SHA256 and family, which is what `check-system.sh`
+  compares with the installed font; a font upgrade means re-running the script on a host with
+  `fontconfig` and the font. It is committed, so the image carries no Python and no Unicode
+  package. Insertion is Omarchy's: `wl-copy` the glyph and type a virtual
   **Shift+Insert** with `wtype` (`wtype -t` would need a keysym for the codepoint, which most emoji
   have not); Alt+1 is the clipboard write alone, for a surface that refuses a virtual keyboard.
   `fonts-noto-color-emoji` is what draws them - without it every glyph is tofu - and
-  `check-system.sh` asks `fc-match emoji`. The other five lists (`rofi-dns`, `rofi-pkg`,
-  `rofi-color`, `rofi-remind`, `rofi-about`) are plain one-shot scripts and no resident process:
+  `check-system.sh` asks `fc-match emoji` and compares the pin. The other five lists
+  (`rofi-dns`, `rofi-pkg`, `rofi-color`, `rofi-remind`, `rofi-about`) are plain one-shot
+  scripts and no resident process:
   DNS sets `ipv4.dns`/`ipv4.ignore-auto-dns` on the connection that is up and brings it back
   (`nmcli connection up` - hence the busy card and then the read-back, not a claim), packages are
   `apt-cache search` then `apt-get -y` behind the same card, colour is `slurp -p` + `grim` 1x1 +
