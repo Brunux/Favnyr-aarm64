@@ -50,9 +50,9 @@ failure.
 
 | Step | Expected |
 |---|---|
-| look at the desktop | the **mountain photograph** (`Pictures/Wallpapers/mountains.jpg`) filling the output; the bar, foot, rofi and the menus are still solarized (the brand did not repaint the session) |
-| `Alt+Ctrl+L`, then unlock | the same **mountain photograph** on base03 - the lock and the desktop wear one photo |
-| `Alt+d`, type `About LazyOS` | the **About LazyOS** row has the mark as its icon (not a hole); Enter opens the card with the two-line wordmark on the left, `OS · LazyOS <version>` among the facts, and the 16-colour palette at the bottom |
+| look at the desktop | the keyboard wallpaper on base03: one lit key carrying the cyan z_ mark, and `lazyOS_`, `lazy by design` and the arcade line bottom left; the bar, foot, rofi and the menus are still solarized (the brand did not repaint the session) |
+| `Alt+Ctrl+L`, then unlock | the **mountain photograph**, not the brand wallpaper - the lock is deliberately the other surface |
+| `Alt+d`, type `About LazyOS` | the **About LazyOS** row has the mark as its icon (not a hole); Enter opens the card with the block-character z_ (cyan z, orange cursor) and `lazyOS_` on the left, `OS · LazyOS <version>` among the facts, and the 16-colour palette at the bottom |
 | `Alt+d`, type `LazyOS Menu` | the row with the same mark; Enter opens the root menu - the list `Alt+Space` shows, reachable by typing (`org.lazyos.menu.desktop`) |
 | `cat /etc/os-release` | `ID=lazyos`, `PRETTY_NAME="LazyOS <version>"`, and `VERSION_ID` equal to the `version` line of `/etc/debian-aarch64-revision` |
 | `hostname` | `lazyos` |
@@ -60,9 +60,11 @@ failure.
 | `Ctrl+Alt+F2` (keyd's VT keys), log in on the text console | the banner is `LazyOS <version> · lazy by design` and `lazyos · tty2` |
 
 The launcher's **About LazyOS** and the root menu's **About** open the same card;
-the launcher entry is the one that carries `Icon=lazyos`. A missing wallpaper is
-`Pictures/Wallpapers/mountains.jpg`, which ships in the repository, so a rebuilt
-image restores it (`scripts/make-brand.sh` no longer renders a wallpaper). A hole
+the launcher entry is the one that carries `Icon=lazyos`. A flat colour instead of
+the keyboard wallpaper is `Pictures/Wallpapers/lazyos.png` missing (or `swaybg`
+failing), which `scripts/make-brand.sh` renders from `brand/wallpaper.svg`; a flat
+colour instead of the photograph at the lock is `mountains.jpg` missing, and that
+file ships in the repository. A hole
 where the About row's icon should be is `lazyos.png` missing from
 `/usr/share/icons/LazyOS/48x48/apps/`.
 Debian's swirl in the About card is `~/.config/fastfetch/config.jsonc` missing.

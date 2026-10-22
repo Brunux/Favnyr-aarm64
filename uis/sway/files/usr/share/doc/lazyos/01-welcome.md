@@ -6,21 +6,6 @@ and a 58 GB eMMC. It is not a Debian remix: the hardware support comes from
 Nura (the postmarketOS-based system this port started from), and Debian supplies
 everything above the kernel.
 
-## First boot
-
-The first time the session comes up it opens **Welcome to LazyOS**, a terminal
-window with the eight keys that make the rest of the desktop easy to find:
-**Alt+Space** for the menu, **Alt+D** for the launcher, **Search** for a file,
-**Alt+Ctrl+F** for the file list, **Alt+Return** for a terminal, **Alt+Q** to
-close a window, **Alt+Escape** for the power menu and **Alt+Ctrl+K** for every
-binding. Enter closes it.
-
-It appears **once per install**, not once per login: the window remembers the
-machine id in `~/.local/state/lazyos/welcome`, so a session restart does not
-bring it back, while a rebuilt card - which gets a fresh `/etc/machine-id` - is
-a new install and shows it again. Delete that file to see it again without
-rebuilding.
-
 ## The first five minutes
 
 * Log in with the user account the image was built with (`brunux` by default,
@@ -28,9 +13,8 @@ rebuilding.
 * `sudo` does not ask for a password on this machine. Anything that needs root
   goes through it, including the scripts that rewrite the boot partition.
 * Open a terminal: **Alt+Return** (or the bar's menu → Terminal).
-* Open the launcher: **Alt+D**. Type part of a name, Enter.
-* Find a file: the **Search key** (the magnifier, left of Tab), or **Alt+Ctrl+F**
-  to browse. Hold **Alt** first and tap **Search** for the terminal search.
+* Open the launcher: the **Search key** (the magnifier, left of Tab) or
+  **Alt+D**. Type part of a name, Enter.
 * See every key binding: **Alt+Ctrl+K**.
 * This manual: the **Learn** entry in the bar menu (**Alt+Space**), or
   `rofi-learn` in a terminal.
@@ -48,18 +32,21 @@ rebuilding.
 
 ## The mark
 
-The desktop wears the session's own mountain photograph,
-`~/Pictures/Wallpapers/mountains.jpg` - the one it had before the mark existed.
-The mark is the arcade button in the session's own four colours, and it is the
-**launcher icon** and the **About LazyOS** card: **Alt+Space** > **About**, whose
-last row opens `fastfetch` for the full picture. The lock screen wears the same
-photograph, so the machine looks the same whether you are at it or away from it.
+The mark is a prompt: **z_**, a cyan `z` and an orange cursor, and the
+wordmark is `lazyOS_`. The wallpaper is a keyboard in the dark with one lit
+key carrying the mark - the key to press - and `lazyOS_`, `lazy by design` and
+the arcade line in the corner. The colours are the session's own Solarized,
+so nothing else had to be repainted. The launcher icon, the wallpaper and the
+**About LazyOS** card are the same drawing - the card is **Alt+Space** >
+**About**, and its last row opens `fastfetch` for the full picture. The lock screen keeps the mountain photograph
+instead: the desktop is the surface the mark owns, and the photograph is what is
+up when nobody is looking.
 
 ## The idle screen
 
-150 s without input and the screen becomes **LazyOS**: the wordmark, `:: lazy by design ::` and the
-arcade line `» press any key to continue «`, drawn in solarized orange. One terminal-text effect
-rebuilds the letters, then the next one does it differently, and so on while the machine waits. Any
+150 s without input and the screen becomes **lazyOS_**: the z_ mark, the wordmark, `:: lazy by
+design ::` and the arcade line `» press any key to continue «`, drawn in cyan. One terminal-text
+effect rebuilds the letters, then the next one does it differently, and so on while the machine waits. Any
 key returns you to the session and the 150 s starts over.
 
 At 300 s the screen locks instead: the wallpaper inside a base03 frame. The lock stops the animation

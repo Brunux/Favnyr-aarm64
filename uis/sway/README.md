@@ -25,7 +25,6 @@ launcher, waybar and the foot terminal.
 | `etc/sway/config` | System half of the session (replaces Debian's default file). Includes `config.d/*` at the end. |
 | `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, the LazyOS idle screen, clipboard, tablet mode, terminal file search. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search key's file-search binding. |
-| `home/.config/sway/config.d/*` | Per-user drop-ins, read last: the keyboard layout `rofi-layout` writes, and the first boot's welcome window (`30-welcome.conf`). |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
 | `home/.config/bin/rofi-learn` | **Learn**: the manual, one page at a time. |
 | `home/.config/bin/rofi-keys` | **Keybindings**: every binding, parsed from the configuration, one icon per section. |
@@ -49,11 +48,10 @@ launcher, waybar and the foot terminal.
 | `home/.config/lazyos/screensaver.txt` | The LazyOS art the idle screen loops: the wordmark, the caption and the arcade line. |
 | `home/.config/bin/lazyos-screensaver` | Launches the idle screen and is also the program that runs inside it (see **The idle screen**). |
 | `home/.config/bin/sway-lock` | Locks the session and waits for swaylock's readiness line; stops the idle screen first (see **The idle screen**). |
-| `home/.config/bin/night-light` | The night light: `wlsunset` with the sunset schedule or the forced warm mode, and the mode the resume hook restarts (see **The night light**). |
-| `home/.config/bin/lazyos-welcome` | The first boot's welcome window: one page of keys, once per install (see **The first boot**). |
 | `home/.config/bin/bar-*` | The menus the bar opens on click: `bar-menu`, `bar-net`, `bar-bt`, `bar-key`, `bar-audio`, `bar-updates`, `bar-power`, plus the shared `bar-pick`. |
 | `home/.config/workstyle/config.toml` | Icon map for workstyle (see below). |
-| `home/Pictures/Wallpapers/mountains.jpg` | Wallpaper referenced by `etc/sway/config`. |
+| `home/Pictures/Wallpapers/lazyos.png` | The desktop wallpaper, rendered from `brand/wallpaper.svg` and referenced by `etc/sway/config`. |
+| `home/Pictures/Wallpapers/mountains.jpg` | The lock screen's photograph, referenced by `bin/sway-lock`. |
 | `etc/keyd/default.conf` | Chromebook keymap for keyd: F-keys and VT switching (see below). |
 | `etc/udev/rules.d/90-brightnessctl.rules` | Gives the `video` group write access to the backlight, so `brightnessctl` works for the unprivileged session (see below). |
 
@@ -212,11 +210,11 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 | `rofi-kill` | End a process | the heaviest twenty by resident memory; SIGTERM, then an explicit offer of SIGKILL |
 | `rofi-tz` | Time zone | `timedatectl list-timezones` with the current one marked, and the network-clock switch. It restarts waybar afterwards: `timedatectl` only rewrites `/etc/localtime`, and a running process keeps the zone glibc cached the first time it called `localtime()` |
 | `rofi-places` | Places | home, documents, downloads, pictures, every mounted filesystem, and a **Mount** row for each unmounted one (a USB stick, an SD card) through `udisks2`; Enter browses there with `rofi-files`, Alt+1 unmounts the disk under the row |
-| `rofi-swap`, `rofi-format` | Places (swap is also in the root menu) | the two disk actions, both drawn from `ui_disks` in `lib-rofi.sh` (nothing mounted, no ChromeOS kernel partition, no SPI flash or eMMC boot partition, and never a disk that is built into the machine or is the one this system runs from - `ui_disk_system`, which both menus ask again after the pick): **swap** turns a card into a `lazyos_swap` partition and the fstab block that activates it on every boot (priority 10, below zram; `nofail` and a 15 s timeout), with **Turn it off** as the undo; **format** wipes a disk clean as exFAT (no 4 GB file limit; Windows, macOS and Linux all read it) or ext4 |
+| `rofi-swap`, `rofi-format` | Places (swap is also in the root menu) | the two disk actions, both drawn from `ui_disks` in `lib-rofi.sh` (nothing mounted, no ChromeOS kernel partition, no SPI flash or eMMC boot partition): **swap** turns a card into a `lazyos_swap` partition and the fstab block that activates it on every boot (priority 10, below zram; `nofail` and a 15 s timeout), with **Turn it off** as the undo; **format** wipes a disk clean as FAT32 or ext4 |
 | `rofi-media` | Media | the current track and play/pause/next/previous through `playerctl` |
 | `rofi-calc` | `Alt+Ctrl+Q`, Calculator | awk, one prompt; Enter copies the result |
 | `rofi-layout` | Settings → Keyboard layout | every layout in `evdev.lst`, applied to all keyboards and kept in `~/.config/sway/config.d/90-keyboard-layout.conf` |
-| `rofi-emoji` | `Alt+Ctrl+E`, Emoji | the table `scripts/make-emojis.sh` generates (`~/.config/emojis.tsv`, ~1300 rows, filtered to the glyphs `fonts-noto-color-emoji` draws); Enter inserts at the cursor, Alt+1 copies only |
+| `rofi-emoji` | `Alt+Ctrl+E`, Emoji | the table `scripts/make-emojis.sh` generates (`~/.config/emojis.tsv`, ~2000 rows); Enter inserts at the cursor, Alt+1 copies only |
 | `rofi-clip` | `Alt+Ctrl+V`, Clipboard | the `cliphist` history: Enter copies an entry back, Alt+1 deletes it, plus "save the newest image" and "clear the history" |
 | `rofi-dns` | DNS | the resolver of the connection that is up: Cloudflare, Google, Quad9, AdGuard, typed servers, or back to DHCP |
 | `rofi-pkg` | Packages | `apt-cache search`, then `apt-get install -y` behind a busy card; installed packages are marked before they are picked |
@@ -248,12 +246,9 @@ data file, and both are worth the exception:
   `~/.cache/cliphist/db` and holds everything copied, secrets included; the menu's last row
   clears it.
 * **`rofi-emoji`** (`Alt+Ctrl+E`) reads `~/.config/emojis.tsv`, which `scripts/make-emojis.sh`
-  generates on the build host from Python's Unicode database (name, glyph, block: 1296 rows, the
-  emoji blocks of the standard plus Dingbats and Miscellaneous Symbols, filtered against the
-  character map of `fonts-noto-color-emoji` so a row is always a glyph the font draws). The image
-  needs neither Python nor a package for it — the file is committed and copied with the home
-  directory, and `~/.config/emojis.font` pins the font's SHA256 and family so `check-system.sh`
-  can report a font upgrade that left the table stale. Insertion
+  generates on the build host from Python's Unicode database (name, glyph, block: 1988 rows, the
+  emoji blocks of the standard plus Dingbats and Miscellaneous Symbols). The image needs neither
+  Python nor a package for it — the file is committed and copied with the home directory. Insertion
   is Omarchy's: the glyph goes to the clipboard and `wtype -M shift -k Insert -m shift` types a
   virtual Shift+Insert, which every toolkit here understands as paste; `wtype -t "$glyph"` would
   need a keysym for the codepoint, which most emoji do not have. Alt+1 is the clipboard write
@@ -711,11 +706,11 @@ Deboma runs a screensaver 150 s after the last input and locks at 300 s
   and the window rule in `23-lazyos-screensaver.conf` fullscreens
   `[app_id="org.lazyos.screensaver"]` on the current workspace.
 
-The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
-design ::` and the arcade continue line `» press any key to continue «`, drawn in solarized orange
-(`foreground=cb4b16` in `screensaver.ini`, and its own SGR in the static frame). It is the one
-surface that carries the block art: the script, the app id and the launcher entry are named after
-it, and the launcher icon and the scalable SVG come from `scripts/make-brand.sh`.
+The art is `~/.config/lazyos/screensaver.txt`: the **z_** mark in block characters, `lazyOS_`,
+`:: lazy by design ::` and the arcade continue line `» press any key to continue «`, drawn in the
+brand's cyan (`foreground=2aa198` in `screensaver.ini`, and its own SGR in the static frame). The
+art, the fastfetch logo, the wallpaper and the launcher icon all come from `scripts/make-brand.sh`;
+`brand/README.md` has the rules.
 
 Any key dismisses it (`read -rsn1 -t 1` polls while the effect runs, so the dismissal does not wait
 for the effect to end; `tte` gets stdin on `/dev/null`, or it would swallow the key). Three details
@@ -738,30 +733,6 @@ The bar menu has a **Screensaver** entry that starts it on demand, and `check-sy
 `tte`, `swayidle`, the art, the launcher, `sway-lock` or `screensaver.ini` is missing, reads the
 drop-in for the 150 s / 300 s / `before-sleep` lines, and WARNs when an idle screen is found running
 under `swaylock`.
-
-## The night light
-
-`~/.config/bin/night-light` owns `wlsunset`: `login` starts the sunset schedule
-(`-l 20.67 -L -103.35 -t 4000`), `start` forces the warm end (`-T 4000 -t 4000`)
-for the Settings switch, `stop` kills it and forgets the mode, and `status`
-answers `on schedule`, `on warm` or `off` (with the stored mode when the client
-died). The mode is one line in `$XDG_RUNTIME_DIR/lazyos-night-light`, so a
-session that dies takes it with it. The idle drop-in's `after-resume` restarts
-the mode that was running, because the panel comes back with its own gamma table
-and a client that survived the sleep no longer has any effect: the screen used
-to wake up at daylight colour while the switch still said on. With no state,
-`resume` does nothing, so a night light that was off stays off.
-
-## The first boot
-
-`~/.config/bin/lazyos-welcome` opens one foot window (`--app-id=lazyos-welcome`,
-floated and centred by `30-welcome.conf`) with the eight keys a new install
-needs, and `read` closes it on Enter. It is **once per install**, not once per
-login: the marker `${XDG_STATE_HOME:-$HOME/.local/state}/lazyos/welcome` holds
-the `/etc/machine-id` it was shown for, so a session restart does not bring it
-back and a rebuilt card (fresh machine id) does. The marker is written after the
-window closes, and not at all when foot is missing or fails to start, so a
-window nobody saw is tried again rather than silently skipped.
 
 ## The CLI tools
 
@@ -952,18 +923,16 @@ that. `etc/sway/config.d/28-tablet.conf` binds the two states to
 
 | Step | What it does | Why |
 |---|---|---|
-| keyboard | `wvkbd-mobintl`, solarized, `JetBrains Mono`, 300 px portrait / 240 px landscape, radius 8, opaque | the panel is the only input once the keyboard is folded, and a translucent keyboard showed the window underneath through its keys |
-| physical keyboard | `keyboard_ids` names each keyboard from `swaymsg -t get_inputs -r` whose identifier no switch also carries (re-enabled by `off`) | the folded keys are under the screen, and a keystroke there is a keystroke. It is switched off **only after the on-screen keyboard is confirmed alive**: from that moment the touchscreen is the only input, so a wvkbd that failed must leave the physical keyboard on. `cros_ec_buttons` is the power/volume keyboard **and** the tablet switch on one libinput device, so a type-wide disable would suspend the switch and `tablet:off` would never arrive; `cros_ec` (the typing keyboard) and keyd's virtual keyboard are devices of their own and do go off. The Lock key still suspends, because logind reads `/dev/input` itself |
+| keyboard | `wvkbd-mobintl`, solarized, `JetBrains Mono`, 300 px portrait / 240 px landscape, radius 8, alpha 242 | the panel is the only input once the keyboard is folded |
+| physical keyboard | `swaymsg input type:keyboard events disabled` (re-enabled by `off`) | the folded keys are under the screen, and a keystroke there is a keystroke. It is switched off **only after the on-screen keyboard is confirmed alive**: from that moment the touchscreen is the only input, so a wvkbd that failed must leave the physical keyboard on. The Lock key still suspends, because logind reads `/dev/input` itself and the switch is a separate device |
 | touchpad | `swaymsg input type:touchpad events disabled` | it is on the back of the screen now, and pressure on it is input nobody meant |
 | rotation | a 1 Hz poller over `cros-ec-accel`'s `in_accel_{x,y,z}_raw` applying `swaymsg output <focused> transform <t>` | the accelerometer is in the kernel; no package, no D-Bus service |
 
 `off` undoes the three in reverse (keyboard gone, both inputs back, `transform
 normal`), and `status` prints `on · screen <transform>` or `off` - which is what
 the Settings row shows. `toggle` is the Settings row itself, for a mode that did
-not follow the switch. `off` also restores the inputs and the rotation when the
-state directory is gone, which is the path a person cannot reach without a
-mouse: the output comes from the compositor, not from `$state`, and a `wvkbd`
-left behind by a killed session is stopped by name.
+not follow the switch. `off` also restores the inputs when the state directory is
+gone, which is the path a person cannot reach without a mouse.
 
 The mapping is a table in `orient()`, and **the card's first report said the screen
 came up upside down**: the accelerometer in this panel sits 180° around from the
@@ -1002,9 +971,9 @@ was just calibrated is the one that has to look upright.
 Nothing about this is resident in laptop mode: the state is a directory in
 `$XDG_RUNTIME_DIR/lazyos-tablet` holding the two pids and the output name, so a
 session that dies takes the keyboard and the poller with it, and the next
-`tablet:off` still restores the touchpad and the screen (`off` runs its undo even
-when the state is gone). `wvkbd` 0.15 from Debian is the version that ships the
-flags this uses (`-H`, `-L`, `-R`, `--fn`, the colours); it has no `--dock` or
+`tablet:off` still restores the touchpad (`off` runs its undo even when the
+state is gone). `wvkbd` 0.15 from Debian is the version that ships the flags this
+uses (`-H`, `-L`, `-R`, `--fn`, the colours, `--alpha`); it has no `--dock` or
 `--auto`, which arrived later, and the keyboard is placed by the compositor as a
 layer-shell surface at the bottom edge, which is what `--dock` would do.
 

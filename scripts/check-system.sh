@@ -2077,18 +2077,23 @@ else
 	fail "/etc/os-release is missing"
 fi
 
-# The wallpaper is the session's own mountain photograph, and a missing file
-# leaves sway painting a flat colour with no message.  The lock screen wears the
-# same photograph, so it is one file that has to stay readable.
-if [ -r "$HOME/Pictures/Wallpapers/mountains.jpg" ]; then
+# The desktop wears the brand's keyboard wallpaper and the lock screen the
+# session's own mountain photograph; a missing file leaves sway painting a flat
+# colour with no message.
+if [ -r "$HOME/Pictures/Wallpapers/lazyos.png" ]; then
 	ok "desktop wallpaper present"
 else
-	fail "missing Pictures/Wallpapers/mountains.jpg: the desktop falls back to a flat colour"
+	fail "missing Pictures/Wallpapers/lazyos.png: the desktop falls back to a flat colour"
 fi
-if grep -qs 'Pictures/Wallpapers/mountains.jpg' /etc/sway/config "$HOME/.config/sway/config" 2>/dev/null; then
-	ok "sway paints the mountain wallpaper"
+if grep -qs 'Pictures/Wallpapers/lazyos.png' /etc/sway/config "$HOME/.config/sway/config" 2>/dev/null; then
+	ok "sway paints the brand wallpaper"
 else
-	fail "sway does not name Pictures/Wallpapers/mountains.jpg (output * bg)"
+	fail "sway does not name Pictures/Wallpapers/lazyos.png (output * bg)"
+fi
+if [ -r "$HOME/Pictures/Wallpapers/mountains.jpg" ]; then
+	ok "lock screen wallpaper present"
+else
+	fail "missing Pictures/Wallpapers/mountains.jpg: the lock falls back to a flat colour"
 fi
 if grep -qs 'mountains.jpg' "$HOME/.config/bin/sway-lock" 2>/dev/null; then
 	ok "lock screen keeps the mountain wallpaper"

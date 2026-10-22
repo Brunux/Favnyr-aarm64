@@ -78,9 +78,9 @@ center_logo() {
 
 static_frame() {
 	clear
-	# No cursor, and the art in solarized orange (#cb4b16): the wordmark is the
-	# one warm surface in the session, and it reads as "alive" on base03.
-	printf '\033[?25l\033[38;2;203;75;22m'
+	# No cursor, and the art in the brand's cyan (#2aa198): the z_ mark is
+	# cyan everywhere it is drawn (brand/README.md).
+	printf '\033[?25l\033[38;2;42;161;152m'
 	center_logo
 }
 
