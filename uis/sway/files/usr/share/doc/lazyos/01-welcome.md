@@ -13,8 +13,9 @@ everything above the kernel.
 * `sudo` does not ask for a password on this machine. Anything that needs root
   goes through it, including the scripts that rewrite the boot partition.
 * Open a terminal: **Alt+Return** (or the bar's menu → Terminal).
-* Open the launcher: the **Search key** (the magnifier, left of Tab) or
-  **Alt+D**. Type part of a name, Enter.
+* Open the launcher: **Alt+D**. Type part of a name, Enter.
+* Find a file: the **Search key** (the magnifier, left of Tab), or **Alt+Ctrl+F**
+  to browse. Hold **Alt** first and tap **Search** for the terminal search.
 * See every key binding: **Alt+Ctrl+K**.
 * This manual: the **Learn** entry in the bar menu (**Alt+Space**), or
   `rofi-learn` in a terminal.

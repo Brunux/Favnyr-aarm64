@@ -586,7 +586,16 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   over `$HOME`), bound in `~/.config/sway/config` and not in `19-launcher.conf` - the launcher had
   it and the key found applications, which is the one thing the launcher already does better one
   key away (`$mod+d`). The binding is `--release --no-repeat` because the top row doubles as
-  F1-F10 with Search held down (keyd), and `Alt+d` stays unbound.
+  F1-F10 with Search held down (keyd). `Alt+d` is the launcher and was never unbound: the overlay
+  used to carry `unbindsym Mod1+d`, which is why the key did nothing, and it is gone.
+  **`Alt+Search` has two paths so either press order works**: keyd's `[alt]` layer maps the Search
+  key to `F20` (`leftmeta = f20`), and sway binds `F20` on the press, so holding Alt and tapping
+  Search opens `lazyos-find` immediately and keyd consumes Search (no release binding fires).
+  Pressed the other way around, Search reaches sway as `Super_L` and the `--release Super_L+Mod1`
+  binding catches it when Search comes up with Alt still down; without Alt it falls through to the
+  file list. The window is wrapped in `lazyos-find`, not `exec`'d: a missing `fd`/`fzf`/opener
+  prints its reason and waits for Enter instead of closing the window, which is what "the key does
+  nothing" looked like.
   **Icons: a font glyph in the lists, an image in the launcher.** The lists this port draws put a
   Font Awesome codepoint in the row text (`~/.config/bin/lib-rofi.sh`), so they cost nothing, follow
   the palette and are filtered away by typing; the launcher and the window switcher show the real

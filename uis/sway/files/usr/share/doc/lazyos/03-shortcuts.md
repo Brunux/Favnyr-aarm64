@@ -51,6 +51,11 @@ size. Enter opens the choice with the same rules the file browser uses (text in
 copies its path instead, which is what a search in a terminal can do that a menu
 cannot, and Escape closes it.
 
+Press **Alt first, then Search**: keyd turns that chord into `F20`, so the window
+opens on the press. Pressing Search first also works - it reaches sway as the
+Search key, and releasing it while Alt is still down opens the same search - but
+the Alt-first order is the one that does not depend on which key comes up first.
+
 The two keys sit next to each other because they answer different questions. The
 Search key opens a *menu* - rows with icons and thumbnails, ready before you can
 type, one bounded run over the tree, and a list you scroll. Alt+Search *filters

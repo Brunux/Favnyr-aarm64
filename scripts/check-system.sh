@@ -915,6 +915,17 @@ fi
 grep -qs -- '--search)' "$HOME/.config/bin/rofi-files" ||
 	fail "bin/rofi-files has no --search mode: the Search key exits with a usage error"
 
+# The launcher is Alt+D and it is one key away from the file search. The overlay
+# used to carry `unbindsym Mod1+d`, which removed the launcher while the Search
+# key was still the launcher; the key then did nothing and looked broken.
+if grep -qs '^unbindsym Mod1+d' "$HOME/.config/sway/config"; then
+	fail "~/.config/sway/config still unbinds Alt+d: the launcher is gone"
+else
+	ok "Alt+d is not unbound (the launcher stays on \$mod+d)"
+fi
+grep -qs 'bindsym \$mod+d exec' /etc/sway/config.d/19-launcher.conf ||
+	fail "/etc/sway/config.d/19-launcher.conf has no \$mod+d binding: Alt+d has nothing to run"
+
 # The file search needs fd; without it rofi-files says so and browses $HOME instead,
 # which looks like a search that found nothing.
 if have fd || have fdfind; then
@@ -929,10 +940,21 @@ fi
 # opener - and the fzf one is a FAIL rather than a warning because a missing
 # filter is an *empty list*: the window opens, prints nothing, and reads as "no
 # such file" instead of as a missing package.
-if grep -qs 'Super_L+Mod1 exec .*lazyos-find' "$HOME/.config/sway/config"; then
+#
+# The chord has two paths: keyd turns Alt-first into F20 (so it fires on the
+# press), and the release binding catches Search-first with Alt still down. A
+# config with only one of them works in one press order and looks dead in the
+# other, so both are asked for, plus the keyd line that creates F20.
+if grep -qs 'F20 exec .*lazyos-find' "$HOME/.config/sway/config" &&
+	grep -qs 'Super_L+Mod1 exec .*lazyos-find' "$HOME/.config/sway/config"; then
 	ok "Alt+Search opens the terminal file search (lazyos-find)"
 else
-	fail "Alt+Search does not run 'lazyos-find' in ~/.config/sway/config"
+	fail "Alt+Search is missing its F20 press binding or its Super_L+Mod1 release fallback in ~/.config/sway/config"
+fi
+if grep -qs '^leftmeta = f20$' /etc/keyd/default.conf; then
+	ok "keyd maps Alt+Search to F20"
+else
+	fail "/etc/keyd/default.conf does not map leftmeta = f20: holding Alt and tapping Search does nothing"
 fi
 if [ -x "$HOME/.config/bin/lazyos-find" ]; then
 	ok "terminal file search (lazyos-find) is executable"

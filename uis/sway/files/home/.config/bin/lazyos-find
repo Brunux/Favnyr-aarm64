@@ -144,10 +144,27 @@ esac
 # this app-id is floated and centred by etc/sway/config.d/29-file-search.conf.
 # Started from a shell it runs in that shell, which is what makes the key and
 # the command the same program.
+#
+# The foot child is wrapped instead of exec'd: if the inner search cannot run
+# (a missing fd/fzf/lazyos-view, a directory that disappeared), fail() prints
+# the reason and exits non-zero, and the wrapper prints it in the window and
+# waits for Enter.  Without that the window closes on the error and the only
+# trace is a notification, which is exactly the "nothing happens" a key that
+# cannot run must not look like.
 if [ ! -t 0 ] || [ ! -t 1 ]; then
 	command -v foot >/dev/null 2>&1 ||
 		fail "No terminal to search in" "foot is missing, so the search has nowhere to draw"
-	exec foot --app-id=lazyos-find --title="Find files" -e "$self" "$root"
+	foot --app-id=lazyos-find --title="Find files" -e sh -c '
+		"$1" "$2"
+		rc=$?
+		case $rc in
+			0|130) exit 0 ;;
+		esac
+		printf "\nThe search stopped (exit %s). Press Enter to close.\n" "$rc"
+		read -r _
+	' sh "$self" "$root" ||
+		fail "The search window could not open" "foot failed to start"
+	exit 0
 fi
 
 # fd, fzf and the opener are the three ways this can come up empty, and each of
