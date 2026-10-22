@@ -1187,6 +1187,27 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   the list shows on a second, dimmer line, and cancelling reads `LoadState`/`Description`/
   `TimersCalendar` before claiming anything. The bar's `sbs-8-000b` gauge is the
   battery there; a `hid-*` power supply belongs to the touchpad and reads 0%.
+- **The About windows name `Alt+Q`, not foot's close key.** `Ctrl+Shift+W` is foot's
+  built-in and did not reach the held windows on this keyboard; `Alt+Q` is sway's own `kill`
+  and closes them. The three footers (fastfetch, boot time, devices) and
+  `docs/test-checklist.md` say the same key, and `03-shortcuts.md` explains why.
+- **The root menu is a launcher entry too.** `org.lazyos.menu.desktop` (`Name=LazyOS
+  Menu`, `Icon=lazyos`) runs `~/.config/bin/bar-menu`, so the list Alt+Space opens is
+  reachable by typing. Its `Exec` is a `$HOME` script, so `check-system.sh` asks for the
+  script's executable bit, not only the `.desktop` file.
+- **pcmanfm unmounts through `eject`, not `udisksctl`.** `udisks2` and `gvfs` do not
+  depend on it; without the package the Unmount action fails with `Failed to execute
+  child process "eject"` while the stick stays mounted. `rofi-places` unmounts through
+  `udisksctl` and never needed it, which is why only the window showed the gap.
+- **The reminder When menu carries its own help row.** "How do I fill these in?" answers
+  in a notification and `continue`s, so the menu reopens with the title and note still
+  known (they live outside the loop); the date/time prompts also name their formats
+  (`YYYY-MM-DD HH:MM`, 24-hour `HH:MM`). A row without its `help)` arm is a dead key.
+- **zoxide is initialised last in `~/.bashrc`.** It appends to `PROMPT_COMMAND`, and
+  starship replaces that variable wholesale, so init must come after starship and after
+  `~/.bash_aliases`; otherwise the hook is dropped and the first `cd -` prints
+  `zoxide: detected a possible configuration issue`. `zd` sends a first argument of
+  `-` to `builtin cd -` (which prints the path), not to zoxide.
 
 - **The manual is rendered, not printed.** `usr/share/doc/lazyos/*.md` (seven pages: welcome, rofi,
   shortcuts, software, the system, troubleshooting, agents) is opened by `rofi-learn` with **glow**

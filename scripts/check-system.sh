@@ -873,6 +873,18 @@ case "$_ls_alias" in
 	*eza*) ok "ls is eza in an interactive shell" ;;
 	*) warn "ls is not eza (alias: ${_ls_alias:-none}); ~/.bashrc is not being read" ;;
 esac
+# zoxide appends its hook to PROMPT_COMMAND and starship replaces it, so the
+# init has to come last or the first `cd -` prints "zoxide: detected a possible
+# configuration issue" and no jump is recorded. awk exits on the first match
+# instead of feeding a pipe, so the script's pipefail rule is not at risk.
+_zhook=$(awk '/zoxide init bash/ { print NR; exit }' "$HOME/.bashrc" 2>/dev/null || true)
+_zstarship=$(awk '/starship init bash/ { print NR; exit }' "$HOME/.bashrc" 2>/dev/null || true)
+if [ -n "$_zhook" ] && [ -n "$_zstarship" ] && [ "$_zhook" -gt "$_zstarship" ] &&
+	grep -qs 'builtin cd -' "$HOME/.bashrc"; then
+	ok "zoxide initialises after starship and cd - stays bash's (hook survives)"
+else
+	warn "~/.bashrc initialises zoxide before starship or lost zd's cd -: zoxide's hook is dropped"
+fi
 
 # The launcher is rofi, themed by two files that the launcher, the window
 # switcher and the bar's dmenu all read. Without them rofi still opens, in its
@@ -1213,6 +1225,15 @@ if [ -z "$_reminder" ]; then
 else
 	fail "reminders incomplete:$_reminder (custom dates or the notification icon disappear)"
 fi
+# The formats are what people ask about in the When menu, so it ends with a help
+# row. Both halves are needed: the row in the list and the arm that answers it -
+# a row whose arm is gone reads as a dead key.
+if grep -qs 'How do I fill these in?' "$HOME/.config/bin/rofi-remind" &&
+	grep -qs '^[[:space:]]*help)' "$HOME/.config/bin/rofi-remind"; then
+	ok "the reminder When menu carries its format help row"
+else
+	warn "rofi-remind lost the 'How do I fill these in?' row or its help arm"
+fi
 
 # A repeat is a calendar expression handed to the timer itself, so the parser that
 # has to read it is worth one call: this is the exact expression the menu writes
@@ -1276,6 +1297,16 @@ if [ -r "$HOME/.config/bin/rofi-about" ] && grep -qs -- '--hold' "$HOME/.config/
 	ok "rofi-about holds its fastfetch window open (--hold)"
 else
 	warn "rofi-about no longer passes --hold: the fastfetch picture flashes and closes"
+fi
+# The About windows stay open until dismissed, and the footer is the only
+# instruction on the screen. The key it names must be one this keyboard
+# answers: Ctrl+Shift+W (foot's built-in close) did not reach them; Alt+Q is
+# sway's own `kill` and does.
+_about_footer=$(grep -c 'close this window with Alt+Q' "$HOME/.config/bin/rofi-about" 2>/dev/null || true)
+if [ "${_about_footer:-0}" -eq 3 ] && ! grep -qs 'Ctrl+Shift+W' "$HOME/.config/bin/rofi-about"; then
+	ok "the About windows name a close key this keyboard answers (Alt+Q)"
+else
+	warn "rofi-about footers do not all say 'close this window with Alt+Q' (found ${_about_footer:-0}/3)"
 fi
 
 # The capture menu (Alt+Ctrl+C) is a list over external tools: grimshot for the
@@ -1623,6 +1654,14 @@ if have udisksctl; then
 else
 	fail "udisks2 is missing: an unprivileged session cannot mount a USB stick at all"
 fi
+# pcmanfm's Unmount runs `eject`, which is not a dependency of udisks2 or gvfs:
+# without it the action answers `Failed to execute child process "eject"` and the
+# stick stays mounted.
+if have eject; then
+	ok "pcmanfm can unmount a stick (eject)"
+else
+	fail "eject is missing: pcmanfm's Unmount fails with 'Failed to execute child process \"eject\"'"
+fi
 _pcm_dirs=${XDG_CONFIG_DIRS:-/etc/xdg}
 _pcm_conf=${_pcm_dirs%%:*}/pcmanfm/default/pcmanfm.conf
 [ -r "$_pcm_conf" ] || _pcm_conf=/etc/xdg/pcmanfm/default/pcmanfm.conf
@@ -1749,7 +1788,7 @@ for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_
 # checked apart because it is the one the brand owns: its name is the mark's.
 _missing_desktop=""
 for _d in wifi wifi-nmtui bluetooth audio-output power lock suspend \
-	screenshot-area capture lazygit tmux files emoji clipboard about; do
+	screenshot-area capture lazygit tmux files emoji clipboard about menu; do
 	[ -r "/usr/share/applications/org.lazyos.$_d.desktop" ] || _missing_desktop="$_missing_desktop $_d"
 done
 [ -r /usr/share/applications/org.lazyos.screensaver.desktop ] ||
@@ -1758,6 +1797,16 @@ if [ -z "$_missing_desktop" ]; then
 	ok "launcher entries present (session actions, nmtui, lazygit, tmux, about)"
 else
 	fail "launcher entries missing:$_missing_desktop"
+fi
+# The root menu's entry is the one row whose Exec is a script in $HOME, not a
+# binary in $PATH. A .desktop whose Exec does not exist is silently dropped, so
+# the row is simply absent and nothing logs it.
+if [ -r /usr/share/applications/org.lazyos.menu.desktop ] &&
+	grep -qs '^Exec=.*bin/bar-menu$' /usr/share/applications/org.lazyos.menu.desktop &&
+	[ -x "$HOME/.config/bin/bar-menu" ]; then
+	ok "the root menu has a launcher entry (LazyOS Menu -> bar-menu)"
+else
+	warn "org.lazyos.menu.desktop is missing or does not run an executable bar-menu"
 fi
 
 # waybar reads the backlight by device name and shows an empty module (with no
