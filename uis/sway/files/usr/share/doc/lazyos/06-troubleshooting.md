@@ -227,12 +227,23 @@ refused on purpose: flat says nothing about which way is up. The four
 top of `~/.config/bin/tablet-mode`.
 
 **The physical keyboard still types in tablet mode.** It should not: the mode
-switches `type:keyboard` off with the touchpad, after the on-screen keyboard has
-started. `swaymsg -t get_inputs -r | grep -c '"type": "keyboard"'` and
-`~/.config/bin/tablet-mode status` are the two readings; if the keyboard is off
-and the on-screen one never appeared, `tablet-mode off` (or folding the keyboard
-back) restores it, and the reason is in what wvkbd printed - usually no Wayland
-session for that process.
+switches the typing keyboards off one identifier at a time, after the on-screen
+keyboard has started. `swaymsg -t get_inputs -r` lists them (`cros_ec`, and
+keyd's virtual keyboard), and `~/.config/bin/tablet-mode status` says whether the
+mode is on. If the keyboard is off and the on-screen one never appeared,
+`tablet-mode off` (or folding the keyboard back) restores it, and the reason is
+in what wvkbd printed - usually no Wayland session for that process.
+
+**Folding the keyboard back does nothing** (the mode stays on, the on-screen
+keyboard stays up). The tablet switch and the volume/power keys are one libinput
+device, `cros_ec_buttons`, so a mode that disables every `type:keyboard` device
+suspends the switch with the keys and never sees `tablet:off` - that was the
+2026-10-22 card. `swaymsg -t get_inputs -r` must list `cros_ec_buttons` as a
+`switch` with `"send_events": "enabled"`, tablet mode on or off; the script
+leaves every identifier that also appears as a switch alone for exactly this
+reason, and `check-system.sh` FAILs when a switch is suspended. To leave the mode
+by hand, **Settings → Tablet mode** or `~/.config/bin/tablet-mode off` (the
+on-screen keyboard can type it).
 
 Nothing about this runs in laptop mode: one process for the keyboard and one
 sleeping for a second at a time for the rotation, both gone when the keyboard is

@@ -504,9 +504,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   (`etc/sway/config.d/28-tablet.conf`): `on` starts `wvkbd-mobintl` (solarized colours, `JetBrains
   Mono`, `-H 300`/`-L 240`, `-R 8`, **opaque**: no `--alpha`, because with transparency the window
   underneath shows through the keys), turns the touchpad off (`swaymsg input
-  type:touchpad events disabled` - it is on the back of the screen now) **and the physical keyboard
-  too** (`swaymsg input type:keyboard events disabled`, `enabled` on exit; the folded keys are on
-  the table and a keystroke there is a keystroke), and starts its own **1 Hz poller**
+  type:touchpad events disabled` - it is on the back of the screen now) **and the typing keyboards
+  too** (`keyboard_ids` enumerates `swaymsg -t get_inputs -r` and names each identifier that is not
+  also a switch, `enabled` on exit; the folded keys are on the table and a keystroke there is a
+  keystroke), and starts its own **1 Hz poller**
   (`tablet-mode poller`) over the accelerometer; `off` kills both, re-enables **both** input types
   and puts `transform normal` back. The state is a directory in `$XDG_RUNTIME_DIR/lazyos-tablet`
   holding the keyboard pid, the poller pid and the output name, so a session that dies removes all
@@ -516,12 +517,21 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   without a mouse, so it exists. **The keyboard is switched off only after `start_kbd`
   has confirmed the process is alive**, and never after a failed start: from that moment the
   touchscreen is the only input, so a wvkbd that did not start must leave the physical keyboard on.
-  The on-screen keyboard is unaffected by that switch because it is **not an input device** - it is
-  a Wayland client of `zwp_virtual_keyboard_manager_v1`; and the **Lock key still suspends**
-  (logind reads `/dev/input` itself and `cros_ec_buttons` is a switch device, not one of the
-  keyboards turned off). **The keyboard belongs to
-  tablet mode and nowhere else** - `check-system.sh` warns when `wvkbd-mobintl` runs while the mode
-  is off, because nothing else starts it. `wvkbd` 0.15 is the version in forky: it has `-H`, `-L`,
+  The keyboards are named one at a time because `cros_ec_buttons` is **both a keyboard and the
+  tablet switch**: it reports the power/volume keys and `SW=3` on one libinput device, wlroots
+  builds both halves over the same handle, and send-events belongs to that handle, so a type-wide
+  `input type:keyboard events disabled` closes the fd the switch is read from
+  (`evdev_device_suspend`) and `tablet:off` never arrives - the 2026-10-22 card could be folded
+  into the mode and not out of it. `keyboard_ids` therefore skips every identifier a
+  `type: "switch"` device also carries (the headset jack next to it), and `check-system.sh` FAILs
+  both on a type-wide disable in the script and on a switch whose `libinput.send_events` is
+  `disabled`. The internal keyboard is `cros_ec`, a device of its own, so the folded keys still go
+  quiet. The on-screen keyboard is unaffected by that switch because it is **not an input device** -
+  it is a Wayland client of `zwp_virtual_keyboard_manager_v1`; and the **Lock key still suspends**
+  because logind reads `/dev/input` itself, so a send-events change in sway never reaches it.
+  **The keyboard belongs to tablet mode and nowhere else** - `check-system.sh` warns when
+  `wvkbd-mobintl` runs while the mode is off, because nothing else starts it. `wvkbd` 0.15 is the
+  version in forky: it has `-H`, `-L`,
   `-R`, `--fn`, the colour flags and `--alpha`, and **no `--dock`/`--ratio`/`--auto`** (later
   releases); the compositor places it as a layer-shell surface at the bottom edge. Its layout is the
   mobile-international one, and there is **no `latin-american` layer** among `--list-layers` (`full`,

@@ -412,7 +412,8 @@ Fold the keyboard all the way back.
 | turn the device 90° clockwise, 90° back, upside down, and lay it flat | the screen follows within about a second, and the flat reading puts it back to `normal` |
 | the pose you would type in (screen upright, facing you) | the screen is upright, **not** upside down - if it is not, see Calibrate below |
 | tilt it, do not turn it | the screen does **not** flip |
-| press the Lock key | the screen locks and the machine suspends (logind reads the power-button node, not the disabled keyboard) |
+| press the Lock key | the screen locks and the machine suspends (logind reads /dev/input directly, so a disabled sway keyboard does not matter) |
+| press the volume keys | the volume still changes: the power/volume keyboard shares its libinput device with the tablet switch, so it is left enabled |
 | fold it back into a laptop | keyboard gone, touchpad **and keyboard** back (type), screen upright, "Tablet mode off" |
 | `pgrep -x wvkbd-mobintl` and `pgrep -af 'tablet-mode poller'` afterwards | nothing |
 | Settings (`Alt+Ctrl+O`) -> **Tablet mode** | toggles by hand; the row reads `on · screen 90` or `off` |
@@ -434,10 +435,19 @@ What a failure means:
   `tablet-mode calibration` says `calibrated …` or `default …`; deleting the file
   goes back to the built-in mapping. The four `transform` values in `orient()`
   are now derived from that one reference.
-* **the physical keyboard still types**: `swaymsg -t get_inputs -r | grep -c
-  '"type": "keyboard"'` and `tablet-mode status`; `tablet-mode off` restores it.
-  It is switched off only after the on-screen keyboard is confirmed alive, so a
-  wvkbd that failed leaves the physical keyboard on and the notification says so.
+* **the physical keyboard still types**: `swaymsg -t get_inputs -r` lists the
+  keyboards, and `tablet-mode status` says whether the mode is on; `tablet-mode
+  off` restores it. It is switched off only after the on-screen keyboard is
+  confirmed alive, so a wvkbd that failed leaves the physical keyboard on and the
+  notification says so.
+* **folded back into a laptop and nothing happens** (the mode stays on, the
+  on-screen keyboard stays up): the tablet switch was suspended with a keyboard.
+  `swaymsg -t get_inputs -r` must list `cros_ec_buttons` as a `switch` with
+  `"send_events": "enabled"` even while the mode is on; the script switches the
+  typing keyboards off one identifier at a time and leaves any identifier a
+  switch also carries alone, and `check-system.sh` FAILs when a switch is
+  suspended. `~/.config/bin/tablet-mode off` (or Settings → Tablet mode) is the
+  way out without folding, and the on-screen keyboard can type it.
 * **keyboard appears but types nowhere**: the focused surface refuses virtual
   keyboards; the emoji picker's notification says the same thing, and pending
   `zwp_virtual_keyboard_manager_v1` support is in wlroots, not wvkbd.

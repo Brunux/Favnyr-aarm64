@@ -155,8 +155,19 @@ again.
 
 The keyboard is only switched off once the on-screen one is confirmed running,
 so a keyboard that fails to start leaves you the physical one instead of only
-the touchscreen. Lock still suspends the machine in tablet mode (the Lock key is
-read from the power-button device, not from a keyboard).
+the touchscreen. Lock still suspends the machine in tablet mode: logind reads
+`/dev/input` itself, so the key reaches it even while sway has the keyboard
+switched off.
+
+The volume and power keys and the tablet switch are one device
+(`cros_ec_buttons`), so the mode cannot simply switch "every keyboard" off: the
+device would be suspended with the keys and folding the keyboard back would
+never be seen. It names the typing keyboards one by one instead and leaves that
+device alone, which is why the volume keys still work and the mode can always be
+left. If it ever stays on after folding the keyboard back, **Settings → Tablet
+mode** (or `~/.config/bin/tablet-mode off`, typed on the on-screen keyboard)
+puts everything back, and `check-system.sh` FAILs when the switch itself is
+suspended.
 
 If the screen comes up **upside down**, or turns the wrong way, the accelerometer
 in your unit's panel disagrees with the built-in mapping: **Settings → Calibrate

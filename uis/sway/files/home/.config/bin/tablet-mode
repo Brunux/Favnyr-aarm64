@@ -58,7 +58,7 @@
 #
 # The physical keyboard is turned off with the touchpad, for the obvious
 # reason: with the keyboard folded back its keys are on the table, under the
-# screen, and a keystroke there is a keystroke.  Three things about that are not
+# screen, and a keystroke there is a keystroke.  Four things about that are not
 # obvious:
 #
 #   - wvkbd is *not* an input device.  It is a Wayland client of
@@ -73,12 +73,26 @@
 #     type; and every path that ends tablet mode - `off`, `toggle`, the
 #     reattach switch, a stale state directory - re-enables both input types,
 #     including the touchpad-only fallback that already existed.
-#   - Suspend from the Lock key does not go through a keyboard device.  logind
-#     reads /dev/input directly and `cros_ec_buttons` (the power button, the lid
-#     and tablet switch) is a switch device, not one of the keyboards switched
-#     off here, so the Lock key keeps suspending the machine in tablet mode.
-#     Neither does the reattach itself: bindswitch is driven by that same switch
-#     device, so folding the keyboard back still delivers `tablet:off`.
+#   - The tablet switch and the volume/power keys are *one* libinput device:
+#     `cros_ec_buttons` reports KEY_VOLUMEUP/DOWN, KEY_POWER and SW=3
+#     (SW_LID + SW_TABLET_MODE).  wlroots builds one wlr_input_device per
+#     capability over that same handle, but send-events is a property of the
+#     handle, and libinput closes its fd when it is disabled
+#     (evdev_device_suspend).  `input type:keyboard events disabled` therefore
+#     suspended the switch along with the keys: the card could be folded *into*
+#     tablet mode but not out of it, because `tablet:off` was never read.  The
+#     keyboards are switched off one identifier at a time instead, and every
+#     identifier a switch device also carries is left alone.  The typing
+#     keyboard is `cros_ec` - a device of its own - plus keyd's virtual keyboard
+#     (what types once keyd has grabbed `cros_ec`), so the folded keys go quiet
+#     while the switch stays readable; the headset jack is the same shape as
+#     cros_ec_buttons (a keyboard half with a switch) and is skipped for the
+#     same reason.
+#   - Suspend from the Lock key does not go through sway's keyboards.  logind
+#     reads /dev/input directly, so the raw KEY_SLEEP still reaches it even
+#     though sway's keyboard half is switched off - and the keyboard half of
+#     `cros_ec_buttons` is deliberately left enabled.  The reattach is read from
+#     that device's switch half, which is the point of leaving it enabled.
 
 set -eu
 
@@ -272,11 +286,40 @@ poller_alive() {
 	kill -0 "$(cat "$state/poller.pid" 2>/dev/null)" 2>/dev/null
 }
 
+# The keyboards that may be switched off: every `type: "keyboard"` device whose
+# identifier no switch device also carries.  `cros_ec_buttons` is both - the
+# power and volume keys on the keyboard half, SW_LID/SW_TABLET_MODE on the
+# switch half, one libinput handle underneath - so naming it would suspend the
+# tablet switch with the keys (see the header).  Nothing is printed when there
+# is no session; inputs() then leaves the keyboards alone instead of guessing a
+# type.
+keyboard_ids() {
+	swaymsg -t get_inputs -r 2>/dev/null |
+		jq -r '
+			[ .[] | select(.type == "switch") | .identifier ] as $switches
+			| .[]
+			| select(.type == "keyboard")
+			| .identifier
+			| select(. as $id | ($switches | index($id)) == null)
+		' 2>/dev/null
+}
+
 # Both input types, in one place: `on` uses them to switch off, `off` to switch
 # back, and off's no-state path to repair what a killed session left behind.
+# The touchpad goes by type because no touchpad is a switch.  The keyboard does
+# not: a type-wide send-events change is a property of the libinput handle the
+# halves of cros_ec_buttons share, so `on` names each safe identifier, and
+# `off` starts with the type-wide enable (the safe direction, and the one that
+# un-suspends a handle an earlier version left behind) before naming them again.
 inputs() { # enabled|disabled
 	swaymsg input type:touchpad events "$1" >/dev/null 2>&1 || true
-	swaymsg input type:keyboard events "$1" >/dev/null 2>&1 || true
+	if [ "$1" = enabled ]; then
+		swaymsg input type:keyboard events enabled >/dev/null 2>&1 || true
+	fi
+	keyboard_ids | while IFS= read -r _id; do
+		[ -n "$_id" ] || continue
+		swaymsg input "$_id" events "$1" >/dev/null 2>&1 || true
+	done
 }
 
 on() {

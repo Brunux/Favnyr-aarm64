@@ -1512,21 +1512,78 @@ fi
 # keyboard comes up first: a card whose keyboard was disabled before wvkbd proved
 # alive would be a touchscreen with no way to type. The mode is the only thing in
 # the session that disables a keyboard, so the pattern is a fair test of the wiring.
-# The value is `$1` of inputs() and not the word `disabled`, so what is tested is
-# the call (`inputs disabled`) and the order of the last one against `start_kbd`:
-# `on` answers an already-running mode before it starts the keyboard, and that
-# early `inputs disabled` is the one a plain line-order test would find.
+#
+# The keyboard is never switched off as `type:keyboard`: cros_ec_buttons is a
+# keyboard (the power and volume keys) *and* the device that reports
+# SW_TABLET_MODE, wlroots builds both halves over one libinput handle, and
+# send-events belongs to that handle - so a type-wide disable suspends the switch
+# too, `tablet:off` never arrives and the mode cannot be left by folding the
+# keyboard back (the 2026-10-22 card). The script names each safe identifier
+# instead and skips every identifier a switch also carries. The value is `$1` of
+# inputs() and not the word `disabled`, so what is tested is the call
+# (`inputs disabled`) and the order of the last one against `start_kbd`: `on`
+# answers an already-running mode before it starts the keyboard, and that early
+# `inputs disabled` is the one a plain line-order test would find.
 _tm="$HOME/.config/bin/tablet-mode"
-if grep -qs 'input type:keyboard events' "$_tm"; then
+_tm_code=$(grep -v '^[[:space:]]*#' "$_tm" 2>/dev/null || true)
+_tm_ids=$(sed -n '/^keyboard_ids() {/,/^}/p' "$_tm" 2>/dev/null || true)
+_tm_inputs=$(sed -n '/^inputs() {/,/^}/p' "$_tm" 2>/dev/null || true)
+_tm_ids_ok=0
+_tm_inputs_ok=0
+_tm_typewide=""
+while IFS= read -r _line; do
+	case $_line in
+	*'input type:keyboard events enabled'*) ;;
+	*'input type:keyboard events'*)
+	_tm_typewide=${_line#"${_line%%[![:space:]]*}"}
+	;;
+	esac
+done <<<"$_tm_code"
+case $_tm_ids in
+*'type == "switch"'*) _tm_ids_ok=1 ;;
+esac
+case $_tm_inputs in
+*'keyboard_ids'*'events "$1"'*) _tm_inputs_ok=1 ;;
+esac
+if [ -n "$_tm_typewide" ]; then
+	fail "bin/tablet-mode switches type:keyboard as a whole ($_tm_typewide): cros_ec_buttons is a keyboard and the tablet switch on one libinput device, so the switch is suspended and tablet:off never arrives (the mode cannot be left by folding the keyboard back)"
+elif [ "$_tm_ids_ok" = 1 ] && [ "$_tm_inputs_ok" = 1 ]; then
 	_after_kbd=$(grep -n 'inputs disabled' "$_tm" | tail -1 | cut -d: -f1)
 	_start_kbd=$(grep -n 'start_kbd ||' "$_tm" | head -1 | cut -d: -f1)
 	if [ -n "$_after_kbd" ] && [ -n "$_start_kbd" ] && [ "$_after_kbd" -gt "$_start_kbd" ]; then
-		ok "tablet mode switches the physical keyboard off (touchpad and keyboard, after wvkbd is up)"
+		ok "tablet mode switches the physical keyboard off per identifier, leaving the tablet switch enabled (after wvkbd is up)"
 	else
 		fail "bin/tablet-mode disables the keyboard before wvkbd is confirmed alive: the touchscreen can be left unable to type"
 	fi
 else
-	fail "bin/tablet-mode does not touch type:keyboard: the folded keys keep typing on the table"
+	fail "bin/tablet-mode does not enumerate keyboards per identifier: disabling a keyboard by type can take the tablet switch with it"
+fi
+# The switch is only useful while it is enabled. `swaymsg -t get_inputs` reports
+# libinput's send-events mode, which is what the switch half shares with the
+# keyboard half of cros_ec_buttons, so this reads the state the next fold depends
+# on. Outside a sway session there is nothing to ask.
+_tm_sock=${SWAYSOCK:-}
+if [ -z "$_tm_sock" ] || [ ! -S "$_tm_sock" ]; then
+	for _s in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"/sway-ipc."$(id -u)".*.sock; do
+		[ -S "$_s" ] || continue
+		_tm_sock=$_s
+		break
+	done
+fi
+_tm_devs=""
+if [ -n "$_tm_sock" ] && [ -S "$_tm_sock" ] && have swaymsg && have jq; then
+	_tm_devs=$(SWAYSOCK="$_tm_sock" swaymsg -t get_inputs -r 2>/dev/null || true)
+fi
+if [ -z "$_tm_devs" ]; then
+	skip "no sway session to ask which input devices are enabled (a suspended tablet switch cannot deliver tablet:off)"
+else
+	_tm_suspended=$(printf '%s\n' "$_tm_devs" |
+		jq -r '.[] | select(.type == "switch" and .libinput.send_events == "disabled") | .identifier' 2>/dev/null || true)
+	if [ -z "$_tm_suspended" ]; then
+		ok "every switch device is enabled (the tablet switch is not suspended with a keyboard)"
+	else
+		fail "switch device(s) $_tm_suspended have send_events disabled: folding the keyboard back cannot deliver tablet:off"
+	fi
 fi
 # Folding the keyboard back has to leave the screen upright even when the mode's
 # state directory is gone: a session killed in tablet mode takes it with it, and
