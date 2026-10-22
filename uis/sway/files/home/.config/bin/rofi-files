@@ -100,7 +100,7 @@ if [ $# -gt 0 ]; then dir=$1; fi
 if [ "$mode" = search ]; then
 	dir=$HOME
 	if [ -z "$dir" ] || [ ! -d "$dir" ]; then
-		notify-send -a Files "No home directory" "\$HOME is $dir"
+		notify-send -a Files -i dialog-error "No home directory" "\$HOME is $dir"
 		exit 1
 	fi
 	# Debian's binary is fdfind; the image also has /usr/local/bin/fd (the
@@ -111,7 +111,7 @@ if [ "$mode" = search ]; then
 	# prompt would otherwise read as a broken binding.
 	fd=$(command -v fd || command -v fdfind || :)
 	if [ -z "$fd" ]; then
-		notify-send -a Files "Search is not available" \
+		notify-send -a Files -i system-search "Search is not available" \
 			"fd is missing (package fd-find); opening the browser instead"
 		mode=browse
 	fi
@@ -130,7 +130,7 @@ if [ -z "$dir" ]; then
 	[ -n "$dir" ] || dir=$HOME
 fi
 if [ ! -d "$dir" ]; then
-	notify-send -a Files "Not a directory" "$dir"
+	notify-send -a Files -i dialog-warning "Not a directory" "$dir"
 	exit 1
 fi
 dir=$(cd -- "$dir" && pwd)
@@ -409,7 +409,7 @@ if [ -z "$action" ]; then
 		action=file
 		payload=$(cd -- "$(dirname -- "$choice")" && pwd)/$(basename -- "$choice")
 	else
-		notify-send -a Files "No such path" "$choice"
+		notify-send -a Files -i dialog-warning "No such path" "$choice"
 		exit 0
 	fi
 fi
@@ -419,7 +419,7 @@ fi
 # dotfile switch is the one row with nothing behind it.
 if [ "$rc" -eq 10 ]; then
 	if [ "$action" = hidden ]; then
-		notify-send -a Files "Hidden files" \
+		notify-send -a Files -i view-hidden "Hidden files" \
 			"Enter switches them · Alt+1 has nothing to act on"
 		exit 0
 	fi
@@ -434,7 +434,7 @@ open_browser() {
 	if command -v firefox-esr >/dev/null 2>&1; then
 		setsid firefox-esr "file://$1" >/dev/null 2>&1 &
 	else
-		notify-send -a Files "$2" "Not a text file, and no browser is installed to open it"
+		notify-send -a Files -i dialog-error "$2" "Not a text file, and no browser is installed to open it"
 	fi
 }
 
@@ -453,11 +453,11 @@ case $action in
 		# profile sets; foot runs the command directly, so pass it here).
 		# Only text is opened: bat would show a binary as an empty page.
 		if [ ! -e "$payload" ]; then
-			notify-send -a Files "$(basename -- "$payload")" "Broken link, there is nothing there"
+			notify-send -a Files -i dialog-warning "$(basename -- "$payload")" "Broken link, there is nothing there"
 			exit 0
 		fi
 		if [ ! -r "$payload" ]; then
-			notify-send -a Files "$(basename -- "$payload")" "Not readable by this user"
+			notify-send -a Files -i dialog-error "$(basename -- "$payload")" "Not readable by this user"
 			exit 0
 		fi
 		# A file was opened: the next Alt+Ctrl+F starts in the folder it lives
