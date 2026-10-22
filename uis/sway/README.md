@@ -709,7 +709,7 @@ The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmar
 design ::` and the arcade continue line `» press any key to continue «`, drawn in solarized orange
 (`foreground=cb4b16` in `screensaver.ini`, and its own SGR in the static frame). It is the one
 surface that carries the block art: the script, the app id and the launcher entry are named after
-it, and the mark on the wallpaper and the launcher icon come from `scripts/make-brand.sh`.
+it, and the launcher icon and the scalable SVG come from `scripts/make-brand.sh`.
 
 Any key dismisses it (`read -rsn1 -t 1` polls while the effect runs, so the dismissal does not wait
 for the effect to end; `tte` gets stdin on `/dev/null`, or it would swallow the key). Three details

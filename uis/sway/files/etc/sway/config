@@ -34,9 +34,10 @@ set $switcher rofi -show window
 
 ### Output configuration
 #
-# Wallpaper. The install step rewrites /home/brunux to the configured
+# Wallpaper: the session's own mountain photograph, which is also what the lock
+# screen wears. The install step rewrites /home/brunux to the configured
 # username, so the default-user path is correct here.
-output * bg /home/brunux/Pictures/Wallpapers/lazyos.png fill
+output * bg /home/brunux/Pictures/Wallpapers/mountains.jpg fill
 
 ### Idle configuration
 #

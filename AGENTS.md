@@ -117,7 +117,7 @@ uis/<ui>/                  one directory per graphical shell
                            root, `home/` is merged into /home/$USERNAME
   README.md                what the shell ships and how it deviates upstream
 brand/                     the mark, as an SVG source: scripts/make-brand.sh
-                           renders the icon and the wallpaper from it
+                           renders the icon and the wordmark from it
 packages/                  device-agnostic package lists (base.list: what the
                            system needs; tools.list: the CLI tools)
 scripts/                   lib.sh (device/kernel/UI resolution), lib-cgpt.sh
@@ -317,29 +317,29 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   it can draw.** `brand/lazyos.svg` is the hand-drawn arcade button (cyan bezel,
   orange dome, base03 crescent, base1 highlight), and `scripts/make-brand.sh`
   renders it into `lazyos.png` in the LazyOS theme's `48x48/apps` (the About row
-  and anything that asks for `Icon=lazyos`), the SVG in `scalable/apps`, a
-  1366x912 `Pictures/Wallpapers/lazyos.png` (the panel's real mode, so nothing
-  is resampled: the mark, `lazy by design` in cyan and the arcade line in base0)
-  and `~/.config/lazyos/wordmark.txt`, the two-line text fastfetch draws. **The
+  and anything that asks for `Icon=lazyos`), the SVG in `scalable/apps` and
+  `~/.config/lazyos/wordmark.txt`, the two-line text fastfetch draws. **The
   PNGs are committed**, because the image is staged with `git archive HEAD` and
   a build host without `rsvg-convert` still has to build; only an edit to the
   SVG needs the script, which is a host tool like `make-icons.sh` - hence
-  `librsvg2-bin`/`fonts-jetbrains-mono` in `00-deps.sh`. **The lock screen keeps
-  `mountains.jpg`**: the desktop is the surface the brand owns, and the
-  photograph is what is up when nobody is looking. **The text is not the
-  picture**: the idle screen draws the ANSI Shadow wordmark (a terminal can draw
-  block art; a PNG cannot become text), fastfetch puts the two-line wordmark
-  next to the facts, and a virtual terminal gets `/etc/issue` - none of them is
-  asked to show the mark. `os-release` (a regular file: Debian's is a
-  base-files-owned symlink, and `check-system.sh` FAILs when the image is back
-  to calling itself Debian), `/etc/issue`, the greeter's `--greeting` and the
-  `lazyos` hostname are the distribution saying its own name, and the version
-  they carry comes from the committed `VERSION` file, read by `build-rootfs.sh`,
-  forwarded through sudo into the chroot and recorded as `version` in
-  `/etc/debian-aarch64-revision` - a build cannot say 0.2 while the tag says
-  v0.3.0. The root menu's `ai` group (Agents and Dictation together, not
-  scattered between the openers and the session actions) is the other statement
-  the brand makes.
+  `librsvg2-bin` in `00-deps.sh`. **The wallpaper is not the brand**: the
+  desktop wears `~/Pictures/Wallpapers/mountains.jpg`, the session's own
+  photograph from before the mark, because a wallpaper is a surface to live on
+  rather than a logo; the mark is the launcher icon and the About card, and the
+  lock screen wears the same photograph, which is what is up when nobody is
+  looking. **The text is not the picture**: the idle screen draws the ANSI
+  Shadow wordmark (a terminal can draw block art; a PNG cannot become text),
+  fastfetch puts the two-line wordmark next to the facts, and a virtual terminal
+  gets `/etc/issue` - none of them is asked to show the mark. `os-release` (a
+  regular file: Debian's is a base-files-owned symlink, and `check-system.sh`
+  FAILs when the image is back to calling itself Debian), `/etc/issue`, the
+  greeter's `--greeting` and the `lazyos` hostname are the distribution saying
+  its own name, and the version they carry comes from the committed `VERSION`
+  file, read by `build-rootfs.sh`, forwarded through sudo into the chroot and
+  recorded as `version` in `/etc/debian-aarch64-revision` - a build cannot say
+  0.2 while the tag says v0.3.0. The root menu's `ai` group (Agents and
+  Dictation together, not scattered between the openers and the session
+  actions) is the other statement the brand makes.
 - **greetd**: Debian's package creates the **`_greetd`** system user (upstream docs say
   `greetd`), and its unit declares `Conflicts=getty@tty7.service`, i.e. it expects `vt = 7` in
   `/etc/greetd/config.toml`. With the upstream name the service dies with
@@ -1275,10 +1275,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   (lazygit/lazydocker: the tool does the boring part, the thing to press is on the screen) plus the
   arcade screen an idle machine deserves. It is the surface that carries the **wordmark**: the art
   is `~/.config/lazyos/screensaver.txt`, the script is `~/.config/bin/lazyos-screensaver`, the app
-  id `org.lazyos.screensaver`, and its drop-in and launcher entry are named after it. The mark and
-  the wallpaper are `scripts/make-brand.sh`'s; the terminal gets the text art because that is what
-  a terminal can draw. **The frame rate is the whole cost.** Measured on this host with a pty and
-  the real art, one complete cycle of the seven effects is **70 s of wall time and 8.5 s of CPU
+  id `org.lazyos.screensaver`, and its drop-in and launcher entry are named after it. The mark is
+  `scripts/make-brand.sh`'s; the terminal gets the text art because that is what a terminal can
+  draw. **The frame rate is the whole cost.** Measured on this host with a pty and the real art,
+  one complete cycle of the seven effects is **70 s of wall time and 8.5 s of CPU
   (~12 % of one core)**, peaking at **49 MB** in `tte` on top of foot's ~25 MB, and costing nothing
   after it ends; the same cycle at 120 fps takes 20 s and ~6.4 s of CPU, i.e. ~32 % of a core, for
   an animation three times faster than a screensaver needs. `tte` has no global foreground flag,
@@ -1512,7 +1512,7 @@ scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initra
 scripts/install-swayfx.sh   # install the compositor .debs (rootfs by default, `/` for a running system)
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
 scripts/make-icons.sh       # Font Awesome glyphs -> the LazyOS icon theme PNGs (host tool, committed output)
-scripts/make-brand.sh       # brand/lazyos.svg -> the icon, the wallpaper and the wordmark (host tool, committed output)
+scripts/make-brand.sh       # brand/lazyos.svg -> the icon, the SVG and the wordmark (host tool, committed output)
 scripts/make-emojis.sh      # Python's Unicode database -> ~/.config/emojis.tsv (host tool, committed output)
 scripts/write-sd.sh [dev]   # partition+populate a microSD/USB (default /dev/mmcblk1)
 scripts/make-image.sh       # distributable disk image from the rootfs (no card needed)

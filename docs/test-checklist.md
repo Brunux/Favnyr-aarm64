@@ -29,12 +29,12 @@ cat /etc/debian-aarch64-revision ~/Dev/LazyOS/REVISION ~/Dev/LazyOS/VERSION
 * `check-system.sh` must end with **0 FAIL**. WARN and SKIP lines are expected
   and explained in `reports/README.md`; anything else stops the run here.
 
-## The brand - wallpaper, About, greeter, console
+## The desktop wallpaper, the About card, the greeter and the console
 
 | Step | Expected |
 |---|---|
-| look at the desktop | the arcade button on base03, `lazy by design` under it and the arcade line at the bottom; the bar, foot, rofi and the menus are still solarized (the brand did not repaint the session) |
-| `Alt+Ctrl+L`, then unlock | the **mountain photograph**, not the brand wallpaper - the lock is deliberately the other surface |
+| look at the desktop | the **mountain photograph** (`Pictures/Wallpapers/mountains.jpg`) filling the output; the bar, foot, rofi and the menus are still solarized (the brand did not repaint the session) |
+| `Alt+Ctrl+L`, then unlock | the same **mountain photograph** on base03 - the lock and the desktop wear one photo |
 | `Alt+d`, type `About LazyOS` | the **About LazyOS** row has the mark as its icon (not a hole); Enter opens the card with the two-line wordmark on the left, `OS · LazyOS <version>` among the facts, and the 16-colour palette at the bottom |
 | `cat /etc/os-release` | `ID=lazyos`, `PRETTY_NAME="LazyOS <version>"`, and `VERSION_ID` equal to the `version` line of `/etc/debian-aarch64-revision` |
 | `hostname` | `lazyos` |
@@ -43,9 +43,10 @@ cat /etc/debian-aarch64-revision ~/Dev/LazyOS/REVISION ~/Dev/LazyOS/VERSION
 
 The launcher's **About LazyOS** and the root menu's **About** open the same card;
 the launcher entry is the one that carries `Icon=lazyos`. A missing wallpaper is
-`Pictures/Wallpapers/lazyos.png`; regenerate it with
-`scripts/make-brand.sh` on the build host. A hole where the About row's icon
-should be is `lazyos.png` missing from `/usr/share/icons/LazyOS/48x48/apps/`.
+`Pictures/Wallpapers/mountains.jpg`, which ships in the repository, so a rebuilt
+image restores it (`scripts/make-brand.sh` no longer renders a wallpaper). A hole
+where the About row's icon should be is `lazyos.png` missing from
+`/usr/share/icons/LazyOS/48x48/apps/`.
 Debian's swirl in the About card is `~/.config/fastfetch/config.jsonc` missing.
 `check-system.sh` FAILs on the first two, on an `os-release` that is Debian's
 again, and on an `org.nureb.*` entry that survived the rename; it WARNs when the
@@ -408,7 +409,7 @@ What a failure means:
 | `gio mime image/png`, `gio mime application/pdf`, `gio mime inode/directory` | `org.lazyos.view.desktop`, `org.gnome.Papers.desktop`, `pcmanfm.desktop`. This is GIO's own answer, not the file read back: a `lazyos-view` without its executable bit makes GIO say "no default application" |
 | `dig +short example.com` and `host example.com` | an address. `dig` comes from `bind9-dnsutils`; `resolvectl` is deliberately absent because NetworkManager owns `resolv.conf`, and its absence is not a gap |
 | a menu whose rows are long (Files on a deep path, a grep match with a long line) | the window is wide enough for the end of the path; a row cut with `…` mid-detail means `ui_width` stopped sizing that list |
-| lock (`Alt+Ctrl+L`, the Lock key, and the 300 s idle timer) | the **mountain photograph** on base03 (the brand wallpaper is the desktop's, not the lock's), then back to the session; no idle screen left behind (it is stopped before the lock) |
+| lock (`Alt+Ctrl+L`, the Lock key, and the 300 s idle timer) | the **mountain photograph** on base03, then back to the session; no idle screen left behind (it is stopped before the lock) |
 | idle for 150 s without touching anything | the **LazyOS** wordmark, the caption and the arcade line, with an effect rebuilding them and another one after it (a still frame means `tte` did not start) |
 | press any key while the idle screen animates | it closes at once, not at the end of the effect |
 | `Alt+Shift+Escape` | the screen locks, *then* the machine suspends; on resume the lock is still up |

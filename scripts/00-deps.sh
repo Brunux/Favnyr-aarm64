@@ -15,10 +15,11 @@ if [ "$(id -u)" -ne 0 ]; then
 	exec sudo -n "$(readlink -f "$0")" "$@"
 fi
 
-# imagemagick is only needed by scripts/make-icons.sh and make-brand.sh, which
-# render the launcher icons and the mark; rsvg-convert (librsvg2-bin) and
-# JetBrains Mono are make-brand.sh's, and every PNG both produce is committed,
-# so a build without them still builds - only an edit needs them.
+# imagemagick is only make-icons.sh's (the launcher, the command palette and the
+# freedesktop names that script renders), and rsvg-convert (librsvg2-bin) is
+# make-brand.sh's (the mark, the scalable SVG and the wordmark).  Every PNG both
+# produce is committed, so a build without them still builds - only an edit
+# needs them.  The desktop wallpaper is a photograph, not a rendered file.
 if command -v apk >/dev/null 2>&1; then
 	log "Installing host build dependencies (apk)"
 	apk add --no-cache \
@@ -40,7 +41,7 @@ if command -v apk >/dev/null 2>&1; then
 		xcb-util-wm-dev xcb-util-dev \
 		debootstrap \
 		cgpt vboot-utils depthcharge-tools \
-		imagemagick librsvg font-jetbrains-mono \
+		imagemagick librsvg \
 		e2fsprogs dosfstools parted gptfdisk \
 		util-linux
 elif command -v apt-get >/dev/null 2>&1; then
@@ -81,7 +82,7 @@ elif command -v apt-get >/dev/null 2>&1; then
 		libxcb-errors-dev \
 		debootstrap \
 		cgpt vboot-kernel-utils depthcharge-tools \
-		imagemagick librsvg2-bin fonts-jetbrains-mono \
+		imagemagick librsvg2-bin \
 		e2fsprogs dosfstools parted gdisk \
 		util-linux
 else

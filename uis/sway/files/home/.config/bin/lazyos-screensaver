@@ -6,7 +6,7 @@
 #   lazyos-screensaver --run    what runs *inside* the terminal (do not call)
 #
 # The idle screen is where the wordmark lives: the terminal draws the text art,
-# and the mark itself (the launcher icon, the wallpaper) comes from
+# and the mark itself (the launcher icon, the SVG) comes from
 # scripts/make-brand.sh. The idea behind it is the lazy-tools family (lazygit,
 # lazydocker and friends): the tool does the boring part, the thing you can press
 # is on the screen, and the machine is allowed to look like it is having fun

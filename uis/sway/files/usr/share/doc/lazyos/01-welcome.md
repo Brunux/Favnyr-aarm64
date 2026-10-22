@@ -32,13 +32,12 @@ everything above the kernel.
 
 ## The mark
 
-The wallpaper is the brand: an arcade button in the session's own four colours,
-with `lazy by design` under it and the arcade line from the idle screen at the
-bottom. The launcher icon, the wallpaper and the **About LazyOS** card are the
-same drawing - the card is **Alt+Space** > **About**, and its last row opens
-`fastfetch` for the full picture. The lock screen keeps the mountain photograph
-instead: the desktop is the surface the mark owns, and the photograph is what is
-up when nobody is looking.
+The desktop wears the session's own mountain photograph,
+`~/Pictures/Wallpapers/mountains.jpg` - the one it had before the mark existed.
+The mark is the arcade button in the session's own four colours, and it is the
+**launcher icon** and the **About LazyOS** card: **Alt+Space** > **About**, whose
+last row opens `fastfetch` for the full picture. The lock screen wears the same
+photograph, so the machine looks the same whether you are at it or away from it.
 
 ## The idle screen
 

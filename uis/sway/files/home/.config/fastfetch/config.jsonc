@@ -3,7 +3,7 @@
 // `fastfetch` in the popup foot window, and this file is what makes it LazyOS's.
 //
 // The logo is text, not the mark: a terminal draws the wordmark, and the mark is
-// the picture the wallpaper and the launcher carry (scripts/make-brand.sh).  The
+// the picture the launcher and the About row carry (scripts/make-brand.sh).  The
 // colours are the session's own - cyan keys, base1 output on base03.
 {
   "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
