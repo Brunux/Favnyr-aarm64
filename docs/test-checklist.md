@@ -29,6 +29,23 @@ cat /etc/debian-aarch64-revision ~/Dev/LazyOS/REVISION ~/Dev/LazyOS/VERSION
 * `check-system.sh` must end with **0 FAIL**. WARN and SKIP lines are expected
   and explained in `reports/README.md`; anything else stops the run here.
 
+## First boot - the welcome card
+
+| Step | Expected |
+|---|---|
+| log in on a card that has never been logged into | one foot window (`--app-id=lazyos-welcome`) with eight keys: `Alt+Space` menu, `Alt+D` launcher, `Search` file search, `Alt+Ctrl+F` file list, `Alt+Return` terminal, `Alt+Q` close, `Alt+Escape` power, `Alt+Ctrl+K` bindings. Enter closes it |
+| log out and back in | no window: it is once per install, not once per login |
+| `cat ~/.local/state/lazyos/welcome` | the content of `/etc/machine-id` |
+| delete that file, log out and back in | the window returns |
+| `sudo -n rm /etc/machine-id; sudo -n systemd-machine-id-setup` (or a rebuilt card) | a new id, so the window appears again - which is what makes it per install |
+
+A window that never appears on a fresh card is `lazyos-welcome` without its
+executable bit (it is started by `config.d/30-welcome.conf`); one that appears on
+**every** login is the marker being written before the window could be read
+rather than after it closes. `check-system.sh` runs the script against a stub
+`foot` in a temporary state directory to prove the marker is not written on
+failure.
+
 ## The desktop wallpaper, the About card, the greeter and the console
 
 | Step | Expected |
@@ -36,6 +53,7 @@ cat /etc/debian-aarch64-revision ~/Dev/LazyOS/REVISION ~/Dev/LazyOS/VERSION
 | look at the desktop | the **mountain photograph** (`Pictures/Wallpapers/mountains.jpg`) filling the output; the bar, foot, rofi and the menus are still solarized (the brand did not repaint the session) |
 | `Alt+Ctrl+L`, then unlock | the same **mountain photograph** on base03 - the lock and the desktop wear one photo |
 | `Alt+d`, type `About LazyOS` | the **About LazyOS** row has the mark as its icon (not a hole); Enter opens the card with the two-line wordmark on the left, `OS · LazyOS <version>` among the facts, and the 16-colour palette at the bottom |
+| `Alt+d`, type `LazyOS Menu` | the row with the same mark; Enter opens the root menu - the list `Alt+Space` shows, reachable by typing (`org.lazyos.menu.desktop`) |
 | `cat /etc/os-release` | `ID=lazyos`, `PRETTY_NAME="LazyOS <version>"`, and `VERSION_ID` equal to the `version` line of `/etc/debian-aarch64-revision` |
 | `hostname` | `lazyos` |
 | log out to the greeter | the greeting is `LazyOS · lazy by design`, not "Welcome back to Debian" |
@@ -52,6 +70,24 @@ Debian's swirl in the About card is `~/.config/fastfetch/config.jsonc` missing.
 again, and on an `org.nureb.*` entry that survived the rename; it WARNs when the
 greeter, `/etc/issue` or the fastfetch files lose the brand, because those are a
 hand-edit away.
+
+## Night light, and what a suspend does to it
+
+| Step | Expected |
+|---|---|
+| Settings (`Alt+Ctrl+O`) -> **Night light** at any hour | the screen turns warm at once, not only after sunset: the switch runs `night-light start`, which forces the warm end (`-T 4000 -t 4000`) |
+| suspend (`Alt+Shift+Escape`, or close the lid) and wake it | the screen comes back **still warm**. Daylight on the first frame and warm a moment later is the `after-resume` hook restarting `wlsunset`, which is correct |
+| `night-light status` after the resume | `on warm` (the mode file survived and `pgrep -x wlsunset` answers) |
+| turn the switch off, suspend and resume | daylight, and it stays daylight: with no state file `resume` does nothing |
+| log out and back in before sunset | daylight: `login` starts the **sunset schedule**, not the forced warm end. Between sunset and sunrise (the hours wlsunset computes for those coordinates) it ramps to 4000 K with no key pressed |
+| `pgrep -x wlsunset` | one process, never two |
+
+The whole cause of the bug this covers: `wlsunset` is a long-running client that
+takes the compositor's gamma table **once**, and the panel comes back from a
+suspend with its own, so a client that survived the sleep no longer has any
+effect on the screen - warm at 22:00, daylight at 22:05. `check-system.sh` FAILs
+when `bin/night-light` is missing and WARNs when the idle drop-in loses
+`night-light resume`; whether the screen is warm is only the eye's answer.
 
 ## Clipboard history - `Alt+Ctrl+V`
 
@@ -160,9 +196,11 @@ with an explicit `--prefix ~/.local`, so npm never needs root and never touches
 | Step | Expected |
 |---|---|
 | open `~/Pictures` | rows with a **32 px** thumbnail for images, videos and PDFs; the icon is the picture, not a mimetype glyph |
+| open a directory, then Escape, then `Alt+Ctrl+F` again | it reopens that directory, not `$PWD`; a fresh home with no state file starts in `$HOME` (`cat ~/.local/state/lazyos/files-last`) |
+| press `Search` (the file search) from another directory, then `Alt+Ctrl+F` | still the directory the list last had: `--search` writes nothing to that state file |
 | open a directory of source files or dotfiles | **every** row still has an icon (a page, an executable, a folder), so the names line up in one column - no bare text list |
 | reopen the same directory | instant: the thumbnails come from `~/.cache/thumbnails/normal/` and are not decoded again |
-| Enter on an image | **imv** in its own window (zoom, pan, rotate; the arrow keys walk the folder). A foot window drawing sixels means imv could not get an EGL context, which is the fallback |
+| Enter on an image | **imv** in its own window (zoom, pan, rotate; the arrow keys walk the folder). The first picture of a session also raises a notification naming those keys (`lazyos-image-hint`), and only the first. A foot window drawing sixels means imv could not get an EGL context, which is the fallback |
 | Enter on an SVG | **imv** as well, not `bat`: an SVG is a text file, but the image family is decided before the text test |
 | Enter on a **video** (`.mp4`, `.mkv`) | **mpv** in its own window with sound; `q` closes it. Firefox means mpv is missing |
 | Enter on a PDF, a DjVu or a comic | **papers**, with search, zoom and print. Firefox means papers is missing |
@@ -320,10 +358,22 @@ missing; icons that are empty squares mean a name the LazyOS theme does not carr
 | **Alt+1** on a folder row (Home, Documents) | "Only a disk can be unmounted", and nothing else happens |
 | a swap partition or a LUKS one on the stick | no **Mount** row for it (a swap has nothing to show and LUKS needs a passphrase prompt this menu does not have) |
 | unplug and replug the stick | it is listed again; a stick that stays mounted after the unplug is a sign the filesystem is dirty |
+| right-click a mounted stick in **pcmanfm** (Search+Shift) -> **Unmount** | it unmounts and the icon goes away, with no `Failed to execute child process "eject"`: pcmanfm unmounts through `/usr/bin/eject`, which is its own package (`gvfs` and `udisks2` do not depend on it) |
 | `systemctl status udisks2` | *inactive (dead)* until something mounts - it is D-Bus activated, nothing runs resident, and `udiskie` is deliberately absent |
 
 A **Mount** row that fails says why in a critical notification, in udisks' own
 words. `vfat`/`exFAT`/`NTFS` need no helper package: the kernel has the drivers.
+
+## The shell - `cd -`, the aliases and the prompt
+
+| Step | Expected |
+|---|---|
+| `cd /tmp`, then `cd -` | back to the previous directory, with **no** `zoxide: detected a possible configuration issue` |
+| `echo $PROMPT_COMMAND` | starship's hook **and** zoxide's, both of them: zoxide's init is the last line of `~/.bashrc` because starship replaces that variable wholesale |
+| `zd -` | the previous directory, printed by `builtin cd -` (that argument is not handed to zoxide) |
+| `ls`, `lt`, `cat <file>` | `eza --icons`, `eza --tree --icons`, `bat --style=plain --paging=never` |
+| `ff` | the fzf picker; the choice opens in `$EDITOR` (`nvim`) |
+| open a new terminal | the prompt draws with no missing-glyph box: foot needs the `Symbols Nerd Font Mono` fallback listed after `JetBrains Mono` in `~/.config/foot/foot.ini` |
 
 ## Editors
 
@@ -418,7 +468,7 @@ What a failure means:
 ## Writing it down
 
 `reports/check-system-<date>-card.txt` gets the script's output verbatim (MAC
-masked to the OUI), and `reports/feedback-<date>-session.txt` gets what only you
+masked to the OUI), and `reports/feedback-<date>-<what>.txt` gets what only you
 saw: which row was wrong, which notification never came, which key did nothing.
 Both are what the next round's checks are written from - a FAIL here becomes a
 line in `check-system.sh`, not a note in a commit message.
