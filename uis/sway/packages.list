@@ -116,6 +116,12 @@ papers
 # whose remaining job would be a tray icon this bar does not have. On-demand
 # udisksctl in rofi-places is the same result with no daemon.
 udisks2
+# exfatprogs (700 kB, libblkid only) provides mkfs.exfat and fsck.exfat.
+# mkfs.exfat is what Format a disk writes, because exFAT has no 4 GB file limit
+# and Windows, macOS and Linux all read it; fsck.exfat is what udisks runs on a
+# stick before mounting it. dosfstools stays in packages/base.list for the vfat
+# sticks udisks also mounts.
+exfatprogs
 # The file manager, for the mouse: drag and drop, multi-select, rename and trash
 # in place are what rofi-files does not do (it is a list and a key). pcmanfm is
 # GTK3 - which waybar and rofi already pull in - so this costs 4.9 MB of pcmanfm

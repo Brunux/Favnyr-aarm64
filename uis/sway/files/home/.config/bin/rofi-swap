@@ -9,8 +9,11 @@
 #
 # What is safe about this menu is the same list rofi-format draws, and it is one
 # function (ui_disks in lib-rofi.sh): nothing mounted, no ChromeOS kernel
-# partition, no zram/loop/optical device.  The eMMC and the card this system
-# boots from are never candidates, whatever their names are.  Setup then:
+# partition, no zram/loop/optical device, and never a disk that is built into the
+# machine or is the one this system runs from (ui_disk_system).  The eMMC and the
+# card this system boots from are never candidates, whatever their names are - even
+# after a wiped partition table - and the guard is asked again after the pick,
+# because setup rewrites the whole disk.  Setup then:
 #
 #   * writes a fresh GPT and one Linux-swap partition, wiped and labelled
 #     lazyos_swap - the same label `resume=LABEL=lazyos_swap` resolves for
@@ -207,7 +210,7 @@ fi
 ui_disks swap >"$tmp/rows"
 if [ ! -s "$tmp/rows" ]; then
 	ui_say 'Auxiliary swap' \
-		'Nothing to offer: every disk here is mounted or is a system disk' \
+		'Nothing to offer: every disk here is mounted, built into the machine, or the one this system runs from' \
 		normal "$UI_ICON_DISK"
 	exit 0
 fi
@@ -219,6 +222,17 @@ swap:*) name=${key#swap:} ;;
 *) exit 0 ;;
 esac
 dev=/dev/$name
+
+# The same last gate as Format a disk: this rewrites the whole disk with parted,
+# so a disk that ui_disk_system refuses is refused again after the pick, whatever
+# the list said.
+if ui_disk_system "$name"; then
+	ui_say 'Auxiliary swap' \
+		"$dev is built into this machine or is the disk this system runs from: never repartitioned here" \
+		critical "$UI_ICON_ERROR"
+	exit 1
+fi
+
 info=$(lsblk -dnro SIZE,MODEL "$dev" 2>/dev/null |
 	sed -e 's/\\x20/ /g' -e 's/  */ /g' || true)
 size=$(lsblk -dnro SIZE "$dev" 2>/dev/null || true)

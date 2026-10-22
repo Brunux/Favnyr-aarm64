@@ -3,16 +3,22 @@
 #
 # The candidate list is ui_disks (lib-rofi.sh), and its rules are the safety, not
 # the confirmation: nothing mounted, no ChromeOS kernel partition, no zram, loop
-# or optical device.  That excludes the running root, /boot, the eMMC and the card
-# this system boots from without naming any device, and rofi-swap draws its own
-# list from the same function.
+# or optical device, and never a disk that is built into the machine or is the one
+# this system is running from (ui_disk_system, which rofi-swap shares).  That
+# excludes the eMMC and the card this system boots from without naming any device,
+# even after their partition table is wiped, and rofi-swap draws its own list from
+# the same function.
 #
 # What is left has nothing this system needs on it, and the confirmation still
 # names the device, its model and its size, with **Cancel as the first row** so a
 # stray Enter does nothing.  The device is written by `parted` and `mkfs`, both
-# already in the image (packages/base.list); udisks2 could do the same over
-# D-Bus, but its Format method ships no CLI in Debian's package - `udiskie` has
-# one, and that is a resident Python daemon this port does not install.
+# already in the image (parted and e2fsprogs in packages/base.list, exfatprogs in
+# uis/sway/packages.list); udisks2 could do the same over D-Bus, but its Format
+# method ships no CLI in Debian's package - `udiskie` has one, and that is a
+# resident Python daemon this port does not install.
+#
+# The filesystem is exFAT, which Windows, macOS and Linux all read and which,
+# unlike FAT32, has no 4 GB file limit, or ext4 for a Linux machine.
 #
 #   rofi-format          what can be formatted, and with which filesystem
 #
@@ -28,11 +34,11 @@ trap 'rm -rf "$tmp"' EXIT
 have() { command -v "$1" >/dev/null 2>&1; }
 
 missing=""
-for _c in parted mkfs.vfat mkfs.ext4 lsblk; do
+for _c in parted mkfs.exfat mkfs.ext4 lsblk; do
 	have "$_c" || missing="$missing $_c"
 done
 if [ -n "$missing" ]; then
-	ui_say 'Format a disk' "Missing:$missing (parted, dosfstools, e2fsprogs)" \
+	ui_say 'Format a disk' "Missing:$missing (parted, exfatprogs, e2fsprogs)" \
 		critical "$UI_ICON_ERROR"
 	exit 1
 fi
@@ -43,7 +49,7 @@ ui_disks fmt >"$tmp/rows"
 
 if [ ! -s "$tmp/rows" ]; then
 	ui_say 'Format a disk' \
-		'Nothing to format: every disk here is mounted or is a system disk' \
+		'Nothing to format: every disk here is mounted, built into the machine, or the one this system runs from' \
 		normal "$UI_ICON_DISK"
 	exit 0
 fi
@@ -56,17 +62,29 @@ fmt:*) name=${key#fmt:} ;;
 *) exit 0 ;;
 esac
 dev=/dev/$name
+
+# The list is the safety, and this is the last gate: the steps below erase the
+# disk, so the same question is asked once more after the choice.  The eMMC is
+# the case that matters - it is fixed storage, and install-emmc.sh is the only
+# thing in this port that writes it.
+if ui_disk_system "$name"; then
+	ui_say 'Format a disk' \
+		"$dev is built into this machine or is the disk this system runs from: never formatted here (install-emmc.sh writes the eMMC)" \
+		critical "$UI_ICON_ERROR"
+	exit 1
+fi
+
 info=$(lsblk -dnro SIZE,MODEL "/dev/$name" 2>/dev/null |
 	sed -e 's/\\x20/ /g' -e 's/  */ /g' || true)
 
 {
-	ui_row "$UI_I_DISK" 'FAT32' 'any machine: Windows, macOS, a camera, a television' fat32
+	ui_row "$UI_I_DISK" 'exFAT' 'any machine: Windows, macOS, a camera, a TV; no 4 GB limit' exfat
 	ui_row "$UI_I_DISK" 'ext4' 'Linux only, and it keeps owners and permissions' ext4
 } >"$tmp/fs"
 fs=$(ui_pick 'Filesystem' "$dev · ${info:-} · everything on it is erased" <"$tmp/fs") ||
 	exit 0
 case $fs in
-fat32 | ext4) ;;
+exfat | ext4) ;;
 *) exit 0 ;;
 esac
 
@@ -116,8 +134,12 @@ if [ "$rc" -eq 0 ]; then
 fi
 if [ "$rc" -eq 0 ]; then
 	step=filesystem
-	if [ "$fs" = fat32 ]; then
-		out=$(sudo -n mkfs.vfat -F32 -n LAZYOS "$part" 2>&1) || rc=$?
+	if [ "$fs" = exfat ]; then
+		# -F: the new partition starts where an old filesystem's signature may
+		# still be, and mkfs.exfat refuses such a device.  The refusal only
+		# happens on a terminal, but passing -F is what keeps that from
+		# deciding the outcome.
+		out=$(sudo -n mkfs.exfat -F -L LAZYOS "$part" 2>&1) || rc=$?
 	else
 		out=$(sudo -n mkfs.ext4 -F -q -L LAZYOS "$part" 2>&1) || rc=$?
 	fi

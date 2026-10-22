@@ -220,18 +220,86 @@ ui_heading() {
 # The ChromeOS kernel partition type.  A disk that carries one is a disk this
 # firmware can load a kernel from, which makes it a system disk and never a
 # candidate: the eMMC and both cards of this machine are excluded by it, whatever
-# their device names are (p1 of the layout in scripts/lib-cgpt.sh).
+# their device names are (p1 of the layout in scripts/lib-cgpt.sh).  It is not the
+# whole rule: a wiped partition table carries no type at all, which is why
+# ui_disk_system below asks what the disk *is* and what the system runs from.
 UI_KERN_TYPE=fe3a2a5d-4f32-41a7-b725-accc3285a309
+
+# ui_disk_system NAME: 0 when NAME is a disk this system must never erase, 1 when
+# it may be offered.  Two independent rules, and both are needed.
+#
+# **A fixed disk is not a candidate.**  This Chromebook reports
+# /sys/block/<disk>/removable as 0 for *both* MMC devices - the eMMC and the SD
+# reader - so that file alone would exclude the card the system boots from as
+# well.  The device-level attribute is what tells them apart:
+# /sys/block/mmcblk0/device/removable is `fixed` and mmcblk1's is `removable`.  A
+# USB stick normally sets /sys/block/sdX/removable to 1, while a USB SSD or an
+# enclosure may report 0, so TRAN=usb counts as removable too.  Everything else
+# (the eMMC, an internal SATA or NVMe disk) is built into the machine.
+#
+# **The disk the running system depends on is not a candidate**: its root, /boot
+# when that is a separate partition, the kernel partition named by kern_guid= on
+# the command line, and every active swap.  This is the rule that survives a disk
+# whose partition table was wiped - the ChromeOS kernel type is gone then and
+# /boot may be unmounted, which is exactly when the old list would have offered
+# the eMMC.
+#
+# The callers run under `set -eu`, so every read that can fail ends in `|| :`.
+ui_disk_system() {
+	_ui_ds_name=${1:-}
+	[ -n "$_ui_ds_name" ] || return 0
+	_ui_ds_removable=$(cat "/sys/block/$_ui_ds_name/removable" 2>/dev/null || :)
+	_ui_ds_device=$(cat "/sys/block/$_ui_ds_name/device/removable" 2>/dev/null || :)
+	_ui_ds_tran=$(lsblk -dnro TRAN "/dev/$_ui_ds_name" 2>/dev/null || :)
+	case $_ui_ds_removable:$_ui_ds_device:$_ui_ds_tran in
+	1:* | *:removable:* | *:*:usb) ;;
+	*) return 0 ;;
+	esac
+
+	# Every source this system is running from, in one list.  A findmnt source
+	# can carry a btrfs subvolume ("/dev/sda2[/@root]") and only a block device
+	# can be a disk.  /sbin is spelled out because it is not on a normal user's
+	# PATH (the same reason build-swayfx.sh spells out ldconfig).
+	_ui_ds_sources=
+	for _ui_ds_dir in / /boot; do
+		_ui_ds_src=$(findmnt -no SOURCE "$_ui_ds_dir" 2>/dev/null || :)
+		[ -n "$_ui_ds_src" ] || continue
+		_ui_ds_src=${_ui_ds_src%%\[*}
+		[ -b "$_ui_ds_src" ] || continue
+		_ui_ds_sources="$_ui_ds_sources $_ui_ds_src"
+	done
+	_ui_ds_guid=$(awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^kern_guid=/) { sub(/^kern_guid=/, "", $i); print $i; exit } }' \
+		/proc/cmdline 2>/dev/null || :)
+	if [ -n "$_ui_ds_guid" ]; then
+		_ui_ds_kpart=$(/sbin/findfs "PARTUUID=$_ui_ds_guid" 2>/dev/null || :)
+		[ -z "$_ui_ds_kpart" ] || _ui_ds_sources="$_ui_ds_sources $_ui_ds_kpart"
+	fi
+	for _ui_ds_swap in $(awk 'NR > 1 { print $1 }' /proc/swaps 2>/dev/null || :); do
+		_ui_ds_sources="$_ui_ds_sources $_ui_ds_swap"
+	done
+
+	# lsblk -s walks from the source up to the disk it lives on, so a partition,
+	# a swap partition and a whole-disk source all answer with the disk name.
+	for _ui_ds_src in $_ui_ds_sources; do
+		_ui_ds_parent=$(lsblk -snro NAME "$_ui_ds_src" 2>/dev/null | tail -n 1 || :)
+		if [ "$_ui_ds_parent" = "$_ui_ds_name" ]; then
+			return 0
+		fi
+	done
+	return 1
+}
 
 # ui_disks PREFIX [COLOUR]: one row per disk this session may write to.
 #
 # The safety is the list, not the question, and this is the one copy of it: a disk
 # with anything mounted on it is not offered (that excludes the running root,
 # /boot and every stick udisks mounted - and a busy disk would fail halfway
-# anyway), a disk carrying a **ChromeOS kernel partition** is not offered, and
-# zram, loop and optical devices are not disks a person writes to.  What is left
-# has nothing this system needs on it; the caller still confirms, but it can only
-# confirm one of these.
+# anyway), a disk carrying a **ChromeOS kernel partition** is not offered, a disk
+# that is **built into the machine or carries what the system runs from** is not
+# offered (ui_disk_system, which also survives a wiped table), and zram, loop and
+# optical devices are not disks a person writes to.  What is left has nothing this
+# system needs on it; the caller still confirms, but it can only confirm one of
+# these.
 #
 # PREFIX is the key the caller gets back (`fmt:sda`, `swap:mmcblk1`), so the same
 # rows can feed two menus without either one guessing what the other does.
@@ -250,6 +318,12 @@ ui_disks() {
 			continue
 			;;
 		esac
+		# Built into the machine, or the disk this system is running from.
+		# ui_disk_system has the two rules and why both are needed; the tests
+		# below answer different questions (a busy disk, a bootable one).
+		if ui_disk_system "$name"; then
+			continue
+		fi
 		# Anything mounted, on the disk itself or on a partition of it.  An
 		# active swap partition shows [SWAP] here, so it is excluded too.
 		_ui_disk_mnt=$(lsblk -nro MOUNTPOINT "/dev/$name" 2>/dev/null | tr -d '[:space:]' || true)

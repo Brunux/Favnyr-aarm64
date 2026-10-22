@@ -215,22 +215,24 @@ missing that name (`check-system.sh` checks the table against the PNGs).
 
 | Step | Expected |
 |---|---|
-| open it with only the eMMC and the boot card attached | "Nothing to format": both carry a ChromeOS kernel partition, so neither is offered |
+| open it with only the eMMC and the boot card attached | "Nothing to format": the eMMC is fixed storage and the card is the disk this system runs from, so neither is offered |
+| boot from the card and wipe the eMMC's partition table (`sudo parted -s /dev/mmcblk0 mktable gpt`), then open it | still "Nothing to format": the eMMC is fixed storage and the disk this system depends on, which is the case the kernel-partition rule alone missed; `scripts/install-emmc.sh` is how it is written again |
 | insert a USB stick, leave it unmounted | the stick, with its model and size |
 | pick it → **Cancel** | nothing at all is written |
-| pick it → **FAT32** → the confirmation | a card, then "is empty (fat32, label LAZYOS)"; the stick mounts again from Places |
+| pick it → **exFAT** → the confirmation | a card, then "is empty (exfat, label LAZYOS)"; the stick mounts again from Places |
 | the same with **ext4** | `mkfs.ext4`, and the disk mounts on a Linux machine |
 
 Neither menu may ever list `mtdblock0` (the SPI flash) or `mmcblk0boot0`/`mmcblk0boot1`
 (the eMMC's hardware boot partitions): `lsblk -d` shows all three as small disks,
 none mounted and none carrying a kernel partition, and writing any of them is how
-this machine gets bricked or loses its boot blocks.
+this machine gets bricked or loses its boot blocks. Neither may list the eMMC or the
+card the system is running from either, whatever their partition tables say.
 
 ## Auxiliary swap - root menu -> **Auxiliary swap**, or **Places** -> **Auxiliary swap**
 
 | Step | Expected |
 |---|---|
-| open it with only the eMMC and the boot card attached | "Nothing to offer: every disk here is mounted or is a system disk" |
+| open it with only the eMMC and the boot card attached | "Nothing to offer: every disk here is mounted, built into the machine, or the one this system runs from" |
 | open it with the boot card and a spare, unmounted card/SD | the spare card only, with model and size |
 | pick it → **Cancel** | no partition table is written |
 | pick it → **The whole card** → the confirmation | a busy card, then a notification with the partition and "priority 10"; `swapon --show` lists it, `blkid -L lazyos_swap` resolves it |

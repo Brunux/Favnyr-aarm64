@@ -845,31 +845,41 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   already in `packages/base.list` for the `fsck.vfat` udisks runs before mounting one.
 - **Format a disk is the one destructive menu, so the list is the safety, not the question.**
   `rofi-format` is reached from the last row of Places and offers only disks where **nothing is
-  mounted** and **no partition carries the ChromeOS kernel type**
-  (`fe3a2a5d-4f32-41a7-b725-accc3285a309`, p1 of the layout in `scripts/lib-cgpt.sh`). Those two
-  rules are what exclude the eMMC, the card that wrote the system and the card the system is
-  running from - however they are named, and with no device name hardcoded - and they also exclude
-  every stick udisks already mounted, which would fail halfway anyway. The candidate list is
-  **`ui_disks` in `lib-rofi.sh`**, shared with `rofi-swap`, and it also skips zram, loop, ram,
-  optical, pseudo devices, **`mtd*`** (the SPI flash this port must never write) and
-  **`mmcblk*boot*`** (the eMMC's 4 MB hardware boot partitions, which `lsblk -d` lists as disks of
-  their own) - see the next bullet for the hardware that made those two necessary. What is left has
-  nothing this system needs, and the confirmation still names the device, its model and its size,
-  with **Cancel as the first row** so a stray Enter does nothing; the filesystem is FAT32 (label
-  `LAZYOS`) or ext4, and the whole disk becomes one partition (`parted -s mktable gpt` +
-  `mkpart primary`, then `mkfs`). **It is not stoppable on purpose**, like the apt install: a killed
-  `mkfs` leaves a disk that looks formatted and is not, which is worse than a wait. The step chain
-  is linear (`rc`/`step`) rather than nested `if`s because `set -e` exits from inside an `if` *body*
-  on a failed command - a failing `mkfs` would leave the `busy` card spinning with no reason in it.
-  `parted`, `mkfs.vfat` and `mkfs.ext4` are already in the image (`parted` in `packages/base.list`),
-  so the menu adds no package; `check-system.sh` FAILs when any of the three or the script is
-  missing.
+  mounted**, **no partition carries the ChromeOS kernel type**
+  (`fe3a2a5d-4f32-41a7-b725-accc3285a309`, p1 of the layout in `scripts/lib-cgpt.sh`), and
+  **`ui_disk_system` in `lib-rofi.sh` allows it**. That function is the one copy of the two rules
+  that keep the internal disk out, shared with `rofi-swap`, and both menus ask it again after the
+  pick because that step is the one that repartitions. **A fixed disk is not a candidate**: on this
+  Chromebook `/sys/block/mmcblk0/removable` and `/sys/block/mmcblk1/removable` are both `0`, so the
+  boot card looks exactly like the eMMC there; the device-level
+  `/sys/block/<disk>/device/removable` is `fixed` for the eMMC and `removable` for the SD, and
+  `TRAN=usb` counts too because a USB enclosure may report `0`. **The disk the system depends on is
+  not a candidate either**: root, `/boot`, the kernel partition named by `kern_guid=` and every
+  active swap resolve to their disk with `lsblk -s`, and that disk is refused - the kernel-partition
+  rule alone would reopen the hole the moment the eMMC's table is wiped or `/boot` is unmounted,
+  which is the case the old list missed. The list also skips zram, loop, ram, optical and pseudo
+  devices, **`mtd*`** (the SPI flash this port must never write) and **`mmcblk*boot*`** (the eMMC's
+  4 MB hardware boot partitions) - see the next bullet for the hardware that made those two
+  necessary. What is left has nothing this system needs, and the
+  confirmation still names the device, its model and its size, with **Cancel as the first row** so a
+  stray Enter does nothing; the filesystem is **exFAT** (label `LAZYOS`, via `mkfs.exfat -F -L`,
+  from `exfatprogs`) or ext4, and the whole disk becomes one partition (`parted -s mktable gpt` +
+  `mkpart primary exfat`, then `mkfs`). exFAT rather than FAT32 because FAT32 refuses a file over
+  4 GB and Windows, macOS and Linux all read exFAT; the eMMC can only be written by
+  `install-emmc.sh`, so this menu is for sticks and cards. **It is not stoppable on purpose**, like
+  the apt install: a killed `mkfs` leaves a disk that looks formatted and is not, which is worse
+  than a wait. The step chain is linear (`rc`/`step`) rather than nested `if`s because `set -e`
+  exits from inside an `if` *body* on a failed command - a failing `mkfs` would leave the `busy`
+  card spinning with no reason in it. `parted` and `mkfs.ext4` are in `packages/base.list`,
+  `mkfs.exfat` comes from `exfatprogs` in `uis/sway/packages.list`, and `check-system.sh` FAILs
+  when any of them, the script, or the guard in `lib-rofi.sh` is missing.
 - **Auxiliary swap turns a card into extra memory, and it shares Format's list on purpose.**
   `rofi-swap` (Places, the row before Format a disk, and the root menu's *system* section) picks a
   disk, then how much of it - the whole card first, then 2/4/8 GiB only when they fit with 64 MiB of
   margin - then confirms with **Cancel first**. The candidates are the same `ui_disks` function as
-  Format (`PREFIX` per caller, `UI_KERN_TYPE` beside it), so the two menus cannot disagree about
-  which disk is a system disk. **Sharing it fixed two holes the card's own `lsblk` shows**: `-d`
+  Format (`PREFIX` per caller, `UI_KERN_TYPE` beside it) plus `ui_disk_system`, and the guard is
+  asked again after the pick, so the two menus cannot disagree about which disk is a system disk.
+  **Sharing it fixed two holes the card's own `lsblk` shows**: `-d`
   lists the SPI flash as `mtdblock0` (8 MB) and the eMMC's hardware boot partitions as
   `mmcblk0boot0`/`mmcblk0boot1` (4 MB each), none mounted and none carrying a kernel partition, so
   Format used to offer all three - and writing `mtdblock0` is the one thing this port must never do.

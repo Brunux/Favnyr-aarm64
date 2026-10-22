@@ -1006,16 +1006,35 @@ else
 	fail "file actions incomplete:$_missing_actions (Alt+1 offers rows that cannot run)"
 fi
 
-# Format a disk writes a partition table and a filesystem, so both halves have to
-# be there before the menu is allowed to list anything - and the menu is reached
-# from Places, where a missing script is a row that does nothing.
+# Format a disk writes a partition table and an exFAT or ext4 filesystem, so both
+# halves have to be there before the menu is allowed to list anything - and the
+# menu is reached from Places, where a missing script is a row that does nothing.
+# The list is also the safety (ui_disk_system in lib-rofi.sh), so the guard is
+# witnessed below: without it the internal eMMC is offered again.
 _missing_fmt=""
-for _c in parted mkfs.vfat mkfs.ext4; do have "$_c" || _missing_fmt="$_missing_fmt $_c"; done
+for _c in parted mkfs.exfat mkfs.ext4; do have "$_c" || _missing_fmt="$_missing_fmt $_c"; done
 [ -x "$HOME/.config/bin/rofi-format" ] || _missing_fmt="$_missing_fmt bin/rofi-format"
 if [ -z "$_missing_fmt" ]; then
-	ok "format a disk complete (parted, mkfs.vfat, mkfs.ext4, rofi-format)"
+	ok "format a disk complete (parted, mkfs.exfat, mkfs.ext4, rofi-format)"
 else
 	fail "format a disk incomplete:$_missing_fmt (the Places row does nothing)"
+fi
+
+# A fixed disk and the disk the system runs from must never be offered, and that
+# is one function plus one last gate in each of the two menus that repartition a
+# disk. The eMMC is the case that matters: it is not mounted as a whole and, with
+# its partition table wiped, it carries no ChromeOS kernel partition either, so
+# without this guard it would be offered for formatting.
+_fmt_guard=ok
+grep -qs 'ui_disk_system()' "$HOME/.config/bin/lib-rofi.sh" || _fmt_guard=
+grep -qs 'device/removable' "$HOME/.config/bin/lib-rofi.sh" || _fmt_guard=
+grep -qs 'kern_guid' "$HOME/.config/bin/lib-rofi.sh" || _fmt_guard=
+grep -qs 'ui_disk_system "\$name"' "$HOME/.config/bin/rofi-format" || _fmt_guard=
+grep -qs 'ui_disk_system "\$name"' "$HOME/.config/bin/rofi-swap" || _fmt_guard=
+if [ -n "$_fmt_guard" ]; then
+	ok "format a disk refuses fixed storage and the disk this system runs from (ui_disk_system)"
+else
+	fail "the disk guard is gone from lib-rofi.sh or from one of the two disk menus: the internal eMMC can be offered for formatting"
 fi
 
 # Auxiliary swap (rofi-swap) writes a swap partition and the fstab block that

@@ -204,11 +204,15 @@ gets corrupted.
   partition stays, and **Format a disk** erases it). `resume=LABEL=lazyos_swap` is
   the extra piece hibernate needs - see **The system** page.
 * **Format a disk** is the last row of Places: it offers only disks with nothing
-  mounted on them and no ChromeOS kernel partition, so the eMMC and the card this
-  system boots from are never candidates, and it asks twice with Cancel first.
-  The filesystem is FAT32 (`LAZYOS`, for a camera, a TV or a car) or ext4 (for a
-  Linux machine), and the whole disk becomes one partition. It is not stoppable:
-  a killed `mkfs` leaves a disk that looks formatted and is not.
+  mounted on them, no ChromeOS kernel partition, and that are neither built into
+  the machine nor the disk this system is running from - so the eMMC and the card
+  this system boots from are never candidates, even after a partition table is
+  wiped - and it asks twice with Cancel first. The filesystem is exFAT (`LAZYOS`,
+  for a camera, a TV or another computer: Windows, macOS and Linux all read it,
+  and unlike FAT32 it has no 4 GB file limit) or ext4 (for a Linux machine), and
+  the whole disk becomes one partition. The internal eMMC is only written by
+  `scripts/install-emmc.sh`; this menu is for sticks and cards. It is not
+  stoppable: a killed `mkfs` leaves a disk that looks formatted and is not.
 * A failed mount says why in the notification, in udisks' own words: "not
   authorized" is a policy problem, "already mounted" means it is already in the
   list above.
