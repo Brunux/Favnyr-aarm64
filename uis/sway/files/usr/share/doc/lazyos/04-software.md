@@ -85,6 +85,20 @@ The variable comes from `/etc/profile.d/90-cli-tools.sh` (a login shell and this
 terminal read it) and only when nothing has set it already, so an `EDITOR` you
 export yourself wins.
 
+## Emoji
+
+**Alt+Ctrl+E** opens the emoji picker (the root menu and the launcher carry the
+same row): type a name, Enter inserts the glyph at the cursor, Alt+1 only copies
+it. The list is `~/.config/emojis.tsv`, and **every row is a glyph the shipped
+font draws**: on the build host the table is filtered against the character map
+of `fonts-noto-color-emoji`, so a symbol the font does not carry is never offered
+instead of being inserted as an empty box. `~/.config/emojis.font` next to it
+pins the SHA256 and the family of the font the filter used, which is how
+`check-system.sh` notices a font upgrade; after one, re-running
+`scripts/make-emojis.sh` on a host with `fontconfig` and the font rebuilds the
+table. Nothing of this runs on the machine: the picker is one rofi window and the
+table is a file.
+
 ## Working in the terminal all day
 
 * `tmux` (alias `t`) keeps a session across terminal windows; `Ctrl+B` is its

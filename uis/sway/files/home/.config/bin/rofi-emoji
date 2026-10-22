@@ -3,9 +3,10 @@
 #
 # Deboma's emoji panel is a QML grid; this is the same idea as one rofi list over
 # the table `scripts/make-emojis.sh` generates from the Unicode database
-# (~2000 rows: name, glyph, block).  Typing narrows it - rofi matches the whole
-# row, so "grin", "faces" or "cat" all work - and the first column is the glyph
-# itself, so a category can also be browsed by scrolling.
+# (~1300 rows: name, glyph, block, filtered to what the emoji font draws).  Typing
+# narrows it - rofi matches the whole row, so "grin", "faces" or "cat" all work -
+# and the first column is the glyph itself, so a category can also be browsed by
+# scrolling.
 #
 # Insertion is Omarchy's trick, not wtype's: the glyph goes to the clipboard and
 # a virtual Shift+Insert is typed, which every toolkit here (GTK, Qt, foot,
@@ -31,8 +32,8 @@ fi
 tmp=$(mktemp "${TMPDIR:-/tmp}/emoji.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
 
-# One awk pass instead of a ui_row per line: 2000 rows through ui_row would be
-# 4000 forks (sed and tr per row) and the menu would open a second late.  The
+# One awk pass instead of a ui_row per line: 1300 rows through ui_row would be
+# 2600 forks (sed and tr per row) and the menu would open a second late.  The
 # columns are ui_row's - glyph, bold name, dim small detail - spelled out here for
 # that reason; the block name is a detail like any other, so it is the smaller
 # size too.

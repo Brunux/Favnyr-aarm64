@@ -213,7 +213,7 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 | `rofi-media` | Media | the current track and play/pause/next/previous through `playerctl` |
 | `rofi-calc` | `Alt+Ctrl+Q`, Calculator | awk, one prompt; Enter copies the result |
 | `rofi-layout` | Settings → Keyboard layout | every layout in `evdev.lst`, applied to all keyboards and kept in `~/.config/sway/config.d/90-keyboard-layout.conf` |
-| `rofi-emoji` | `Alt+Ctrl+E`, Emoji | the table `scripts/make-emojis.sh` generates (`~/.config/emojis.tsv`, ~2000 rows); Enter inserts at the cursor, Alt+1 copies only |
+| `rofi-emoji` | `Alt+Ctrl+E`, Emoji | the table `scripts/make-emojis.sh` generates (`~/.config/emojis.tsv`, ~1300 rows, filtered to the glyphs `fonts-noto-color-emoji` draws); Enter inserts at the cursor, Alt+1 copies only |
 | `rofi-clip` | `Alt+Ctrl+V`, Clipboard | the `cliphist` history: Enter copies an entry back, Alt+1 deletes it, plus "save the newest image" and "clear the history" |
 | `rofi-dns` | DNS | the resolver of the connection that is up: Cloudflare, Google, Quad9, AdGuard, typed servers, or back to DHCP |
 | `rofi-pkg` | Packages | `apt-cache search`, then `apt-get install -y` behind a busy card; installed packages are marked before they are picked |
@@ -245,9 +245,12 @@ data file, and both are worth the exception:
   `~/.cache/cliphist/db` and holds everything copied, secrets included; the menu's last row
   clears it.
 * **`rofi-emoji`** (`Alt+Ctrl+E`) reads `~/.config/emojis.tsv`, which `scripts/make-emojis.sh`
-  generates on the build host from Python's Unicode database (name, glyph, block: 1988 rows, the
-  emoji blocks of the standard plus Dingbats and Miscellaneous Symbols). The image needs neither
-  Python nor a package for it — the file is committed and copied with the home directory. Insertion
+  generates on the build host from Python's Unicode database (name, glyph, block: 1296 rows, the
+  emoji blocks of the standard plus Dingbats and Miscellaneous Symbols, filtered against the
+  character map of `fonts-noto-color-emoji` so a row is always a glyph the font draws). The image
+  needs neither Python nor a package for it — the file is committed and copied with the home
+  directory, and `~/.config/emojis.font` pins the font's SHA256 and family so `check-system.sh`
+  can report a font upgrade that left the table stale. Insertion
   is Omarchy's: the glyph goes to the clipboard and `wtype -M shift -k Insert -m shift` types a
   virtual Shift+Insert, which every toolkit here understands as paste; `wtype -t "$glyph"` would
   need a keysym for the codepoint, which most emoji do not have. Alt+1 is the clipboard write

@@ -275,12 +275,17 @@ in the history until deleted or cleared.
 ## Emoji
 
 **Alt+Ctrl+E** (`rofi-emoji`, and "Emoji" in the root menu and the launcher) is
-the same list shape over `~/.config/emojis.tsv`: nearly 2000 rows of *name*,
+the same list shape over `~/.config/emojis.tsv`: about 1300 rows of *name*,
 *glyph* and *block*. Typing filters by any word of the name, and since the block
 is in the row too, `faces`, `transport` or `dingbats` narrow it to a category.
 The table is generated on the build host by `scripts/make-emojis.sh` from
 Python's Unicode database and shipped as a file, so the image needs no Python and
-no extra package for it.
+no extra package for it. It is filtered against the font that draws it: only the
+codepoints `fonts-noto-color-emoji` actually carries become rows, because a
+symbol the font does not draw is inserted as an empty box. `~/.config/emojis.font`
+next to the table pins that font's SHA256 and family, which is how
+`check-system.sh` notices that a font upgrade made the table stale - re-running
+the script on a build host with `fontconfig` and the font rebuilds it.
 
 Enter inserts the glyph at the cursor the way Omarchy does it: the glyph goes to
 the clipboard and a virtual **Shift+Insert** is typed with `wtype`, which every

@@ -16,10 +16,15 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # imagemagick is only make-icons.sh's (the launcher, the command palette and the
-# freedesktop names that script renders), and rsvg-convert (librsvg2-bin) is
-# make-brand.sh's (the mark, the scalable SVG and the wordmark).  Every PNG both
-# produce is committed, so a build without them still builds - only an edit
-# needs them.  The desktop wallpaper is a photograph, not a rendered file.
+# freedesktop names that script renders), rsvg-convert (librsvg2-bin) is
+# make-brand.sh's (the mark, the scalable SVG and the wordmark), and fontconfig
+# is make-emojis.sh's (fc-match/fc-query, the font whose glyphs the table is
+# filtered against).  Every PNG and table those scripts produce is committed, so
+# a build without them still builds - only an edit needs them.  Regenerating the
+# emoji table also needs the font itself (fonts-noto-color-emoji), which is a
+# desktop package and lives in uis/sway/packages.list; the host only needs to
+# have it installed where scripts/make-emojis.sh runs.  The desktop wallpaper is
+# a photograph, not a rendered file.
 if command -v apk >/dev/null 2>&1; then
 	log "Installing host build dependencies (apk)"
 	apk add --no-cache \
@@ -41,7 +46,7 @@ if command -v apk >/dev/null 2>&1; then
 		xcb-util-wm-dev xcb-util-dev \
 		debootstrap \
 		cgpt vboot-utils depthcharge-tools \
-		imagemagick librsvg \
+		imagemagick librsvg fontconfig \
 		e2fsprogs dosfstools parted gptfdisk \
 		util-linux
 elif command -v apt-get >/dev/null 2>&1; then
@@ -82,7 +87,7 @@ elif command -v apt-get >/dev/null 2>&1; then
 		libxcb-errors-dev \
 		debootstrap \
 		cgpt vboot-kernel-utils depthcharge-tools \
-		imagemagick librsvg2-bin \
+		imagemagick librsvg2-bin fontconfig \
 		e2fsprogs dosfstools parted gdisk \
 		util-linux
 else
