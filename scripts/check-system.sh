@@ -1680,6 +1680,29 @@ else
 	skip "fc-match or sha256sum is not installed"
 fi
 
+# The touchpad's three-finger swipes. The two vertical ones are the only place
+# this port *types for the person*: sway has no command that hands a key to the
+# focused client, so `wtype` drives the virtual keyboard protocol and the window
+# receives a real Ctrl+Tab. Without it the swipe completes, sway logs
+# `Command not found` and the tab does not change - the gesture looks broken
+# while the binding is exactly as written. The two workspace swipes are checked
+# with it because one file holds all four.
+_gest_cfg=/etc/sway/config.d/22-workspace-gestures.conf
+_gest=""
+[ -r "$_gest_cfg" ] || _gest="$_gest config.d/22-workspace-gestures.conf"
+for _g in 'swipe:3:left workspace next_on_output' \
+	'swipe:3:right workspace prev_on_output' \
+	'swipe:3:up exec wtype -M ctrl -k Tab -m ctrl' \
+	'swipe:3:down exec wtype -M ctrl -M shift -k Tab -m shift -m ctrl'; do
+	grep -qsF "$_g" "$_gest_cfg" 2>/dev/null || _gest="$_gest ${_g%% *}"
+done
+have wtype || _gest="$_gest wtype"
+if [ -z "$_gest" ]; then
+	ok "touchpad swipes wired (3-finger left/right workspaces, up/down Ctrl+Tab / Ctrl+Shift+Tab)"
+else
+	fail "touchpad swipes incomplete:$_gest (the swipe completes and nothing happens)"
+fi
+
 # Tablet mode: the keyboard folded back. Four pieces have to be there for it to
 # do anything - the switch, the script, the on-screen keyboard and the
 # accelerometer - and each missing half is silent: no bindswitch means detaching

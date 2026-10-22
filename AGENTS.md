@@ -1203,6 +1203,25 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   because `rofi-keys` shows those comments - a binding without one appears as its raw command in the
   key view, and a group header with no blank line after it would label the first binding instead.
   Bindings inside a `mode "..."` block are shown with the mode's name.
+- **The touchpad's four three-finger swipes: two move the session, two type into the window.**
+  Left and right are `bindgesture swipe:3:left|right workspace next_on_output|prev_on_output`
+  (`config.d/22-workspace-gestures.conf`, the file that already held them); up and down are
+  **Ctrl+Tab and Ctrl+Shift+Tab into the focused client**, which is how a browser, an editor and
+  every other tabbed application moves between tabs. sway has no command that hands a key to a
+  client - `swaymsg` speaks to the compositor, not to the window - so the two vertical bindings are
+  `exec wtype -M ctrl [-M shift] -k Tab -m ...`, the virtual keyboard protocol the emoji picker and
+  dictation already use: the application receives a real key press, Xwayland programs included.
+  The modifiers are pressed **and released in the binding** (`-M` holds one for whatever follows,
+  `-m` lets it go): `wtype` also releases them when it exits, and the written pair is what makes the
+  chord readable and independent of that exit path - the emoji picker's `-M shift -k Insert -m shift`
+  is the same form. Two silent failures are
+  what the check exists for: a `wtype` that is not installed makes the swipe complete with
+  `Command not found` in the journal while the binding reads correctly, and a session binding on
+  Ctrl+Tab would swallow the injected keys before the window sees them (there is none - Alt is
+  `$mod`, and `Alt+Tab` is the window switcher, not a tab switch). `check-system.sh` FAILs when any
+  of the four bindings or `wtype` is missing; the manual table and its paragraph are in
+  `03-shortcuts.md` § Windows; `rofi-keys` lists the four with the comment above each as their
+  description, because it parses `bindgesture` like every other binding.
 - **The menus are one-shot rofi scripts, and slow actions say so twice.** `~/.config/bin/rofi-*`
   are the menus behind the root menu (`rofi-quick`, `rofi-notify`, `rofi-clean`, `rofi-kill`,
   `rofi-tz`, `rofi-places`, `rofi-media`, `rofi-calc`, `rofi-layout`, `rofi-learn`, `rofi-emoji`,
