@@ -432,15 +432,18 @@ name for that reason.
 | three fingers to the left / to the right | next / previous workspace, the same as `Alt+1..0` |
 | three fingers up with two tabs open in `firefox-esr` | the browser moves to the next tab, as if Ctrl+Tab had been pressed |
 | three fingers down | the previous tab (Ctrl+Shift+Tab) |
-| the same in an editor with two files open (or `vim`'s `:tabnew`) | the next / previous tab: the keys go to the focused window, not to the compositor |
-| three fingers up on the bare desktop | nothing, and nothing in `journalctl --user -b` (`wtype` typed into a surface with no tabs) |
+| the same in foot, or in an editor with two files open | **nothing**, in any window that is not Firefox - and `pgrep -a wtype` while swiping shows no process: the filter runs inside sway, so the gesture costs nothing there |
+| three fingers up on the bare desktop | nothing, and nothing in `journalctl --user -b` |
 
 What a failure means:
 
 * **the swipe does nothing at all, for all four directions**: `/etc/sway/config.d/22-workspace-gestures.conf`
   is not in the image; `check-system.sh` FAILs on the four bindings.
-* **left/right work, up/down do not**: `wtype` is missing (`check-system.sh` FAILs on it),
-  or the application has no tab to switch.
+* **left/right work, up/down do not in Firefox**: `wtype` is missing (`check-system.sh` FAILs
+  on it), or that Firefox runs under Xwayland (`MOZ_ENABLE_WAYLAND=0`): it then has no Wayland
+  app id, which is what the binding filters on.
+* **up/down also type into another window**: the `[app_id="(?i)^firefox" con_id="__focused__"]`
+  prefix is gone from the binding; `check-system.sh` FAILs on it.
 * **the tab changes on the *press* of another key instead**: something is bound to
   Ctrl+Tab in `~/.config/sway/config`; sway sees the injected keys first, and a
   session binding there swallows them before the window gets them.

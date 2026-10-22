@@ -285,6 +285,57 @@ sudo keyd.rvaiya reload       # after editing /etc/keyd/default.conf
 `backspace+escape+enter` makes keyd quit and release the keyboard if a mapping
 goes wrong, which is the way back to a working top row.
 
+## The red bar says "There are errors in your config file"
+
+That bar is sway's, and **Toggle details** in it prints the file, the line and
+what it did not understand. Two things cause it here:
+
+* **a real syntax error** in `~/.config/sway/config`, in
+  `~/.config/sway/config.d/*.conf` or in `/etc/sway/config.d/*`. The same check
+  without a running session is
+  `sway -C -c ~/.config/sway/config`, which prints `Error on line N ...`.
+* **the same gesture defined twice**, once in a system drop-in and once in your
+  own. A repeated `bindsym` is a silent override; a repeated `bindgesture` is
+  not, and it is counted as an error on `swaymsg reload` while `sway -C` and a
+  fresh start both accept the very same files - so the swipe still works and the
+  bar is the whole symptom. Measured with the three-finger bindings in
+  `/etc/sway/config.d/22-workspace-gestures.conf`: a diagnostic copy of
+  `swipe:3:up` in `~/.config/sway/config.d/` raised the bar on every reload.
+
+Delete the duplicate from your drop-in and edit the system file instead, then:
+
+```sh
+swaymsg reload
+```
+
+`check-system.sh` warns when a user drop-in repeats a system `bindgesture`.
+
+## The three-finger swipes do nothing up or down
+
+That is the design in every window that is not Firefox: the binding carries
+sway's own filter, `[app_id="(?i)^firefox" con_id="__focused__"]`, so the
+compositor checks the focused window and starts nothing otherwise. In foot, in
+an editor, on the desktop - nothing happens, and nothing is supposed to.
+
+Inside Firefox it should still move a tab. If it does not:
+
+```sh
+command -v wtype
+swaymsg -t get_tree | jq -r '.. | objects | select(.focused==true) | .app_id'
+```
+
+`wtype` is the package of that name (`check-system.sh` FAILs when it is gone).
+The second line names the focused window's Wayland app id; it must start with
+`firefox` (Debian's package reports `firefox-esr`). A Firefox started with
+`MOZ_ENABLE_WAYLAND=0` runs under Xwayland, has no app id at all, and gets no
+gesture - start it normally.
+
+To let the gesture work in more applications, widen that one regex in
+`/etc/sway/config.d/22-workspace-gestures.conf` instead of adding a second
+binding (`(?i)^(firefox|code)` and so on), then `swaymsg reload`: two
+`bindgesture` lines for the same swipe are the duplicate that raises the red
+bar above.
+
 ## Nothing responds, the machine is thrashing
 
 4 GB and a compressed swap: a runaway process can make everything crawl before

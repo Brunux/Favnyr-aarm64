@@ -1203,25 +1203,52 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   because `rofi-keys` shows those comments - a binding without one appears as its raw command in the
   key view, and a group header with no blank line after it would label the first binding instead.
   Bindings inside a `mode "..."` block are shown with the mode's name.
-- **The touchpad's four three-finger swipes: two move the session, two type into the window.**
+- **The touchpad's four three-finger swipes: two move the session, two type into Firefox.**
   Left and right are `bindgesture swipe:3:left|right workspace next_on_output|prev_on_output`
-  (`config.d/22-workspace-gestures.conf`, the file that already held them); up and down are
-  **Ctrl+Tab and Ctrl+Shift+Tab into the focused client**, which is how a browser, an editor and
-  every other tabbed application moves between tabs. sway has no command that hands a key to a
-  client - `swaymsg` speaks to the compositor, not to the window - so the two vertical bindings are
+  (`config.d/22-workspace-gestures.conf`, the file that already held them); up and down go to the
+  next / previous tab of the **focused window when it is Firefox**, because they type **Ctrl+Tab**
+  and **Ctrl+Shift+Tab** into it. sway has no command that hands a key to a client - `swaymsg`
+  speaks to the compositor, not to the window - so the two vertical bindings are
   `exec wtype -M ctrl [-M shift] -k Tab -m ...`, the virtual keyboard protocol the emoji picker and
-  dictation already use: the application receives a real key press, Xwayland programs included.
-  The modifiers are pressed **and released in the binding** (`-M` holds one for whatever follows,
-  `-m` lets it go): `wtype` also releases them when it exits, and the written pair is what makes the
-  chord readable and independent of that exit path - the emoji picker's `-M shift -k Insert -m shift`
-  is the same form. Two silent failures are
-  what the check exists for: a `wtype` that is not installed makes the swipe complete with
-  `Command not found` in the journal while the binding reads correctly, and a session binding on
-  Ctrl+Tab would swallow the injected keys before the window sees them (there is none - Alt is
-  `$mod`, and `Alt+Tab` is the window switcher, not a tab switch). `check-system.sh` FAILs when any
-  of the four bindings or `wtype` is missing; the manual table and its paragraph are in
-  `03-shortcuts.md` § Windows; `rofi-keys` lists the four with the comment above each as their
-  description, because it parses `bindgesture` like every other binding.
+  dictation already use: the window receives a real key press. The modifiers are pressed **and
+  released in the binding** (`-M` holds one for whatever follows, `-m` lets it go): `wtype` also
+  releases them when it exits, and the written pair is what makes the chord readable and
+  independent of that exit path - the emoji picker's `-M shift -k Insert -m shift` is the same
+  form. **The Firefox gate is a criteria prefix on the command, not a helper script**:
+  `[app_id="(?i)^firefox" con_id="__focused__"]`, and both halves are load-bearing. Measured on
+  the maintainer's session: `[app_id="firefox-esr"] exec …` ran while a terminal was focused - a
+  criteria matches *every* window of that app, not the focused one - and adding
+  `con_id="__focused__"` stopped it, which is the half that makes the swipe do nothing outside
+  Firefox. `(?i)^firefox` covers `firefox-esr` (Debian's app id here) and upstream `firefox`. The
+  prefix is also the fast form, and that is why it is not a script: it runs inside the compositor,
+  so a `nop` through IPC measured 4.1 ms without criteria, 3.8 ms with `con_id="__focused__"` and
+  4.4 ms with the regex - noise, i.e. no measurable cost - and in another application it starts
+  **no process at all**; `wtype` itself costs 11.9 ms (measured with `wtype ""`, so it is process
+  startup plus the Wayland connect, not the key), which is the floor and under one 60 Hz frame.
+  The script alternative (`swaymsg -t get_tree | jq | grep`) measured 12.1 ms per swipe in *every*
+  application and about 24 ms in Firefox; a resident injector holding the keymap open would reach
+  ~0.2 ms and is exactly the daemon this port does not keep. Three silent failures are what the
+  check exists for: a `wtype` that is not installed makes the swipe complete with `Command not
+  found` in the journal while the binding reads correctly; a session binding on Ctrl+Tab would
+  swallow the injected keys before the window sees them (there is none - Alt is `$mod`, and
+  `Alt+Tab` is the window switcher, not a tab switch); and a binding that loses the criteria prefix
+  types Ctrl+Tab into whatever is focused. `check-system.sh` FAILs when any of the four bindings
+  (the criteria included) or `wtype` is missing; the manual table and paragraph are in
+  `03-shortcuts.md` § Windows, the symptom is `06-troubleshooting.md` § *The three-finger swipes
+  do nothing up or down*, and `rofi-keys` lists the four with the comment above each as their
+  description, because it parses `bindgesture` like every other binding. **A duplicate
+  `bindgesture` is not a silent override like a duplicate `bindsym`**: the same gesture in a user
+  drop-in and in the system one still applies, `sway -C` and a fresh sway accept both files, and
+  `swaymsg reload` counts it as a config error and puts the red *There are errors in your config
+  file* bar across the top - the only visible cause being a line that reads correctly. That is how
+  the temporary diagnostic behind these two swipes was found, and it is why `check-system.sh` WARNs
+  when a user drop-in repeats a system gesture (the device's own `~/.config/sway/config.d` is the
+  person's to edit) instead of editing `/etc/sway/config.d/22-workspace-gestures.conf`; the symptom
+  and the `/etc` alternative are in `06-troubleshooting.md` § *The red bar*. It is also why the
+  Firefox filter is one regex inside the one binding and not a second `bindgesture`: the criteria
+  cannot say "app_id or class" in a single bracket, and a Firefox forced onto Xwayland
+  (`MOZ_ENABLE_WAYLAND=0`) has no app_id and therefore no gesture - a deliberate limit the
+  troubleshooting page states instead of a second binding that would raise the bar.
 - **The menus are one-shot rofi scripts, and slow actions say so twice.** `~/.config/bin/rofi-*`
   are the menus behind the root menu (`rofi-quick`, `rofi-notify`, `rofi-clean`, `rofi-kill`,
   `rofi-tz`, `rofi-places`, `rofi-media`, `rofi-calc`, `rofi-layout`, `rofi-learn`, `rofi-emoji`,

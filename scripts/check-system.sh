@@ -1687,20 +1687,52 @@ fi
 # `Command not found` and the tab does not change - the gesture looks broken
 # while the binding is exactly as written. The two workspace swipes are checked
 # with it because one file holds all four.
+#
+# The vertical two also carry the Firefox filter, and that half is checked too:
+# `con_id="__focused__"` is what keeps the keys out of every other window (a
+# criteria without it matches a window of that app even when it is not focused,
+# measured), and it is sway's own check in-process - nothing is started when
+# another application is focused. A binding that loses the criteria would type
+# Ctrl+Tab into whatever is focused and look like a broken gesture everywhere
+# else, so this FAILs when it goes missing.
 _gest_cfg=/etc/sway/config.d/22-workspace-gestures.conf
 _gest=""
 [ -r "$_gest_cfg" ] || _gest="$_gest config.d/22-workspace-gestures.conf"
 for _g in 'swipe:3:left workspace next_on_output' \
 	'swipe:3:right workspace prev_on_output' \
-	'swipe:3:up exec wtype -M ctrl -k Tab -m ctrl' \
-	'swipe:3:down exec wtype -M ctrl -M shift -k Tab -m shift -m ctrl'; do
+	'swipe:3:up [app_id="(?i)^firefox" con_id="__focused__"] exec wtype -M ctrl -k Tab -m ctrl' \
+	'swipe:3:down [app_id="(?i)^firefox" con_id="__focused__"] exec wtype -M ctrl -M shift -k Tab -m shift -m ctrl'; do
 	grep -qsF "$_g" "$_gest_cfg" 2>/dev/null || _gest="$_gest ${_g%% *}"
 done
 have wtype || _gest="$_gest wtype"
 if [ -z "$_gest" ]; then
-	ok "touchpad swipes wired (3-finger left/right workspaces, up/down Ctrl+Tab / Ctrl+Shift+Tab)"
+	ok "touchpad swipes wired (3-finger left/right workspaces, up/down Ctrl+Tab / Ctrl+Shift+Tab in Firefox)"
 else
 	fail "touchpad swipes incomplete:$_gest (the swipe completes and nothing happens)"
+fi
+
+# A duplicate bindgesture is *not* a silent override the way a duplicate bindsym
+# is. Measured on the maintainer's session: the same gesture in a user drop-in
+# and in the system one still applies, and away from a running session nothing
+# complains (`sway -C` accepts the files, and so does a fresh sway) - but a
+# `swaymsg reload` counts it as a config error and puts the red "There are
+# errors in your config file" bar across the top of the screen, where the only
+# visible cause is a line that looks correct. That is how the temporary
+# diagnostic behind the vertical swipes was found. It is a WARN and not a FAIL:
+# the bindings work, the bar is the whole symptom.
+_user_gestures=""
+for _f in "$HOME/.config/sway/config" "$HOME"/.config/sway/config.d/*.conf; do
+	[ -r "$_f" ] || continue
+	while read -r _k; do
+		[ -n "$_k" ] || continue
+		grep -rqsF "bindgesture $_k " /etc/sway/config.d/ &&
+			_user_gestures="$_user_gestures $_k(${_f##*/})"
+	done <<<"$(sed -n 's/^[[:space:]]*bindgesture[[:space:]]\{1,\}\([^[:space:]]*\).*/\1/p' "$_f")"
+done
+if [ -z "$_user_gestures" ]; then
+	ok "no user drop-in repeats a system bindgesture (a duplicate raises the red config-error bar on reload)"
+else
+	warn "a user drop-in repeats a system bindgesture:$_user_gestures - sway counts that as a config error and shows 'There are errors in your config file' on reload while 'sway -C' accepts it; edit the system file instead"
 fi
 
 # Tablet mode: the keyboard folded back. Four pieces have to be there for it to

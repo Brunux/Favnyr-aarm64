@@ -107,7 +107,7 @@ with `Super+Ctrl`:
 | Alt+Shift+Space | toggle floating (the sway default) |
 | Alt+A | focus the parent container |
 | three-finger swipe left/right | previous / next workspace (touchpad) |
-| three-finger swipe up/down | next / previous tab in the focused window: Ctrl+Tab and Ctrl+Shift+Tab |
+| three-finger swipe up/down | next / previous tab in Firefox: Ctrl+Tab and Ctrl+Shift+Tab |
 
 **Alt+Q closes the focused window**, and it is the key to remember for the
 windows the About menu holds open: **The full picture** (fastfetch), **Boot
@@ -118,14 +118,19 @@ did not reach these windows on this keyboard, so the footer names the session's
 key instead.
 
 **The touchpad carries four three-finger swipes.** Left and right switch
-workspaces; up and down go to the next and the previous tab of the focused
-window, because they type **Ctrl+Tab** and **Ctrl+Shift+Tab** into it - the keys
-a browser, an editor and every other tabbed application already answers to.
-Nothing is configured per application, so a window with no tabs simply ignores
-them. The two vertical swipes are typed with `wtype` (the same virtual keyboard
-the emoji picker and dictation use), which is what makes the keys real for the
-focused window; if it is missing the swipe completes and nothing happens, and
-`check-system.sh` says so.
+workspaces. Up and down go to the next and the previous tab of **Firefox**,
+because they type **Ctrl+Tab** and **Ctrl+Shift+Tab** into it, and they do
+nothing at all in any other window: sway checks that the focused window is
+Firefox before it starts anything, so the filter costs nothing when it is not.
+That is deliberate - a swipe that typed Ctrl+Tab into every application would be
+a keyboard nobody asked for, and in a terminal Ctrl+Tab means something else.
+
+The keys themselves are typed with `wtype` (the same virtual keyboard the emoji
+picker and dictation use), which is what makes them real for the focused window;
+if it is missing the swipe completes and nothing happens, and `check-system.sh`
+says so. A Firefox started with `MOZ_ENABLE_WAYLAND=0` runs under Xwayland, has
+no Wayland app id, and therefore gets no gesture: run it the normal way and the
+swipes work.
 
 ## Sound, light and screenshots
 
