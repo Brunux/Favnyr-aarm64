@@ -6,7 +6,7 @@
 > device work is [`optimization.md`](optimization.md); the boot chain and the gotchas are
 > [`AGENTS.md`](../AGENTS.md).
 
-**Status: v0.3.0.** The image boots from microSD on the Hayato, the eMMC install works, the
+**Status: v0.3.1.** The image boots from microSD on the Hayato, the eMMC install works, the
 running system can be backed up and restored, and the session is documented and measured. The next
 release is **v0.4.0, the Rust installer**.
 
