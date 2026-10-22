@@ -14,10 +14,12 @@
 # files dropped by rg itself, and the rows capped at 400.
 #
 # Enter opens the file in bat, scrolled to the match.  bat colours the line
-# (`--highlight-line N`) but its own pager always starts at the top, so its
-# output is piped into `less -R +N`: less is told the line to start at, and -R
-# keeps the colours bat wrote.  The window is a `popup` foot, the same one
-# rofi-files reads a text file in.
+# (`--highlight-line N`) but its own pager always starts at the top, so bat
+# writes the page to a real file and `less -R +N` opens *that file* at the
+# line: less cannot seek a pipe, and piping bat into it answered "Cannot seek
+# to line number N" and left the match below the screen.  -R keeps the colours
+# bat wrote, and the file is removed when less exits.  The window is a `popup`
+# foot, the same one rofi-files reads a text file in.
 #
 # The walk is a `busy` card with a stop button, like the dictation and the Wi-Fi
 # scan: on this machine the unfiltered tree costs 1.6 s of walk, and on a home
@@ -29,7 +31,10 @@ dir=$(dirname "$0")
 
 MAX_ROWS=400
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/grep.XXXXXX")
-trap 'rm -rf "$tmp"' EXIT
+# The page less reads lives outside $tmp: this trap removes $tmp when the
+# script exits, which happens before foot's child has read the page. The child
+# removes its own file, and this trap only covers a foot that never started.
+trap 'rm -rf "$tmp"; rm -f "${view:-}"' EXIT
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -102,10 +107,26 @@ open:*)
 	line=${rest##*:}
 	path=${rest%:*}
 	name=$(basename -- "$path")
-	# $1 is the line, $2 the file name bat prints in its header, $3 the path.
+	# bat writes the page to a real file because less cannot seek a pipe: the
+	# old `bat | less +N` answered "Cannot seek to line number N" and showed
+	# the top of the file instead of the match. mktemp is asked for a path
+	# outside the menu's temp directory, because the EXIT trap removes that
+	# one as soon as this script is replaced by foot, while less reads the page
+	# afterwards; less' own shell removes this file when the window closes.
+	view=$(mktemp "${TMPDIR:-/tmp}/lazyos-grep.XXXXXX") || {
+		ui_say 'Search inside files' 'Could not create a temporary file' \
+			critical "$UI_ICON_ERROR"
+		exit 1
+	}
+	BAT_THEME=ansi bat --color=always --style=numbers --paging=never \
+		--highlight-line "$line" --file-name "$name" -- "$path" >"$view" || {
+		rm -f "$view"
+		ui_say 'Search inside files' "Could not read $name" \
+			critical "$UI_ICON_ERROR"
+		exit 1
+	}
+	# $1 is the line, $2 the file less reads (and removes).
 	exec foot --app-id=popup --title="$name:$line" -e sh -c '
-		BAT_THEME=ansi bat --color=always --style=numbers --paging=never \
-			--highlight-line "$1" --file-name "$2" -- "$3" |
-			less -R "+$1"' sh "$line" "$name" "$path"
+		less -R "+$1" "$2"; rm -f "$2"' sh "$line" "$view"
 	;;
 esac

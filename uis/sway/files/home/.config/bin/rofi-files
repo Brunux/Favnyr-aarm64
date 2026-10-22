@@ -23,7 +23,7 @@
 # thumbnail through lazyos-thumbnail for the rows it is about to show, all at
 # once, and only when that picture is not cached in ~/.cache/thumbnails yet.
 #
-#   rofi-files              start in the current directory
+#   rofi-files              start where you were last time (or in $HOME)
 #   rofi-files <dir>        start there
 #   rofi-files --search     every file under $HOME, narrowed by typing
 #   rofi-files --hidden     start with the dotfiles shown (in either mode)
@@ -44,9 +44,32 @@
 # never a subprocess per row - so the list is up as fast as the browser, and a
 # home directory of a hundred thousand files does not become a beach ball.
 # Escape closes either mode with nothing.
+#
+# The browser remembers where it was: the last directory browsed, or the folder
+# of the last file opened (from a row or from --search), is one line in
+# $XDG_STATE_HOME/lazyos/files-last. The first run, and a deleted state file,
+# start in $HOME - never in $PWD, which is whatever directory the session's
+# launcher happened to be in and reads as the browser forgetting.
 set -eu
 
 theme="$HOME/.config/rofi/solarized.rasi"
+
+# State, not cache and not config: it survives a reboot, deleting it is the way
+# back to $HOME, and a directory that cannot be written must not stop a file
+# from opening (remember below ignores every failure).
+state_dir=${XDG_STATE_HOME:-$HOME/.local/state}/lazyos
+state_file=$state_dir/files-last
+
+# remember DIR: the directory the next Alt+Ctrl+F should reopen. It is called
+# for every directory browsed and for the parent of every file opened, and
+# every failure is ignored - a read-only state directory must not stop a file
+# from opening, and the browser still works without its memory.
+remember() {
+	[ -n "${1:-}" ] || return 0
+	[ -d "$1" ] || return 0
+	mkdir -p -- "$state_dir" 2>/dev/null || return 0
+	printf '%s\n' "$1" >"$state_file" 2>/dev/null || :
+}
 base1="#93a1a1"     # file names, a step above the dim metadata
 base01="#586e75"    # metadata, paths and the arrows
 cyan="#2aa198"      # directories, the same colour the key view gives a section
@@ -61,11 +84,12 @@ LIMIT=500
 
 hidden=no
 mode=browse
+from_search=no
 dir=""
 while [ $# -gt 0 ]; do
 	case $1 in
 		--hidden) hidden=yes; shift ;;
-		--search) mode=search; shift ;;
+		--search) mode=search; from_search=yes; shift ;;
 		--) shift; break ;;
 		-*) printf 'usage: rofi-files [--hidden] [--search] [directory]\n' >&2; exit 2 ;;
 		*) dir=$1; shift ;;
@@ -92,12 +116,33 @@ if [ "$mode" = search ]; then
 		mode=browse
 	fi
 fi
-if [ -z "$dir" ]; then dir=$PWD; fi
+# No directory argument: reopen where the browser was, if that still exists.
+# $PWD is deliberately not the fallback - Alt+Ctrl+F is pressed from wherever
+# the session is, and starting there made the browser look like it forgot.
+# The search always starts at $HOME and never reads or writes this memory here.
+if [ -z "$dir" ]; then
+	if [ "$mode" = browse ] && [ "$from_search" = no ] && [ -r "$state_file" ]; then
+		last=$(head -n 1 "$state_file" 2>/dev/null || :)
+		if [ -n "$last" ] && [ -d "$last" ]; then
+			dir=$last
+		fi
+	fi
+	[ -n "$dir" ] || dir=$HOME
+fi
 if [ ! -d "$dir" ]; then
 	notify-send -a Files "Not a directory" "$dir"
 	exit 1
 fi
 dir=$(cd -- "$dir" && pwd)
+
+# Browsing a directory is what the next Alt+Ctrl+F should reopen, including
+# the re-exec into a subdirectory (browse() starts this script again, which
+# reaches this line). The search is skipped: it is defined to start at $HOME,
+# and letting that overwrite the memory would send the browser home after
+# every search.
+if [ "$mode" = browse ] && [ "$from_search" = no ]; then
+	remember "$dir"
+fi
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/files.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
@@ -415,6 +460,10 @@ case $action in
 			notify-send -a Files "$(basename -- "$payload")" "Not readable by this user"
 			exit 0
 		fi
+		# A file was opened: the next Alt+Ctrl+F starts in the folder it lives
+		# in, not at the top of the tree. This covers a row of --search too,
+		# which is the case where the file is usually furthest from home.
+		remember "$(dirname -- "$payload")"
 		name=$(basename -- "$payload")
 		total=$(head -c 4096 -- "$payload" 2>/dev/null | wc -c)
 		text=$(head -c 4096 -- "$payload" 2>/dev/null | tr -d '\000' | wc -c)
@@ -448,6 +497,10 @@ case $action in
 			# as soon as it is started. The image family is decided before the
 			# text test on purpose: an SVG *is* a text file, and with the old
 			# order it opened as source in bat and could never be looked at.
+			# The hint is asked for before imv starts, because it is the one
+			# moment the keys are worth saying; it is a no-op after the first
+			# picture of the session.
+			"$HOME/.config/bin/lazyos-image-hint" || :
 			setsid imv -- "$payload" >/dev/null 2>&1 &
 		elif [ "$kind" = image ] && command -v chafa >/dev/null 2>&1; then
 			# The fallback for a GPU where imv gets no EGL context: --hold keeps

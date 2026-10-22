@@ -96,7 +96,9 @@ if [ "$kind" = image ] && command -v imv >/dev/null 2>&1; then
 	# family is decided before the text test below on purpose: an SVG *is* a
 	# text file, and with the old order it opened as source in bat and could
 	# never be looked at. `--` keeps a name that begins with "-" from being read
-	# as an option.
+	# as an option. The hint says the keys once per session, before the window
+	# takes the screen; it never delays the picture and never fails the open.
+	"$HOME/.config/bin/lazyos-image-hint" || :
 	exec imv -- "$path"
 elif [ "$kind" = image ] && command -v chafa >/dev/null 2>&1 &&
 	command -v foot >/dev/null 2>&1; then

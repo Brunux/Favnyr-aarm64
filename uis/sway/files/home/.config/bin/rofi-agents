@@ -26,7 +26,15 @@
 #   rofi-agents                 the menu (also Alt+Ctrl+Shift+A)
 #   rofi-agents --env <a> <acc> print the env assignment for an account
 #   rofi-agents --new <agent>   create an account directory
+#
+# Every row carries the session's glyph from lib-rofi.sh - a code sign for an
+# agent, two people for its accounts, a download arrow for an install, a gear
+# for the default, a terminal for the shell, a bin for removing an account and
+# an undo arrow for going back - and a display/key table maps the rendered row
+# back to its action, because rofi hands back the row and not a key.
 set -eu
+
+. "$(dirname "$0")/lib-rofi.sh"
 
 theme="$HOME/.config/rofi/solarized.rasi"
 
@@ -48,11 +56,20 @@ AGENTS=(
 	"Gemini CLI|gemini|@google/gemini-cli|"
 	"GitHub Copilot|copilot|@github/copilot|"
 )
-SEP=$'\t'
 
 pick() { # prompt, lines on stdin
-	rofi -dmenu -theme "$theme" -p "$1" -lines 12 -i \
+	rofi -dmenu -markup-rows -theme "$theme" -p "$1" -lines 12 -i \
 		-theme-str 'window { width: 56%; }' "${@:2}"
+}
+
+# choose PROMPT TABLE: print the key of the row picked from a display/key TSV.
+# The table is what keeps a glyph harmless: rofi hands back the rendered row,
+# and the key beside it is the action. Returns 1 when the window is dismissed.
+choose() { # prompt, table
+	local choice
+	choice=$(cut -f1 "$2" | pick "$1") || return 1
+	[ -n "$choice" ] || return 1
+	awk -F'\t' -v d="$choice" '$1 == d { print $2; exit }' "$2"
 }
 
 # The menu's messages are about accounts and installs, so the one icon is the
@@ -88,22 +105,29 @@ accounts_menu() { # entry
 	fi
 	local dir="$data/$bin"
 	mkdir -p "$dir"
-	local rows
-	rows=$(
+	local table action a
+	table=$(mktemp "${TMPDIR:-/tmp}/agents.XXXXXX") || return
+	{
 		for d in "$dir"/*/; do
 			[ -d "$d" ] || continue
 			a=$(basename "$d")
-			printf '● %s%s\n' "$a" "$([ "$a" = "$(cat "$dir/default" 2>/dev/null)" ] && echo '  (default)')"
+			if [ "$a" = "$(cat "$dir/default" 2>/dev/null)" ]; then
+				ui_row "$UI_I_USERS" "$a" "(default)" "use:$a"
+			else
+				ui_row "$UI_I_USERS" "$a" "" "use:$a"
+			fi
 		done
-		printf '%s\n' "New account…" "Remove an account…" "Back"
-	)
-	local choice
-	choice=$(printf '%s\n' "$rows" | pick "Accounts · $name") || return
-	case "$choice" in
-	"New account…") new_account "$name" "$bin" ;;
-	"Remove an account…") remove_account "$name" "$bin" ;;
-	"Back" | "") return ;;
-	*) use_account "$name" "$bin" "${choice#● }" ;;
+		ui_row "$UI_I_USERS" "New account…" "" "new"
+		ui_row "$UI_I_TRASH" "Remove an account…" "" "remove"
+		ui_row "$UI_I_UNDO" "Back" "" "back"
+	} >"$table"
+	action=$(choose "Accounts · $name" "$table") || { rm -f "$table"; return; }
+	rm -f "$table"
+	case "$action" in
+	"new") new_account "$name" "$bin" ;;
+	"remove") remove_account "$name" "$bin" ;;
+	"back" | "") return ;;
+	"use:"*) use_account "$name" "$bin" "${action#use:}" ;;
 	esac
 }
 
@@ -121,16 +145,29 @@ new_account() { # name, binary
 }
 
 remove_account() { # name, binary
-	local name=$1 dir="$data/$2" choice
-	choice=$(
-		for d in "$dir"/*/; do [ -d "$d" ] && basename "$d"; done
-	) || return
-	[ -n "$choice" ] || { notify "No accounts to remove"; return; }
-	local pick1
-	pick1=$(printf '%s\n' "$choice" | pick "Remove account · $name") || return
-	[ -n "$pick1" ] || return
-	rm -rf "${dir:?}/$pick1"
-	notify "$name: removed $pick1"
+	local name=$1 dir="$data/$2" table action a
+	table=$(mktemp "${TMPDIR:-/tmp}/agents.XXXXXX") || return
+	{
+		for d in "$dir"/*/; do
+			[ -d "$d" ] || continue
+			a=$(basename "$d")
+			ui_row "$UI_I_USERS" "$a" "" "rm:$a"
+		done
+	} >"$table"
+	if [ ! -s "$table" ]; then
+		rm -f "$table"
+		notify "No accounts to remove"
+		return
+	fi
+	action=$(choose "Remove account · $name" "$table") || { rm -f "$table"; return; }
+	rm -f "$table"
+	case "$action" in
+	"rm:"*) ;;
+	*) return ;;
+	esac
+	a=${action#rm:}
+	rm -rf "${dir:?}/$a"
+	notify "$name: removed $a"
 }
 
 use_account() { # name, binary, account
@@ -140,28 +177,29 @@ use_account() { # name, binary, account
 }
 
 menu() {
-	local rows="" entry name bin npm envvar mark
+	local rows="" entry name bin npm envvar mark table action
 	for entry in "${AGENTS[@]}"; do
 		IFS='|' read -r name bin npm envvar <<<"$entry"
-		mark=$([ "$(default_agent)" = "$bin" ] && echo '● ' || echo '  ')
-		if installed "$bin"; then
-			rows+="${mark}${name}${SEP}launch:${entry}"$'\n'
-			[ -n "$envvar" ] && rows+="  ${name} accounts…${SEP}accounts:${entry}"$'\n'
+		if [ "$(default_agent)" = "$bin" ]; then
+			mark="● $name"
 		else
-			rows+="  ${name} — install ${npm}${SEP}install:${entry}"$'\n'
+			mark=$name
+		fi
+		if installed "$bin"; then
+			rows+=$(ui_row "$UI_I_CODE" "$mark" "" "launch:$entry")$'\n'
+			if [ -n "$envvar" ]; then
+				rows+=$(ui_row "$UI_I_USERS" "$name accounts…" "" "accounts:$entry")$'\n'
+			fi
+		else
+			rows+=$(ui_row "$UI_I_DOWNLOAD" "$name" "install $npm" "install:$entry")$'\n'
 		fi
 	done
-	rows+="  Set the default agent…${SEP}default"$'\n'
-	rows+="  Open a terminal in ~/Work${SEP}shell"$'\n'
+	rows+=$(ui_row "$UI_I_COG" "Set the default agent…" "" "default")$'\n'
+	rows+=$(ui_row "$UI_I_TERM" "Open a terminal in ~/Work" "" "shell")$'\n'
 
-	local table choice
-	table=$(mktemp "${TMPDIR:-/tmp}/agents.XXXXXX")
+	table=$(mktemp "${TMPDIR:-/tmp}/agents.XXXXXX") || return
 	printf '%s' "$rows" >"$table"
-
-	choice=$(cut -f1 "$table" | pick "Agents") || { rm -f "$table"; return; }
-	[ -n "$choice" ] || { rm -f "$table"; return; }
-	local action
-	action=$(awk -F'\t' -v d="$choice" '$1 == d { print $2; exit }' "$table")
+	action=$(choose "Agents" "$table") || { rm -f "$table"; return; }
 	rm -f "$table"
 	case "$action" in
 	launch:*)
@@ -180,16 +218,23 @@ menu() {
 			"npm install -g --prefix \"\$HOME/.local\" '$npm' && echo; echo \"$name is in ~/.local/bin; the menu finds it now.\"; read -r _"
 		;;
 	default)
-		local list
-		list=$(
+		local table chosen
+		table=$(mktemp "${TMPDIR:-/tmp}/agents.XXXXXX") || return
+		{
 			for entry in "${AGENTS[@]}"; do
 				IFS='|' read -r name bin npm envvar <<<"$entry"
-				installed "$bin" && echo "$bin"
+				if installed "$bin"; then
+					ui_row "$UI_I_CODE" "$bin" "" "$bin"
+				fi
 			done
-		)
-		[ -n "$list" ] || { notify "No agent CLI is installed yet"; return; }
-		local chosen
-		chosen=$(printf '%s\n' "$list" | pick "Default agent") || return
+		} >"$table"
+		if [ ! -s "$table" ]; then
+			rm -f "$table"
+			notify "No agent CLI is installed yet"
+			return
+		fi
+		chosen=$(choose "Default agent" "$table") || { rm -f "$table"; return; }
+		rm -f "$table"
 		[ -n "$chosen" ] || return
 		mkdir -p "$state"
 		printf '%s' "$chosen" >"$default_file"

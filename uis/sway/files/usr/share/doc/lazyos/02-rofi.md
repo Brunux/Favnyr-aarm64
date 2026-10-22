@@ -128,6 +128,15 @@ script over `rofi -dmenu`, because rofi 2.0 has no filebrowser mode:
 * the line under the prompt says where you are, how many directories and files
   are there and how much space is left.
 
+**It opens where you left it.** The first time, Files starts in your home
+directory; after that it starts in the directory you were last browsing, and
+opening a file - from a row or from the Search key - remembers that file's
+folder instead, so the next **Alt+Ctrl+F** is already where the file lives. The
+memory is one line in `~/.local/state/lazyos/files-last` (under `$XDG_STATE_HOME`
+when that is set); deleting the file sends the browser back to your home
+directory. The Search key itself still searches all of `$HOME` and does not move
+that memory.
+
 **Alt+1 acts on the row instead of opening it.** Enter *opens* what is under the
 cursor; Alt+1 asks what else can be done with it, and the list offers only what
 fits: a directory can be measured (`du -sh`, as a card with the stop button) and
@@ -166,8 +175,12 @@ was it" from the name. `rofi-grep` answers the other question - "where did I wri
 this" - by running `ripgrep` over the same home directory and listing a row per
 match: the matching **text** on the row (which is what tells two matches apart),
 `path:line` in the dim colour, and Enter opening the file in `bat` scrolled to
-that line (bat's own pager cannot start anywhere but the top, so its output goes
-through `less -R +N`, which keeps the colours bat wrote). It is bounded like the
+that line. bat colours the match and writes the page to a real temporary file,
+and `less -R +N` opens that file at the line - `-R` keeps the colours bat wrote,
+and the file is removed when the window closes. A pipe would be the obvious
+shape and is the one that does not work: `less` cannot seek it, and the old
+`bat | less +N` answered "Cannot seek to line number N" instead of showing the
+match. It is bounded like the
 list: three matches per file, the same four trees left out, binaries dropped by
 ripgrep itself, and 400 rows - type one more word to narrow it. A pattern ripgrep
 cannot read says so in ripgrep's own words, and the walk is a `busy` card with the

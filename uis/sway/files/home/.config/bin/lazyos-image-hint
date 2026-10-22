@@ -1,0 +1,29 @@
+#!/bin/sh
+# The picture viewer's keys, once per session.
+#
+# imv draws a picture and has no on-screen help; its bindings are the ones
+# /etc/imv_config defines (i/o zoom, h/j/k/l pan, Ctrl+R rotate, Left/Right
+# previous/next, f fullscreen, q quit), and the first picture of a session says
+# so in a notification. The state file is the whole memory: $XDG_RUNTIME_DIR is
+# per session, so a new login gets the hint again, and the file is written
+# before the card is queued so a runtime directory that cannot be written stays
+# quiet instead of raising the toast on every picture.
+#
+# It is called by lazyos-view (a double click in pcmanfm) and by rofi-files
+# (the Files list) right before they start imv, never for another kind of file.
+# Nothing is resident: this script ends, and the notification is mako's.
+set -eu
+
+runtime=${XDG_RUNTIME_DIR:-}
+[ -n "$runtime" ] && [ -d "$runtime" ] || exit 0
+state=$runtime/lazyos-imv-hint
+[ -e "$state" ] && exit 0
+: >"$state" 2>/dev/null || exit 0
+
+# notify-send only queues the message on the session bus, and it is started in
+# the background so a slow or missing bus never delays the viewer's window. A
+# failure has no answer worth giving here: the picture is the thing asked for.
+notify-send -a imv -i image-x-generic -t 12000 "imv" \
+	"i / o zoom · h j k l pan · Ctrl+R rotate · Left / Right previous / next · f fullscreen · q quit" \
+	>/dev/null 2>&1 &
+exit 0

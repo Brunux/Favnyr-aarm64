@@ -157,6 +157,15 @@ and `chafa`'s sixels in a foot window are the answer when imv cannot get an EGL
 context - both cost a fraction of a player, and a picture looks like a picture
 rather than like a video that has not started.
 
+**The first picture comes with its keys.** imv has no on-screen help, so the
+first picture of a session raises one notification with the bindings its
+`/etc/imv_config` defines: `i` and `o` zoom, `h` `j` `k` `l` pan, **Ctrl+R**
+rotates, **Left** and **Right** walk the folder, `f` is fullscreen and `q` quits.
+It is one card per session (the state file is
+`$XDG_RUNTIME_DIR/lazyos-imv-hint`), it appears only when a picture actually
+opens in imv - not for text, a document or a video - and it is queued in the
+background, so it never delays the picture.
+
 ## Files in a window
 
 **Search+Shift** opens **pcmanfm**: the files the Search key and **Alt+Ctrl+F**
