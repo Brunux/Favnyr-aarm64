@@ -1517,6 +1517,32 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   (U+F00C, U+EA71, U+EBAB, codicons) would all be boxes. waybar gets away without that because it
   is Pango, and a terminal is not. `check-system.sh` fails on each missing binary, on the two
   wiring files, and warns when an interactive `bash -ic 'alias ls'` does not answer `eza`.
+- **kitty is the second terminal, and its configuration is the session's theme rather than a second
+  theme.** Nothing starts it (`$term`, the bar's popups and every menu that needs a terminal open
+  **foot**) and no package list installs it, but
+  `uis/sway/files/home/.config/kitty/kitty.conf` ships with the image so that `apt install kitty`
+  does not put a default-palette terminal beside a solarized one. Every line is what `foot.ini`
+  already decided: solarized dark (the same 16 values), JetBrains Mono 11 with
+  `symbol_map U+E000-U+F8FF` and plane 15 to **Symbols Nerd Font Mono** - kitty's fontconfig
+  fallback would find the *non*-Mono variant, whose glyph is two cells wide, and every
+  `eza --icons` row would stop lining up - 6 px of padding, 1000 lines of scrollback, no bell and
+  `background_opacity 0.87`. Four things are deliberate and easy to undo by mistake:
+  **`background_blur` stays 0**, because kitty only blurs when the compositor speaks
+  `org_kde_kwin_blur` or `ext_background_effect_v1` and swayfx advertises neither
+  (`WAYLAND_DEBUG=1` lists `wl_compositor`, `xdg_wm_base` and the KDE decoration manager, nothing
+  about blur) - the blur under that window is swayfx's, behind the alpha; **`hide_window_decorations
+  yes`**, because swayfx is the frame (2 px, cyan when focused) and kitty would paint its own title
+  bar over it; **`confirm_os_window_close 0`**, because `Alt+Q` is sway's `kill`, a close request
+  that cannot answer a dialog; and **`kitty_mod` stays `ctrl+shift`**, because sway sees every Alt
+  chord before the window does, so a kitty on Alt would lose its keys to the session (which is also
+  why prompt jumping is `Ctrl+Shift+Z`/`X`, not the obvious left/right). Ligatures are the one
+  rendering difference from foot - kitty draws JetBrains Mono's `calt`, foot cannot - and nothing
+  else about the window is. `check-system.sh` asks kitty's own parser what the file *resolves to*
+  (`kitty +runpy` with `kitty.config.load_config`: ~0.1 s, no window, writes nothing, and the
+  `--debug-config` of older releases is gone in 0.48), because an unknown key is one stderr line and
+  a value that does not parse keeps the default in silence; `font_family` is a `FontSpec` namedtuple,
+  so the family is its `.system`. SKIP when kitty is not installed, and the manual section is
+  `04-software.md` § *kitty, if you install it*.
 - **`/etc/yt-dlp.conf` names Node as yt-dlp's JS runtime**, for the same reason node is installed at
   all: yt-dlp 2026 needs a JS runtime for YouTube's JS challenges ("EJS"), enables only `deno` by
   default and Debian ships none, so a stock install logs `[debug] JS runtimes: none` and warns that

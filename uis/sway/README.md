@@ -39,6 +39,7 @@ launcher, waybar and the foot terminal.
 | `home/.config/rofi/config.rasi` | Launcher settings: the three modes, `terminal = foot`, matching. |
 | `home/.config/rofi/solarized.rasi` | The solarized look, shared by the launcher, the window switcher and the bar's dmenu. |
 | `home/.config/foot/foot.ini` | Solarized palette, JetBrains Mono and the Nerd Font fallback for the session terminal and the bar's popups. |
+| `home/.config/kitty/kitty.conf` | The same theme for **kitty**, if it is installed: nothing in the session starts kitty (foot is `$term`), so this file is only there to keep `apt install kitty` from adding a second, unthemed palette. |
 | `home/.bashrc` | The interactive shell: `ls` is eza, `cat` is bat, `cd` is zoxide, fzf key bindings and the starship prompt (see **The CLI tools**). |
 | `home/.config/starship.toml` | Deboma's prompt: directory and git state in the theme's cyan. |
 | `etc/profile.d/90-cli-tools.sh` | The CLI environment (`MANPAGER`, `BAT_THEME`, `PATH`), shared by login shells and `~/.bashrc`. |
@@ -81,9 +82,11 @@ binary, `/etc/sway` and the greeter's `sway` command are the same either way, bu
 | `layer_effects` | bar + launcher | The bar only has the wallpaper behind it and takes the cached path; rofi floats over windows and takes the live one. |
 
 Blur is drawn *behind* a surface, so it only exists under one with alpha < 1: the terminal
-(`foot.ini`, `alpha=0.92`), the launcher (`solarized.rasi`, 0.88) and the bar (`style.css`, 0.78 for
-the bar and 0.86 for its cards) are the three carriers. `docs/optimization.md` §7 has the
-measurements, the method, and why the renderer question has only one answer here.
+(`foot.ini`, `alpha=0.87`), the launcher (`solarized.rasi`, 0.82, and 0.88 on the selected row), the
+bar (`style.css`, 0.71, and 0.80 on the cards) and, if it is installed, **kitty**
+(`kitty.conf`, `background_opacity 0.87`) are the carriers. Everything else in the session is
+opaque on purpose. `docs/optimization.md` §7 has the measurements, the method, and why the renderer
+question has only one answer here.
 
 The drop-in is swayfx-only, so `sway -C` failing means Debian's plain sway is installed again
 (`scripts/check-system.sh` fails on that, and on a `sway --version` that does not say `swayfx`).

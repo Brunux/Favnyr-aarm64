@@ -668,6 +668,71 @@ else
 	warn "commands referenced by the sway configuration are missing:$_missing_cmds"
 fi
 
+# kitty is the optional second terminal: nothing in the session starts it (foot is
+# $term, the bar's popups, and every menu that needs a terminal) and no package
+# list installs it, but the image ships its configuration so that `apt install
+# kitty` does not put a second, unthemed palette on the wallpaper.  A kitty with a
+# broken configuration looks *fine*: an unknown key is only a stderr line
+# ("Ignoring unknown config key") and a value that does not parse - a mistyped
+# colour, a font size that is not a number - is dropped in favour of the default.
+# So the check asks kitty's own parser what the file resolves to, with no window
+# (kitty +runpy, ~0.1 s, writes nothing), and compares that with the theme rather
+# than grepping the file for the keys it is supposed to have.
+if ! have kitty; then
+	skip "kitty is not installed (the session terminal is foot)"
+elif [ ! -r "$HOME/.config/kitty/kitty.conf" ]; then
+	fail "$HOME/.config/kitty/kitty.conf is missing: kitty opens on its own palette beside a solarized foot"
+else
+	_kitty_out=$(LZY_KITTY_CONF="$HOME/.config/kitty/kitty.conf" kitty +runpy '
+import os
+from kitty.config import load_config
+bad = []
+o = load_config(os.environ["LZY_KITTY_CONF"], accumulate_bad_lines=bad)
+print("bad=%d" % len(bad))
+print("bg=%06x" % o.background.rgb)
+print("fg=%06x" % o.foreground.rgb)
+print("opacity=%s" % o.background_opacity)
+# `font_family` resolves to a FontSpec namedtuple (family, system, postscript
+# name, ...), so ask it for .system: a bare %s of the spec is a TypeError and the
+# report then says the font is missing when it is right there.
+print("font=%s" % o.font_family.system)
+print("symbols=%d" % len(o.symbol_map))
+for b in bad:
+    print("badline=%d %s: %s" % (b.number, b.line, b.exception))
+' 2>"$RUNTIME/kitty.err")
+	_kitty_rc=$?
+	_kitty_unknown=$(sed -n 's/.*Ignoring unknown config key: *//p' "$RUNTIME/kitty.err" | paste -sd, -)
+	_kitty_badlines=$(sed -n 's/^bad=//p' <<<"$_kitty_out")
+	_kitty_first=$(sed -n 's/^badline=[0-9]* //p' <<<"$_kitty_out" | head -n 1)
+	if [ "$_kitty_rc" -ne 0 ] && [ -z "$_kitty_out" ]; then
+		warn "kitty +runpy failed, cannot confirm the configuration: $(head -n 1 "$RUNTIME/kitty.err")"
+	elif [ "${_kitty_badlines:-?}" != 0 ] || [ -n "$_kitty_unknown" ]; then
+		fail "kitty ignores part of its configuration:${_kitty_unknown:+ unknown key(s) $_kitty_unknown;} ${_kitty_first:-no value reported} (the default is used instead, so the palette or the alpha is not what the theme says)"
+	else
+		_kitty_bg=$(sed -n 's/^bg=//p' <<<"$_kitty_out")
+		_kitty_fg=$(sed -n 's/^fg=//p' <<<"$_kitty_out")
+		_kitty_op=$(sed -n 's/^opacity=//p' <<<"$_kitty_out")
+		_kitty_font=$(sed -n 's/^font=//p' <<<"$_kitty_out")
+		_kitty_sym=$(sed -n 's/^symbols=//p' <<<"$_kitty_out")
+		_kitty_off=
+		[ "$_kitty_bg" = 002b36 ] ||
+			_kitty_off="$_kitty_off background=#$_kitty_bg (not solarized base03)"
+		[ "$_kitty_fg" = 93a1a1 ] ||
+			_kitty_off="$_kitty_off foreground=#$_kitty_fg (not base1)"
+		awk -v o="$_kitty_op" 'BEGIN { exit !(o > 0 && o < 1) }' ||
+			_kitty_off="$_kitty_off opacity=$_kitty_op (opaque: swayfx has no blur to draw behind it)"
+		[ "$_kitty_font" = "JetBrains Mono" ] ||
+			_kitty_off="$_kitty_off font=$_kitty_font (not the theme's type)"
+		[ "${_kitty_sym:-0}" -ge 2 ] ||
+			_kitty_off="$_kitty_off symbol_maps=$_kitty_sym (Nerd Font glyphs render double width)"
+		if [ -z "$_kitty_off" ]; then
+			ok "kitty carries the session palette (solarized base03/base1, alpha $_kitty_op, $_kitty_font, $_kitty_sym symbol map(s))"
+		else
+			fail "kitty is not themed like the session:$_kitty_off"
+		fi
+	fi
+fi
+
 # Notifications: mako owns org.freedesktop.Notifications on the session bus. If
 # the daemon is not running (crashed, or never started) nothing logs it and
 # every application's notifications silently disappear, so ask the bus.

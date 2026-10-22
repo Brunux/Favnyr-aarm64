@@ -46,6 +46,32 @@ that is built. For the machine in front of you, `apt install` is the answer.
 | Ctrl+Shift+PageUp / PageDown | scrollback |
 | Shift+PageUp | scrollback too |
 
+### kitty, if you install it
+
+`sudo apt install kitty` gives a second terminal that arrives already in this
+session's palette: `~/.config/kitty/kitty.conf` ships with the image and carries
+the same solarized colours as foot, JetBrains Mono 11 with the Nerd Font
+fallback, 6 px of padding, 1000 lines of scrollback and 0.87 alpha, so the
+compositor's blur shows through it exactly as it does through foot. Nothing here
+starts it - `Alt+Return` and every menu open foot - so the file exists for one
+reason: installing a terminal should not put a second, unthemed one beside the
+first.
+
+| Keys | Does |
+|---|---|
+| Ctrl+Shift+C / Ctrl+Shift+V | copy / paste |
+| Ctrl+Shift+T | new tab (the tab bar appears with the second one) |
+| Ctrl+Shift+N | new window |
+| Ctrl+Shift+Z / Ctrl+Shift+X | previous / next shell prompt |
+| Ctrl+Shift+Plus / Minus | text size (`Ctrl+Shift+Backspace` back to 11) |
+| Ctrl+Shift+Up / Down | scrollback, one line |
+| Alt+Q | close the window, which is sway's key and not kitty's |
+
+Alt is the session's modifier and sway sees every Alt chord first, which is why
+kitty keeps its own shortcuts on Ctrl+Shift. The one respect in which it differs
+from foot: kitty draws JetBrains Mono's ligatures (`->`, `!=`), the same bytes
+in a narrower column.
+
 The shell is bash with a set of aliases and tools that are worth knowing:
 
 | Instead of | Use | Note |
@@ -58,7 +84,7 @@ The shell is bash with a set of aliases and tools that are worth knowing:
 | `Ctrl+R` | **fzf** history | `Ctrl+T` files, `Alt+C` directories |
 | `ff` / `eff` | fzf + bat | pick a file with a preview / edit the pick |
 | `t` | tmux | attach to the `main` session or start it |
-| the prompt | **starship** | directory and git only |
+| the prompt | **starship** | user, directory, git, language, container, time |
 
 Also there: `btop`, `lazygit`, `tmux`, `gum`, `tldr` (cached cheat sheets),
 `fastfetch`, `inxi`, `tmux`, `yt-dlp` (with `ffmpeg` to merge streams), `node`
