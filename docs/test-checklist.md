@@ -13,13 +13,19 @@ question: every one of its checks maps to a bug this port has already hit.
 ## Before anything else
 
 ```sh
-cat /etc/debian-aarch64-revision      # commit, device, UI, kernel, build date
+cat /etc/debian-aarch64-revision ~/Dev/LazyOS/REVISION ~/Dev/LazyOS/VERSION
 /usr/local/sbin/check-system.sh ~/Dev/LazyOS
 ```
 
 * the revision must be the build you meant to test. The tree at
   `~/Dev/LazyOS` is a snapshot (`git archive HEAD`), not a checkout, so compare
   that hash with `git log --oneline -1` on the machine that wrote the card;
+* the snapshot and the system must be one build: `~/Dev/LazyOS/REVISION` carries
+  the same lines as `/etc/debian-aarch64-revision` (commit, device, UI, kernel,
+  version, date), `~/Dev/LazyOS/VERSION` is the `VERSION_ID` in
+  `/etc/os-release` and the version in `/etc/issue`, and on the build host
+  `git rev-parse v<version>^{commit}` is the commit `REVISION` names. A
+  disagreement means the card was assembled from two builds - stop here;
 * `check-system.sh` must end with **0 FAIL**. WARN and SKIP lines are expected
   and explained in `reports/README.md`; anything else stops the run here.
 
@@ -29,13 +35,15 @@ cat /etc/debian-aarch64-revision      # commit, device, UI, kernel, build date
 |---|---|
 | look at the desktop | the arcade button on base03, `lazy by design` under it and the arcade line at the bottom; the bar, foot, rofi and the menus are still solarized (the brand did not repaint the session) |
 | `Alt+Ctrl+L`, then unlock | the **mountain photograph**, not the brand wallpaper - the lock is deliberately the other surface |
-| `Alt+d`, type `About` | the row has the mark as its icon (not a hole); Enter opens the card with the two-line wordmark on the left, `OS · LazyOS <version>` among the facts, and the 16-colour palette at the bottom |
+| `Alt+d`, type `About LazyOS` | the **About LazyOS** row has the mark as its icon (not a hole); Enter opens the card with the two-line wordmark on the left, `OS · LazyOS <version>` among the facts, and the 16-colour palette at the bottom |
 | `cat /etc/os-release` | `ID=lazyos`, `PRETTY_NAME="LazyOS <version>"`, and `VERSION_ID` equal to the `version` line of `/etc/debian-aarch64-revision` |
 | `hostname` | `lazyos` |
 | log out to the greeter | the greeting is `LazyOS · lazy by design`, not "Welcome back to Debian" |
 | `Ctrl+Alt+F2` (keyd's VT keys), log in on the text console | the banner is `LazyOS <version> · lazy by design` and `lazyos · tty2` |
 
-A missing wallpaper is `Pictures/Wallpapers/lazyos.png`; regenerate it with
+The launcher's **About LazyOS** and the root menu's **About** open the same card;
+the launcher entry is the one that carries `Icon=lazyos`. A missing wallpaper is
+`Pictures/Wallpapers/lazyos.png`; regenerate it with
 `scripts/make-brand.sh` on the build host. A hole where the About row's icon
 should be is `lazyos.png` missing from `/usr/share/icons/LazyOS/48x48/apps/`.
 Debian's swirl in the About card is `~/.config/fastfetch/config.jsonc` missing.
@@ -131,6 +139,21 @@ the reason, and the menu shows it instead of claiming success.
 | **Boot time** | `systemd-analyze blame` in a foot window, longest first |
 | **Devices** | `lspci` then `lsusb` in a foot window |
 
+## Agents - `Alt+Ctrl+Shift+A`, and the root menu's `ai` group
+
+| Step | Expected |
+|---|---|
+| open the root menu (`Alt+Space`) | an `ai` heading with **Agents** and **Dictation** together, above `system`; **Agents** opens its menu |
+| `Alt+Ctrl+Shift+A` with no agent installed | the five agents, each row reading `Name — install <npm>`, then **Set the default agent…** and **Open a terminal in ~/Work**; Escape leaves nothing running |
+| from a terminal, `rofi-agents --new claude`, then the name `work` | `~/.local/share/lazyos/agents/claude/work` exists and is empty, and `~/.local/share/lazyos/agents/claude/default` holds `work` |
+| with Claude Code or Codex installed, its row grows **accounts…** | `● work  (default)` is listed; `rofi-agents --env claude work` prints `CLAUDE_CONFIG_DIR` at the directory |
+| launch the installed Claude Code row | foot opens in `~/Work` (or `$HOME` when `~/Work` does not exist) with `CLAUDE_CONFIG_DIR` pointing at `agents/claude/work` |
+
+An account is a directory, not a login: the first launch in a new one runs the
+CLI's own sign-in, so two subscriptions never share a token. The menu installs
+with an explicit `--prefix ~/.local`, so npm never needs root and never touches
+`/usr/local`.
+
 ## Files and thumbnails - `Alt+Ctrl+F`
 
 | Step | Expected |
@@ -212,6 +235,7 @@ this machine gets bricked or loses its boot blocks.
 | pick it → **Cancel** | no partition table is written |
 | pick it → **The whole card** → the confirmation | a busy card, then a notification with the partition and "priority 10"; `swapon --show` lists it, `blkid -L lazyos_swap` resolves it |
 | `grep lazyos_swap /etc/fstab` | one marked block: `LABEL=lazyos_swap none swap sw,nofail,x-systemd.device-timeout=15s,pri=10 0 0` |
+| **Hibernate** from the power menu (`Alt+Escape`) on the default card (swap on, no `resume=`) | a notification naming the missing `resume=` and the kpart rebuild it needs; the machine stays up, it does not suspend |
 | reboot with the card in | `swapon --show` lists it again without touching the menu (priority 10, below zram's 100) |
 | remove the card and reboot | the boot still reaches the session (a swap unit may show as failed only if `nofail` was lost); it waits at most 15 s for the card |
 | run the menu again | the status row (device, size, priority) and **Turn it off**, not the disk picker |
@@ -219,8 +243,12 @@ this machine gets bricked or loses its boot blocks.
 | after turning it off, open **Format a disk** | the card is offered again (it is no longer active swap), and formatting erases the old swap partition |
 
 Never pull the card while the swap is active: the pages living on it are lost. Turn
-it off from the same menu first. Hibernate additionally needs `resume=` on the
-kernel command line; the swap row does not edit the kernel partition.
+it off from the same menu first. Hibernate additionally needs
+`resume=LABEL=lazyos_swap` on the kernel command line - the swap row does not edit
+the kernel partition, so the default card refuses with that message. A partition
+labelled `nureb_swap` (an old card) is still usable as swap, but that `resume=`
+will not find it: re-label it (`sudo swaplabel -L lazyos_swap <device>`) or let
+the swap menu recreate it.
 
 ## Search key - the file search
 
@@ -270,6 +298,7 @@ correctly absent.
 | look at a folder of photos | thumbnails; a PDF or a video keeps its mimetype icon (libfm decodes images only - that is not a bug) |
 | insert a USB stick | it appears in the sidebar already mounted (`udisks2`); nothing on it runs by itself |
 | `dpkg -l pcmanfm gvfs` | both installed; `gvfs-backends` absent on purpose |
+| `ls ~/.config/mimeapps.list` | no such file: only `/etc/xdg/mimeapps.list` decides, so `org.lazyos.view.desktop` is the system default. A file left from a pre-v0.3.0 card keeps the old viewer for every association it names |
 
 A window that looks like Adwaita's light grey means `~/.config/gtk-3.0/gtk.css` is
 missing; icons that are empty squares mean a name the LazyOS theme does not carry
@@ -371,13 +400,13 @@ What a failure means:
 | click the spinner during an apt install | it says the task cannot be stopped, and the install finishes |
 | any notification that has one (`sudo`, a file copy) | its picture is drawn; a text-only card means mako's `icon-path` |
 | `Alt+Ctrl+V` and press `Alt+1` | the entry is deleted (the second action still works after the `-kb-custom-1` fix) |
-| root menu (`Alt+Space`) | **Colour**, **DNS**, **Packages**, **Reminders**, **About**, **Download**, **Password** and **Search inside files** are all there |
+| root menu (`Alt+Space`) | **Colour**, **DNS**, **Packages**, **Reminders**, **About**, **Download**, **Password** and **Search inside files** are all there, and the `ai` heading has **Agents** and **Dictation** together, above `system` |
 | `Alt+Ctrl+G` and then `Alt+1` inside that menu | nothing is taken by sway: the menu answers, the workspace does not change |
 | `Alt+Ctrl+F`, then `Alt+1` | the actions menu, not workspace 1 (the `global-kb` fix reached both menus) |
 | `gio mime image/png`, `gio mime application/pdf`, `gio mime inode/directory` | `org.lazyos.view.desktop`, `org.gnome.Papers.desktop`, `pcmanfm.desktop`. This is GIO's own answer, not the file read back: a `lazyos-view` without its executable bit makes GIO say "no default application" |
 | `dig +short example.com` and `host example.com` | an address. `dig` comes from `bind9-dnsutils`; `resolvectl` is deliberately absent because NetworkManager owns `resolv.conf`, and its absence is not a gap |
 | a menu whose rows are long (Files on a deep path, a grep match with a long line) | the window is wide enough for the end of the path; a row cut with `…` mid-detail means `ui_width` stopped sizing that list |
-| lock (`Alt+Ctrl+L`, the Lock key, and the 300 s idle timer) | the wallpaper on base03, then back to the session; no idle screen left behind (it is stopped before the lock) |
+| lock (`Alt+Ctrl+L`, the Lock key, and the 300 s idle timer) | the **mountain photograph** on base03 (the brand wallpaper is the desktop's, not the lock's), then back to the session; no idle screen left behind (it is stopped before the lock) |
 | idle for 150 s without touching anything | the **LazyOS** wordmark, the caption and the arcade line, with an effect rebuilding them and another one after it (a still frame means `tte` did not start) |
 | press any key while the idle screen animates | it closes at once, not at the end of the effect |
 | `Alt+Shift+Escape` | the screen locks, *then* the machine suspends; on resume the lock is still up |
