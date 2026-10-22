@@ -246,6 +246,25 @@ gets corrupted.
   authorized" is a policy problem, "already mounted" means it is already in the
   list above.
 
+## The night light
+
+The session starts `wlsunset` at login: from sunset it warms the screen to
+4000 K, and by day it leaves it alone. **Settings → Night light** (`Alt+Ctrl+O`)
+turns it off and on by hand; turning it on forces the warm end immediately
+instead of waiting for sunset, because a switch that does nothing at 17:00 reads
+as a broken switch. The command line and the remembered mode live in
+`~/.config/bin/night-light` (`login`, `start`, `stop`, `resume`, `status`), and
+the mode is one line in `$XDG_RUNTIME_DIR/lazyos-night-light`, so it dies with
+the session.
+
+Suspend and resume are the part that used to lose it: the panel comes back with
+its own gamma table, so a running `wlsunset` no longer has any effect and the
+screen wakes up at daylight colour while the switch still says on. The idle
+drop-in's `after-resume` hook asks the helper to restart the mode that was
+running (`night-light resume`), and it does nothing when the night light was off
+before the sleep. `night-light status` prints `on schedule`, `on warm` or `off`
+from a terminal.
+
 ## What is deliberately not installed
 
 A GUI editor, an office suite and any Electron-style application. The image is

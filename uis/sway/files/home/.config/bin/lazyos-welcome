@@ -1,0 +1,71 @@
+#!/bin/sh
+# The first boot's welcome window: one foot, once per install.
+#
+# The marker holds the machine id the window was last shown for, so the
+# condition is "this install has not seen it" and not "this home has not": a
+# rebuilt card (and install-emmc.sh's copy) gets a fresh /etc/machine-id, and a
+# home carried over from another install is not a reason to skip it.  A session
+# restart is not a new install either, so the marker is written after the window
+# closes, not when it opens.
+#
+# `--print` is the text the window shows.  It is a mode of this script so the
+# key list lives next to the window that owns it, and the pager is plain `read`,
+# so Enter closes it.  The text is plain ASCII on purpose: foot falls back to
+# Symbols Nerd Font Mono for glyphs JetBrains Mono lacks, and a Font Awesome
+# codepoint there is a tofu box, not an icon.
+
+set -eu
+
+marker_dir=${XDG_STATE_HOME:-$HOME/.local/state}/lazyos
+marker=$marker_dir/welcome
+
+print_text() {
+	cat <<'EOF'
+Welcome to LazyOS
+
+Debian forky on the Google Hayato (ASUS Chromebook Detachable CM3,
+MediaTek MT8192).  These eight keys are the rest of the desktop:
+
+  Alt+Space       the menu: applications, settings, the manual, power
+  Alt+D           the launcher: type part of a name, Enter opens it
+  Search          find a file by name (Shift+Search: the file window)
+  Alt+Ctrl+F      browse the files, one directory per step
+  Alt+Return      a terminal
+  Alt+Q           close the focused window
+  Alt+Escape      lock, suspend, log out, reboot, shut down
+  Alt+Ctrl+K      every key binding, generated from the configuration
+
+The manual is under Learn in the menu, or `rofi-learn` in a terminal;
+the same pages live in /usr/share/doc/lazyos/.
+
+Enter closes this window - it appears once per install.
+EOF
+}
+
+case ${1:-} in
+--print)
+	print_text
+	exit 0
+	;;
+esac
+
+# A window with no machine id cannot be remembered, and showing it on every
+# login would be worse than not showing it at all.
+machine_id=$(cat /etc/machine-id 2>/dev/null || true)
+[ -n "$machine_id" ] || exit 0
+if [ -f "$marker" ] && [ "$(cat "$marker" 2>/dev/null || true)" = "$machine_id" ]; then
+	exit 0
+fi
+
+# foot is the session's terminal; without it there is no window to show, and
+# the marker stays absent so the next login tries again.
+command -v foot >/dev/null 2>&1 || exit 0
+
+mkdir -p "$marker_dir"
+# The inner shell is the pager: `--print` writes the page and `read` waits for
+# Enter (or Ctrl+D), so the window closes when the person says so.  `|| true`
+# makes Ctrl+D a close, not a failure.
+if foot --app-id=lazyos-welcome --title='Welcome to LazyOS' \
+	-e sh -c '"$0" --print; read -r _ || true' "$0"; then
+	printf '%s\n' "$machine_id" >"$marker"
+fi

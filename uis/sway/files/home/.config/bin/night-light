@@ -1,0 +1,119 @@
+#!/bin/sh
+# The night light: one wlsunset, and one place that knows which mode it runs.
+#
+# wlsunset is a long-running Wayland client: it asks the compositor for the
+# gamma table once and keeps it.  That is why it has to be restarted after a
+# resume - the panel comes back with its own gamma table, the client is still
+# alive and no longer has any effect, and the screen wakes up at daylight colour
+# while the Settings switch still says on - and why the session needs one owner
+# for the command line:
+#
+#   night-light login    follow the sunset at the maintainer's coordinates
+#   night-light start    force the warm end (-T = -t), what the switch does
+#   night-light stop     kill it and forget the mode
+#   night-light resume   restart the mode that login or start left running
+#   night-light status   "on schedule", "on warm", "off <mode>" or "off"
+#
+# The mode is one line in $XDG_RUNTIME_DIR/lazyos-night-light, so a session that
+# dies takes it with it and the next login decides again.  Nothing here is
+# resident: wlsunset is the client the session already had, and this script
+# exits after it has started or stopped it.
+#
+# The state is written after the client is started, so `status` can tell the
+# truth about both halves: the file says which mode was asked for, pgrep says
+# whether it is still running.  "off warm" is a wlsunset that died on its own
+# (a crash, or a resume before the after-resume hook ran), and it is exactly the
+# state a resume has to repair.
+
+set -eu
+
+state="${XDG_RUNTIME_DIR:-/tmp}/lazyos-night-light"
+
+die() {
+	printf 'night-light: %s\n' "$*" >&2
+	exit 1
+}
+
+# wlsunset restores the previous gamma table when it exits, and a second client
+# started while the first is still connected is how two ramps end up fighting.
+# SIGTERM is enough and is bounded, so a resume never waits on a hung client.
+stop_wlsunset() {
+	pkill -x wlsunset >/dev/null 2>&1 || true
+	_i=0
+	while pgrep -x wlsunset >/dev/null 2>&1; do
+		_i=$((_i + 1))
+		[ "$_i" -ge 20 ] && break
+		sleep 0.1
+	done
+}
+
+start_wlsunset() { # schedule|warm
+	case $1 in
+	schedule) _args='-l 20.67 -L -103.35 -t 4000' ;;
+	warm) _args='-T 4000 -t 4000' ;;
+	*) die "unknown mode '$1' (schedule or warm)" ;;
+	esac
+	# setsid detaches it from this script, so the menu or the login line can
+	# exit without taking the client with it; the output is dropped because
+	# wlsunset is a daemon in all but name and its log has no reader.
+	# shellcheck disable=SC2086
+	setsid wlsunset $_args >/dev/null 2>&1 &
+	printf '%s\n' "$1" >"$state"
+}
+
+login() {
+	stop_wlsunset
+	start_wlsunset schedule
+}
+
+start() {
+	stop_wlsunset
+	start_wlsunset warm
+}
+
+stop() {
+	stop_wlsunset
+	rm -f "$state"
+}
+
+resume() {
+	# No state means the night light was off when the machine slept: waking up
+	# must not turn it on.
+	[ -f "$state" ] || return 0
+	_mode=$(cat "$state" 2>/dev/null || true)
+	case $_mode in
+	schedule|warm) ;;
+	*)
+		# A file this script did not write (a truncated write, a hand edit)
+		# says nothing about what to restart, so it is dropped instead of
+		# guessed at.
+		rm -f "$state"
+		return 0
+		;;
+	esac
+	stop_wlsunset
+	start_wlsunset "$_mode"
+}
+
+status() {
+	_mode=$(cat "$state" 2>/dev/null || true)
+	if pgrep -x wlsunset >/dev/null 2>&1; then
+		printf 'on %s\n' "${_mode:-unknown}"
+	elif [ -n "$_mode" ]; then
+		printf 'off %s\n' "$_mode"
+	else
+		printf 'off\n'
+	fi
+}
+
+case ${1:-} in
+login) login ;;
+start) start ;;
+stop) stop ;;
+resume) resume ;;
+status) status ;;
+*)
+	echo "usage: night-light login|start|stop|resume|status" >&2
+	exit 2
+	;;
+esac

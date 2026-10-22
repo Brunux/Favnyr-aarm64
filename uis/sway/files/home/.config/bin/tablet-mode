@@ -221,15 +221,17 @@ start_kbd() {
 		say Tablet 'the on-screen keyboard is not installed (wvkbd)'
 		return 1
 	}
-	# Solarized, translucent, and the same font as the session: the keyboard is
-	# part of the screen, not a foreign window.  -H is the portrait height and
-	# -L the landscape one; both fit the 1200 px panel without covering it.
+	# Solarized, opaque, and the same font as the session: the keyboard is
+	# part of the screen, not a foreign window.  It is opaque on purpose -
+	# with alpha the window underneath showed through the keys, and a
+	# keyboard whose keys are a photograph is harder to read than one whose
+	# keys are keys.  -H is the portrait height and -L the landscape one;
+	# both fit the 1200 px panel without covering it.
 	setsid "$kbd_bin" -H 300 -L 240 -R 8 \
 		--fn 'JetBrains Mono 13' \
 		--bg 002b36 --fg 073642 --fg-sp 0a4a55 \
 		--press 2aa198 --press-sp 268bd2 \
-		--text 93a1a1 --text-sp 839496 \
-		--alpha 242 >/dev/null 2>&1 &
+		--text 93a1a1 --text-sp 839496 >/dev/null 2>&1 &
 	_pid=$!
 	printf '%s\n' "$_pid" >"$state/kbd.pid"
 	# A keyboard that cannot open a display exits at once, and a notification
@@ -297,19 +299,30 @@ on() {
 }
 
 off() {
-	[ -d "$state" ] || {
-		# Still undo what a killed session could have left behind, keyboard
-		# included: that is the state a person cannot fix without a mouse.
-		inputs enabled
-		return 0
-	}
-	stop_pid "$state/poller.pid"
-	stop_pid "$state/kbd.pid"
-	rm -rf "$state"
-	inputs enabled
+	# The poller goes first: it is the one thing that could turn the screen
+	# back between the transform below and the end of this function.
+	if [ -d "$state" ]; then
+		stop_pid "$state/poller.pid"
+		stop_pid "$state/kbd.pid"
+	fi
+	# Upright is restored whether or not the state directory survived.  A
+	# session killed in tablet mode leaves the rotation applied with no pid
+	# and no output name to undo it from, and the next `on` would take that
+	# rotation as its starting point; out_name asks the compositor for the
+	# focused output, so this half needs nothing from $state.
 	_out=$(out_name)
 	if [ -n "$_out" ]; then apply_transform normal "$_out"; fi
-	say Tablet 'Tablet mode off'
+	# A wvkbd from a session that died mid-mode is still drawing over the
+	# bottom of the screen, and nothing else would ever stop it.
+	pkill -x "$kbd_bin" >/dev/null 2>&1 || true
+	# Both inputs come back in every path: this is the state a person cannot
+	# fix without a mouse.
+	inputs enabled
+	if [ -d "$state" ]; then
+		rm -rf "$state"
+		say Tablet 'Tablet mode off'
+	fi
+	return 0
 }
 
 calibrate() {

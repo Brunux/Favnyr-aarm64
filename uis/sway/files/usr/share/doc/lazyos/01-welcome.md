@@ -6,6 +6,21 @@ and a 58 GB eMMC. It is not a Debian remix: the hardware support comes from
 Nura (the postmarketOS-based system this port started from), and Debian supplies
 everything above the kernel.
 
+## First boot
+
+The first time the session comes up it opens **Welcome to LazyOS**, a terminal
+window with the eight keys that make the rest of the desktop easy to find:
+**Alt+Space** for the menu, **Alt+D** for the launcher, **Search** for a file,
+**Alt+Ctrl+F** for the file list, **Alt+Return** for a terminal, **Alt+Q** to
+close a window, **Alt+Escape** for the power menu and **Alt+Ctrl+K** for every
+binding. Enter closes it.
+
+It appears **once per install**, not once per login: the window remembers the
+machine id in `~/.local/state/lazyos/welcome`, so a session restart does not
+bring it back, while a rebuilt card - which gets a fresh `/etc/machine-id` - is
+a new install and shows it again. Delete that file to see it again without
+rebuilding.
+
 ## The first five minutes
 
 * Log in with the user account the image was built with (`brunux` by default,

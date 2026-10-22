@@ -182,6 +182,12 @@ you tap is what gets typed; `Cmp` then `?` is how `¿` is reached. It types into
 the focused window through the virtual-keyboard protocol, which is why it works
 in foot, Firefox and the rofi prompts alike.
 
+The keyboard is **opaque**: with transparency the window underneath showed
+through the keys, which is the opposite of what a keyboard is for. Folding it
+back always leaves the screen upright, even after a session that died in tablet
+mode - the rotation is undone by asking the compositor for the focused output,
+not by reading the mode's state directory, which such a session takes with it.
+
 ## What was copied from Omarchy, and what differs
 
 `Super` there is `Alt` here; the letters and Ctrl/Shift combinations are the same

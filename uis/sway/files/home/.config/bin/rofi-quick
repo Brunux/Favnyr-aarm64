@@ -20,7 +20,7 @@
 # the bar's list looks like the rest of the session's.
 #
 # Nothing here is a daemon: every draw reads the state from nmcli,
-# bluetoothctl, swaymsg, makoctl and sysfs.
+# bluetoothctl, swaymsg, makoctl, the night-light helper and sysfs.
 
 set -eu
 
@@ -90,7 +90,12 @@ bt_detail() {
 	esac
 }
 
-night_on() { pgrep -x wlsunset >/dev/null 2>&1; }
+night_on() {
+	case $("$dir/night-light" status 2>/dev/null || true) in
+	on\ *) return 0 ;;
+	*) return 1 ;;
+	esac
+}
 
 dnd_on() { makoctl mode 2>/dev/null | grep -qx do-not-disturb; }
 
@@ -148,18 +153,17 @@ battery_detail() {
 	printf '%s%% · %s' "$_c" "$(printf '%s' "${_s:-unknown}" | tr 'A-Z' 'a-z')"
 }
 
-# The night light is whatever /etc/sway/config starts at login, so turning it
-# back on reuses that command line instead of a second copy of the coordinates -
-# with one deliberate change: the toggle forces the warm end of the range
-# (-T = -t).  Reusing the sunset schedule unchanged did nothing when the switch
-# was tried at 17:00, when wlsunset still has the screen at daylight colour, and
-# a switch that visibly does nothing reads as a broken switch.
-night_start() {
-	_cmd=$(sed -n 's/^exec \(wlsunset .*\)$/\1/p' /etc/sway/config 2>/dev/null | head -1)
-	[ -n "$_cmd" ] || _cmd='wlsunset -t 4000'
-	_cmd=${_cmd%% -t *}
-	setsid $_cmd -T 4000 -t 4000 >/dev/null 2>&1 &
-}
+# The night light is whatever the login line starts (night-light login), so
+# turning it back on asks the same helper instead of keeping a second copy of
+# the coordinates - with one deliberate change: the toggle forces the warm end
+# of the range (-T = -t).  Reusing the sunset schedule unchanged did nothing
+# when the switch was tried at 17:00, when wlsunset still has the screen at
+# daylight colour, and a switch that visibly does nothing reads as a broken
+# switch.
+#
+# The helper owns the command line and the mode, shared with the after-resume
+# hook: the switch, the login line and the resume all have to agree about what
+# is running, and three copies of the coordinates cannot.
 
 # --- rotation --------------------------------------------------------------
 
@@ -323,9 +327,9 @@ while :; do
 	bt) exec "$dir/bar-bt" ;;
 	night)
 		if night_on; then
-			pkill -x wlsunset 2>/dev/null || true
+			"$dir/night-light" stop
 		else
-			night_start
+			"$dir/night-light" start
 		fi
 		;;
 	dnd) makoctl mode -t do-not-disturb >/dev/null 2>&1 || true ;;

@@ -25,6 +25,7 @@ launcher, waybar and the foot terminal.
 | `etc/sway/config` | System half of the session (replaces Debian's default file). Includes `config.d/*` at the end. |
 | `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, the LazyOS idle screen, clipboard, tablet mode, terminal file search. |
 | `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search key's file-search binding. |
+| `home/.config/sway/config.d/*` | Per-user drop-ins, read last: the keyboard layout `rofi-layout` writes, and the first boot's welcome window (`30-welcome.conf`). |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
 | `home/.config/bin/rofi-learn` | **Learn**: the manual, one page at a time. |
 | `home/.config/bin/rofi-keys` | **Keybindings**: every binding, parsed from the configuration, one icon per section. |
@@ -48,6 +49,8 @@ launcher, waybar and the foot terminal.
 | `home/.config/lazyos/screensaver.txt` | The LazyOS art the idle screen loops: the wordmark, the caption and the arcade line. |
 | `home/.config/bin/lazyos-screensaver` | Launches the idle screen and is also the program that runs inside it (see **The idle screen**). |
 | `home/.config/bin/sway-lock` | Locks the session and waits for swaylock's readiness line; stops the idle screen first (see **The idle screen**). |
+| `home/.config/bin/night-light` | The night light: `wlsunset` with the sunset schedule or the forced warm mode, and the mode the resume hook restarts (see **The night light**). |
+| `home/.config/bin/lazyos-welcome` | The first boot's welcome window: one page of keys, once per install (see **The first boot**). |
 | `home/.config/bin/bar-*` | The menus the bar opens on click: `bar-menu`, `bar-net`, `bar-bt`, `bar-key`, `bar-audio`, `bar-updates`, `bar-power`, plus the shared `bar-pick`. |
 | `home/.config/workstyle/config.toml` | Icon map for workstyle (see below). |
 | `home/Pictures/Wallpapers/mountains.jpg` | Wallpaper referenced by `etc/sway/config`. |
@@ -736,6 +739,30 @@ The bar menu has a **Screensaver** entry that starts it on demand, and `check-sy
 drop-in for the 150 s / 300 s / `before-sleep` lines, and WARNs when an idle screen is found running
 under `swaylock`.
 
+## The night light
+
+`~/.config/bin/night-light` owns `wlsunset`: `login` starts the sunset schedule
+(`-l 20.67 -L -103.35 -t 4000`), `start` forces the warm end (`-T 4000 -t 4000`)
+for the Settings switch, `stop` kills it and forgets the mode, and `status`
+answers `on schedule`, `on warm` or `off` (with the stored mode when the client
+died). The mode is one line in `$XDG_RUNTIME_DIR/lazyos-night-light`, so a
+session that dies takes it with it. The idle drop-in's `after-resume` restarts
+the mode that was running, because the panel comes back with its own gamma table
+and a client that survived the sleep no longer has any effect: the screen used
+to wake up at daylight colour while the switch still said on. With no state,
+`resume` does nothing, so a night light that was off stays off.
+
+## The first boot
+
+`~/.config/bin/lazyos-welcome` opens one foot window (`--app-id=lazyos-welcome`,
+floated and centred by `30-welcome.conf`) with the eight keys a new install
+needs, and `read` closes it on Enter. It is **once per install**, not once per
+login: the marker `${XDG_STATE_HOME:-$HOME/.local/state}/lazyos/welcome` holds
+the `/etc/machine-id` it was shown for, so a session restart does not bring it
+back and a rebuilt card (fresh machine id) does. The marker is written after the
+window closes, and not at all when foot is missing or fails to start, so a
+window nobody saw is tried again rather than silently skipped.
+
 ## The CLI tools
 
 Deboma ships an opinionated terminal and this port keeps it: the tools are listed in
@@ -925,7 +952,7 @@ that. `etc/sway/config.d/28-tablet.conf` binds the two states to
 
 | Step | What it does | Why |
 |---|---|---|
-| keyboard | `wvkbd-mobintl`, solarized, `JetBrains Mono`, 300 px portrait / 240 px landscape, radius 8, alpha 242 | the panel is the only input once the keyboard is folded |
+| keyboard | `wvkbd-mobintl`, solarized, `JetBrains Mono`, 300 px portrait / 240 px landscape, radius 8, opaque | the panel is the only input once the keyboard is folded, and a translucent keyboard showed the window underneath through its keys |
 | physical keyboard | `swaymsg input type:keyboard events disabled` (re-enabled by `off`) | the folded keys are under the screen, and a keystroke there is a keystroke. It is switched off **only after the on-screen keyboard is confirmed alive**: from that moment the touchscreen is the only input, so a wvkbd that failed must leave the physical keyboard on. The Lock key still suspends, because logind reads `/dev/input` itself and the switch is a separate device |
 | touchpad | `swaymsg input type:touchpad events disabled` | it is on the back of the screen now, and pressure on it is input nobody meant |
 | rotation | a 1 Hz poller over `cros-ec-accel`'s `in_accel_{x,y,z}_raw` applying `swaymsg output <focused> transform <t>` | the accelerometer is in the kernel; no package, no D-Bus service |
@@ -933,8 +960,10 @@ that. `etc/sway/config.d/28-tablet.conf` binds the two states to
 `off` undoes the three in reverse (keyboard gone, both inputs back, `transform
 normal`), and `status` prints `on · screen <transform>` or `off` - which is what
 the Settings row shows. `toggle` is the Settings row itself, for a mode that did
-not follow the switch. `off` also restores the inputs when the state directory is
-gone, which is the path a person cannot reach without a mouse.
+not follow the switch. `off` also restores the inputs and the rotation when the
+state directory is gone, which is the path a person cannot reach without a
+mouse: the output comes from the compositor, not from `$state`, and a `wvkbd`
+left behind by a killed session is stopped by name.
 
 The mapping is a table in `orient()`, and **the card's first report said the screen
 came up upside down**: the accelerometer in this panel sits 180° around from the
@@ -973,9 +1002,9 @@ was just calibrated is the one that has to look upright.
 Nothing about this is resident in laptop mode: the state is a directory in
 `$XDG_RUNTIME_DIR/lazyos-tablet` holding the two pids and the output name, so a
 session that dies takes the keyboard and the poller with it, and the next
-`tablet:off` still restores the touchpad (`off` runs its undo even when the
-state is gone). `wvkbd` 0.15 from Debian is the version that ships the flags this
-uses (`-H`, `-L`, `-R`, `--fn`, the colours, `--alpha`); it has no `--dock` or
+`tablet:off` still restores the touchpad and the screen (`off` runs its undo even
+when the state is gone). `wvkbd` 0.15 from Debian is the version that ships the
+flags this uses (`-H`, `-L`, `-R`, `--fn`, the colours); it has no `--dock` or
 `--auto`, which arrived later, and the keyboard is placed by the compositor as a
 layer-shell surface at the bottom edge, which is what `--dock` would do.
 
