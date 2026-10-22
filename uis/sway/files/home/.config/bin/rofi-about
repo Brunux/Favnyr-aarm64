@@ -124,11 +124,11 @@ errors)
 	;;
 boot)
 	exec foot --app-id=popup --hold -e sh -c \
-		'systemd-analyze blame; printf "\n  systemd-analyze blame · close this window with Ctrl+Shift+W\n"'
+		'systemd-analyze blame; printf "\n  systemd-analyze blame · close this window with Alt+Q\n"'
 	;;
 devices)
 	exec foot --app-id=popup --hold -e sh -c \
-		'lspci; printf "\n"; lsusb; printf "\n  close this window with Ctrl+Shift+W\n"'
+		'lspci; printf "\n"; lsusb; printf "\n  close this window with Alt+Q\n"'
 	;;
 fastfetch)
 	if have fastfetch; then
@@ -136,11 +136,13 @@ fastfetch)
 		# was drawing in closes with it - "the full picture" flashed for a tenth
 		# of a second.  The app-id stays `popup`, which is the float rule in
 		# /etc/sway/config.d/25-bar-panels.conf; the closing line says why the
-		# window is still there and how to be rid of it, since holding it is new
-		# (foot's own binding, Control+Shift+W: there is no [key-bindings] section
-		# in ~/.config/foot/foot.ini to change it).
+		# window is still there and how to be rid of it, since holding it is new.
+		# The key it names is Alt+Q, the session's own close binding (sway's
+		# `kill`), and not foot's built-in close key: the report from the card
+		# says the built-in one does not answer on this keyboard, while Alt+Q
+		# closes the same window.
 		exec foot --app-id=popup --hold -e sh -c \
-			'fastfetch; printf "\n  fastfetch has finished · close this window with Ctrl+Shift+W\n"'
+			'fastfetch; printf "\n  fastfetch has finished · close this window with Alt+Q\n"'
 	fi
 	ui_say About 'fastfetch is not installed (packages/tools.list)' critical "$UI_ICON_ERROR"
 	;;

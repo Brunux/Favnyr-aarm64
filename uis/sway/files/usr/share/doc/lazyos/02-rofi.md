@@ -6,7 +6,7 @@ daemon).
 
 | You press | What opens | What it lists |
 |---|---|---|
-| **Alt+D** | `rofi -show drun` | the applications: the `.desktop` entries, including this image's own (Settings, Wi-Fi, Bluetooth, audio, media, notifications, power, Files, Learn, Keys, Dictate, Agents…) |
+| **Alt+D** | `rofi -show drun` | the applications: the `.desktop` entries, including this image's own (LazyOS Menu, Settings, Wi-Fi, Bluetooth, audio, media, notifications, power, Files, Learn, Keys, Dictate, Agents…) |
 | **Alt+Tab** | `rofi -show window` | the open windows (sway has no switcher of its own; this uses wlroots' foreign-toplevel protocol) |
 | **Alt+Shift+D** | `rofi -show run` | every executable in `$PATH`. **Enter** runs it, **Shift+Enter** runs it in foot |
 | **Alt+Space** | `bar-menu` | the root menu: what opens something, the system panels, and the session actions |
@@ -23,6 +23,12 @@ daemon).
 | **Alt+Ctrl+E** | `rofi-emoji` | **emoji**: type a name, Enter inserts the glyph at the cursor, Alt+1 only copies it |
 | any bar module click | `bar-pick` → `rofi -dmenu` | the fixed list that module hands it (Wi-Fi networks, sinks, devices, power actions, …) |
 | **Learn** (root menu) | `rofi-learn` | these pages, rendered with glow, plus a search across all of them |
+
+The root menu is also a launcher entry: **LazyOS Menu** (`Alt+D`, type
+`lazy`). It runs the same `bar-menu` that **Alt+Space** opens, so the list is
+one row away for someone who does not know the key yet, and the launcher is not
+only applications - the bar's left-most button and this entry open the same
+window.
 
 The rest of the menus live in the root menu and the launcher: **Places**
 (home, documents, downloads, pictures, every mounted disk, and a **Mount** row
@@ -333,6 +339,16 @@ Five more lists in the root menu, each one screen of answers about the machine:
 
 They are all scripts in `~/.config/bin/`, they all use the shared row style from
 `lib-rofi.sh`, and none of them stays running.
+
+**Reminders: what the prompts expect.** The When menu has a **How do I fill
+these in?** row that says this in a notification and reopens the menu, so the
+answer is one keystroke away while the title and note are still known. The five
+delays need nothing typed. A date is `YYYY-MM-DD HH:MM`, for example
+`2026-12-24 19:00` (anything `date -d` understands also works). A time is
+24-hour `HH:MM`, for example `09:00` or `18:30`. Weekdays and days of the month
+are picked from a list, not typed. A repeating reminder repeats while the
+session's user manager lives - logging out stops it, the same lifetime as the
+one-shot ones.
 
 ## The manual, rendered
 

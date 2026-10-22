@@ -67,6 +67,15 @@ and `npm`, `tesseract` (OCR), `zbarimg` (QR/barcode), `qrencode`, `socat`,
 `swappy` annotates a screenshot and `wf-recorder` records the screen, both
 through the capture menu (Alt+Ctrl+C).
 
+**`cd -` is bash's, not zoxide's.** `cd` is the wrapper `zd`, which keeps real
+paths working and jumps by frecency otherwise; a first argument of `-` goes
+straight to bash's own `builtin cd -`, so it returns to the previous directory
+and prints it instead of asking zoxide for a match. The shell initialises zoxide
+at the very end of `~/.bashrc`, after starship and after `~/.bash_aliases`:
+starship replaces `PROMPT_COMMAND`, and zoxide's directory-tracking hook has to
+be appended to it last - initialised earlier, the hook is dropped and the first
+`cd -` prints "zoxide: detected a possible configuration issue".
+
 `man <command>` and `tldr <command>` are the two fastest ways to learn a tool;
 `tldr` needs one fetch the first time (`tldr --update`).
 
@@ -204,6 +213,12 @@ gets corrupted.
   it runs until a mount is asked for, and nothing stays afterwards.
 * The same disks are in pcmanfm's sidebar (**Search+Shift**), and a stick shows
   up there as soon as it is mounted.
+* **Unmounting from pcmanfm needs `eject`.** The window's Unmount action runs
+  `eject`, not `udisksctl`, and the package is not a dependency of udisks2 or
+  gvfs: without it the action fails with `Failed to execute child process
+  "eject" (No such file or directory)` and the stick stays mounted. `eject` is
+  in `uis/sway/packages.list`; the Places menu unmounts through `udisksctl` and
+  does not need it, which is why the failure only showed up in the window.
 * `vfat`, `exFAT` and `NTFS` all work - the kernel has those drivers - so a
   stick from a camera or from Windows needs no extra package.
 * **Auxiliary swap** is the row above it: it takes a card that is not a system card

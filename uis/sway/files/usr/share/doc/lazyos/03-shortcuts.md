@@ -108,6 +108,14 @@ with `Super+Ctrl`:
 | Alt+A | focus the parent container |
 | three-finger swipe left/right | previous / next workspace (touchpad) |
 
+**Alt+Q closes the focused window**, and it is the key to remember for the
+windows the About menu holds open: **The full picture** (fastfetch), **Boot
+time** and **Devices** start a terminal that stays up until it is dismissed, and
+each one ends with "close this window with Alt+Q". That is sway's own close
+binding, the same one every other window answers to; foot's built-in close key
+did not reach these windows on this keyboard, so the footer names the session's
+key instead.
+
 ## Sound, light and screenshots
 
 | Keys | Does |

@@ -23,6 +23,10 @@
 #     a day.  A repeating reminder is a *calendar expression* handed to the timer
 #     itself (`Mon-Fri 08:30:00`), so systemd repeats it while the session lives -
 #     no cron, no watcher, no file;
+#   * the same menu ends with a "How do I fill these in?" row, because the
+#     formats are what people ask about here.  It raises one notification and
+#     reopens the menu (the title and the note live outside the loop), so the
+#     answer is never a menu that has to stay open to be read;
 #   * every expression is first put through `systemd-analyze calendar`, which is
 #     the parser the timer is going to use anyway.  Its own error text is what a
 #     rejection shows, and its "Next elapse:" line is what the confirmation shows
@@ -312,6 +316,8 @@ note=$(printf '%s' "$note" | tr '\n\t' '  ' | sed -e 's/^[[:space:]]*//' -e 's/[
 	ui_row "$UI_I_CLOCK" 'Every weekday at…' 'Monday to Friday' weekday
 	ui_row "$UI_I_CLOCK" 'Every week on…' 'pick a weekday, then a time' weekly
 	ui_row "$UI_I_CLOCK" 'Every month on…' 'pick a day of the month, then a time' monthly
+	ui_heading 'help'
+	ui_row "$UI_I_INFO" 'How do I fill these in?' 'what a date, a time and the repeats expect' help
 } >"$tmp/when"
 
 # The loop is not decoration: an expression systemd refuses sends the person
@@ -323,6 +329,19 @@ while :; do
 
 	mode=calendar
 	case $when in
+	help)
+		# A row, not a sentence in the prompt: the formats are the one thing
+		# people ask about here, and a notification can say them without
+		# holding the menu open.  The menu is redrawn after it, with the title
+		# and the note still known (they live outside this loop).
+		ui_say 'How to fill these in' "The five delays (5, 15, 30 minutes, 1 and 4 hours) need nothing typed.
+A date is YYYY-MM-DD HH:MM, for example 2026-12-24 19:00. Anything date -d understands works too.
+A time is 24-hour HH:MM, for example 09:00 or 18:30.
+Weekdays and days of the month are picked from the list that follows.
+A repeating reminder repeats while this session's user manager lives." \
+			normal "$UI_ICON_INFO"
+		continue
+		;;
 	5min | 15min | 30min | 1h | 4h)
 		mode=active
 		expr=$when
@@ -337,7 +356,7 @@ while :; do
 		;;
 	date)
 		answer=$("$UI_BIN/bar-pick" 'Date and time' -free \
-			-mesg 'For example 2026-12-24 19:00; whatever date -d understands') || exit 0
+			-mesg 'YYYY-MM-DD HH:MM, for example 2026-12-24 19:00 · anything date -d understands works too') || exit 0
 		answer=$(printf '%s' "$answer" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
 		[ -n "$answer" ] || continue
 		# A fully specified date is what makes the timer fire once, so the answer
@@ -374,7 +393,7 @@ while :; do
 			;;
 		esac
 		clock=$("$UI_BIN/bar-pick" 'Time' -free \
-			-mesg '24-hour, for example 09:00 or 18:30') || exit 0
+			-mesg '24-hour HH:MM, for example 09:00 or 18:30') || exit 0
 		clock=$(printf '%s' "$clock" | tr -d '[:space:]')
 		[ -n "$clock" ] || continue
 		# The time is *not* parsed here: it is handed to systemd as part of the

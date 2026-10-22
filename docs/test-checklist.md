@@ -135,7 +135,7 @@ the reason, and the menu shows it instead of claiming success.
 |---|---|
 | open it | model, revision, kernel, uptime, memory, disk, battery, network, session, processes |
 | **Copy this summary** | the same lines are on the clipboard |
-| **The full picture** | fastfetch in a foot window that **stays open** and ends with `fastfetch has finished · close this window with Ctrl+Shift+W`; a window that flashed for a tenth of a second is `--hold` missing from `rofi-about` |
+| **The full picture** | fastfetch in a foot window that **stays open** and ends with `fastfetch has finished · close this window with Alt+Q`; a window that flashed for a tenth of a second is `--hold` missing from `rofi-about` |
 | **Errors this boot** | `journalctl -p err -b` in a foot window (the same lines the report calls a problem) |
 | **Boot time** | `systemd-analyze blame` in a foot window, longest first |
 | **Devices** | `lspci` then `lsusb` in a foot window |

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=LazyOS Menu
+GenericName=Applications and session
+Comment=Applications, settings and session actions in one list
+Exec=/home/brunux/.config/bin/bar-menu
+Icon=lazyos
+Terminal=false
+Categories=System;
+Keywords=menu;applications;session;settings;lazyos;
