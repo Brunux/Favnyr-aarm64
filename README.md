@@ -1,4 +1,8 @@
+<p align="center"><img src="brand/social-preview.png" width="720" alt="lazyOS_ - Debian for ARM Chromebooks. Keyboard first. Lazy by design."></p>
+
 # LazyOS
+
+**Website:** [brunux.github.io/LazyOS](https://brunux.github.io/LazyOS/) · **Brand:** [`brand/`](brand/README.md)
 
 **LazyOS** (`lazy by design`) is a Debian (**forky**, arm64) system for Nura-supported devices.
 It is built by a **device-agnostic** port framework that reuses Nura's (postmarketOS') hardware

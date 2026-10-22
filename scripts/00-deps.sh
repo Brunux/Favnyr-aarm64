@@ -15,9 +15,9 @@ if [ "$(id -u)" -ne 0 ]; then
 	exec sudo -n "$(readlink -f "$0")" "$@"
 fi
 
-# imagemagick is only needed by scripts/make-icons.sh and make-brand.sh, which
-# render the launcher icons and the mark; rsvg-convert (librsvg2-bin) and
-# JetBrains Mono are make-brand.sh's, and every PNG both produce is committed,
+# imagemagick is only needed by scripts/make-icons.sh, which renders the
+# launcher icons; rsvg-convert (librsvg2-bin) and JetBrains Mono are
+# make-brand.sh's (brand/*.svg), and every PNG both produce is committed,
 # so a build without them still builds - only an edit needs them.
 if command -v apk >/dev/null 2>&1; then
 	log "Installing host build dependencies (apk)"

@@ -314,23 +314,29 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
 ### Userspace / UI (Debian forky)
 
 - **The brand is one mark and one wordmark, and each surface asks for the form
-  it can draw.** `brand/lazyos.svg` is the hand-drawn arcade button (cyan bezel,
-  orange dome, base03 crescent, base1 highlight), and `scripts/make-brand.sh`
+  it can draw.** `brand/README.md` is the brand (mark, wordmark, palette, rules).
+  `brand/lazyos.svg` is the hand-drawn **z_** prompt (a cyan `z` and an orange
+  cursor on a base02 tile; the wordmark is `lazyOS_`), and `scripts/make-brand.sh`
   renders it into `lazyos.png` in the LazyOS theme's `48x48/apps` (the About row
   and anything that asks for `Icon=lazyos`), the SVG in `scalable/apps`, a
-  1366x912 `Pictures/Wallpapers/lazyos.png` (the panel's real mode, so nothing
-  is resampled: the mark, `lazy by design` in cyan and the arcade line in base0)
-  and `~/.config/lazyos/wordmark.txt`, the two-line text fastfetch draws. **The
+  1366x912 `Pictures/Wallpapers/lazyos.png` from `brand/wallpaper.svg` (the
+  panel's real mode, so nothing is resampled: a keyboard in the dark with one
+  lit key carrying the mark, and `lazyOS_`, `lazy by design` and the arcade line
+  bottom left), `brand/social-preview.png` (the repository's card), and the two
+  text forms of the mark - `~/.config/lazyos/wordmark.txt` (fastfetch's logo,
+  `$1..$3` colours) and `~/.config/lazyos/screensaver.txt` (the idle screen) -
+  the z_ in full and half blocks, every row padded to the same width because
+  the idle screen centres line by line. **The
   PNGs are committed**, because the image is staged with `git archive HEAD` and
-  a build host without `rsvg-convert` still has to build; only an edit to the
-  SVG needs the script, which is a host tool like `make-icons.sh` - hence
+  a build host without `rsvg-convert` still has to build; only an edit to
+  `brand/` needs the script, which is a host tool like `make-icons.sh` - hence
   `librsvg2-bin`/`fonts-jetbrains-mono` in `00-deps.sh`. **The lock screen keeps
   `mountains.jpg`**: the desktop is the surface the brand owns, and the
-  photograph is what is up when nobody is looking. **The text is not the
-  picture**: the idle screen draws the ANSI Shadow wordmark (a terminal can draw
-  block art; a PNG cannot become text), fastfetch puts the two-line wordmark
-  next to the facts, and a virtual terminal gets `/etc/issue` - none of them is
-  asked to show the mark. `os-release` (a regular file: Debian's is a
+  photograph is what is up when nobody is looking. **Each surface gets the form
+  it can draw**: the PNGs and the SVG where pictures go, the block-character z_
+  in the idle screen and fastfetch (box and block characters lay out the same in
+  every monospace font; the old ANSI Shadow letters did not), and plain text in
+  `/etc/issue`. `os-release` (a regular file: Debian's is a
   base-files-owned symlink, and `check-system.sh` FAILs when the image is back
   to calling itself Debian), `/etc/issue`, the greeter's `--greeting` and the
   `lazyos` hostname are the distribution saying its own name, and the version
@@ -1260,8 +1266,8 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `before-sleep` lock and `after-resume` cleanup), with Debian's `tte` instead of `ttfx`, at **30 fps**,
   looping with `--reuse-canvas` over a curated list (`decrypt middleout print sweep wipe slide
   expand`; the effects that end with the text sitting still, so the next one starts from the wordmark).
-  The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
-  design ::` and the arcade continue line `» press any key to continue «` - the lazy-tools idea
+  The art is `~/.config/lazyos/screensaver.txt`: the **z_** mark in block characters, `lazyOS_`,
+  `:: lazy by design ::` and the arcade continue line `» press any key to continue «` - the lazy-tools idea
   (lazygit/lazydocker: the tool does the boring part, the thing to press is on the screen) plus the
   arcade screen an idle machine deserves. It is the surface that carries the **wordmark**: the art
   is `~/.config/lazyos/screensaver.txt`, the script is `~/.config/bin/lazyos-screensaver`, the app
@@ -1273,7 +1279,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   after it ends; the same cycle at 120 fps takes 20 s and ~6.4 s of CPU, i.e. ~32 % of a core, for
   an animation three times faster than a screensaver needs. `tte` has no global foreground flag,
   so the colour lives in the terminal profile (`~/.config/foot/screensaver.ini`,
-  `foreground=cb4b16`, solarized orange) for the effects that paint in the terminal's foreground,
+  `foreground=2aa198`, the brand's cyan) for the effects that paint in the terminal's foreground,
   and the static frame prints its own SGR.
   Four things are not obvious. **`tte`'s stdout is the animation** - the first version redirected it
   to `/dev/null` while silencing the log and the screen stayed black for the whole run ("the

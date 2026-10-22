@@ -32,19 +32,21 @@ everything above the kernel.
 
 ## The mark
 
-The wallpaper is the brand: an arcade button in the session's own four colours,
-with `lazy by design` under it and the arcade line from the idle screen at the
-bottom. The launcher icon, the wallpaper and the **About LazyOS** card are the
-same drawing - the card is **Alt+Space** > **About**, and its last row opens
-`fastfetch` for the full picture. The lock screen keeps the mountain photograph
+The mark is a prompt: **z_**, a cyan `z` and an orange cursor, and the
+wordmark is `lazyOS_`. The wallpaper is a keyboard in the dark with one lit
+key carrying the mark - the key to press - and `lazyOS_`, `lazy by design` and
+the arcade line in the corner. The colours are the session's own Solarized,
+so nothing else had to be repainted. The launcher icon, the wallpaper and the
+**About LazyOS** card are the same drawing - the card is **Alt+Space** >
+**About**, and its last row opens `fastfetch` for the full picture. The lock screen keeps the mountain photograph
 instead: the desktop is the surface the mark owns, and the photograph is what is
 up when nobody is looking.
 
 ## The idle screen
 
-150 s without input and the screen becomes **LazyOS**: the wordmark, `:: lazy by design ::` and the
-arcade line `» press any key to continue «`, drawn in solarized orange. One terminal-text effect
-rebuilds the letters, then the next one does it differently, and so on while the machine waits. Any
+150 s without input and the screen becomes **lazyOS_**: the z_ mark, the wordmark, `:: lazy by
+design ::` and the arcade line `» press any key to continue «`, drawn in cyan. One terminal-text
+effect rebuilds the letters, then the next one does it differently, and so on while the machine waits. Any
 key returns you to the session and the 150 s starts over.
 
 At 300 s the screen locks instead: the wallpaper inside a base03 frame. The lock stops the animation

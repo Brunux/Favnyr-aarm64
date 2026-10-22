@@ -33,9 +33,9 @@ cat /etc/debian-aarch64-revision ~/Dev/LazyOS/REVISION ~/Dev/LazyOS/VERSION
 
 | Step | Expected |
 |---|---|
-| look at the desktop | the arcade button on base03, `lazy by design` under it and the arcade line at the bottom; the bar, foot, rofi and the menus are still solarized (the brand did not repaint the session) |
+| look at the desktop | the keyboard wallpaper on base03: one lit key carrying the cyan z_ mark, and `lazyOS_`, `lazy by design` and the arcade line bottom left; the bar, foot, rofi and the menus are still solarized (the brand did not repaint the session) |
 | `Alt+Ctrl+L`, then unlock | the **mountain photograph**, not the brand wallpaper - the lock is deliberately the other surface |
-| `Alt+d`, type `About LazyOS` | the **About LazyOS** row has the mark as its icon (not a hole); Enter opens the card with the two-line wordmark on the left, `OS · LazyOS <version>` among the facts, and the 16-colour palette at the bottom |
+| `Alt+d`, type `About LazyOS` | the **About LazyOS** row has the mark as its icon (not a hole); Enter opens the card with the block-character z_ (cyan z, orange cursor) and `lazyOS_` on the left, `OS · LazyOS <version>` among the facts, and the 16-colour palette at the bottom |
 | `cat /etc/os-release` | `ID=lazyos`, `PRETTY_NAME="LazyOS <version>"`, and `VERSION_ID` equal to the `version` line of `/etc/debian-aarch64-revision` |
 | `hostname` | `lazyos` |
 | log out to the greeter | the greeting is `LazyOS · lazy by design`, not "Welcome back to Debian" |

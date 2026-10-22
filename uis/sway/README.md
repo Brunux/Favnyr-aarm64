@@ -705,11 +705,11 @@ Deboma runs a screensaver 150 s after the last input and locks at 300 s
   and the window rule in `23-lazyos-screensaver.conf` fullscreens
   `[app_id="org.lazyos.screensaver"]` on the current workspace.
 
-The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
-design ::` and the arcade continue line `» press any key to continue «`, drawn in solarized orange
-(`foreground=cb4b16` in `screensaver.ini`, and its own SGR in the static frame). It is the one
-surface that carries the block art: the script, the app id and the launcher entry are named after
-it, and the mark on the wallpaper and the launcher icon come from `scripts/make-brand.sh`.
+The art is `~/.config/lazyos/screensaver.txt`: the **z_** mark in block characters, `lazyOS_`,
+`:: lazy by design ::` and the arcade continue line `» press any key to continue «`, drawn in the
+brand's cyan (`foreground=2aa198` in `screensaver.ini`, and its own SGR in the static frame). The
+art, the fastfetch logo, the wallpaper and the launcher icon all come from `scripts/make-brand.sh`;
+`brand/README.md` has the rules.
 
 Any key dismisses it (`read -rsn1 -t 1` polls while the effect runs, so the dismissal does not wait
 for the effect to end; `tte` gets stdin on `/dev/null`, or it would swallow the key). Three details
