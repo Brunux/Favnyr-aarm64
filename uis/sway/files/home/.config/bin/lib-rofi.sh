@@ -107,6 +107,12 @@ UI_I_DOWNLOAD=$(printf '\357\200\231')   # f019
 UI_I_KEY=$(printf '\357\202\204')   # f084
 UI_I_DESKTOP=$(printf '\357\204\210')   # f108
 UI_I_CHIP=$(printf '\357\213\233')   # f2db
+# Install: a shield for the one row that leads to erasing a disk, and a check for
+# the rows that say what the install menu verified.  Both are Font Awesome 4
+# codepoints and both are in the FontAwesome.otf the image ships, which is what
+# check-system.sh asks of the installed fonts before a row can draw them.
+UI_I_SHIELD=$(printf '\357\204\262')   # f132
+UI_I_CHECK=$(printf '\357\200\214')   # f00c
 
 # The notification icons are *names*, not glyphs: mako resolves them through the
 # icon theme, and ~/.config/mako/config puts /usr/share/icons/LazyOS on its
@@ -134,6 +140,11 @@ UI_ICON_DISK=drive-harddisk
 UI_ICON_BOX=package-x-generic
 UI_ICON_SEARCH=system-search
 UI_ICON_VIDEO=video-x-generic
+# Install LazyOS is the one feature that adds a picture: the launcher entry, the
+# busy card and the final notification all ask for this name, so it is a row in
+# the first table of scripts/make-icons.sh (the shield, f132) rather than a name
+# the theme does not carry - which would draw nothing and log nothing.
+UI_ICON_INSTALL=system-software-install
 
 # The third column of a row is the one that grows: a path, a revision string, a
 # package description.  Past this many characters it is cut (ui_trim).  The number

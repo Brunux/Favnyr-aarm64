@@ -64,6 +64,11 @@ while :; do
 		ui_row "$UI_I_CLOCK" 'Time zone' 'and network time' tz
 		ui_row "$UI_I_TRASH" 'Free space' 'what is using it, and clean up' clean
 		ui_row "$UI_I_CHIP" 'Auxiliary swap' 'a card as more memory, on every boot' swap
+		# The one row here that rewrites a disk, and it is red like Power for
+		# the same reason: it asks once more, in the menu it opens, and once
+		# by typing the disk's name.  rofi-install is a front-end for
+		# scripts/install-emmc.sh - the same copy with the same CONFIRM=yes.
+		ui_row "$UI_I_SHIELD" 'Install LazyOS' 'copy this system to the internal disk' install "$UI_RED"
 		ui_row "$UI_I_BUG" 'End a process' 'the heaviest twenty' kill
 		ui_row "$UI_I_BOX" 'Packages' 'search, then install one' pkg
 		ui_row "$UI_I_BRUSH" 'Colour' 'the hex of a pixel, and the palette' colour
@@ -132,6 +137,7 @@ while :; do
 	tz) exec "$dir/rofi-tz" ;;
 	clean) exec "$dir/rofi-clean" ;;
 	swap) exec "$dir/rofi-swap" ;;
+	install) exec "$dir/rofi-install" ;;
 	kill) exec "$dir/rofi-kill" ;;
 	dictate) exec "$dir/dictate" ;;
 	lock) exec "$dir/sway-lock" ;;

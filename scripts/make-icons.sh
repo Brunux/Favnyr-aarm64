@@ -132,6 +132,9 @@ document-print-preview             f02f
 # the same PNG either way, and each table stays a complete answer to its own
 # question (what the launcher shows / what the file manager draws).
 folder-download                    f019
+# Install LazyOS (org.lazyos.install.desktop) asks for the shield the root menu
+# draws on its row, so the launcher and the menu tell the same story.
+system-software-install            f132
 TABLE
 
 # 2. The command palette.  rofi's run mode resolves an icon by *asking the icon

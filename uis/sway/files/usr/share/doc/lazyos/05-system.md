@@ -112,6 +112,55 @@ stock firmware's developer-mode menu picks **internal disk** (the eMMC) or
 **external disk** (the card), so a broken install on the eMMC is recoverable by
 booting the card and running the installer again.
 
+## Install LazyOS
+
+There is no separate installer program: `scripts/install-emmc.sh` copies **the
+system that is running** onto the internal disk, which is why the card is what
+you install from. The menu (*Install LazyOS* in the root menu and in the
+launcher) is its front end, so what lands on the eMMC is the system that was
+tested, not a second implementation of it.
+
+Open it from the microSD. When the machine is running from the disk it would
+erase, it says so and offers nothing to press: that is the one mistake nothing
+can undo.
+
+The menu is a report before it is a button. It checks the target and the room
+the copy needs, the charger and the battery (below half it says so, below 20% on
+battery it refuses), the running kernel's own files - the kernel partition is
+rebuilt from them *after* the copy, and without them the install would fail with
+the disk already formatted - the installer's tools, and that `sudo` does not ask
+for a password, because the copy runs detached and nothing can answer a prompt.
+
+**Cancel is the first row**, and it is selected, so a stray Enter writes
+nothing. Choosing *Install LazyOS* then asks for the disk's name typed in full
+(`mmcblk0` for the eMMC): a list cannot ask that, because Enter on a row is
+exactly the gesture that must not erase a disk.
+
+After that it runs the documented install unchanged - `install-emmc.sh` with
+`CONFIRM=yes` - and does not partition or format anything itself. Around that
+call it does the two things the installer refuses to start with: it stops
+**udisks2** and masks it for the length of the run, so nothing can auto-mount
+the new partitions mid-write, and it unmounts any partition of the target. Both
+are put back afterwards on every exit path, and a failure there stops before a
+byte is written. `systemd-inhibit` holds a sleep lock for the length of the copy.
+
+The copy takes minutes, so it is **not stoppable**: a killed `rsync` or `mkfs`
+leaves a disk that is neither the old system nor the new one. A notification
+card that does not expire and the bar's spinner follow the installer's own
+steps, and the card says why it cannot be stopped when it is clicked.
+
+The end is read from the disk and not from the exit code: the three partitions
+must carry `pmOS_kernel`, `pmOS_boot` and `pmOS_root`, and the kernel partition
+must verify with `futility show`. Only then does the card say to reboot and pick
+**internal disk** in the firmware menu.
+
+Every run writes `~/.local/state/lazyos/install-<date>.log`. **Show the install
+log** opens it in a window with `less`, following it live while the copy runs
+and at the end afterwards; the menu also keeps the last run's outcome under
+*last time*, and a `running` line with no process behind it means the run was
+killed. When something fails, the card carries the installer's own last `ERROR:`
+line and the path of the log.
+
 ## Updating
 
 ```sh

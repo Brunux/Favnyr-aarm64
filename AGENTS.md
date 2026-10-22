@@ -971,6 +971,55 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   menu adds no package. `check-system.sh` FAILs on a missing tool or script and when Places loses
   the row; when the fstab block exists it WARNs if `nofail`, the device timeout or a priority below
   100 went away, SKIPs when the card is not inserted, and WARNs when it is inserted but not active.
+- **Install LazyOS is a front end, not a second installer, and the delegation is what
+  `check-system.sh` asks of the file.** The root menu's red row (and
+  `org.lazyos.install.desktop`) opens `~/.config/bin/rofi-install`, one rofi process that only
+  *reads*: the target is fixed (`DEVICE_BLOCK`, `/dev/mmcblk0`, no picker - a list of disks is a
+  list of ways to erase the wrong one), and the menu reports the machine before offering anything -
+  the target and the room the copy needs (`df` on `/` + `/boot`, minus `$WORK_DIR`, because on a
+  machine that built this port the build tree is bigger than the system it built), the charger and
+  the battery (below half says so, below 20% on battery refuses), `/lib/modules/<release>` +
+  `vmlinuz-` + `initrd.img-` (the kpart is built from them *after* the copy, so missing them was a
+  failure with the disk already formatted), the installer's tools and a `sudo` that would not
+  prompt - the latter two being cases where the row disappears instead of a doomed write starting.
+  Those rows carry `none` as their key, so Enter re-checks instead of closing (the same trick
+  `bar-menu`'s headings use), which is what makes "Cannot install yet" an honest row and not a
+  dead one. **Cancel is the first row and it is selected**, and the last gate is the target's own
+  name typed in full (`mmcblk0`) through `bar-pick -free`: Enter on a list row is exactly the
+  gesture that must not erase a disk, so a wrong answer is a critical toast and nothing else.
+  Then `setsid ~/.config/bin/lazyos-install-run TARGET REPO` - the runner is bash, detached, and
+  **the only writer**: it calls `scripts/install-emmc.sh` once with `CONFIRM=yes` after `env`
+  (`env`, not a bare `VAR=value` list: with no `systemd-inhibit` prefix the empty `"$@"` made bash
+  read `DEVICE=` as the command name - "Failed to execute 'DEVICE='" - which is a second, silent
+  way for an install to die before it starts), and `check-system.sh` FAILs if `parted`, `mkfs`,
+  `cgpt`, `rsync` or `dd` ever appears in that file, which is what makes "byte for byte the
+  documented install" a test instead of a promise.
+  **Its preparation is exactly the two refusals `disk_release()` has**, done before the call so
+  that refusal is unreachable instead of surprising: `systemctl stop udisks2` **and
+  `mask --runtime`** - stopping is not enough, because udisks2 is D-Bus-activated and the new
+  table alone is what makes it mount p2/p3 mid-write (`write-sd.sh`'s documented failure) - and
+  `umount` of every mounted partition of the target; a failure in either aborts before a byte is
+  written, and a trap unmasks and starts udisks2 again on **every** exit path, which is the manual
+  procedure the port already documents. `systemd-inhibit --what=sleep --mode=block` keeps an idle
+  machine from suspending into a half-written disk (the install still runs without the binary).
+  **Not stoppable on purpose**, like Format a disk and the apt install: no `BUSY_STOP` is
+  registered and the card says a killed copy leaves the disk half written; progress is the
+  installer's own `==> ` lines (ANSI stripped) turning into `busy update` cards under a waybar
+  spinner, and the log is `$XDG_STATE_HOME/lazyos/install-<timestamp>.log`, opened by
+  `lazyos-install-log` in the floated foot (`less -R +F` while it runs, `+G` when it is finished).
+  **Success is read back, not believed**: the three `PARTLABEL`s are asked one at a time (the
+  `partx` round reorders minors) and `futility show` on p1 must say `Body verification
+  succeeded` - an exit status 0 with a disk that has no bootable kernel partition is the one
+  failure a copy this size must not hide - while a failure carries the installer's **last**
+  `ERROR:` line, ANSI stripped and its prefix dropped because `fail()` puts one back ("ERROR:
+  ERROR: …" is what a card looks like when it is not). The menu reads `$state/status` back the
+  next time it opens (running/failed/did-not-finish), and the icon language is
+  `system-software-install` (Font Awesome f132, table 1 of `scripts/make-icons.sh`) with
+  `UI_I_SHIELD`/`UI_I_CHECK`. Nothing is resident: one rofi process while the menu is open, then
+  the detached runner. On a loop device with the real pmOS layout and a signed kpart copied from
+  the eMMC's p1 the whole path was exercised - success, failure, the udisks2 window
+  (`inactive`/`masked-runtime` while writing, `active`/`enabled` after, no leftover mask) - which
+  is how the `env` bug and the doubled `ERROR:` prefix were found.
 - **The GTK3 half of the palette is two files** in `uis/sway/files/home/.config/gtk-3.0/`:
   `settings.ini` (`Adwaita-dark`, `gtk-application-prefer-dark-theme=1`, `LazyOS`,
   `JetBrains Mono 10`, animations off) and `gtk.css`, which repaints the surfaces with explicit

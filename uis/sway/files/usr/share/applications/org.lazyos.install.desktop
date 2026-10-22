@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Install LazyOS
+GenericName=Install to the internal disk
+Comment=Copy this tested system onto the internal disk, with the checks a write this size needs
+Exec=/home/brunux/.config/bin/rofi-install
+Icon=system-software-install
+Terminal=false
+Categories=System;
+Keywords=install;internal;disk;emmc;copy;lazyos;
