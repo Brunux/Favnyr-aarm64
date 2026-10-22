@@ -293,6 +293,29 @@ labelled `nureb_swap` (an old card) is still usable as swap, but that `resume=`
 will not find it: re-label it (`sudo swaplabel -L lazyos_swap <device>`) or let
 the swap menu recreate it.
 
+## Install LazyOS - root menu -> **Install LazyOS**
+
+Boot from the card; the menu writes `/dev/mmcblk0`, the internal disk.
+
+| Step | Expected |
+|---|---|
+| open it on the eMMC install (the system runs from the target) | "Cannot install yet": the target is the disk this system is running from, and the Install row is not offered |
+| boot from the card and open it | the machine report - target, room needed, charger and battery, the three kernel files, the installer's tools, a `sudo` that will not prompt - and **Cancel** selected; **Install LazyOS** offered only if every gate passed |
+| press Enter on a report row (they carry no action) | the menu re-opens and re-checks; it does not close |
+| pick **Install LazyOS** and answer the typed name wrongly | a critical toast, nothing written; the menu is still there |
+| answer `mmcblk0` | a toast that the copy started and the bar spinner; open the menu again and pick the log row for the live log. `systemctl is-active udisks2` says inactive while it runs |
+| while it runs, `systemctl show -p LoadState udisks2` and `findmnt -rn -S /dev/mmcblk0p3` | `masked-runtime` and no mount: the two states `disk_release()` refuses to start with |
+| when it finishes | the card says it finished; `lsblk -o NAME,PARTLABEL /dev/mmcblk0` names `pmOS_kernel`, `pmOS_boot` and `pmOS_root`; `sudo futility show /dev/mmcblk0p1` says *Body verification succeeded*; `udisks2` is `active`/`enabled` again with no runtime mask |
+| power off, remove the card, pick **internal disk** in the firmware menu | the eMMC boots the system that ran from the card (the same files, the same `REVISION`) |
+| open the same menu there | it refuses for the same reason as the first row |
+| kill the copy by hand mid-run (`sudo pkill -f '[i]nstall-emmc.sh'`) | the next menu reads `failed`/`did-not-finish` with the installer's last `ERROR:` line; the disk is half written and a new run is the way out - there is no stop button, on purpose |
+
+The four report rows are gates, not decoration: below 20 % on battery the install
+is refused, and a `sudo` that would prompt makes the Install row disappear rather
+than fail after the disk has been formatted. The copy is not interruptible (a
+killed `rsync` or `mkfs` leaves a disk that looks written and is not) and the log
+stays in `~/.local/state/lazyos/install-<timestamp>.log`.
+
 ## Search key - the file search
 
 | Step | Expected |
