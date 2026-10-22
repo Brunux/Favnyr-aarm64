@@ -1,12 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- The LazyOS mark: an arcade button, in the session's own four colours.
-       The base03 crescent behind the dome gives it depth, the base1 ellipse is
-       the highlight, and the cyan ring is the bezel.  Drawn with circles and
-       ellipses only so that every renderer agrees on it (rsvg-convert on the
-       build host, librsvg in the icon theme).  Regenerate the PNGs with
-       scripts/make-brand.sh after editing this file. -->
-  <circle cx="256" cy="272" r="186" fill="#002b36" opacity="0.9"/>
-  <circle cx="256" cy="256" r="186" fill="#cb4b16"/>
-  <ellipse cx="256" cy="196" rx="118" ry="64" fill="#eee8d5" opacity="0.16"/>
-  <circle cx="256" cy="256" r="232" fill="none" stroke="#2aa198" stroke-width="28"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 100 100">
+  <!-- The lazyOS mark: a prompt.  A lowercase z (the "lazy", and the sleep it
+       stands for) followed by the terminal cursor, on a base02 tile, in the
+       session's own Solarized colours: cyan #2aa198 is the accent, the cursor is
+       #e8743b (Solarized orange lifted until it passes 4.5:1 on base03, so the
+       same orange can be used for text), the tile is base02 #073642.
+       Rectangles and one polygon only, no text, so every renderer agrees on it
+       (rsvg-convert on the build host, librsvg in the icon theme, browsers).
+       Regenerate the PNGs with scripts/make-brand.sh after editing this file;
+       brand/README.md has the rules. -->
+  <rect x="4" y="4" width="92" height="92" rx="22" fill="#073642"/>
+  <polygon points="22,28 56,28 56,40 36,62 56,62 56,72 22,72 22,60 42,38 22,38" fill="#2aa198"/>
+  <rect x="62" y="62" width="18" height="10" rx="2" fill="#e8743b"/>
 </svg>

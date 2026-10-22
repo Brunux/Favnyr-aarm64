@@ -1,15 +1,22 @@
 // The About card's "full picture": the same facts `rofi-about` shows as a list,
-// under the two-line wordmark instead of Debian's swirl.  `rofi-about` runs
+// next to the lazyOS mark instead of Debian's swirl.  `rofi-about` runs
 // `fastfetch` in the popup foot window, and this file is what makes it LazyOS's.
 //
-// The logo is text, not the mark: a terminal draws the wordmark, and the mark is
-// the picture the wallpaper and the launcher carry (scripts/make-brand.sh).  The
-// colours are the session's own - cyan keys, base1 output on base03.
+// The logo is the z_ mark in block characters with the wordmark under it
+// (scripts/make-brand.sh writes it; brand/README.md has the rules).  It is a
+// "file" logo, not "file-raw", so $1..$3 in it are the colours below and
+// fastfetch measures its width without them: cyan z, orange cursor, base2 name.
+// The rest are the session's own colours - cyan keys, base2 output on base03.
 {
   "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
   "logo": {
-    "type": "file-raw",
+    "type": "file",
     "source": "~/.config/lazyos/wordmark.txt",
+    "color": {
+      "1": "#2aa198",
+      "2": "#e8743b",
+      "3": "#eee8d5"
+    },
     "padding": {
       "top": 1,
       "right": 4
