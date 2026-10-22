@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>LazyOS: Debian Linux for ARM Chromebooks · lazy by design</title>
-<meta name="description" content="LazyOS is Debian (forky, arm64) for ARM Chromebooks like the Google Hayato (MediaTek MT8192): postmarketOS hardware support, a keyboard-first swayfx desktop, built-in AI agents, and a free image you flash to microSD.">
+<meta name="description" content="LazyOS is Debian (forky, arm64) for ARM Chromebooks like the Google Hayato (MediaTek MT8192): postmarketOS hardware support, a keyboard-first swayfx desktop, built-in AI agents, and a free image you flash to microSD, then install to internal storage from the running card.">
 <link rel="canonical" href="https://brunux.github.io/LazyOS/">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <meta name="author" content="Brunux">
@@ -186,6 +186,15 @@ kbd.hot { border-color: var(--cyan); color: var(--cyan); }
 .step::before { counter-increment: step; content: counter(step); width: 44px; height: 44px; border-radius: 10px; background: var(--base02); border: 1px solid var(--cyan); color: var(--cyan); font-weight: 800; display: grid; place-items: center; box-shadow: 0 4px 0 var(--key-shadow); }
 .step h3 { margin-top: 8px; }
 .step p { margin-top: 8px; color: var(--muted); }
+.step p strong { color: var(--text); }
+.checks { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 8px; }
+.checks li { position: relative; padding-left: 26px; color: var(--muted); font-size: 14.5px; }
+.checks li::before { content: "✓"; position: absolute; left: 0; top: 0; color: var(--cyan); font-weight: 700; }
+.checks strong { color: var(--text); }
+.sub-head { margin-top: 58px; max-width: 66ch; display: flex; flex-direction: column; gap: 10px; }
+.sub-head h3 { font-size: clamp(21px, 2.8vw, 27px); font-weight: 800; letter-spacing: -0.03em; }
+.sub-head p { color: var(--muted); font-size: 15px; }
+.sub-head + .steps { margin-top: 30px; }
 .code { position: relative; margin-top: 14px; background: #001f27; border: 1px solid var(--line); border-radius: 12px; }
 .code pre { margin: 0; padding: 18px 20px; overflow-x: auto; font-size: 14px; line-height: 1.6; color: var(--text); }
 .code pre .c { color: var(--muted); }
@@ -390,9 +399,9 @@ footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; fo
   <section id="install" class="alt" aria-labelledby="inst-h">
     <div class="wrap">
       <div class="sec-head">
-        <span class="kicker">FOUR STEPS</span>
+        <span class="kicker">FROM CARD TO EMMC</span>
         <h2 id="inst-h">Install from a microSD card</h2>
-        <p>The release image boots from external storage on the stock ChromeOS firmware. Install to internal storage later, from the running card: <strong>Install LazyOS</strong> in the root menu (<code>Alt+Space</code>).</p>
+        <p>The release image boots from external storage on the stock ChromeOS firmware, and the same card is the installer: once it is up, the root menu copies that running system onto the internal disk.</p>
       </div>
       <div class="steps">
         <div class="step">
@@ -430,7 +439,37 @@ footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; fo
           </div>
         </div>
       </div>
-      <p class="note"><strong>Read before you flash.</strong> The firmware is never touched: the boot chain is the stock signed kernel partition. But developer mode wipes ChromeOS, and installing to internal storage - <strong>Install LazyOS</strong> in the card's root menu, or <code>CONFIRM=yes sudo scripts/install-emmc.sh</code> - erases it. Keep a second computer and recovery media at hand.</p>
+
+      <div class="sub-head">
+        <h3>Then, from the running card: <span class="cur">Install LazyOS</span></h3>
+        <p>There is no second installer to flash. <kbd>Alt</kbd> <kbd>Space</kbd> opens the root menu, and <strong>Install LazyOS</strong> there (or in the launcher) is the documented <code>scripts/install-emmc.sh</code> with the questions asked first.</p>
+      </div>
+      <div class="steps" style="counter-reset: step 4">
+        <div class="step">
+          <div>
+            <h3>Read the report before you press anything</h3>
+            <p>The menu is a report first, and it only reads: the target and the room the copy needs, the charger and the battery, the running kernel's own files, the installer's tools and a <code>sudo</code> that will not prompt.</p>
+            <ul class="checks">
+              <li><strong>Power.</strong> Below half it says so; below 20% on battery it refuses to start.</li>
+              <li><strong>Kernel.</strong> <code>/lib/modules/&lt;release&gt;</code>, <code>vmlinuz-</code> and <code>initrd.img-</code> have to be there, because the kernel partition is rebuilt from them after the copy.</li>
+              <li><strong>Disk.</strong> It refuses when this system runs from the disk it would erase, and when the internal disk is too small for the copy.</li>
+            </ul>
+            <p>Every row is re-read each time the menu is drawn: plug the charger in, press Enter on the reason, and it is gone. While anything is still wrong there is no install row at all, only the reasons and a <strong>Close</strong>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div>
+            <h3>Type the disk's name, then let it finish</h3>
+            <p><strong>Cancel</strong> is the first row and it is selected, so a stray Enter writes nothing. The last gate is the target typed in full - <code>mmcblk0</code> for the eMMC - because Enter on a list row is exactly the gesture that must not erase a disk. A typo writes nothing and raises a critical notification instead.</p>
+            <div class="code">
+<pre><span class="p">›</span> Type mmcblk0 to confirm</pre>
+            </div>
+            <p>The copy takes minutes and is <strong>not stoppable</strong>: a killed copy leaves a disk that is neither the old system nor the new one. The installer's own steps turn into a notification card that does not expire, the bar shows a spinner, and <strong>Show the install log</strong> opens the log live in a window.</p>
+            <p>The result is read back from the disk, not from an exit code: the three partitions must carry their <code>pmOS_*</code> labels and the kernel partition must verify with <code>futility show</code>. Only then does it say to reboot and pick <strong>internal disk</strong> in the firmware menu.</p>
+          </div>
+        </div>
+      </div>
+      <p class="note"><strong>Read before you flash.</strong> The firmware is never touched: the boot chain is the stock signed kernel partition. But developer mode wipes ChromeOS, and <strong>Install LazyOS</strong> erases the internal disk. Keep a second computer and recovery media at hand; the card is untouched, so it can always be picked again in the firmware menu.</p>
     </div>
   </section>
 
@@ -448,7 +487,7 @@ footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; fo
         <div><dt>First device</dt><dd style="margin:0">Google Hayato · MT8192 · <code>google-asurada</code></dd></div>
         <div><dt>Kernel</dt><dd style="margin:0">postmarketOS MediaTek MT81xx, signed FIT kpart</dd></div>
         <div><dt>Session</dt><dd style="margin:0">swayfx · waybar · rofi · foot · mako</dd></div>
-        <div><dt>Works</dt><dd style="margin:0">display, input, storage, Wi-Fi, Bluetooth, audio, suspend, eMMC install, backup and restore</dd></div>
+        <div><dt>Works</dt><dd style="margin:0">display, input, storage, Wi-Fi, Bluetooth, audio, suspend, install to the eMMC from the running card, backup and restore</dd></div>
         <div><dt>Firmware</dt><dd style="margin:0">never flashed</dd></div>
       </dl>
     </div>
