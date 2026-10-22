@@ -194,6 +194,14 @@ uncommitted changes, since those do not travel into the image.
   a slow one (`check-system.sh`'s firmware check reported a loaded firmware as missing on the card
   and as present on the host). Capture the output first and use `grep -q PAT <<<"$var"`, or a
   single `grep -rqs PAT <path>`.
+- **`pkill -f PAT` also matches the shell that runs it**: `swayidle` executes each `timeout`,
+  `before-sleep` and `after-resume` argument with `/bin/sh -c`, so that shell's own command line
+  contains `PAT`. An unbracketed `pkill -f org.lazyos.screensaver` kills the shell, and anything
+  after the `;` in the same chain never runs (the `night-light resume` added to `after-resume` was
+  the first command to notice; the old line had nothing after the `pkill`, which is why it looked
+  fine). Write the pattern as `pkill -f "[o]rg.lazyos.screensaver"`: the regex matches the target
+  but not the literal text in its own command line. `check-system.sh` FAILs on the unbracketed form
+  in the idle drop-in.
 
 ### Host toolchain
 
@@ -494,15 +502,18 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   sysfs, and it stays out: the poller this port uses costs nothing outside tablet mode.
 - **Tablet mode is `~/.config/bin/tablet-mode`, driven by two `bindswitch` lines**
   (`etc/sway/config.d/28-tablet.conf`): `on` starts `wvkbd-mobintl` (solarized colours, `JetBrains
-  Mono`, `-H 300`/`-L 240`, `-R 8`, `--alpha 242`), turns the touchpad off (`swaymsg input
+  Mono`, `-H 300`/`-L 240`, `-R 8`, **opaque**: no `--alpha`, because with transparency the window
+  underneath shows through the keys), turns the touchpad off (`swaymsg input
   type:touchpad events disabled` - it is on the back of the screen now) **and the physical keyboard
   too** (`swaymsg input type:keyboard events disabled`, `enabled` on exit; the folded keys are on
   the table and a keystroke there is a keystroke), and starts its own **1 Hz poller**
   (`tablet-mode poller`) over the accelerometer; `off` kills both, re-enables **both** input types
   and puts `transform normal` back. The state is a directory in `$XDG_RUNTIME_DIR/lazyos-tablet`
   holding the keyboard pid, the poller pid and the output name, so a session that dies removes all
-  three, and `off` still restores the inputs when the state is gone (that path is the one a person
-  cannot fix without a mouse, so it exists). **The keyboard is switched off only after `start_kbd`
+  three. **`off` restores the rotation and both inputs even when the state directory is gone**: the
+  output name comes from `swaymsg -t get_outputs`, not from `$state`, a leftover `wvkbd-mobintl` is
+  stopped by name, and both input types are re-enabled - that path is the one a person cannot fix
+  without a mouse, so it exists. **The keyboard is switched off only after `start_kbd`
   has confirmed the process is alive**, and never after a failed start: from that moment the
   touchscreen is the only input, so a wvkbd that did not start must leave the physical keyboard on.
   The on-screen keyboard is unaffected by that switch because it is **not an input device** - it is
@@ -624,7 +635,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   Specification, but does not support any of the theme metadata"*), and `/usr/share/icons` is not
   a theme root - so `~/.config/mako/config` has to name
   `icon-path=/usr/share/icons/LazyOS:/usr/share/icons/hicolor` or every notification icon stays
-  blank while `notify-send -i folder` looks perfectly correct on the command line. Two traps that
+  blank while `notify-send -i folder` looks perfectly correct on the command line. The call has to
+  ask for the picture as well: a `notify-send -a APP` without `-i` is a text-only card with no log
+  line, and the file browser's eight messages were the last ones without one, so `check-system.sh`
+  warns when an application-named call in `~/.config/bin` has no icon. Two traps that
   cost a round each:
   a literal private-use character does not survive every editor or transport (the first attempt
   shipped a row of empty spans), and `printf '\uXXXX'` needs bash - dash has no `\u`, so the first
@@ -664,7 +678,15 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `rofi -dmenu -markup-rows -show-icons`, and Enter reopens the script in the chosen directory,
   reads the file with `bat --paging=always` in the floated `popup` foot window (`BAT_THEME=ansi`,
   since foot runs the command directly and never sources the profile) or hands it to the program
-  that fits it. **Where it goes is the extension, not a guess**: a **document to `papers`** (PDF,
+  that fits it. **The browser remembers where it was**: the last directory browsed, or the folder
+  of the last file opened, is one line in
+  `${XDG_STATE_HOME:-$HOME/.local/state}/lazyos/files-last`; a missing file starts in `$HOME`,
+  never in `$PWD`, which is wherever the session happened to be and read as the browser
+  forgetting. `--search` is defined to start at `$HOME` and carries a `from_search` flag, so its
+  startup line does not overwrite the memory - otherwise every search would send the next
+  `Alt+Ctrl+F` home. `remember()` ignores every write failure: a read-only state directory must
+  not stop a file from opening.
+  **Where it goes is the extension, not a guess**: a **document to `papers`** (PDF,
   DjVu, a comic: search, zoom, printing and annotations, where a PDF used to be a 280 MB browser
   tab; poppler only feeds the row's thumbnail), a **picture to `imv`** (the GPU viewer, with
   zoom/pan/rotate and a slideshow of the folder) with **`chafa`'s sixels as the fallback** for a
@@ -815,7 +837,11 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   printing and annotations, where a PDF used to be a 280 MB browser tab, and poppler stays only
   as the thumbnailer; a picture goes to **`imv`**, which draws it on the GPU and gives zoom, pan,
   rotation and a slideshow of the folder, with `chafa`'s sixels kept as the **fallback** for a
-  GPU where imv gets no EGL context; a container goes to **`mpv`**. **`papers` does not open
+  GPU where imv gets no EGL context; a container goes to **`mpv`**. **imv has no on-screen help**,
+  so `bin/lazyos-image-hint` says its keys in one notification the first time a picture opens in a
+  session (`$XDG_RUNTIME_DIR/lazyos-imv-hint`, written before the toast is queued) and never again;
+  it is called only from the image+imv branches of `lazyos-view` and `rofi-files`, each followed
+  by `|| :` so a missing hint never fails the open. **`papers` does not open
   EPUB** - its `MimeType=` has no `application/epub+zip`, whatever `docs/omarchy-gap.md` once
   said - so an EPUB (and a `.deb`) still goes to the browser, and `foliate` (12.4 MB, in forky)
   is the package that would change that. Two packaging facts cost a round each: **Debian's `imv`
@@ -1002,8 +1028,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   excludes, `--max-columns 200`, 400 rows) because a home directory is not a repository: a file
   that says "error" forty times is one row of context and thirty-nine of noise. **Enter opens the
   match, not the file**: `bat --highlight-line N` colours the line but bat's own pager always
-  starts at the top, so its output is piped into `less -R +N` - less is told the line to start at
-  and `-R` keeps the colours bat wrote - inside the floated `popup` foot window. A pattern
+  starts at the top, so bat writes the page to a real file and `less -R "+N"` opens *that file* -
+  less cannot seek a pipe, and the old `bat | less +N` answered *Cannot seek to line number N*
+  and left the match below the screen; `-R` keeps the colours bat wrote, and the file is removed
+  when less exits - inside the floated `popup` foot window. A pattern
   ripgrep cannot parse is reported in ripgrep's own words (`regex parse error`) instead of an
   empty list, and the walk is a `busy` card whose `BUSY_STOP` is `pkill -f "[r]g ..."`, so a
   search that is taking too long is one click away from stopping. The binding lives in
@@ -1068,11 +1096,18 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   root menu's `Log out`/`Reboot`/`Power off` rows are gone for the same reason: a stray Enter there
   rebooted the machine with no question. `Alt+Shift+F`/`Alt+Shift+S`/`Alt+Ctrl+S` run `grimshot -n`
   (the flag that prints and notifies the file, or that the region is on the clipboard); without it
-  the screenshot keys are silent. `Alt+Shift+Return` opens `firefox-esr`. **Night light**: the login
-  line is `wlsunset -t 4000`, because 5500 K is close enough to daylight that the switch looked
-  broken, and the manual toggle strips the `-t` from that same line (one copy of the coordinates)
-  and forces `-T 4000 -t 4000`: a toggle that only takes effect after sunset does nothing when it is
-  tried at 17:00. **Time zone**: `timedatectl set-timezone` rewrites `/etc/localtime` and nothing
+  the screenshot keys are silent. `Alt+Shift+Return` opens `firefox-esr`. **Night light**: one
+  helper, `~/.config/bin/night-light`, owns the command line and the mode, because the login line,
+  the Settings switch and the resume hook have to agree about what `wlsunset` is running and three
+  copies of the coordinates cannot. `login` starts the sunset schedule
+  (`-l 20.67 -L -103.35 -t 4000`, 4000 K because 5500 K was close enough to daylight that the switch
+  looked broken), `start` forces the warm end (`-T 4000 -t 4000`) for the switch - a toggle that
+  only takes effect after sunset does nothing when it is tried at 17:00 - and the mode is one line
+  in `$XDG_RUNTIME_DIR/lazyos-night-light`. The idle drop-in's `after-resume` runs
+  `night-light resume`, because the panel comes back with its own gamma table and a client that
+  survived the sleep no longer has any effect; with no state file it does nothing, so a night light
+  that was off stays off. The screensaver kill in that chain is bracketed - see the `pkill -f`
+  gotcha below. **Time zone**: `timedatectl set-timezone` rewrites `/etc/localtime` and nothing
   else, and glibc caches the zone the first time a process calls `localtime()`, so the bar kept the
   old time and the menu looked inert; `rofi-tz` restarts `waybar` and puts the new local time in the
   notification. **Settings** (`rofi-quick`): six probe groups render in parallel (it was the sum of
@@ -1208,6 +1243,21 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `~/.bash_aliases`; otherwise the hook is dropped and the first `cd -` prints
   `zoxide: detected a possible configuration issue`. `zd` sends a first argument of
   `-` to `builtin cd -` (which prints the path), not to zoxide.
+- **The first boot gets one welcome window, and it is once per install, not once per login.**
+  `~/.config/bin/lazyos-welcome` (started by `~/.config/sway/config.d/30-welcome.conf`, which also
+  floats and centres it) opens one `foot --app-id=lazyos-welcome` page with the eight keys a new
+  install needs - `Alt+Space` (menu), `Alt+D` (launcher), `Search` (file search), `Alt+Ctrl+F`
+  (file list), `Alt+Return` (terminal), `Alt+Q` (close), `Alt+Escape` (power) and `Alt+Ctrl+K`
+  (bindings) - and `read` closes it on Enter. The marker is
+  `${XDG_STATE_HOME:-$HOME/.local/state}/lazyos/welcome` and holds `/etc/machine-id`; it is written
+  **after** the window closes, so a missing or failing `foot` leaves no marker and the next login
+  tries again, while a session restart with the same machine id stays quiet. A rebuilt card and an
+  `install-emmc.sh` copy get a fresh machine id (the script blanks it), which is what makes it "once
+  per install" rather than "once per home". The page is plain ASCII on purpose: foot falls back to
+  Symbols Nerd Font Mono, where a Font Awesome codepoint is a tofu box, and the window is a card to
+  read, not a terminal to work in. Nothing stays resident: one foot process while the window is
+  open. The manual section is `01-welcome.md` § First boot; `check-system.sh` runs the script
+  against a stub `foot` in a temp state directory to prove the marker is not written on failure.
 
 - **The manual is rendered, not printed.** `usr/share/doc/lazyos/*.md` (seven pages: welcome, rofi,
   shortcuts, software, the system, troubleshooting, agents) is opened by `rofi-learn` with **glow**
@@ -1270,7 +1320,12 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   **`CLAUDE_CONFIG_DIR`** for Claude Code and **`CODEX_HOME`** for Codex. OpenCode, Gemini and
   Copilot have no such variable and the menu says so instead of pretending. A new account is created
   empty on purpose - the first launch there runs the CLI's own sign-in, so two subscriptions never
-  share a token. **The usage meters are not ported**: Omarchy's bar panel reads provider APIs (and
+  share a token. **Every row carries the session's glyph** from `lib-rofi.sh` - a code sign for
+  an agent, two people for its accounts, a download arrow for an install, a gear for the default,
+  a terminal for the shell, a bin for removing an account and an undo arrow for going back - and a
+  display/key TSV maps the rendered row back to its action, because rofi hands back the row and
+  markup cannot be parsed back; `-markup-rows` is what makes the glyphs draw instead of printing
+  their tags. **The usage meters are not ported**: Omarchy's bar panel reads provider APIs (and
   local session logs) that change shape and need credentials, and a broken meter is worse than none;
   the shape that would fit here is a stdlib `python3` script printing one line for a waybar `custom`
   module, not a daemon and not a new language. Nothing in this feature is resident: the menu is rofi
@@ -1305,7 +1360,8 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `ttfx` at 120 fps - measured here, 78 MB of Python and 74-86 % of one core on a 200x60 canvas, i.e.
   120 full 1920x1200 repaints per second through panfrost, which is what the battery notices. The same
   chain runs here (`config.d/23-lazyos-screensaver.conf`: `swayidle -w` with 150 s screen, 300 s lock,
-  `before-sleep` lock and `after-resume` cleanup), with Debian's `tte` instead of `ttfx`, at **30 fps**,
+  `before-sleep` lock, and `after-resume` cleanup plus `night-light resume`), with Debian's `tte`
+  instead of `ttfx`, at **30 fps**,
   looping with `--reuse-canvas` over a curated list (`decrypt middleout print sweep wipe slide
   expand`; the effects that end with the text sitting still, so the next one starts from the wordmark).
   The art is `~/.config/lazyos/screensaver.txt`: an ANSI Shadow **LAZYOS** wordmark, `:: lazy by
@@ -1348,13 +1404,13 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   colour; if swaylock does not report back and is not running at all, it raises a critical
   `dialog-error` notification, because a lock that failed quietly is the one failure a person must
   hear. `check-system.sh` FAILs on a missing `tte`/`swayidle`/art/launcher/`sway-lock`/terminal
-  profile, reads the drop-in for the 150 s, 300 s and `before-sleep` lines **and** that `swayidle` is
-  running (a missing chain means no lock at all), and WARNs when an idle screen is found running
-  under `swaylock`. Deboma's launcher (`hyprctl monitors`, a special workspace per monitor, its
-  socket2 event stream) has no sway equivalent worth building: there is one output, and the drop-in
-  fullscreens `[app_id="org.lazyos.screensaver"]` on the current workspace. Deboma's `ttfx` shim
-  exists only because Omarchy's scripts call the Rust port by that name; this script calls Debian's
-  `tte` directly, so no shim is shipped.
+  profile, reads the drop-in for the 150 s, 300 s, `before-sleep` and `after-resume` lines **and**
+  that `swayidle` is running (a missing chain means no lock at all), and WARNs when an idle screen
+  is found running under `swaylock`. Deboma's launcher (`hyprctl monitors`, a special workspace per
+  monitor, its socket2 event stream) has no sway equivalent worth building: there is one output,
+  and the drop-in fullscreens `[app_id="org.lazyos.screensaver"]` on the current workspace.
+  Deboma's `ttfx` shim exists only because Omarchy's scripts call the Rust port by that name; this
+  script calls Debian's `tte` directly, so no shim is shipped.
 - **The CLI tools are Deboma's, in `packages/tools.list`** (a third list next to base and the UI
   one, installed by `rootfs-setup.sh` between the two). It is deliberately *only* tools: everything
   Deboma installs that is a service, a daemon or a timer stays out, which is why `plocate` is

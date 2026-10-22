@@ -696,6 +696,17 @@ if [ -r "$HOME/.config/bin/lib-rofi.sh" ] && [ -d /usr/share/icons/LazyOS ]; the
 		warn "notification icon(s) missing from /usr/share/icons/LazyOS:$_missing_icon (scripts/make-icons.sh)"
 fi
 
+# The other half of the same rule: a name only draws if the call asks for one.
+# A `notify-send -a APP` without `-i` is a text-only card with no log line, and
+# the file browser's eight messages were the last ones without a picture.
+_notify_calls=$(grep -rn 'notify-send .*-a [A-Za-z]' "$HOME/.config/bin" 2>/dev/null || true)
+_notify_noicon=$(printf '%s\n' "$_notify_calls" | grep -v -- ' -i ' || true)
+if [ -z "$_notify_noicon" ]; then
+	ok "every notification in ~/.config/bin carries an icon"
+else
+	warn "notification(s) without -i, so a text-only card: $(printf '%s\n' "$_notify_noicon" | sed 's#.*/bin/##' | tr '\n' ' ')"
+fi
+
 # mako reads icon-path itself (no theme metadata), so both halves have to be there
 # for any picture to appear. The config has no --check, and a name it cannot find
 # is silent, which is why this is asked of the configuration directly.
@@ -814,6 +825,40 @@ if [ -z "$_idle" ]; then
 	ok "idle chain armed (150 s idle screen, 300 s lock, lock before sleep)"
 else
 	fail "idle chain broken:$_idle"
+fi
+
+# The night light is one helper now: the login line, the Settings switch and
+# the after-resume hook all ask it, so a raw `exec wlsunset` and the switch's own
+# copy of the coordinates are both regressions. The resume has to run after the
+# screensaver kill, and that kill has to be bracketed: swayidle runs the chain
+# with `/bin/sh -c`, whose own command line contains the pattern, so
+# `pkill -f org.lazyos.screensaver` kills the shell before `night-light resume`
+# runs and the screen wakes at daylight colour while the switch says on.
+_nl_cfg=/etc/sway/config.d/23-lazyos-screensaver.conf
+_night_light=""
+[ -x "$HOME/.config/bin/night-light" ] || _night_light="$_night_light bin/night-light"
+grep -qs '^exec .*/night-light login' /etc/sway/config ||
+	_night_light="$_night_light config(night-light-login)"
+grep -qs 'after-resume .*night-light resume' "$_nl_cfg" ||
+	_night_light="$_night_light config.d/23-lazyos-screensaver.conf(resume)"
+grep -qs 'night-light" start' "$HOME/.config/bin/rofi-quick" ||
+	_night_light="$_night_light bin/rofi-quick(start)"
+if [ -x "$HOME/.config/bin/night-light" ]; then
+	case $("$HOME/.config/bin/night-light" status 2>/dev/null || true) in
+	on\ *|off|off\ *) ;;
+	*) _night_light="$_night_light bin/night-light(status)" ;;
+	esac
+fi
+if [ -z "$_night_light" ]; then
+	ok "night light wired (helper, login line, after-resume, Settings switch)"
+else
+	fail "night light incomplete:$_night_light (the screen never warms, or it stays at daylight after a resume)"
+fi
+if grep -qs '^exec .*wlsunset' /etc/sway/config; then
+	fail "/etc/sway/config starts wlsunset directly (the night-light helper is bypassed: the switch and the after-resume hook do not know the mode)"
+fi
+if grep -q 'after-resume .*pkill -f org\.lazyos\.screensaver' "$_nl_cfg" 2>/dev/null; then
+	fail "idle chain uses an unbracketed pkill -f org.lazyos.screensaver (it matches its own sh -c and kills the chain before night-light resume)"
 fi
 
 # The bug the guard in lazyos-screensaver exists for: a saver left running under
@@ -994,6 +1039,15 @@ else
 fi
 have rg && ok "ripgrep present, which the search inside files runs" ||
 	fail "ripgrep is missing (package ripgrep): Alt+Ctrl+G finds nothing"
+# Enter opens the match at its line. less cannot seek a pipe, so bat writes the
+# page to a real file; piping bat into less answered "Cannot seek to line number
+# N" and left the match below the screen.
+if grep -qs 'lazyos-grep.XXXXXX' "$HOME/.config/bin/rofi-grep" &&
+	grep -qs 'less -R "+$1" "$2"' "$HOME/.config/bin/rofi-grep"; then
+	ok "a match opens at its line (less seeks a real page file)"
+else
+	warn "bin/rofi-grep no longer gives less a seekable file: the page starts at the top"
+fi
 
 # Download (the root menu and the launcher) is yt-dlp plus the two things that
 # make it useful: ffmpeg to merge a video stream with its audio, and node as the
@@ -1030,6 +1084,17 @@ if grep -qs -- '-kb-custom-1 Alt+1' "$HOME/.config/bin/rofi-files"; then
 	ok "the file browser passes Alt+1 through to rofi (-kb-custom-1)"
 else
 	warn "bin/rofi-files no longer passes -kb-custom-1 Alt+1: Alt+1 opens the row instead of acting on it"
+fi
+# The browser remembers the last directory in $XDG_STATE_HOME/lazyos/files-last.
+# Two edits make it silently forget: dropping the state path (every Alt+Ctrl+F
+# starts in $HOME again) or removing the --search guard (a search overwrites the
+# memory, so the browser goes home after it).
+if grep -qs 'files-last' "$HOME/.config/bin/rofi-files" &&
+	grep -qs 'XDG_STATE_HOME' "$HOME/.config/bin/rofi-files" &&
+	grep -qs 'from_search' "$HOME/.config/bin/rofi-files"; then
+	ok "the file browser remembers its directory (\$XDG_STATE_HOME/lazyos/files-last)"
+else
+	warn "bin/rofi-files has no files-last memory: every Alt+Ctrl+F starts in \$HOME"
 fi
 _missing_actions=""
 for _c in tar unzip ffmpeg udisksctl; do have "$_c" || _missing_actions="$_missing_actions $_c"; done
@@ -1463,6 +1528,28 @@ if grep -qs 'input type:keyboard events' "$_tm"; then
 else
 	fail "bin/tablet-mode does not touch type:keyboard: the folded keys keep typing on the table"
 fi
+# Folding the keyboard back has to leave the screen upright even when the mode's
+# state directory is gone: a session killed in tablet mode takes it with it, and
+# the old off() answered that case first and returned before the rotation was
+# undone. off() now asks the compositor for the focused output, so the undo needs
+# nothing from $state; extract the function because the same words appear in
+# comments and in on().
+_tablet_off=$(sed -n '/^off() {/,/^}/p' "$HOME/.config/bin/tablet-mode" 2>/dev/null || true)
+case $_tablet_off in
+*'apply_transform normal'*)
+	if grep -q '\[ -d "\$state" \] ||' <<<"$_tablet_off"; then
+		fail "tablet-mode off() returns before restoring the rotation when the state is gone (the screen can stay sideways after a killed session)"
+	else
+		ok "tablet mode off restores the rotation without the state directory"
+	fi
+	;;
+*)
+	fail "tablet-mode off() does not apply 'transform normal': folding the keyboard back can leave the screen turned"
+	;;
+esac
+if grep -q -- '--alpha' "$HOME/.config/bin/tablet-mode" 2>/dev/null; then
+	warn "tablet-mode still passes --alpha to wvkbd (the keyboard is meant to be opaque: with transparency the window shows through the keys)"
+fi
 # The rotation reference is optional - the built-in -Y table is the default - but a
 # file that does not parse is ignored in silence by orient(), which reads as "the
 # rotation keeps turning back to the old way" after a calibration that claimed to work.
@@ -1484,6 +1571,58 @@ if [ ! -d "${XDG_RUNTIME_DIR:-/tmp}/lazyos-tablet" ]; then
 	if pgrep -x wvkbd-mobintl >/dev/null 2>&1; then
 		warn "wvkbd-mobintl is running outside tablet mode (config.d/28-tablet.conf starts it on the switch only)"
 	fi
+fi
+# The first boot's card is once per *install*: the marker holds /etc/machine-id,
+# it is written after the window closes, and a foot that never opened must not
+# write it (a window nobody saw would then never be tried again). The stub-foot
+# test uses only a temp directory, so it puts nothing on the real desktop.
+_welcome=""
+[ -x "$HOME/.config/bin/lazyos-welcome" ] || _welcome="$_welcome bin/lazyos-welcome"
+[ -r "$HOME/.config/sway/config.d/30-welcome.conf" ] ||
+	_welcome="$_welcome .config/sway/config.d/30-welcome.conf"
+grep -qs '^exec .*/lazyos-welcome' "$HOME/.config/sway/config.d/30-welcome.conf" 2>/dev/null ||
+	_welcome="$_welcome 30-welcome.conf(no-exec)"
+if [ -z "$_welcome" ]; then
+	_welcome_text=$("$HOME/.config/bin/lazyos-welcome" --print 2>/dev/null || true)
+	_welcome_missing=""
+	for _k in 'Alt+Space' 'Alt+D' 'Search' 'Alt+Ctrl+F' 'Alt+Return' 'Alt+Q' 'Alt+Escape' 'Alt+Ctrl+K'; do
+		grep -qF -- "$_k" <<<"$_welcome_text" || _welcome_missing="$_welcome_missing $_k"
+	done
+	grep -qF -- 'once per install' <<<"$_welcome_text" ||
+		_welcome_missing="$_welcome_missing once-per-install"
+	if [ -z "$_welcome_missing" ]; then
+		ok "welcome window lists the eight keys and says it is once per install"
+	else
+		fail "welcome window text lacks:$_welcome_missing"
+	fi
+else
+	fail "welcome window incomplete:$_welcome (the first boot shows no card)"
+fi
+
+_welcome_tmp=$(mktemp -d "${TMPDIR:-/tmp}/lazyos-welcome.XXXXXX" 2>/dev/null || true)
+if [ -n "$_welcome_tmp" ] && [ -x "$HOME/.config/bin/lazyos-welcome" ]; then
+	printf '%s\n' '#!/bin/sh' 'printf "call\n" >>"$WELCOME_TEST_LOG"' 'exit "${WELCOME_TEST_RC:-0}"' >"$_welcome_tmp/foot"
+	chmod +x "$_welcome_tmp/foot"
+	_welcome_res=$(
+		export XDG_STATE_HOME="$_welcome_tmp/state" PATH="$_welcome_tmp:$PATH"
+		export WELCOME_TEST_LOG="$_welcome_tmp/calls"
+		WELCOME_TEST_RC=1 "$HOME/.config/bin/lazyos-welcome" >/dev/null 2>&1 || true
+		[ -f "$_welcome_tmp/state/lazyos/welcome" ] && printf 'fail-marker '
+		WELCOME_TEST_RC=0 "$HOME/.config/bin/lazyos-welcome" >/dev/null 2>&1 || true
+		[ "$(cat "$_welcome_tmp/state/lazyos/welcome" 2>/dev/null)" = "$(cat /etc/machine-id)" ] &&
+			printf 'marker-ok '
+		_welcome_before=$(wc -l <"$_welcome_tmp/calls")
+		"$HOME/.config/bin/lazyos-welcome" >/dev/null 2>&1 || true
+		[ "$(wc -l <"$_welcome_tmp/calls")" = "$_welcome_before" ] &&
+			printf 'no-third-call'
+	)
+	case $_welcome_res in
+	'marker-ok no-third-call')
+		ok "welcome marker works (failure leaves none, success writes the machine id, third run stays quiet)" ;;
+	*)
+		fail "welcome marker misbehaves ('${_welcome_res:-empty}'): the card can repeat on every login or never appear again" ;;
+	esac
+	rm -rf "$_welcome_tmp"
 fi
 
 # The manual is rendered with glow, and both the binary and the glamour style
@@ -1560,6 +1699,18 @@ if [ -x /usr/local/bin/imv ]; then
 else
 	fail "/usr/local/bin/imv is missing: rofi-files and lazyos-view cannot start the viewer"
 fi
+# imv has no on-screen help: the first picture of a session says its keys in one
+# notification. A missing executable bit or a dropped call is silent - the picture
+# simply opens with no hint.
+if [ -x "$HOME/.config/bin/lazyos-image-hint" ]; then
+	ok "the viewer keys are hinted once per session (lazyos-image-hint)"
+else
+	fail "bin/lazyos-image-hint is missing or not executable: imv opens with no key hint"
+fi
+for _f in rofi-files lazyos-view; do
+	grep -qs 'lazyos-image-hint' "$HOME/.config/bin/$_f" ||
+		warn "bin/$_f no longer calls lazyos-image-hint: pictures opened that way get no hint"
+done
 # mpv-mpris is a plugin file, not a program, so nothing else notices it: without
 # it the film plays and playerctl, the Media menu and the bar see no player.
 if [ -r /etc/mpv/scripts/mpris.so ]; then
@@ -1777,6 +1928,17 @@ fi
 # because installing one is the menu's own job.
 [ -x "$HOME/.config/bin/rofi-agents" ] && ok "agents menu (rofi-agents) is executable" ||
 	fail "bin/rofi-agents is missing: Alt+Ctrl+Shift+A does nothing"
+# The agents menu draws the session's glyph rows. Without lib-rofi.sh the rows are
+# text-only; without -markup-rows rofi prints the <span> tags instead of drawing.
+if grep -qs 'lib-rofi.sh' "$HOME/.config/bin/rofi-agents" &&
+	grep -qs 'ui_row' "$HOME/.config/bin/rofi-agents"; then
+	ok "the agents menu draws the session's glyph rows (lib-rofi.sh, ui_row)"
+else
+	warn "bin/rofi-agents no longer uses lib-rofi.sh/ui_row: its rows are text only"
+fi
+grep -qs -- '-markup-rows' "$HOME/.config/bin/rofi-agents" &&
+	ok "the agents menu asks rofi to render markup rows" ||
+	fail "bin/rofi-agents lost -markup-rows: every row shows its <span> tags"
 _agent_bins=""
 for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_agent_bins $_a"; done
 [ -n "$_agent_bins" ] && ok "coding agent CLI(s) installed:$_agent_bins" ||
