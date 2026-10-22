@@ -1,0 +1,30 @@
+- when comming back from sleep the warm color set for light are gone
+- Alt+d is not working we dont need it but lets check why is was not working.
+- after checking the full picture from the about menu
+fastfetch has finished · close this window with Ctrl+Shift+W
+is this shotcut corret? using alt + q works for closing it
+- There is no LazyOS menu entry but there is an About one.
+- got this error ~/Pictures ❯ cd -
+zoxide: detected a possible configuration issue.
+Please ensure that zoxide is initialized right at the end of your shell configuration file (usually ~/.bashrc).
+
+If the issue persists, consider filing an issue at:
+https://github.com/ajeetdsouza/zoxide/issues
+
+Disable this message by setting _ZO_DOCTOR=0.
+
+/home/brunux
+ 
+- Some emojis are not show intest somo rectangle
+- For remainders give help on how to setup when asking the values
+- about boot time also show  systemd-analyze blame · close this window with Ctrl+Shift+W at the end which does not work no that we need since can close with alt-q
+
+- would be nice to show the main shortcuts just the bear minimun and how to use them when the user firts boot.
+- Alt+Ctrl+Shift+A show no icons
+- for Alt+Ctrl+F would it be possible to open from the last place if and default to user home
+- When open an image would be nice to show an alert on how to manipulate it
+- When umounting usb drive pcmanfm shows an error see image in screenshot folder 2026-10-21T20:03:27,576275473-06:00.png
+- When serching in files and open the file some errors happen see the screenshot image 2026-10-21T20:09:28,833158440-06:00.pn althro if i move the arrows it shows file content.
+Alt+Search does not work nothing is show
+- when folding the taptop out of table mode it does not change also I think the keyboar for table want to make some kind of effect lets remove it or keep it a simple affect
+
