@@ -952,6 +952,54 @@ else
 	fail "CLI tools incomplete:$_missing_tools"
 fi
 
+# The prompt is a page of private-use codepoints, and a glyph no installed font
+# draws is a missing-glyph box in the terminal - no log line, no error, and the
+# same prompt can look whole in one emulator and broken in another.  That is not
+# hypothetical: the `$os` block of the upstream prompt asked for Nerd Fonts v3
+# `nf-md` glyphs (Linux U+F033D, Debian U+F08DA, ...), which live in plane 15 and
+# which no package in forky provides because fonts-nerd-symbols is DFSG-stripped;
+# 14 of its 44 codepoints had no font at all.  The quieter half is the second
+# question: a codepoint that only some *other* family has is drawn from
+# fontconfig's dynamic fallback at that family's size, so the icon comes out
+# smaller than the cell next to it (foot draws the listed fonts first, in order).
+# Both are asked of fontconfig, per codepoint, against the chain foot is given.
+if [ ! -r "$HOME/.config/starship.toml" ]; then
+	: # the CLI tools check above already FAILs on the missing file
+elif ! have fc-list || ! have perl; then
+	skip "fc-list or perl is missing: cannot confirm that every prompt glyph has a font"
+else
+	_star_cps=$(perl -CSD -ne 'while (/([\x{E000}-\x{F8FF}\x{F0000}-\x{FFFFD}])/g) { printf "%X\n", ord($1) }' \
+		"$HOME/.config/starship.toml" 2>/dev/null | sort -u)
+	_star_footfonts=$(sed -n 's/^[[:space:]]*font[[:space:]]*=[[:space:]]*//p' "$HOME/.config/foot/foot.ini" 2>/dev/null |
+		tr ',' '\n' | sed 's/:.*//; s/^[[:space:]]*//; s/[[:space:]]*$//')
+	_star_nofont= _star_offchain= _star_count=0
+	for _cp in $_star_cps; do
+		_star_count=$((_star_count + 1))
+		_star_fams=$(fc-list ":charset=$_cp" family 2>/dev/null | cut -d, -f1 | sort -u)
+		if [ -z "$_star_fams" ]; then
+			_star_nofont="$_star_nofont U+$_cp"
+			continue
+		fi
+		_star_listed=no
+		while IFS= read -r _f; do
+			[ -n "$_f" ] || continue
+			if grep -qxF -- "$_f" <<<"$_star_fams"; then
+				_star_listed=yes
+				break
+			fi
+		done <<<"$_star_footfonts"
+		[ "$_star_listed" = yes ] ||
+			_star_offchain="$_star_offchain U+$_cp($(paste -sd/ - <<<"$_star_fams"))"
+	done
+	if [ -n "$_star_nofont" ]; then
+		fail "the prompt asks for glyph(s) no installed font draws:$_star_nofont (fc-list :charset= answers nothing, so the terminal can only draw a missing-glyph box)"
+	elif [ -n "$_star_offchain" ]; then
+		warn "prompt glyph(s)$_star_offchain come from a family $HOME/.config/foot/foot.ini does not list: foot draws them from fontconfig's fallback at that family's size, so they render small (add the family to font=)"
+	else
+		ok "all $_star_count private-use glyphs of the prompt are drawn by fonts foot is given"
+	fi
+fi
+
 # The editors. /usr/bin/vi is the part that goes missing on its own: it is an
 # update-alternatives link that vim's postinst registers, so a `vim` installed
 # without its postinst running leaves `vim` working and `vi` absent, which only

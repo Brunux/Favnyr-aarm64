@@ -1,44 +1,204 @@
-# starship: the prompt, ported from Deboma (omarchy's config/starship.toml).
+# starship: the prompt, in the session palette.
 #
-# Directory and git state only, in the theme's cyan: the bar already reports
-# battery, network and volume, so a prompt that repeated them would be noise on
-# a 1200 px wide terminal. `$character` is cyan on success and red on error,
-# which is the one piece of state a prompt has to show.
+# Ported from the maintainer's Deboma (omarchy) configuration: one powerline
+# segment per question the prompt answers - who, where, which branch, which
+# language, which container, what time - and a character that is the one piece of
+# state a prompt has to show.
 #
-# Read by `starship init bash` in ~/.bashrc; the binary comes from
-# packages/tools.list. The git_status glyphs (U+F00C, U+EA71, U+EBAB) are Nerd
-# Font codicons, so ~/.config/foot/foot.ini lists Symbols Nerd Font Mono as a
-# fallback; without it they would be boxes, not icons.
+# Three things are this port's and not upstream's.
+#
+# The palette is **solarized**, not the Gruvbox the original used: the bar, the
+# launcher, foot and the window borders are solarized (style.css, solarized.rasi,
+# config.d/90-solarized.conf), and a prompt in another palette is a second theme
+# on the same desktop. The role names are upstream's, the values are the theme's:
+# base3 on the saturated segments, base02/base01 for time and the containers, cyan
+# for git (the accent), blue for the languages.
+#
+# There is **no `$os` segment**, and that is a font fact, not a taste: upstream
+# asks for Nerd Fonts v3 `nf-md` glyphs (Linux U+F033D, Debian U+F08DA, ...), which
+# live in plane 15 and which no package in forky ships - `fonts-nerd-symbols` is
+# DFSG-stripped and `fonts-materialdesignicons-legacy` uses the older numbering,
+# so `fc-list :charset=f033d` answers nothing and the segment is a missing-glyph
+# box in every terminal. A segment that cannot be drawn is worse than a segment
+# that is not there, and the hostname already says which machine this is.
+#
+# The separators are **triangles**, not the rounded caps, and that is what makes
+# the prompt look the same in foot and in kitty. U+E0B0 and U+E0B2 are drawn by
+# JetBrains Mono itself - the primary font, so they tile with the cell at any
+# size - while the rounded caps U+E0B6/U+E0B4 exist only in the symbol font, and a
+# terminal that draws a fallback glyph at *that font's* size and baseline (foot
+# does; kitty scales it to the cell) puts them noticeably short of the segment
+# they are supposed to close. Both terminals were compared on the same prompt
+# before this was chosen: the triangles match, the caps do not.
+#
+# The glyphs that are here are a contract: every private-use codepoint below is
+# drawn by a font that ~/.config/foot/foot.ini names (JetBrains Mono for the
+# triangles, Symbols Nerd Font Mono for the branch, the clock, the character and
+# the language icons, Font Awesome and Material Design Icons for the folder
+# substitutions) - foot takes the *first* font in that list which has the glyph,
+# and draws it at that font's size, so a codepoint only a third font has is a
+# glyph that renders small or not at all. check-system.sh reads this file, asks
+# fontconfig which family covers each codepoint and FAILs when it is not one foot
+# lists, so adding a glyph here without its font is a red line and not a surprise
+# on someone else's card.
+#
+# Docker and Java are the two icons the upstream set cannot have: U+F308 and
+# U+E256 are in no font here, so they are devicons' docker (U+E7B0) and seti's
+# java (U+E624), both in Symbols Nerd Font Mono.
 
-add_newline = true
-command_timeout = 200
-format = "[$directory$git_branch$git_status]($style)$character"
+format = """
+[](fg:color_orange)\
+$username\
+[](bg:color_yellow fg:color_orange)\
+$directory\
+[](fg:color_yellow bg:color_aqua)\
+$git_branch\
+$git_status\
+[](fg:color_aqua bg:color_blue)\
+$c\
+$cpp\
+$rust\
+$golang\
+$nodejs\
+$bun\
+$php\
+$java\
+$kotlin\
+$haskell\
+$python\
+[](fg:color_blue bg:color_bg3)\
+$docker_context\
+$conda\
+$pixi\
+[](fg:color_bg3 bg:color_bg1)\
+$time\
+[](fg:color_bg1)\
+$line_break$character"""
 
-[character]
-error_symbol = "[✗](bold cyan)"
-success_symbol = "[❯](bold cyan)"
+palette = 'solarized_dark'
+
+[palettes.solarized_dark]
+color_fg0 = '#fdf6e3'
+color_bg1 = '#073642'
+color_bg3 = '#586e75'
+color_blue = '#268bd2'
+color_aqua = '#2aa198'
+color_green = '#859900'
+color_orange = '#cb4b16'
+color_purple = '#d33682'
+color_red = '#dc322f'
+color_yellow = '#b58900'
+
+[username]
+show_always = true
+style_user = "bg:color_orange fg:color_fg0"
+style_root = "bg:color_orange fg:color_fg0"
+format = '[ $user ]($style)'
 
 [directory]
-truncation_length = 2
+style = "fg:color_fg0 bg:color_yellow"
+format = "[ $path ]($style)"
+truncation_length = 3
 truncation_symbol = "…/"
-repo_root_style = "bold cyan"
-repo_root_format = "[$repo_root]($repo_root_style)[$path]($style)[$read_only]($read_only_style) "
+
+[directory.substitutions]
+"Documents" = "󰈙 "
+"Downloads" = " "
+"Music" = "󰝚 "
+"Pictures" = " "
+"Developer" = "󰲋 "
 
 [git_branch]
-format = "[$branch]($style) "
-style = "italic cyan"
+symbol = ""
+style = "bg:color_aqua"
+format = '[[ $symbol $branch ](fg:color_fg0 bg:color_aqua)]($style)'
 
 [git_status]
-format     = '[$all_status]($style)'
-style      = "cyan"
-ahead      = "⇡${count} "
-diverged   = "⇕⇡${ahead_count}⇣${behind_count} "
-behind     = "⇣${count} "
-conflicted = " "
-up_to_date = " "
-untracked  = "? "
-modified   = " "
-stashed    = ""
-staged     = ""
-renamed    = ""
-deleted    = ""
+style = "bg:color_aqua"
+format = '[[($all_status$ahead_behind )](fg:color_fg0 bg:color_aqua)]($style)'
+
+[nodejs]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[bun]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[c]
+symbol = " "
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[cpp]
+symbol = " "
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[rust]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[golang]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[php]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[java]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[kotlin]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[haskell]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[python]
+symbol = ""
+style = "bg:color_blue"
+format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
+
+[docker_context]
+symbol = ""
+style = "bg:color_bg3"
+format = '[[ $symbol( $context) ](fg:#839496 bg:color_bg3)]($style)'
+
+[conda]
+style = "bg:color_bg3"
+format = '[[ $symbol( $environment) ](fg:#839496 bg:color_bg3)]($style)'
+
+[pixi]
+style = "bg:color_bg3"
+format = '[[ $symbol( $version)( $environment) ](fg:color_fg0 bg:color_bg3)]($style)'
+
+[time]
+disabled = false
+time_format = "%R"
+style = "bg:color_bg1"
+format = '[[  $time ](fg:color_fg0 bg:color_bg1)]($style)'
+
+[line_break]
+disabled = false
+
+[character]
+disabled = false
+success_symbol = '[](bold fg:color_green)'
+error_symbol = '[](bold fg:color_red)'
+vimcmd_symbol = '[](bold fg:color_green)'
+vimcmd_replace_one_symbol = '[](bold fg:color_purple)'
+vimcmd_replace_symbol = '[](bold fg:color_purple)'
+vimcmd_visual_symbol = '[](bold fg:color_yellow)'

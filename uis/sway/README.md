@@ -38,10 +38,10 @@ launcher, waybar and the foot terminal.
 | `usr/share/doc/lazyos/*.md` | The seven manual pages the Learn menu opens. |
 | `home/.config/rofi/config.rasi` | Launcher settings: the three modes, `terminal = foot`, matching. |
 | `home/.config/rofi/solarized.rasi` | The solarized look, shared by the launcher, the window switcher and the bar's dmenu. |
-| `home/.config/foot/foot.ini` | Solarized palette, JetBrains Mono and the Nerd Font fallback for the session terminal and the bar's popups. |
+| `home/.config/foot/foot.ini` | Solarized palette, and the font chain that doubles as the icon policy: JetBrains Mono, then Symbols Nerd Font Mono, Font Awesome and Material Design Icons for the session terminal and the bar's popups. |
 | `home/.config/kitty/kitty.conf` | The same theme for **kitty**, if it is installed: nothing in the session starts kitty (foot is `$term`), so this file is only there to keep `apt install kitty` from adding a second, unthemed palette. |
 | `home/.bashrc` | The interactive shell: `ls` is eza, `cat` is bat, `cd` is zoxide, fzf key bindings and the starship prompt (see **The CLI tools**). |
-| `home/.config/starship.toml` | Deboma's prompt: directory and git state in the theme's cyan. |
+| `home/.config/starship.toml` | The powerline prompt in the session palette: user, directory, git, languages, container and time, with glyphs the image's fonts actually draw (see **The CLI tools**). |
 | `etc/profile.d/90-cli-tools.sh` | The CLI environment (`MANPAGER`, `BAT_THEME`, `PATH`), shared by login shells and `~/.bashrc`. |
 | `etc/yt-dlp.conf` | Names Node as yt-dlp's JS runtime (see **The CLI tools**). |
 | `home/.config/foot/screensaver.ini` | The idle screen's terminal: black, no padding, 26 pt, solarized orange foreground. |
@@ -751,7 +751,7 @@ environment and `home/.bashrc` for the interactive shell.
 | `find` | **fd** | Debian's binary is `fdfind`, same symlink. It is also `FZF_DEFAULT_COMMAND`. |
 | `grep` | **ripgrep** | Not aliased: `rg` is not a drop-in for every `grep` flag, and a quietly different grep is a trap. |
 | `cd` | **zoxide** | A `cd` wrapper tries the real path first, so only non-paths jump by frecency. |
-| the prompt | **starship** | Deboma's `starship.toml`, shipped as `~/.config/starship.toml`. |
+| the prompt | **starship** | The powerline prompt in `~/.config/starship.toml`, recoloured to the session palette. |
 | `top` | **btop** | |
 | `man` pager | **bat** | `MANPAGER='sh -c "col -bx | bat -l man -p"'`; `bsdextrautils` supplies `col`, `man-db` supplies `man` itself. |
 
@@ -771,10 +771,18 @@ service or a daemon — `plocate` is deliberately absent because it is `locate` 
 feed Omarchy's own components, which this port does not have. The full rationale is in
 `packages/tools.list`.
 
-**The Nerd Font fallback has to be listed in `foot.ini`.** foot does not fall back through
-fontconfig for a glyph its font lacks — it draws a box — so `font=` names `Symbols Nerd Font Mono`
-after JetBrains Mono (`fonts-nerd-symbols`). That is what makes eza's icons, fastfetch's logo and
-the starship git glyphs render. waybar needs no such line: it is a Pango program.
+**The prompt's glyphs come from fonts `foot.ini` names, in order.** `font=` is also the icon
+policy: foot searches the listed fonts and draws the first one that has the glyph *at that font's
+size*, and only then asks fontconfig's dynamic list. So the chain is JetBrains Mono (the cell),
+then `Symbols Nerd Font Mono` (the DFSG-stripped Nerd Fonts set: eza's icons, fastfetch's logo, the
+starship branch/clock/character glyphs), then `Font Awesome 6 Free Solid` and `Material Design
+Icons version 6` for what that set leaves out (the prompt's folder substitutions), with the three
+icon fonts one point larger than the text because otherwise they sit short of the line. The
+prompt's separators are the triangles `JetBrains Mono` draws itself for the same reason: a glyph
+from the primary font always tiles with the cell, and the rounded caps from the symbol font do not
+(it is `~/.config/starship.toml` that asks for triangles). `check-system.sh` asks fontconfig, per
+codepoint of the prompt, whether the font that draws it is one of these, and FAILs when no font has
+it at all. waybar needs none of this: it is a Pango program.
 
 ## Deviations from the Nura original
 
@@ -786,7 +794,7 @@ the starship git glyphs render. waybar needs no such line: it is a Pango program
   | Glyphs | Package |
   |---|---|
   | Font Awesome, `U+F000`-`U+F2FF` | `fonts-font-awesome-legacy` |
-  | Material Design Icons, plane 15 | `fonts-materialdesignicons-legacy` |
+  | Material Design Icons, plane 15 | `fonts-materialdesignicons-legacy` (the *older* MDI numbering: it has `U+F0219`, not the Nerd Fonts v3 `nf-md` set) |
   | Octicons, Codicons, Devicons, Powerline | `fonts-nerd-symbols` |
 
   `fonts-nerd-symbols` alone is not enough: Debian stripped Font Awesome and Material Design

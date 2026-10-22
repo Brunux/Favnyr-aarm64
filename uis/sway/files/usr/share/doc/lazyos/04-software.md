@@ -72,6 +72,34 @@ kitty keeps its own shortcuts on Ctrl+Shift. The one respect in which it differs
 from foot: kitty draws JetBrains Mono's ligatures (`->`, `!=`), the same bytes
 in a narrower column.
 
+### The prompt
+
+**starship**, in the shape of a powerline: one coloured block per question, left
+to right - who you are, where you are, which branch and what the tree looks like,
+which languages this directory has, which container, what time - then a second
+line that is nothing but the character: cyan `❯` when the last command worked,
+red `✗` when it did not. The blocks are solarized (base3 on orange for the user,
+base02/base01 for time and containers, cyan for git, blue for the languages) and
+the separators are the triangles `U+E0B0`/`U+E0B2`, which is the form that looks
+the same in foot and in kitty.
+
+Two things are worth knowing before editing `~/.config/starship.toml`:
+
+- Most of what you see in the prompt is a *private-use* character, and a
+  character no installed font has is a box - silently, in some terminals and not
+  in others. This image ships the DFSG-stripped Nerd Fonts set, which has no
+  Nerd Fonts v3 `nf-md` glyphs at all, so the OS logo the upstream prompt carried
+  is not here (and neither are the distro logos). Every glyph the shipped prompt
+  uses comes from JetBrains Mono, Symbols Nerd Font Mono, Font Awesome or
+  Material Design Icons, all named in `~/.config/foot/foot.ini`.
+- `check-system.sh` reads the prompt, asks fontconfig which font draws each
+  codepoint and FAILs when the answer is "none", or when the only family that has
+  it is not one foot is given (that one renders small, from fontconfig's
+  fallback). Add a glyph, run the report: it names the codepoint.
+
+`starship prompt` prints what the prompt would look like, and `starship preset
+nerd-font-symbols` is a starting point if you would rather build another one.
+
 The shell is bash with a set of aliases and tools that are worth knowing:
 
 | Instead of | Use | Note |

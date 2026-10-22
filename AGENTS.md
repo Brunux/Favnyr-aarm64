@@ -1543,6 +1543,33 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   a value that does not parse keeps the default in silence; `font_family` is a `FontSpec` namedtuple,
   so the family is its `.system`. SKIP when kitty is not installed, and the manual section is
   `04-software.md` § *kitty, if you install it*.
+- **The prompt is the powerline one, and its glyphs are the reason it looks the same in foot and in
+  kitty.** `uis/sway/files/home/.config/starship.toml` is the maintainer's Deboma config recoloured
+  to the session's palette (the role names are upstream's, the values are solarized's: base3 on the
+  saturated segments, base02/base01 for time and the containers, cyan for git, blue for languages,
+  orange for the user), and it is the distro's prompt rather than the earlier four-line one because
+  directory-and-git alone is what the bar already says. Three decisions are load-bearing. **There is
+  no `$os` segment**: it asked for Nerd Fonts v3 `nf-md` glyphs (Linux `U+F033D`, Debian `U+F08DA`,
+  Arch `U+F08C7`, …), which live in plane 15; `fonts-nerd-symbols` is DFSG-stripped (Octicons,
+  Codicons, Devicons, Seti, Powerline) and `fonts-materialdesignicons-legacy` carries the *older*
+  MDI numbering, so 12 of the 14 codepoints the segment could show have no font at all - measured
+  with `fc-list :charset=<cp>`, which is also what the check asks. **The separators are the triangles
+  `U+E0B0`/`U+E0B2`, not the rounded caps `U+E0B6`/`U+E0B4`**: JetBrains Mono draws the triangles
+  itself, so they tile with the cell at any size, while the caps exist only in the symbol font, which
+  foot draws at *that font's* size and baseline - on the same line, kitty's caps reached the segment
+  and foot's stopped short (both terminals were screenshotted before the choice, and the mismatch is
+  what "kitty looks good, foot does not" was). **Docker and Java use `U+E7B0` and `U+E624`** because
+  `U+F308` and `U+E256` are in no font here. The other half of the same bug is `foot.ini`'s `font=`
+  chain, which is now `JetBrains Mono` followed by `Symbols Nerd Font Mono`, `Font Awesome 6 Free
+  Solid` and `Material Design Icons version 6`, each icon font **one point larger than the text**:
+  foot searches the listed fonts in order and draws the first that has the glyph *at that font's
+  size*, so a stripped-set glyph at 11 pt sat a fifth short of the cell; the old comment claiming
+  foot has no fontconfig fallback at all was wrong (foot.ini(5): *"the dynamic fallback list from
+  fontconfig … is searched"*) and was what hid the sizing half. `check-system.sh` reads the prompt,
+  asks fontconfig which family draws each private-use codepoint and FAILs when the answer is none
+  (the box that logs nothing) and WARNs when the only families that have it are not in foot's chain
+  (the glyph renders small from the fallback), naming the codepoint; the manual section is
+  `04-software.md` § *The prompt*.
 - **`/etc/yt-dlp.conf` names Node as yt-dlp's JS runtime**, for the same reason node is installed at
   all: yt-dlp 2026 needs a JS runtime for YouTube's JS challenges ("EJS"), enables only `deno` by
   default and Debian ships none, so a stock install logs `[debug] JS runtimes: none` and warns that
