@@ -102,6 +102,9 @@ rust/crates/lazyos         multi-call session/system tool (installer host in v0.
 - **Tests are part of the port**: unit tests, `TestBackend` snapshots for the TUI, a loop-device
   diff of the GPT against the shell library before the shell is deleted, a dry run on the card,
   and the hardware checklist for the first real install.
+- **The session framework around the installer** — the design system, the TaskView, the theme
+  engine and the OpenCode/MCP contract — is [`plan-ui.md`](plan-ui.md). The installer TUI is the
+  first consumer of the same widgets.
 
 ## 4. The installer (v0.4)
 
@@ -186,7 +189,9 @@ Rules for every tier:
 - **v0.4.x — Rust session.**
   The 12 logic tools, `lib-rofi.sh`, the 9 bar popups and the 28 rofi menus become `lazyos`
   subcommands; the old paths become symlinks. This is the bulk of the line count and is done one
-  commit per tool/menu, with the key view and the manual regenerated from the same paths.
+  commit per tool/menu, with the key view and the manual regenerated from the same paths. The
+  framework they are hosted in (design system, TaskView, themes, AI/MCP) is
+  [`plan-ui.md`](plan-ui.md).
 - **v0.5.0 — System tools and many devices.**
   `lazyos check` (the same report, with a golden diff against `check-system.sh`), backup/restore,
   Wi-Fi import/export, release/sanitizer, the host disk tools, and the first non-Hayato device
@@ -254,6 +259,8 @@ The first non-Hayato port is the test that the device layer is real.
 
 - [`plan-installer.md`](plan-installer.md) — the installer design: layers, phases, safety, protocol,
   screens, tests, packaging.
+- [`plan-ui.md`](plan-ui.md) — the session UI framework: design system, TaskView, theme engine,
+  and the OpenCode/MCP contract that lets the AI drive the desktop visually.
 - [`plan-rofi.md`](plan-rofi.md) — what of the session can move onto rofi (the menus being ported).
 - [`plan-agents.md`](plan-agents.md) — the agents feature, phased.
 - [`optimization.md`](optimization.md) — the measured device and kernel tuning.

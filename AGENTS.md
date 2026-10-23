@@ -54,6 +54,18 @@ yet present in `scripts/` as not implemented.
   WirePlumber, the portals, gvfs, dconf, mpris) appears. The two agreed exceptions are `exec`'d by
   the sway configuration rather than running as units, which is why their checks are process
   checks and not unit checks.
+- **The session UI moves to one Rust framework, and this bullet records the direction while it is
+  built.** [`docs/plan-ui.md`](docs/plan-ui.md) designs it: Ratatui in foot, one `lazyos`
+  multi-call binary, every old path a symlink (the ~55 bindings and the `.desktop` entries keep
+  working), a TaskView that keeps the user in the loop (a slow action ends by showing its own
+  result, not a toast), a design system, and a theme engine that owns the palette files. Three
+  rules change when a surface is ported, and only then: a **TUI row draws a Nerd Font codepoint**
+  (Font Awesome does not render in foot, which is why the `UI_I_*` alphabet stays for rofi/Pango
+  surfaces); the **palette files are generated** from `theme.toml` (a hand edit is caught by the
+  idempotent-regeneration check, never silently overwritten); and **the AI proposes, the person
+  confirms** - `lazyos mcp` never exposes an apply-level destructive tool (install, format, swap,
+  power), so the MCP manifest is the witness. Nothing here exists yet; `docs/plan-ui.md` §16 is
+  the order, and each tier lands with its three witnesses like everything else.
 
 ## Critical upstream facts
 
