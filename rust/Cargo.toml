@@ -1,6 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["crates/spike-sixel"]
+members = [
+    "crates/lazyos-cli",
+    "crates/lazyos-theme",
+    "crates/lazyos-ui",
+    "crates/spike-sixel",
+]
 
 # The spike is a validation tool, not a shipped binary: it exists to prove that
 # foot + ratatui-image draw a theme PNG and a thumbnail through the sixel
