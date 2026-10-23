@@ -46,6 +46,22 @@ rather than after it closes. `check-system.sh` runs the script against a stub
 `foot` in a temporary state directory to prove the marker is not written on
 failure.
 
+## Workspace pills
+
+| Step | Expected |
+|---|---|
+| look at the bar | the pills are the workspace number plus the glyph of what is open there - **1: >_** for a terminal, **2: 🌐** for Firefox - and a workspace with nothing in it is its bare number |
+| open a second terminal in the same workspace | the pill keeps **one** terminal glyph (`deduplicate_icons`): one glyph per kind of window, not per window |
+| open an app with no line in `~/.config/workstyle/config.toml` (`libreoffice --writer`) | a plain window outline (U+F2D0) in the pill, and **no** workstyle line in `journalctl -b` - an unmapped window is a debug message (see `tools/workstyle/patches/`) |
+| `swaymsg -t get_workspaces \| jq -r '.[] \| "\(.num) \(.name)"'` | the name carries the glyphs and `num` stays the number: anything scripted reads `num`, not `name` |
+| `swaymsg reload`, then `pgrep -c -x workstyle` | `1` - the lockfile keeps a reload from leaving a second copy, and the extra one exits without a log line |
+| `swaymsg exit` from a tty, wait a minute, `pgrep -x workstyle` | nothing: the reconnect loop gives up after 60 tries instead of retrying once a second for the rest of the boot |
+
+A FAIL here means `scripts/check-system.sh` reports it: the binary
+(`scripts/install-workstyle.sh`), the `exec_always` line in
+`/etc/sway/config.d/02-workstyle.conf`, a workspace binding that names a workspace instead of
+`workspace number N`, or a glyph outside the `UI_I_*` alphabet.
+
 ## The desktop wallpaper, the About card, the greeter and the console
 
 | Step | Expected |

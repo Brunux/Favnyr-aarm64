@@ -1,0 +1,54 @@
+Keep the journal quiet and stop retrying a compositor that is not coming back.
+
+Three calls in main.rs are what a long-lived daemon on this image cannot afford:
+
+  * an unmapped window is the *fallback* glyph, a state the pill shows by itself;
+    logging it at error level once per event turns a GTK app nobody mapped into
+    permanent journal noise. debug! keeps the hint for `RUST_LOG=debug workstyle`.
+  * a second instance is the normal case, not a failure: `exec_always` runs on
+    every `swaymsg reload` and the lockfile is what keeps the session at one
+    process. Exiting 1 there is a red line per reload; exiting 0 quietly is the
+    same decision without the line.
+  * the reconnect loop is there for `swaymsg restart` (a couple of seconds), but
+    it never gives up, so a daemon orphaned by a logout retries - one error line
+    per second - for the rest of the boot. Sixty tries is longer than any restart
+    and shorter than a person noticing.
+
+--- a/src/main.rs
++++ b/src/main.rs
+@@ -50,7 +50,7 @@
+             return icon.clone();
+         }
+     }
+-    error!("Couldn't identify window: {window:?}");
++    debug!("Couldn't identify window: {window:?}");
+     info!("Make sure to add an icon for this file in your config file!");
+     config.fallback_icon().into()
+ }
+@@ -88,8 +88,8 @@
+ fn aquire_lock() {
+     // Try to aquire the lock
+     if LOCK.lock().unwrap().is_none() {
+-        error!("Failed to aquire the lock");
+-        exit(1);
++        debug!("another instance is already running");
++        exit(0);
+     }
+ 
+     // Drop the lock on exit
+@@ -139,9 +139,15 @@
+     env_logger::init();
+     let _ = Args::parse();
+     aquire_lock();
++    let mut failures = 0;
+     loop {
+         if let Err(e) = run() {
+             error!("{e:#}");
++            failures += 1;
++            if failures > 60 {
++                error!("giving up after {} failed reconnects", failures);
++                exit(1);
++            }
+             info!("Attempting to reconnect to the WM in 1 second");
+             sleep(Duration::from_secs(1));
+         }

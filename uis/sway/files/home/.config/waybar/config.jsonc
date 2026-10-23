@@ -51,19 +51,23 @@
         "on-click": "~/.config/bin/bar-menu",
         "on-click-right": "foot"
     },
+    // workspace icons: workstyle (tools/workstyle/) renames each workspace to
+    // "3: <glyphs>", one per kind of window in it, and `{value}` is that whole
+    // name - number included, so Alt+3 and the third pill still mean the same
+    // thing, and a workspace with no window keeps its bare number. `{name}`
+    // would drop the number (the module hands back only what is after the
+    // colon) and `{icon}` would do the same.
+    //
+    // No persistent-workspaces on purpose: this module matches that list by
+    // workspace *name*, and workstyle renames the workspaces, so every renamed
+    // pill would come with a duplicate. (The "*": [1, 2, 3, 4, 5] shape this
+    // file used to carry is the Hyprland module's format and drew nothing at
+    // all here - a pill appears when its workspace exists.) `all-outputs`
+    // stays for the day there is a second screen.
     "sway/workspaces": {
         "disable-scroll": true,
         "all-outputs": true,
-        "format": "{name}",
-        "persistent-workspaces": {
-            "*": [
-                1,
-                2,
-                3,
-                4,
-                5
-            ]
-        }
+        "format": "{value}"
     },
     "sway/mode": {
         "format": "<span font_desc='JetBrains Mono 13'>\uf11c</span>  {}",

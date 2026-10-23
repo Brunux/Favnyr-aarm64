@@ -1,36 +1,48 @@
-# Config for workstyle
+# workstyle (tools/workstyle/) gives each workspace pill the icons of the windows
+# in it: workspace 3 becomes "3: <glyphs>", and ~/.config/waybar/config.jsonc
+# draws that name as it is (`"format": "{value}"`).  Every other surface keeps
+# working because the bindings address workspaces by number, never by name.
 #
-# Format:
-# "pattern" = "icon"
+# Format: "<pattern>" = "<glyph>"
 #
-# The pattern will be used to match against the application name, class_id or WM_CLASS.
-# The icon will be used to represent that application.
+# The pattern is matched as a case-insensitive substring of the window's title,
+# then of its app_id, then of its WM_CLASS, and the *first* pattern in this file
+# that matches wins - so the specific app_ids come first and the terminal and the
+# fallback come last.  Titles are matched first by upstream's design; that is why
+# "firefox" sits above "foot" (a Firefox tab titled "... foot ..." must still be
+# a browser).
 #
-# Note if multiple patterns are present in the same application name,
-# precedence is given in order of apparition in this file.
+# Glyphs are written as \uXXXX escapes rather than as literal characters: a
+# private-use character does not survive every editor or transport, and the
+# first attempt at a glyph table in this repository shipped a row of empty
+# spans for exactly that reason.  A TOML basic string parses the escape into the
+# same character, and the file stays ASCII.
+#
+# Every glyph below is a UI_I_* codepoint from ~/.config/bin/lib-rofi.sh, so the
+# menus, the bar's own modules and these pills draw from one alphabet.  That is
+# also what makes them checkable: check-system.sh fails when a codepoint here is
+# not one the alphabet carries, and the alphabet itself is what the report asks
+# the installed fonts about.  A glyph no font draws is a tofu box in the pill,
+# and nothing logs it.
 
-"foot" = ""
-"github" = ""
-"rust" = ""
-"google" = ""
-"private browsing" = ""
-"firefox" = ""
-"chrome" = ""
-"file manager" = ""
-"libreoffice calc" = ""
-"libreoffice writer" = ""
-"libreoffice" = ""
-"nvim" = ""
-"gthumb" = ""
-"menu" = ""
-"calculator" = ""
-"transmission" = ""
-"videostream" = ""
-"mpv" = ""
-"music" = ""
-"disk usage" = ""
-".pdf" = ""
+# foot windows that are not a shell: the file search, the first-boot card and
+# the popup terminals the bar opens (a log, the apt updater, nmtui, the QR code).
+"lazyos-find" = "\uf002"       # f002 UI_I_SEARCH
+"lazyos-welcome" = "\uf05a"    # f05a UI_I_INFO
+"popup" = "\uf120"             # f120 UI_I_TERM
+
+"firefox" = "\uf0ac"           # f0ac UI_I_GLOBE   (firefox-esr too)
+"pcmanfm" = "\uf07b"           # f07b UI_I_FILES
+"papers" = "\uf15c"            # f15c UI_I_FILE    (a document: PDF, DjVu, comic)
+"imv" = "\uf03e"               # f03e UI_I_IMAGE
+"mpv" = "\uf03d"               # f03d UI_I_VIDEO
+"kitty" = "\uf120"             # f120 UI_I_TERM    (installed by the user, if at all)
+"foot" = "\uf120"              # f120 UI_I_TERM
 
 [other]
-fallback_icon = "🤨"
-deduplicate_icons = false
+# One glyph per *kind* of window, not one per window: three terminals in a
+# workspace say the same thing as one, and the pill stays the width of a number.
+deduplicate_icons = true
+# A window no pattern above named: a window outline, and one line at debug level
+# (see tools/workstyle/patches/) instead of an error per workspace event.
+fallback_icon = "\uf2d0"       # f2d0 UI_I_WINDOW

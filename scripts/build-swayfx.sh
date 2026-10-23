@@ -20,10 +20,7 @@ set -euo pipefail
 
 [ -f "$COMPOSITOR_DIR/SHA256SUMS" ] || die "no SHA256SUMS in $COMPOSITOR_DIR"
 
-ARCH="$(dpkg --print-architecture)"
 MULTIARCH="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
-# /sbin is not on a normal user's PATH, and this script runs unprivileged.
-LDCONFIG="$(command -v ldconfig || printf /sbin/ldconfig)"
 # Debian packaging revision: a change to the packaging itself (not the upstream
 # source) bumps this, so apt sees an upgrade.
 PACKAGING_REVISION="1lazyos1"
@@ -101,66 +98,8 @@ DESTDIR="$COMPOSITOR_ROOT" meson install -C "$COMPOSITOR_SRC/build" --strip
 # overlay, so a packaged copy would replace the tested configuration.
 rm -rf "$COMPOSITOR_ROOT/etc"
 
-deb_depends() {
-	# deb_depends <file>...: the packages that own the shared libraries the
-	# given binaries need, as a comma separated list. dpkg-shlibdeps does this
-	# from a debian/ directory; this build has none, so each DT_NEEDED name is
-	# resolved to the real file by the host's ldconfig cache and that exact path
-	# is asked of dpkg. Asking dpkg for the bare soname is not the same thing:
-	# `libc.so.6` also matches the linker script of that name in libc6-dev, and
-	# a -dev package would then end up on the target.
-	local list="" soname path pkg f
-	for f in "$@"; do
-		for soname in $(readelf -d "$f" 2>/dev/null | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
-			path="$("$LDCONFIG" -p | awk -v s="$soname" '$1 == s { print $NF; exit }')"
-			if [ -z "$path" ]; then
-				# libscenefx is built here and packaged by this script, so it is
-				# not in the host's cache; anything else means the build host is
-				# missing a library the binary will need at runtime.
-				case "$soname" in libscenefx-*) ;; *)
-					warn "no library named $soname on this host (needed by $(basename "$f"))"
-					;;
-				esac
-				continue
-			fi
-			pkg="$(dpkg -S "$path" 2>/dev/null | head -n1 | cut -d: -f1)"
-			if [ -z "$pkg" ]; then
-				warn "$path (needed by $(basename "$f")) belongs to no package"
-				continue
-			fi
-			# Keep the list comma separated without spaces while deduplicating
-			# (a pattern cannot look for ", pkg," and ",pkg," at once).
-			case ",$list," in
-			*",$pkg,"*) ;;
-			*) list="${list:+$list,}$pkg" ;;
-			esac
-		done
-	done
-	printf '%s\n' "$list" | sed 's/,/, /g'
-}
-
-build_deb() {
-	# build_deb <tree> <package> <version> <depends> <description> [extra control lines]
-	local tree="$1" name="$2" version="$3" depends="$4" desc="$5" extra="${6:-}"
-	local size
-	size="$(du -sk --exclude=DEBIAN "$tree" | cut -f1)"
-	mkdir -p "$tree/DEBIAN"
-	{
-		printf 'Package: %s\n' "$name"
-		printf 'Version: %s\n' "$version"
-		printf 'Architecture: %s\n' "$ARCH"
-		printf 'Maintainer: %s\n' "LazyOS builder <builder@localhost>"
-		printf 'Installed-Size: %s\n' "$size"
-		if [ -n "$depends" ]; then printf 'Depends: %s\n' "$depends"; fi
-		printf 'Section: x11\n'
-		printf 'Priority: optional\n'
-		if [ -n "$extra" ]; then printf '%s\n' "$extra"; fi
-		printf 'Description: %s\n' "$desc"
-	} >"$tree/DEBIAN/control"
-	dpkg-deb --root-owner-group --build "$tree" \
-		"$COMPOSITOR_STAGE/${name}_${version}_${ARCH}.deb" >/dev/null
-	log "Packaged ${name}_${version}_${ARCH}.deb"
-}
+# deb_depends and build_deb live in scripts/lib.sh: the workstyle build packages
+# its binary the same way, and the Depends list must come from one place.
 
 # Only the runtime library ships: the headers and the pkg-config file are build
 # inputs, and nothing in the image compiles against scenefx.
@@ -173,11 +112,11 @@ mkdir -p "$SCENEFX_PKG/usr/lib/$MULTIARCH"
 cp -a "$SCENEFX_ROOT/usr/lib/$MULTIARCH/libscenefx-$SCENEFX_VERSION.so" "$SCENEFX_PKG/usr/lib/$MULTIARCH/"
 cp -a "$COMPOSITOR_ROOT" "$COMPOSITOR_PKG"
 
-build_deb "$SCENEFX_PKG" "libscenefx-$SCENEFX_VERSION" "$SCENEFX_PKG_VERSION" \
+build_deb "$COMPOSITOR_STAGE" "$SCENEFX_PKG" "libscenefx-$SCENEFX_VERSION" "$SCENEFX_PKG_VERSION" \
 	"$(deb_depends "$SCENEFX_PKG/usr/lib/$MULTIARCH/libscenefx-$SCENEFX_VERSION.so")" \
 	"Effects renderer for wlroots (scenefx $SCENEFX_VERSION)"
 
-build_deb "$COMPOSITOR_PKG" "$COMPOSITOR" "$COMPOSITOR_PKG_VERSION" \
+build_deb "$COMPOSITOR_STAGE" "$COMPOSITOR_PKG" "$COMPOSITOR" "$COMPOSITOR_PKG_VERSION" \
 	"$(deb_depends "$COMPOSITOR_PKG"/usr/bin/*), libscenefx-$SCENEFX_VERSION" \
 	"i3-compatible Wayland compositor (swayfx $COMPOSITOR_VERSION, based on sway)" \
 	"Provides: sway

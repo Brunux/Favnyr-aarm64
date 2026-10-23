@@ -30,6 +30,18 @@ everything above the kernel.
 | notifications | **mako**, bottom of the top-right corner, under the bar |
 | the session | greetd starts sway at boot; swayidle runs the idle screen at 150 s and the lock at 300 s |
 
+**The workspace pills say what is in them.** Each pill is the number of the
+workspace plus one glyph per *kind* of window open there - a terminal, a
+browser, a file manager, a picture, a video, a document - and a workspace with
+nothing in it keeps its bare number. The glyphs are the same alphabet the menus
+draw with, so a terminal in the bar and a terminal in the power menu are the
+same picture. It is the one thing on this system that keeps running in order to
+do it (`workstyle`, about 1 MB), because "where did I leave that window" is a
+question only something watching can answer. The table is
+`~/.config/workstyle/config.toml`: one line per application, matched against its
+title or its app_id, and the next window or workspace change picks it up - no
+restart, and an app with no line of its own shows a plain window outline.
+
 ## The mark
 
 The mark is a prompt: **z_**, a cyan `z` and an orange cursor, and the

@@ -236,7 +236,7 @@ column that markup cannot be parsed out of.
 
 ## Clipboard history and emoji
 
-These two are the batch that took the session its only resident process and its first generated
+These two are the batch that took the session its first resident process and its first generated
 data file, and both are worth the exception:
 
 * **`rofi-clip`** (`Alt+Ctrl+V`) is a list over `cliphist`, which is fed by
@@ -469,7 +469,9 @@ make a name with a space, a tab or a newline one row and one argument. Measured 
 * **`skim`** (Debian has it) is the same program in Rust with no advantage here: it would be a
   second fuzzy finder in a 4 GB image, against one that is already wired into the shell.
 * **`television`/`tv`** is the fast new one and is **not packaged in forky**, so it would mean
-  `cargo` on the device or a vendored binary - the same rule that keeps `workstyle` out.
+  `cargo` on the device or a vendored binary of its own. (workstyle *is* built from a pinned
+  crates.io tarball - `tools/workstyle/`, `scripts/build-workstyle.sh` - because the bar's
+  workspace icons have no other source; a second finder does not earn the same exception.)
 * **`fzy`** is tiny and slower than fzf on big lists, with no preview and no bindings to build on.
 * **fzf's built-in `--walker`** would drop the `fd` dependency for this one feature and is 8 ms
   faster to first paint, but it does **not** read `.gitignore` - on a home full of repos that is
@@ -636,13 +638,42 @@ instead, and nothing survives the click:
 --app-id=popup` (floated by `etc/sway/config.d/25-bar-panels.conf`) runs what needs a real
 terminal, `nmtui` and `bluetoothctl`; `swaynag` shows the power panel.  All of those are already
 in the image for other reasons, so the bar needed no package of its own once rofi replaced the
-launcher.  The bar itself is the only resident process.
+launcher.  The bar is resident; the only other thing that stays is `workstyle`, which renames the
+workspaces it displays (see below).
 
 The scripts are POSIX `sh`, they live in `home/.config/bin/`, and they share `bar-pick`, which holds
 the look of every popup through `~/.config/rofi/solarized.rasi`.  Each one
 documents at the top of the file which Deboma widget it reproduces.  Icons are written in
 `config.jsonc` as `\uXXXX` escapes so the codepoint is readable and survives any editor; they are
 Font Awesome (see the font table below).
+
+### Workspace icons
+
+Each pill is the workspace number plus one glyph per *kind* of window in it - **3: 🖥 🌐** - so
+"where did I leave that window" is answered by the bar. The renaming is **workstyle**'s
+(`tools/workstyle/`, built from its pinned crate because Debian packages no workspace renamer and
+Nura's binary was linked against musl): the session's second resident process after the clipboard
+watcher, and for the same reason - only something watching can say which windows are where. It
+costs about 1 MB (2.4 MB of RSS, 4.7 MB at peak) and no CPU while idle, and it re-reads its config on every workspace or window
+event, so an edit lands on the next switch.
+
+`config.jsonc` draws `"{value}"` - the whole name. `{name}` is only the part after the colon, so it
+would drop the number and leave the glyphs; `{icon}` behaves the same. `persistent-workspaces` is
+deliberately gone: this module matches that list by workspace *name*, so a renamed workspace would
+get a duplicate pill beside it (and in the `"*": [1, 2, 3, 4, 5]` shape it carried before - the
+*Hyprland* module's format - it drew nothing at all).
+
+`home/.config/workstyle/config.toml` is the table: `"pattern" = "\uXXXX"` per application, the
+glyph being a `UI_I_*` codepoint from `lib-rofi.sh` so the pills use the same alphabet as the
+menus. Patterns match a case-insensitive substring of the title, then the app_id, then the class,
+and the first match in the file wins - `firefox` sits above `foot` so a browser tab titled after a
+terminal is still a browser, and the foot windows with their own app_id (`popup`, `lazyos-find`,
+`lazyos-welcome`) sit above it too. `deduplicate_icons = true` makes three terminals one glyph, and
+a window nobody mapped draws a plain window outline instead of nothing.
+
+Renaming is what breaks anything that addresses a workspace by *name*, so the configuration says
+`workspace number 3` everywhere and `check-system.sh` fails on a line that does not. The `swaymsg
+-t get_workspaces` name carries the glyphs; `num` is the field to read.
 
 ### Refreshing
 
@@ -661,7 +692,6 @@ bar.
 
 * **weather**, **elsewhen** (time until the next calendar event), **indicators** and **agents**:
   none of them is a control, and each one is another process or network call.
-* **workstyle** (workspace icons) is not packaged in Debian; see above.
 * **Power profiles** in the power panel need `power-profiles-daemon`, a resident daemon and a
   D-Bus service for a setting that is not exposed through sysfs on this SoC.  The panel shows the
   readings instead; add the package to `packages.list` if the profiles matter more than the memory.
@@ -804,16 +834,14 @@ it at all. waybar needs none of this: it is a Pango program.
   `fonts-nerd-symbols` alone is not enough: Debian stripped Font Awesome and Material Design
   Icons from it for DFSG reasons, so every waybar icon would render as a tofu box with the hex
   codepoint inside. Nothing else in the configuration changes.
-* **workstyle is not installed.** It is not packaged in Debian and the Nura
-  build was a cargo binary linked against musl (it cannot run against glibc).
-  It renames workspaces to icons; the waybar theme shows workspace numbers, so
-  nothing is missing visually. `home/.config/workstyle/config.toml` is kept so
-  that enabling it later needs no extra configuration:
-
-  ```sh
-  cargo install workstyle
-  echo 'exec_always --no-startup-id workstyle' >/etc/sway/config.d/03-workstyle.conf
-  ```
+* **workstyle renames the workspaces, and is built here.** Debian packages no workspace
+  renamer and Nura's binary was linked against musl (it cannot run against glibc), so
+  `tools/workstyle/` pins the 0.8.2 crate, `scripts/build-workstyle.sh` builds it into a `.deb`
+  and `scripts/install-workstyle.sh` installs it (`scripts/build.sh` does both). The session
+  starts it from `etc/sway/config.d/02-workstyle.conf`, the bar draws the renamed name with
+  `"format": "{value}"`, and `home/.config/workstyle/config.toml` is the icon table - one
+  `UI_I_*` codepoint per app, written as a `\uXXXX` escape. See **Workspace icons** (under *The
+  bar*) and `tools/workstyle/README.md`.
 
 * **Bluetooth needs `bluez`, not just the PipeWire plugin.** `libspa-0.2-bluetooth` only gives
   PipeWire a D-Bus client for `org.bluez`; the daemon that actually powers the controller up

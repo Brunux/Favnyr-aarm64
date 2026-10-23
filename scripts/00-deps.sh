@@ -33,7 +33,7 @@ if command -v apk >/dev/null 2>&1; then
 		rust rust-bindgen rust-src rustfmt \
 		openssl openssl-dev elfutils-dev pahole \
 		perl python3 \
-		findutils rsync cpio \
+		findutils rsync cpio patch \
 		xz zstd lz4 gzip \
 		git curl wget \
 		dtc kmod \
@@ -73,7 +73,7 @@ elif command -v apt-get >/dev/null 2>&1; then
 		rustc rust-src cargo bindgen \
 		libssl-dev libelf-dev dwarves \
 		perl python3 \
-		findutils rsync cpio \
+		findutils rsync cpio patch \
 		xz-utils zstd lz4 gzip \
 		git curl wget ca-certificates \
 		device-tree-compiler kmod \

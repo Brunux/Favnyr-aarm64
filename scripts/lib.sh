@@ -128,6 +128,23 @@ require_compositor() {
 }
 
 # ---------------------------------------------------------------------------
+# Session tools built from source
+# ---------------------------------------------------------------------------
+# workstyle renames every workspace to "<number>: <icons>", one glyph per window
+# in it, so the bar's pills say what is running where. Debian packages no
+# workspace renamer, so tools/workstyle/ pins the crates.io tarball (+ a patch)
+# and scripts/build-workstyle.sh turns it into a .deb under $WORKSTYLE_STAGE.
+# It is the session's only daemon besides cliphist's clipboard watcher.
+WORKSTYLE="workstyle"
+WORKSTYLE_DIR="$REPO_DIR/tools/$WORKSTYLE"
+[ -d "$WORKSTYLE_DIR" ] || die "session tool '$WORKSTYLE' not found in $REPO_DIR/tools"
+WORKSTYLE_VERSION="$(cat "$WORKSTYLE_DIR/version")"
+WORKSTYLE_STAGE="$WORK_DIR/$WORKSTYLE-stage"
+WORKSTYLE_SRC="$SRC_DIR/$WORKSTYLE-$WORKSTYLE_VERSION"
+WORKSTYLE_TARBALL="$WORKSTYLE-$WORKSTYLE_VERSION.crate"
+WORKSTYLE_URL="https://static.crates.io/crates/$WORKSTYLE/$WORKSTYLE_TARBALL"
+
+# ---------------------------------------------------------------------------
 # Agents
 # ---------------------------------------------------------------------------
 # The Agents menu (uis/*/files/home/.config/bin/rofi-agents) launches the
@@ -145,6 +162,76 @@ OPENCODE_DIR="$REPO_DIR/tools/$OPENCODE"
 OPENCODE_VERSION="$(cat "$OPENCODE_DIR/version")"
 OPENCODE_TARBALL="$OPENCODE-cli-linux-arm64-$OPENCODE_VERSION.tgz"
 OPENCODE_URL="https://registry.npmjs.org/@opencode/cli-linux-arm64/-/cli-linux-arm64-$OPENCODE_VERSION.tgz"
+
+# ---------------------------------------------------------------------------
+# Packaging things built here as .debs
+# ---------------------------------------------------------------------------
+# build_deb <outdir> <tree> <package> <version> <depends> <description> [extra control lines]
+# The tree is the payload as it will land on the target (/usr/...); DEBIAN is
+# created in it. No debian/ directory and no dpkg-buildpackage are involved,
+# because nothing here is built from a Debian source package.
+build_deb() {
+	local outdir="$1" tree="$2" name="$3" version="$4" depends="$5" desc="$6" extra="${7:-}"
+	local arch size
+	arch="$(dpkg --print-architecture)"
+	size="$(du -sk --exclude=DEBIAN "$tree" | cut -f1)"
+	mkdir -p "$tree/DEBIAN" "$outdir"
+	{
+		printf 'Package: %s\n' "$name"
+		printf 'Version: %s\n' "$version"
+		printf 'Architecture: %s\n' "$arch"
+		printf 'Maintainer: %s\n' "LazyOS builder <builder@localhost>"
+		printf 'Installed-Size: %s\n' "$size"
+		if [ -n "$depends" ]; then printf 'Depends: %s\n' "$depends"; fi
+		printf 'Section: x11\n'
+		printf 'Priority: optional\n'
+		if [ -n "$extra" ]; then printf '%s\n' "$extra"; fi
+		printf 'Description: %s\n' "$desc"
+	} >"$tree/DEBIAN/control"
+	dpkg-deb --root-owner-group --build "$tree" "$outdir/${name}_${version}_${arch}.deb" >/dev/null
+	log "Packaged ${name}_${version}_${arch}.deb"
+}
+
+# deb_depends <file>...: the packages that own the shared libraries the given
+# binaries need, as a comma separated list. dpkg-shlibdeps does this from a
+# debian/ directory; this build has none, so each DT_NEEDED name is resolved to
+# the real file by the host's ldconfig cache and that exact path is asked of
+# dpkg. Asking dpkg for the bare soname is not the same thing: `libc.so.6` also
+# matches the linker script of that name in libc6-dev, and a -dev package would
+# then end up on the target.
+deb_depends() {
+	local list="" soname path pkg f
+	# /sbin is not on a normal user's PATH, and this runs unprivileged.
+	local ldconfig
+	ldconfig="$(command -v ldconfig || printf /sbin/ldconfig)"
+	for f in "$@"; do
+		for soname in $(readelf -d "$f" 2>/dev/null | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p'); do
+			path="$("$ldconfig" -p | awk -v s="$soname" '$1 == s { print $NF; exit }')"
+			if [ -z "$path" ]; then
+				# A library built by the same script (libscenefx) is not in the
+				# host's cache yet; anything else means the build host is missing
+				# a library the binary will need at runtime.
+				case "$soname" in libscenefx-*) ;; *)
+					warn "no library named $soname on this host (needed by $(basename "$f"))"
+					;;
+				esac
+				continue
+			fi
+			pkg="$(dpkg -S "$path" 2>/dev/null | head -n1 | cut -d: -f1)"
+			if [ -z "$pkg" ]; then
+				warn "$path (needed by $(basename "$f")) belongs to no package"
+				continue
+			fi
+			# Keep the list comma separated without spaces while deduplicating
+			# (a pattern cannot look for ", pkg," and ",pkg," at once).
+			case ",$list," in
+			*",$pkg,"*) ;;
+			*) list="${list:+$list,}$pkg" ;;
+			esac
+		done
+	done
+	printf '%s\n' "$list" | sed 's/,/, /g'
+}
 
 # ---------------------------------------------------------------------------
 # Boot chain (depthcharge / ChromeOS GPT)
@@ -203,6 +290,7 @@ KPART="${KPART:-$WORK_DIR/$DEVICE.vmlinuz.kpart}"
 
 export REPO_DIR BUILD_ROOT WORK_DIR SRC_DIR DEVICE DEVICE_DIR KERNEL_DIR
 export UI UIS_DIR UI_DIR WIFI_DIR
+export WORKSTYLE WORKSTYLE_DIR WORKSTYLE_VERSION WORKSTYLE_STAGE
+export OPENCODE OPENCODE_DIR OPENCODE_VERSION OPENCODE_TARBALL OPENCODE_URL
 export LOCALE TIMEZONE
 export BOOT_SIZE_MIB BOOT_FS KERNEL_RELEASE
-export OPENCODE OPENCODE_DIR OPENCODE_VERSION OPENCODE_TARBALL OPENCODE_URL

@@ -557,3 +557,45 @@ clear and repaint between effects.
   an effect runs went to `tte` (which ignores it) and not to the script's `read -t 1` poll: the screen
   survived the key until the effect ended. Starting `tte` with stdin on `/dev/null` gave the poll the
   only reader, and the dismissal is immediate.
+
+## 11. The workspace renamer
+
+The bar's pills have to say what is running where, and the only way to know that is to watch: sway
+tells nobody which windows are in a workspace unless somebody keeps the IPC connection open.
+`workstyle` (built here from its pinned crate, `tools/workstyle/`) opens one connection, blocks on
+the event stream, and issues one `rename workspace to` when the set of windows in a workspace
+changes. That is the whole loop, and it is the session's second resident process.
+
+### Method
+
+The shipped binary (`workstyle 0.8.2-1lazyos1`, `/usr/bin/workstyle`) started by the session with
+the shipped config, one foot window in workspace 1 and Firefox in workspace 2. RSS and PSS are
+`/proc/<pid>/status` and `/proc/<pid>/smaps_rollup` on the running daemon; CPU is `utime+stime` from
+`/proc/<pid>/stat` sampled 60 s apart with nothing else running. The rename itself is what `swaymsg`
+reports for the same command; it is a single IPC round trip.
+
+### What it costs
+
+| | Value |
+|---|---|
+| binary / package | 1.9 MB installed, 584 KB `.deb` |
+| VmRSS | 2.4 MB (peak 4.7 MB, right after the first rename) |
+| PSS | 1.0 MB (152 KB of it private-dirty; the rest is the mapped binary's shared text) |
+| CPU while idle | 0 ticks in 60 s (`utime+stime` unchanged) |
+| per workspace event | one `rename workspace to` IPC command, plus rewriting that workspace's name |
+
+The rename is not free but it is bounded by the number of workspaces that *have* windows - in
+practice one or two - and it happens on window open/close/move, not on every key press. The
+alternative measured and rejected was waybar's own `{windows}` with `window-rewrite`: it needs no
+process at all, and it was verified drawing a terminal glyph in the pill on this machine, but it
+draws the windows *inside the bar's pill* and leaves the workspace name bare - `swaymsg -t
+get_workspaces`, and therefore anything scripted, and any other bar, keeps seeing `3`. workstyle
+renames the workspace itself, so every surface agrees about what is in workspace 3, and it is what
+Nura ran.
+
+### What it must not become
+
+* **No polling.** The daemon waits on the socket; a 1 s `swaymsg -t get_tree` loop would wake the
+  CPU 86 400 times a day and rewrite every name each time. The measured 0 ticks is the point.
+* **No extra icons per window.** `deduplicate_icons = true` keeps a workspace of three terminals one
+  glyph, which is both a shorter pill and less work per event.

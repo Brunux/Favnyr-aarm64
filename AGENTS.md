@@ -43,9 +43,10 @@ yet present in `scripts/` as not implemented.
   dependency disappears, a paragraph in `usr/share/doc/lazyos/` (the manual is what a person
   reads on the device), and a bullet in this file that says why it is built this way.
 - **Nothing resident.** Menus are one-shot rofi scripts and a viewer is the viewer's own window,
-  so the session starts nothing that stays (`cliphist`'s watcher is the one agreed exception: no
-  history without a watcher). A slow action gets a `busy` card **and** a bar spinner, and says
-  whether it can be stopped.
+  so the session starts nothing that stays. Two agreed exceptions, both because only something
+  watching can answer the question: `cliphist`'s watcher (no history without one) and `workstyle`
+  (which windows are in which workspace, see the UI section). A slow action gets a `busy` card
+  **and** a bar spinner, and says whether it can be stopped.
 
 ## Critical upstream facts
 
@@ -273,8 +274,9 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   configuration, and apt swaps it for Debian's sway (and back) instead of refusing.
 - **`uis/sway/packages.list` does not list `sway`**, because that would install Debian's plain one.
   A rootfs is therefore useless until `scripts/install-swayfx.sh` has run: the order is
-  `build-rootfs.sh` → `install-kernel.sh` → `install-swayfx.sh` → `make-kpart.sh` (`build.sh` does
-  all four). On a running system `install-swayfx.sh /` is the counterpart of `install-kpart.sh`.
+  `build-rootfs.sh` → `install-kernel.sh` → `install-swayfx.sh` → `install-workstyle.sh` →
+  `make-kpart.sh` (`build.sh` does all five). On a running system `install-swayfx.sh /` and
+  `install-workstyle.sh /` are the counterparts of `install-kpart.sh`.
 - **The .deb deliberately does not carry `/etc/sway/config`.** Upstream installs its sample there,
   and `install-swayfx.sh` runs *after* `rootfs-setup.sh` has overlaid `uis/sway/files/`, so a
   packaged copy would replace the solarized, tested configuration. The build deletes `etc/` from the
@@ -601,9 +603,46 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `xwayland` is in `uis/sway/packages.list` (25 extra packages: the X libraries);
   `check-system.sh` warns when it is missing, unless the session deliberately disables it with
   `xwayland disable`.
-- **workstyle** (renames workspaces to icons) is not packaged in Debian; Nura ran a cargo build
-  linked against musl, which cannot run against glibc. Its drop-in is not shipped, but
-  `~/.config/workstyle/config.toml` is kept so `cargo install workstyle` is enough to enable it.
+- **workstyle gives every workspace pill the icons of what is in it**, and it is the session's
+  second resident process after `cliphist`'s clipboard watcher. Each workspace is renamed to
+  `"<number>: <icons>"` (bare `<number>` when it is empty), `~/.config/waybar/config.jsonc` draws
+  `"{value}"` - the whole name, because `{name}` is only what follows the colon and would drop the
+  number - and the keys keep agreeing with the pills because every binding says
+  `workspace number 3`. Debian packages no workspace renamer, upstream's answer is
+  `cargo install workstyle`, and the binary Nura ran was linked against musl (it cannot run against
+  this image's glibc); `tools/workstyle/` therefore pins the published **0.8.2** crate (git master
+  still says 0.3.0 against `swayipc` 2.7, and 0.8.2 is the release that has the TOML config and
+  `deduplicate_icons`) and `scripts/build-workstyle.sh` builds it into a `.deb` with
+  `cargo --release --locked` - the tarball carries its `Cargo.lock`, so the fetched crates are the
+  versions that release was tested with - and a generated `Depends`. It earns the exception the way
+  the clipboard watcher does, and no more: nothing can answer "which windows are in this workspace"
+  without watching, it blocks on sway's event stream (0 CPU ticks in 60 s), it costs **1 MB of PSS**
+  (2.4 MB of RSS, 4.7 MB at peak), and it re-reads its config on every event, so an edit lands on the
+  next switch (method and numbers: `docs/optimization.md` §11). **Three patched
+  lines** (`tools/workstyle/patches/`) are each a failure this image would otherwise live with: an
+  unmapped window logged at `error!` becomes `debug!` (the fallback glyph is the visible signal,
+  and any app nobody mapped would otherwise add a journal line per workspace event); a second
+  instance that finds the lockfile taken exits 0 at debug level instead of 1, because `exec_always`
+  reaches that line on *every* `swaymsg reload`; and the reconnect loop - which exists for
+  `swaymsg restart` - gives up after 60 tries, so a daemon orphaned by a logout cannot retry once a
+  second until the next boot. **The bar's `persistent-workspaces` turned out to be dead config**:
+  `"*": [1, 2, 3, 4, 5]` is the *Hyprland* module's shape and the sway module matches that list by
+  workspace *name*, so it drew nothing at all - and with workstyle it would draw a duplicate pill
+  beside every renamed workspace, which is why it is gone rather than fixed. **The glyphs are the
+  `UI_I_*` alphabet** from `lib-rofi.sh` (terminal, globe, folder, image, video, document, and a
+  window outline for "nobody mapped this one"), written as `\uXXXX` escapes so the file stays
+  ASCII - a literal private-use character does not survive every editor, which is how an earlier
+  glyph table in this repository shipped as a row of empty spans - and `check-system.sh` FAILs on a
+  codepoint the alphabet does not carry, because nothing else checks whether a font draws it and a
+  pill with no glyph logs nothing. Patterns are case-insensitive substrings of the title, then the
+  app_id, then the class, first in the file wins: `firefox` sits above `foot` so a browser tab whose
+  title mentions a terminal is still a browser, and `popup`/`lazyos-find`/`lazyos-welcome` are foot
+  windows with their own app_id and are named above `foot` for the same reason.
+  `deduplicate_icons = true` keeps a pill the width of a number. Renaming is what breaks
+  name-addressed workspaces, so the same check FAILs when a binding or command names a workspace
+  instead of using `number`. `install-workstyle.sh` installs with `dpkg --root` (no chroot: its only
+  dependencies are the C library and the compiler runtime), and the manual paragraph is
+  `01-welcome.md` § *What is on the screen*.
 - **The launcher, the window switcher and the bar's dmenu are all `rofi` 2.0** (Debian's `rofi`;
   +6 packages / 1.75 MB over the previous set). `$mod+d` = `rofi -show drun` (the
   `.desktop` entries, including the port's own `usr/share/applications/org.lazyos.*`), `$mod+Tab` =
@@ -1791,9 +1830,11 @@ Large artifacts go to `$HOME/.cache/debian-aarch64` (`WORK_DIR`, `SRC_DIR`).
 scripts/00-deps.sh          # install host build deps (apk or apt), re-execs via sudo
 scripts/build-kernel.sh     # mainline 7.2.7 + patches + config  -> $WORK_DIR/kernel-stage
 scripts/build-swayfx.sh     # scenefx + swayfx from source     -> $WORK_DIR/swayfx-stage
+scripts/build-workstyle.sh  # workstyle from its pinned crate  -> $WORK_DIR/workstyle-stage
 scripts/build-rootfs.sh     # debootstrap Debian forky rootfs    -> $WORK_DIR/rootfs
 scripts/install-kernel.sh   # copy staged kernel into the rootfs, depmod, initramfs
 scripts/install-swayfx.sh   # install the compositor .debs (rootfs by default, `/` for a running system)
+scripts/install-workstyle.sh # install the workspace renamer .deb (rootfs by default, `/` for a running system)
 scripts/make-kpart.sh       # signed depthcharge FIT kpart       -> $WORK_DIR/vmlinuz.kpart
 scripts/make-icons.sh       # Font Awesome glyphs -> the LazyOS icon theme PNGs (host tool, committed output)
 scripts/make-brand.sh       # brand/lazyos.svg -> the icon, the SVG and the wordmark (host tool, committed output)
@@ -1809,7 +1850,7 @@ scripts/wifi.sh export      # saved NetworkManager Wi-Fi profiles -> $WIFI_DIR
 scripts/wifi.sh import      # $WIFI_DIR -> a rootfs (drops interface-name=)
 scripts/check-system.sh     # (on the booted image) hardware + configuration report
 
-scripts/build.sh            # full pipeline (kernel + compositor + rootfs + kernel + compositor + kpart)
+scripts/build.sh            # full pipeline (kernel + compositor + workstyle + rootfs + kernel + compositor + workstyle + kpart)
 ```
 
 `scripts/lib-cgpt.sh` holds the one copy of the ChromeOS GPT layout, used by `write-sd.sh`,

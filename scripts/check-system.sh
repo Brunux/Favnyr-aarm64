@@ -668,6 +668,81 @@ else
 	warn "commands referenced by the sway configuration are missing:$_missing_cmds"
 fi
 
+# Workspace icons: workstyle renames every workspace to "<number>: <icons>" and
+# the bar draws that name back ("format": "{value}"). Four things have to hold at
+# once, and each one of them fails silently on its own: the binary, the exec line
+# that starts it, a pill that is not trimmed back to its number, and glyphs that
+# the menus' own alphabet carries (a codepoint from nowhere else is a tofu box in
+# the pill, and nothing logs it).
+if [ ! -x /usr/bin/workstyle ]; then
+	fail "/usr/bin/workstyle is missing: every pill keeps its bare number and the workspace names stay bare (run scripts/install-workstyle.sh)"
+else
+	ok "workstyle installed ($(/usr/bin/workstyle --version 2>/dev/null | head -n1))"
+	if grep -rqsE '^[[:space:]]*exec(_always)?[[:space:]]+.*workstyle' \
+		/etc/sway/config /etc/sway/config.d 2>/dev/null; then
+		ok "the sway configuration starts workstyle"
+	else
+		fail "no exec line starts workstyle (/etc/sway/config.d/02-workstyle.conf): the workspace names are never rewritten"
+	fi
+	if pgrep -x workstyle >/dev/null 2>&1; then
+		ok "workstyle is running"
+	else
+		warn "workstyle is not running: the workspace names stay as they are until it starts (swaymsg reload starts it again)"
+	fi
+	_bar_cfg="$HOME/.config/waybar/config.jsonc"
+	if grep -A 14 '"sway/workspaces"' "$_bar_cfg" 2>/dev/null | grep -q 'persistent-workspaces'; then
+		warn "the bar's workspaces module still carries persistent-workspaces: it is matched by workspace *name*, so every renamed workspace draws a duplicate pill beside it"
+	fi
+	if grep -A 14 '"sway/workspaces"' "$_bar_cfg" 2>/dev/null | grep -q '"format": "{value}"'; then
+		ok "the bar draws the whole workspace name (number and icons)"
+	elif [ -r "$_bar_cfg" ]; then
+		warn "the bar's workspaces format is not \"{value}\": {name} keeps only what is after the colon, so the number disappears from the pill"
+	fi
+	_ws_conf="$HOME/.config/workstyle/config.toml"
+	if [ ! -r "$_ws_conf" ]; then
+		fail "$_ws_conf is missing: workstyle writes its own default there, which knows none of this session's apps"
+	else
+		# The glyphs are \uXXXX escapes, so the file stays ASCII (a literal
+		# private-use character does not survive every editor, which is how an
+		# earlier glyph table in this repository shipped as empty spans). Each one
+		# has to be a codepoint ~/.config/bin/lib-rofi.sh already carries: the font
+		# check below is what proves some installed font draws those.
+		_ws_hexes="$(sed -n 's/.*"\\u\([0-9a-fA-F]\{4\}\)".*/\1/p' "$_ws_conf" | tr 'A-F' 'a-f' | sort -u)"
+		_ws_alphabet="$(sed -n 's/^UI_I_[A-Z_]*=.*#[[:space:]]*\([0-9a-f][0-9a-f]*\)$/\1/p' \
+			"$HOME/.config/bin/lib-rofi.sh" 2>/dev/null | sort -u)"
+		_ws_stray=""
+		for _h in $_ws_hexes; do
+			grep -qx "$_h" <<<"$_ws_alphabet" || _ws_stray="$_ws_stray U+$_h"
+		done
+		if [ -z "$_ws_hexes" ]; then
+			fail "no glyph parsed from $_ws_conf (every pill would show a bare number)"
+		elif [ -n "$_ws_stray" ]; then
+			fail "workstyle uses glyph(s) the menu alphabet does not carry:$_ws_stray (nothing checks whether a font draws them, and a pill with no glyph is a hole)"
+		else
+			ok "workspace icons use $(printf '%s\n' $_ws_hexes | wc -l) codepoints from the menu alphabet"
+		fi
+		# A line this check cannot read is either a typo or a construct the daemon
+		# parses differently. A TOML parse error is loud in the journal (one retry
+		# per second) and silent in the bar (the old names stay), so it is worth
+		# saying once here.
+		_ws_bad="$(grep -vE '^[[:space:]]*(#|$)' "$_ws_conf" |
+			grep -cvE '^("[^"]*"[[:space:]]*=[[:space:]]*"\\u[0-9a-fA-F]{4}"|\[other\]|[a-z_]+[[:space:]]*=[[:space:]]*("[^"]*"|true|false))[[:space:]]*(#.*)?$' ||
+			true)"
+		[ "${_ws_bad:-0}" -eq 0 ] ||
+			warn "$_ws_bad line(s) of $_ws_conf do not look like \"pattern\" = \"\\uXXXX\": a parse error leaves workstyle retrying once a second"
+	fi
+fi
+# workstyle renames workspaces, so a command that names one ("workspace 3")
+# targets a name that is about to change; `workspace number 3` is the form that
+# keeps working, and it is what this configuration already uses everywhere.
+_ws_named="$(grep -rnE '^[[:space:]]*[^#[:space:]][^#]*workspace[[:space:]]+[0-9]' \
+	/etc/sway/config /etc/sway/config.d 2>/dev/null | head -n 3 || true)"
+if [ -z "$_ws_named" ]; then
+	ok "sway addresses workspaces by number, so renaming them does not break a binding"
+else
+	fail "a command names a workspace instead of its number: $(printf '%s' "$_ws_named" | tr '\n' ' ')(workstyle renames workspaces, so that name will not exist)"
+fi
+
 # kitty is the optional second terminal: nothing in the session starts it (foot is
 # $term, the bar's popups, and every menu that needs a terminal) and no package
 # list installs it, but the image ships its configuration so that `apt install
