@@ -230,7 +230,7 @@ impl Theme {
                 .unwrap_or_else(|| surface.mix(c.background, 0.35)),
             faint: stated
                 .faint
-                .unwrap_or_else(|| c.foreground.mix(c.background, 0.45)),
+                .unwrap_or_else(|| c.foreground.mix(c.background, 0.60)),
             danger_bg: stated
                 .danger_bg
                 .unwrap_or_else(|| stated.danger.unwrap_or(c.regular1).mix(c.background, 0.82)),

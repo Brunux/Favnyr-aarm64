@@ -51,6 +51,7 @@ pub fn run(resolved: &Resolved) -> i32 {
         Some((&"list" | &"ls", [])) => list(&paths),
         Some((&"current", [])) => current(&paths),
         Some((&"validate", rest)) => validate(rest),
+        Some((&"preview", rest)) => preview(&paths, rest),
         Some((&"next", rest)) => next(&paths, rest),
         Some((&"wallpaper", rest)) if *rest == ["next"] => wallpaper_next(&paths),
         Some((&"diff", rest)) => diff(&paths, rest),
@@ -74,6 +75,7 @@ fn usage() -> i32 {
     eprintln!("  next       the next theme in the cycle (Alt+Shift+T)");
     eprintln!("  current    the active theme, as `slug<TAB>name`");
     eprintln!("  validate   parse and check the built-ins (or the names given)");
+    eprintln!("  preview [NAME]  the palette as a card: roles, the 16 ANSI swatches, the ratios");
     eprintln!("  wallpaper next  the next wallpaper of the active theme (Alt+Shift+W)");
     eprintln!(
         "  diff [--quiet]  compare every surface with a fresh render (the idempotence witness)"
@@ -142,6 +144,100 @@ fn validate(names: &[&str]) -> i32 {
         }
     }
     if failed == 0 { EXIT_OK } else { EXIT_FAILED }
+}
+
+/// The palette as a card, in the terminal it is printed in.
+///
+/// A preview, not a window: truecolour blocks are what the theme will look like,
+/// they work over ssh, and nothing has to be installed to see them. The ratios
+/// are the same function `validate` refuses a theme with, so the card explains
+/// the refusal it would get.
+fn preview(paths: &Paths, rest: &[&str]) -> i32 {
+    let slug = match rest.iter().find(|arg| !arg.starts_with("--")) {
+        Some(slug) => (*slug).to_string(),
+        None => match store::active(paths) {
+            Some(slug) => slug,
+            None => "solarized".to_string(),
+        },
+    };
+    let theme = match theme(&slug) {
+        Ok(theme) => theme,
+        Err(error) => {
+            eprintln!("lazyos theme preview: {error}");
+            return EXIT_USAGE;
+        }
+    };
+    let swatch = |colour: lazyos_theme::Hex| {
+        let c = colour.0;
+        format!("\x1b[48;2;{};{};{}m    \x1b[0m", c.r, c.g, c.b)
+    };
+    say!("{} ({})", theme.name, slug);
+    if !theme.author.is_empty() {
+        say!("by {}", theme.author);
+    }
+    if !theme.source.is_empty() {
+        say!("{}", theme.source);
+    }
+    say!();
+    say!("roles");
+    for (name, colour) in theme.roles().table() {
+        say!("  {} {name:<14} {}", swatch(colour), colour.hashed());
+    }
+    say!();
+    say!("the sixteen");
+    let c = theme.colors;
+    let ansi = [
+        ("background", c.background),
+        ("regular0", c.regular0),
+        ("regular1", c.regular1),
+        ("regular2", c.regular2),
+        ("regular3", c.regular3),
+        ("regular4", c.regular4),
+        ("regular5", c.regular5),
+        ("regular6", c.regular6),
+        ("regular7", c.regular7),
+        ("bright0", c.bright0),
+        ("bright1", c.bright1),
+        ("bright2", c.bright2),
+        ("bright3", c.bright3),
+        ("bright4", c.bright4),
+        ("bright5", c.bright5),
+        ("bright6", c.bright6),
+        ("bright7", c.bright7),
+    ];
+    for row in ansi.chunks(8) {
+        let cells: Vec<String> = row
+            .iter()
+            .map(|(_, colour)| format!("{} {}", swatch(*colour), colour.bare()))
+            .collect();
+        say!("  {}", cells.join("  "));
+        let names: Vec<String> = row.iter().map(|(name, _)| format!("{name:<12}")).collect();
+        say!("  {}", names.join("  "));
+    }
+    say!();
+    say!("contrast against the background");
+    let roles = theme.roles();
+    for (name, floor) in [
+        ("text", 4.5),
+        ("accent", 3.0),
+        ("danger", 3.0),
+        ("warn", 3.0),
+        ("ok", 3.0),
+        ("info", 3.0),
+    ] {
+        let colour = match name {
+            "text" => roles.text,
+            "accent" => roles.accent,
+            "danger" => roles.danger,
+            "warn" => roles.warn,
+            "ok" => roles.ok,
+            _ => roles.info,
+        };
+        let ratio = lazyos_theme::contrast::ratio(colour.0, c.background.0);
+        let verdict = if ratio >= floor { "ok" } else { "BELOW FLOOR" };
+        say!("  {name:<8} {ratio:>5.1}:1  (floor {floor:.1})  {verdict}");
+    }
+    EXIT_OK
 }
 
 fn next(paths: &Paths, rest: &[&str]) -> i32 {

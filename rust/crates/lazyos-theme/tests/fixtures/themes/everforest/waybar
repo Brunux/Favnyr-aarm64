@@ -60,7 +60,7 @@ tooltip label {
 #custom-menu          { color: #a7c080; } /* cyan */
 #custom-busy          { color: #dbbc7f; } /* yellow: something is happening */
 #custom-updates       { color: #dbbc7f; } /* yellow */
-#custom-keyboard-layout { color: #888578; }
+#custom-keyboard-layout { color: #6f6f67; }
 #custom-bluetooth     { color: #8d897b; }
 #custom-bluetooth.on  { color: #7fbbb3; } /* blue */
 #custom-vnc           { color: #dbbc7f; } /* yellow: this session is being served */
@@ -158,7 +158,7 @@ tooltip label {
 #workspaces button:hover {
     background: #8d897b;
     color: #d3c6aa;
-    border-color: #888578;
+    border-color: #6f6f67;
 }
 
 #workspaces button.focused,

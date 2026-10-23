@@ -10,5 +10,5 @@ output * bg /home/lazy/Pictures/Wallpapers/lazyos.png fill
 # client.focused <border> <background> <text> <indicator> <child-border>
 client.focused          #cba6f7 #181825 #a6adc8 #f9e2af #cba6f7
 client.focused_inactive #8489a1 #181825 #cdd6f4 #8489a1 #8489a1
-client.unfocused        #181825 #1e1e2e #7e839b #181825 #181825
+client.unfocused        #181825 #1e1e2e #64687d #181825 #181825
 client.urgent           #f38ba8 #f38ba8 #a6adc8 #f38ba8 #f38ba8

@@ -177,11 +177,11 @@ format = '[[ $symbol( $version) ](fg:color_fg0 bg:color_blue)]($style)'
 [docker_context]
 symbol = ""
 style = "bg:color_bg3"
-format = '[[ $symbol( $context) ](fg:#8c929d bg:color_bg3)]($style)'
+format = '[[ $symbol( $context) ](fg:#727884 bg:color_bg3)]($style)'
 
 [conda]
 style = "bg:color_bg3"
-format = '[[ $symbol( $environment) ](fg:#8c929d bg:color_bg3)]($style)'
+format = '[[ $symbol( $environment) ](fg:#727884 bg:color_bg3)]($style)'
 
 [pixi]
 style = "bg:color_bg3"
