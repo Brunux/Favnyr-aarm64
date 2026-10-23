@@ -1,17 +1,17 @@
 ===== 80x24 =====
-   Files  rofi-files                                               Alt+Ctrl+F
-   Files (window)  pcmanfm                                       Search+Shift
-▍  Capture  screenshot                                             Alt+Ctrl+C
-   Translate  selection                                            Alt+Ctrl+T
-   Search inside files  ripgrep                                    Alt+Ctrl+G
-   Download  yt-dlp                                                Alt+Ctrl+U
-   Settings  radios                                                Alt+Ctrl+O
-   Notifications  mako history                                     Alt+Ctrl+N
-   Clipboard  cliphist                                             Alt+Ctrl+V
-   Emoji  1,296 rows                                               Alt+Ctrl+E
-   Camera  uvcvideo                                                       row
-   Power  rofi-power                                               Alt+Escape
-
+    Files  rofi-files                                              Alt+Ctrl+F
+    Files (window)  pcmanfm                                      Search+Shift
+▍   Capture  screenshot                                            Alt+Ctrl+C
+    Translate  selection                                           Alt+Ctrl+T
+    Search inside files  ripgrep                                   Alt+Ctrl+G
+    Download  yt-dlp                                               Alt+Ctrl+U
+    Settings  radios                                               Alt+Ctrl+O
+    Notifications  mako history                                    Alt+Ctrl+N
+    Clipboard  cliphist                                            Alt+Ctrl+V
+    Emoji  1,296 rows                                              Alt+Ctrl+E
+    Camera  uvcvideo                                                      row
+  ⏻  Power  rofi-power                                              Alt+Escape
+  bt Bluetooth  bluez                                               Alt+Ctrl+B
 
 
 
@@ -24,19 +24,19 @@
 
 
 ===== 152x45 =====
-   Files  rofi-files                                                                                                                       Alt+Ctrl+F
-   Files (window)  pcmanfm                                                                                                               Search+Shift
-▍  Capture  screenshot                                                                                                                     Alt+Ctrl+C
-   Translate  selection                                                                                                                    Alt+Ctrl+T
-   Search inside files  ripgrep                                                                                                            Alt+Ctrl+G
-   Download  yt-dlp                                                                                                                        Alt+Ctrl+U
-   Settings  radios                                                                                                                        Alt+Ctrl+O
-   Notifications  mako history                                                                                                             Alt+Ctrl+N
-   Clipboard  cliphist                                                                                                                     Alt+Ctrl+V
-   Emoji  1,296 rows                                                                                                                       Alt+Ctrl+E
-   Camera  uvcvideo                                                                                                                               row
-   Power  rofi-power                                                                                                                       Alt+Escape
-
+    Files  rofi-files                                                                                                                      Alt+Ctrl+F
+    Files (window)  pcmanfm                                                                                                              Search+Shift
+▍   Capture  screenshot                                                                                                                    Alt+Ctrl+C
+    Translate  selection                                                                                                                   Alt+Ctrl+T
+    Search inside files  ripgrep                                                                                                           Alt+Ctrl+G
+    Download  yt-dlp                                                                                                                       Alt+Ctrl+U
+    Settings  radios                                                                                                                       Alt+Ctrl+O
+    Notifications  mako history                                                                                                            Alt+Ctrl+N
+    Clipboard  cliphist                                                                                                                    Alt+Ctrl+V
+    Emoji  1,296 rows                                                                                                                      Alt+Ctrl+E
+    Camera  uvcvideo                                                                                                                              row
+  ⏻  Power  rofi-power                                                                                                                      Alt+Escape
+  bt Bluetooth  bluez                                                                                                                       Alt+Ctrl+B
 
 
 

@@ -12,7 +12,7 @@
 
 use std::time::{Duration, Instant};
 
-use lazyos_ui::{App, BodyCtx, Design, Header, KeyHint, ListState, Row, Screen};
+use lazyos_ui::{App, BodyCtx, Design, Glyph, Header, KeyHint, ListState, Row, Screen};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 
@@ -34,7 +34,7 @@ fn a_tick_of_a_full_list_stays_under_the_budget() {
         (0..40)
             .map(|i| {
                 Row::new(format!("row {i:02}"))
-                    .glyph("\u{f0ac}")
+                    .glyph(Glyph::Globe)
                     .detail("a detail worth reading")
                     .value("Alt+Ctrl+F")
             })
