@@ -1,6 +1,6 @@
 # Spec 001 — The `lazyos` binary and its host
 
-- **Status**: in progress
+- **Status**: merged
 - **Phase**: 2 (framework core, plan §16)
 - **Depends on**: none
 - **Model**: `opencode-go/deepseek-v4-pro` — cross-crate architecture and a dispatch table that
