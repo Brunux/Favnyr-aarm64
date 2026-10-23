@@ -64,7 +64,8 @@ yet present in `scripts/` as not implemented.
   surfaces); the **palette files are generated** from `theme.toml` (a hand edit is caught by the
   idempotent-regeneration check, never silently overwritten); and **the AI proposes, the person
   confirms** - `lazyos mcp` never exposes an apply-level destructive tool (install, format, swap,
-  power), so the MCP manifest is the witness. Nothing here exists yet; `docs/plan-ui.md` §16 is
+  power), so the MCP manifest is the witness. The framework itself does not exist yet (the
+  sixel spike in `rust/crates/spike-sixel` is the one validated piece); `docs/plan-ui.md` §16 is
   the order, and each tier lands with its three witnesses like everything else.
 
 ## Critical upstream facts

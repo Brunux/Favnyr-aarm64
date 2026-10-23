@@ -140,6 +140,15 @@ The canonical references: **yazi** (async walk + preview pane + task manager wit
   thumbnails). Protocol encoding cached per image; redrawn only when the frame repaints.
 - `scripts/make-icons.sh` is untouched: it keeps feeding PNGs for toasts, launcher,
   pcmanfm and the sixel surfaces.
+- **The spike (`rust/crates/spike-sixel`) settled the API**: foot 1.28 answers `Sixel` to
+  `Picker::from_query_stdio()` with a 9x20 cell, and both a 48 px theme PNG and a 1366x912
+  screenshot render at full size. Three facts the framework depends on: the fixed `Image`
+  widget **silently draws nothing** when the protocol does not fit the area, so pictures use
+  `StatefulImage` + `new_resize_protocol` (fit at render time); `Resize::Fit` only shrinks,
+  so a hero that has to fill its card uses `Resize::Scale`; and `ratatui-image`'s default
+  features want **`libchafa-dev`**, which sixel does not need — the crate is built with
+  `default-features = false` (`crossterm` + `image-defaults`) and the build host stays free
+  of it.
 
 ## 7. Keymap
 
@@ -489,7 +498,12 @@ the MCP server only inside an agent session. Credentials stay in `~/.local/share
 - Target: the `lazyos` process ≤ rofi's measured 15-17 MB PSS; a window ≈ 40 MB with foot;
   0 after close. Measured with the `optimization.md` method and watched by `check-system.sh`.
 - Sixels: protocol encoding cached per image; thumbnails already cached by
-  `lazyos-thumbnail` (reused as-is).
+  `lazyos-thumbnail` (reused as-is). **Measured on the device** (spike, release build, foot
+  1.28, 150x45 cells): the first frame carrying a 1366x912 picture takes **169 ms** (resize +
+  quantize + encode + write), and every later repaint of the same frame **1-2 ms**, because
+  the cached protocol is an unchanged cell and ratatui's diff skips it. So a ticking UI is
+  free once a picture is up, and the one visible cost is opening a picture — which is where
+  a pre-scaled 128 px thumbnail (or encoding off the UI thread) keeps the window responsive.
 - Tablet mode: layout tokens enlarge rows/buttons when the tablet state dir is present
   (touch-first pickers, no daemon).
 
@@ -538,15 +552,16 @@ the MCP server only inside an agent session. Credentials stay in `~/.local/share
 6. **Later** — `theme from-wallpaper` (matugen-style), sound design (if enabled), custom lock
    and which-key overlay (if un-parked).
 
-**First technical step (the only spike)**: a minimal `rust/` workspace rendering a 48 px theme
-PNG and a 128 px thumbnail via sixel in real foot on the device — validates foot's sixel +
-ratatui-image before anything else depends on it; fallback is ratatui-image half-blocks.
+**First technical step (the only spike)**: done — `rust/crates/spike-sixel` rendered a 48 px
+theme PNG and a document picture via sixel in real foot on the device (commit `spike: …`),
+with the timings in §14. `ratatui-image` 11.1.0 + `ratatui` 0.30.2, no chafa. The half-blocks
+fallback stays in `ratatui-image` and is what any other terminal gets for free.
 
 ## 17. Risks and mitigations
 
 | Risk | Mitigation |
 |---|---|
-| sixel in foot | first commit is the spike; half-blocks fallback works in any terminal |
+| sixel in foot | **validated on hardware** (spike: both pictures render, 169 ms first frame, 1-2 ms cached repaint); half-blocks fallback works in any terminal |
 | sway steals Alt chords | zero Alt chords inside the TUI; footer letters; checked by design |
 | theme switch breaks a surface silently | idempotent regeneration diff is the witness; atomic writes |
 | old paths vs new binary | symlinks + dispatch by argv[0]; `check-system.sh` `-x` + dangling-link checks |

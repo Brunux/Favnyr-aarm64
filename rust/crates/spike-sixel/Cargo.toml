@@ -1,0 +1,12 @@
+[package]
+name = "spike-sixel"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+image = "0.25.10"
+ratatui = "0.30.2"
+# chafa-dyn is in ratatui-image's default features; it exists for a text-mode
+# encoder we do not use. SIXEL comes from icy_sixel, so the spike (and the UI
+# framework after it) keeps the build host free of libchafa-dev.
+ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm", "image-defaults"] }

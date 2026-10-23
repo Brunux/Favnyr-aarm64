@@ -1,0 +1,7 @@
+[workspace]
+resolver = "2"
+members = ["crates/spike-sixel"]
+
+# The spike is a validation tool, not a shipped binary: it exists to prove that
+# foot + ratatui-image draw a theme PNG and a thumbnail through the sixel
+# protocol on this device before anything depends on it (docs/plan-ui.md §16).
