@@ -165,6 +165,8 @@ git                                f1d3
 tig                                f1d3
 nvim                               f121
 vim                                f121
+# The Developer menu's script, which the key view draws on the Alt+Ctrl+D row.
+rofi-dev                           f121
 nano                               f044
 micro                              f044
 tmux                               f120

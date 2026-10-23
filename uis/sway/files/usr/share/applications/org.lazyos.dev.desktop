@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Developer
+GenericName=Profile and diagnostics
+Comment=Export your profile to a disk, restore one, or save a report
+Exec=/home/brunux/.config/bin/rofi-dev
+Icon=applications-development
+Terminal=false
+Categories=Development;
+Keywords=developer;profile;backup;export;import;restore;keys;ssh;gpg;diagnostics;

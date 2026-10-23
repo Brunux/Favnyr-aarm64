@@ -476,6 +476,93 @@ gets corrupted.
   authorized" is a policy problem, "already mounted" means it is already in the
   list above.
 
+## Your profile, on a stick
+
+**Alt+Ctrl+D** - also the root menu's **Developer** row and the launcher entry -
+opens three actions: export your profile to a disk, restore an exported profile,
+and save a diagnostics bundle. They are about the *account*, not the machine: the
+keys, the dotfiles and the configuration the tools in this image read at login,
+in one archive you can carry to another computer.
+
+**Export my profile** asks for a disk (a mounted one, a partition it can mount
+with udisks - the same mechanism as Places - or `~/Downloads` when no stick is
+in), then for a passphrase, twice. The prompt is a masked **rofi** window when
+the menu is opened from the session, and the terminal's own when the command is
+run from a shell or over ssh. It writes
+`lazyos-profile-<host>-<date>.tar.zst.gpg` and a `.txt` manifest beside it.
+
+* **It is encrypted, and it has to be**: the archive carries `~/.ssh` (private
+  keys), `~/.gnupg` (secret keys) and the Firefox password store
+  (`logins.db` + `key4.db`), and a stick that is lost must not be an identity
+  that is lost. The passphrase is typed into rofi, kept in a private
+  staging file and handed to `gpg` through a file descriptor, so it never
+  appears on a command line; the plaintext tar is removed on every exit path,
+  including a stop from the bar.
+* **It is a tar, not a copy of the files**, because the disks this menu is
+  pointed at are usually exFAT (that is what **Format a disk** writes): exFAT
+  has no permission bits and no symlinks, so a plain copy would leave
+  `~/.ssh/id_ed25519` with no `0600`, and ssh refuses a key like that. The modes
+  travel inside the tar, where the filesystem underneath cannot drop them.
+* **What is inside**: `~/.ssh`, `~/.gnupg`, the shell files (`.bashrc`,
+  `.bash_aliases`, `.profile`, `.bash_logout`), `.gitconfig`, the configuration
+  of the tools this image ships (`foot`, `kitty`, `nvim`, `vim`,
+  `starship.toml`, `glow`, `sway` drop-ins, `mako`, `rofi`, `gtk-3.0`,
+  `gtk-4.0`, `lazyos`, `pcmanfm`, `mpv`, `yt-dlp`, `go`, `pip`, `cargo`,
+  `rustup`, `mimeapps.list`, `user-dirs.dirs`), `~/.local/bin`, the user's own
+  applications, and the **agents**: the account directories of the Agents menu
+  (`~/.local/share/lazyos/agents`, sign-ins included), OpenCode's configuration
+  (`~/.config/opencode`) and the CLIs' own homes - `~/.claude`, `~/.codex`,
+  `~/.gemini`, `~/.copilot` and `~/.config/github-copilot` - with their
+  credentials and settings; and the **Firefox profile** (`~/.config/mozilla`,
+  the XDG path this image's Firefox uses, or `~/.mozilla` with
+  `MOZ_LEGACY_HOME=1`): bookmarks and history in `places.sqlite`, passwords in
+  `logins.db` with `key4.db`, the certificate and permission overrides, cookies,
+  the add-ons in `extensions/`, the daily backup in `bookmarkbackups/` and
+  `prefs.js`.
+* **What is deliberately not**: caches, the Firefox *site data* - `storage/`
+  (202 MB of IndexedDB and localStorage here), `security_state`,
+  `sessionstore-backups`, `gmp-*`, the SQLite `-wal`/`-shm` checkpoints (a copy
+  of a live profile is the database at its last checkpoint, so close Firefox
+  first if the last few seconds matter) and `~/.cache/mozilla` (468 MB, never in
+  the archive) - `node_modules`, the
+  code in `~/Dev` (git remotes are its backup), the conversation transcripts and
+  caches inside the agents' homes (`~/.claude/projects`, `~/.codex/sessions`,
+  `~/.copilot/session-state`, `plugins/repos`…: history, not configuration), and
+  `~/.local/share/opencode/opencode.db` - OpenCode keeps its sign-in there and on
+  this machine it is 49 MB of session history, so sign in again on the machine
+  that restored the profile; `~/.local/share/opencode/auth.json` travels when a
+  layout keeps the credentials outside the database.
+* The **manifest** (`...txt`, plaintext, no secrets) names the date, the host,
+  the image revision, the paths, `apt-mark showmanual` and `npm ls -g`, so a
+  stick can be read without the passphrase.
+* From a terminal - including over ssh, which this machine answers - the same
+  work is one command:
+  `~/.config/bin/lazyos-profile export /run/media/$USER/STICK`. It asks for the
+  passphrase on the terminal, and `--passphrase-file FILE` makes it scriptable.
+
+**Restore a profile** lists every archive it can see (mounted disks and
+`~/Downloads`), asks for the passphrase, and says how many files it is about to
+overwrite - **Cancel is the first row**. Before extracting anything it writes
+the current profile to
+`~/.cache/lazyos/backups/profile-before-restore-<date>.tar.zst`, so a restore
+that turns out to be the wrong archive is itself undoable. It then extracts into
+your home with the modes from the archive and says to log out and back in: the
+shell, the session and the agents read their configuration at login. It cannot
+be stopped once it starts - a killed extraction is a half-restored home.
+By hand the archive is ordinary gpg and tar:
+
+```sh
+gpg -d lazyos-profile-20261023-1200.tar.zst.gpg | tar --zstd -x -C ~
+```
+
+**Save a diagnostics bundle** writes `lazyos-report-<host>-<date>.tar.zst` with
+the output of `check-system.sh`, the last 3000 lines of this boot's journal, the
+kernel ring buffer and one page of hardware and package facts. It is not
+encrypted because it holds no keys; the journal does name Wi-Fi networks, paths
+and errors, which is why the README inside says to read it before posting it. It
+is the file to attach to a bug report - the same report `docs/test-checklist.md`
+asks for after a fresh card.
+
 ## The night light
 
 The session starts `wlsunset` at login: from sunset it warms the screen to

@@ -125,7 +125,7 @@ BEGIN {
     # out of this list is simply not claimed - that binding keeps the picture of its
     # section - so a tool added tomorrow is a missing picture at worst, never a wrong
     # one.
-    m = split("bar-audio bar-bt bar-busy bar-key bar-menu bar-net bar-pick bar-power bar-updates busy dictate dictate-model lazyos-screensaver rofi-about rofi-agents rofi-calc rofi-capture rofi-clean rofi-clip rofi-color rofi-dns rofi-emoji rofi-files rofi-keys rofi-kill rofi-learn rofi-media rofi-notify rofi-pkg rofi-places rofi-power rofi-qr rofi-quick rofi-remind rofi-tz sway-hibernate sway-lock sway-suspend", tl, " ")
+    m = split("bar-audio bar-bt bar-busy bar-key bar-menu bar-net bar-pick bar-power bar-updates busy dictate dictate-model lazyos-screensaver rofi-about rofi-agents rofi-calc rofi-capture rofi-clean rofi-clip rofi-color rofi-dev rofi-dns rofi-emoji rofi-files rofi-keys rofi-kill rofi-learn rofi-media rofi-notify rofi-pkg rofi-places rofi-power rofi-qr rofi-quick rofi-remind rofi-tz sway-hibernate sway-lock sway-suspend", tl, " ")
     for (i = 1; i <= m; i++) tools[tl[i]] = 1
     n = split(ENVIRON["SWAY_FILES"], files, " ")
     for (i = 1; i <= n; i++) {              # pass 1: set $var value

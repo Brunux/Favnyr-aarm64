@@ -101,6 +101,21 @@ neovim
 # for POSIX expects to find.
 vim
 
+# --- keys / encryption ------------------------------------------------------
+# gpg: the Developer menu (Alt+Ctrl+D) encrypts the profile archive with it -
+# symmetric AES256, with the passphrase fed through file descriptor 3 because
+# that is what a rofi prompt can hand over (age -p only reads a terminal). It is
+# also the binary a developer with a keyring expects: `git commit -S` and
+# `gpg --export-secret-keys` are the same client, which is why this is gnupg
+# (gpg, gpg-agent, dirmngr, gpgsm, the localizations) and not the bare `gpg`
+# package: signing needs the agent, and a gpg without one fails at the first
+# signed commit instead of at the moment something depends on it. No unit is
+# enabled: the packaged gpg-agent socket starts the agent on demand and it idles
+# out by itself (the Developer menu's export starts it too, because gpg 2.x
+# routes the passphrase through the agent - check-system.sh lists it among the
+# expected user units for that reason).
+gnupg
+
 # --- dictation -------------------------------------------------------------
 # whisper.cpp: the dictation shortcut records with parecord and transcribes with
 # whisper-cli. The package ships the CLI tools only; the model (78 MB for the

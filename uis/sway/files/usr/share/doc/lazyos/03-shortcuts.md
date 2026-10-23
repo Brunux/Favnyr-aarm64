@@ -25,6 +25,7 @@ read. This page is the tour.
 | Alt+Ctrl+F | files: browse a directory, Enter reads a text file in foot, Alt+1 acts on the row |
 | Alt+Ctrl+Shift+F | the file search in a terminal (`lazyos-find`): live filtering as you type, a preview on the right, Enter opens the file |
 | Alt+Ctrl+G | search inside the files: ripgrep over your home, Enter opens the file at the matching line |
+| Alt+Ctrl+D | developer: export your profile (keys, configs, packages) encrypted to a disk, restore one, or save a diagnostics bundle |
 | Alt+Ctrl+T | translate the selected text (or the clipboard): the answer is copied, and the card names the direction |
 | Alt+Ctrl+O | settings: the radio switches, night light, touchpad, rotation, display arrangement |
 | Alt+Ctrl+Shift+D | bring the internal panel back when the screen is black (no menu needed: it works with nothing on screen) |
@@ -89,6 +90,18 @@ into the language **Settings → Translate** sets (English until it is set), the
 translation is copied to the clipboard, and a long one opens in a read window
 with the selection underneath it. `04-software.md` § Translate has the rest: the
 two engines, what happens offline, and why `translate-shell` is not on the card.
+
+**Alt+Ctrl+D is the developer menu**, and it is about your account rather than
+the machine. *Export my profile* packs `~/.ssh`, `~/.gnupg`, the dotfiles and the
+configuration of the tools this image ships into one archive on a disk you pick -
+encrypted with a passphrase, because those are private keys - and writes a
+manifest beside it. *Restore a profile* is the way back: it lists the archives it
+can see, backs up the current profile first, and overwrites only what the
+archive carries, so the wrong archive is undoable. *Save a diagnostics bundle*
+collects the system report, this boot's journal and the hardware facts into one
+file to attach to a bug report. `04-software.md` § *Your profile, on a stick*
+has what is inside, what is deliberately not, and the command to do it from a
+terminal (or over ssh).
 
 ## Panels, lock and power
 

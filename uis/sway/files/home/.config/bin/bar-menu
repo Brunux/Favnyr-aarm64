@@ -93,6 +93,11 @@ while :; do
 		ui_row "$UI_I_SHIELD" 'Install LazyOS' 'copy this system to the internal disk' install "$UI_RED"
 		ui_row "$UI_I_BUG" 'End a process' 'the heaviest twenty' kill
 		ui_row "$UI_I_BOX" 'Packages' 'search, then install one' pkg
+		# The account as a developer: the keys and the configuration in one
+		# encrypted archive, the way back from it, and a report to attach to a
+		# bug. Alt+Ctrl+D opens the same menu (24-keys.conf); this row is here
+		# so it is also reachable by name and from the launcher.
+		ui_row "$UI_I_CODE" 'Developer' 'profile export and restore, diagnostics' dev
 		ui_row "$UI_I_BRUSH" 'Colour' 'the hex of a pixel, and the palette' colour
 		ui_row "$UI_I_INFO" 'About' 'kernel, uptime, memory, battery' about
 
@@ -150,6 +155,7 @@ while :; do
 	clip) exec "$dir/rofi-clip" ;;
 	dns) exec "$dir/rofi-dns" ;;
 	pkg) exec "$dir/rofi-pkg" ;;
+	dev) exec "$dir/rofi-dev" ;;
 	colour) exec "$dir/rofi-color" ;;
 	about) exec "$dir/rofi-about" ;;
 	remind) exec "$dir/rofi-remind" ;;

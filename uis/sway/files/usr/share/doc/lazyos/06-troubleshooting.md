@@ -614,6 +614,57 @@ while the line is gone. An image built before it needs a rebuild; until then the
 tools still work from a terminal with their full path (`/usr/sbin/parted`), and
 the menu's own rows are the part that cannot see them.
 
+## The Developer menu does not offer the stick
+
+**Export my profile** (Alt+Ctrl+D) lists three kinds of target: a mounted
+filesystem this session can write to, a partition it can mount with `udisksctl`,
+and `~/Downloads` as the fallback. A stick can be missing from the first group
+for four reasons, and the list tells them apart by what it does show:
+
+* **It is mounted read-only.** udisks mounts a dirty exFAT or vfat stick `ro`
+  and the menu skips it, because the export would fail after the passphrase.
+  Unmount it, run `sudo fsck.exfat /dev/sdX1` (or `fsck.vfat`) and plug it back
+  in - or format it from **Places → Format a disk**, which is the next row.
+* **It is not mounted yet**, so it appears as **Mount LABEL**. Picking it mounts
+  it through udisks and writes there; if the mount itself fails, the notification
+  carries udisks' own words (`not authorized`, `already mounted`, a filesystem
+  error).
+* **It is the disk this system runs from.** The same rule as Format a disk
+  (`ui_disk_system` in `lib-rofi.sh`) keeps the eMMC and the card this machine
+  boots from out of the list, even when a spare partition has nothing mounted.
+  That is the guard, not a fault: use a second stick.
+* **It is an ext4 stick owned by root.** udisks mounts it, but the session
+  cannot write into its root directory; the row disappears from the writable
+  list, and `ls -ld /run/media/$USER/LABEL` shows why. Formatting it from Places
+  gives it a filesystem the session can use.
+
+`lsblk -f` shows what the kernel has, `findmnt` what is mounted where, and
+`udisksctl mount -b /dev/sdX1` does the mount by hand. The archive itself is
+ordinary gpg and tar; nothing about the export needs the menu.
+
+## The restored profile did not take effect
+
+The restore writes files into your home and says **log out and back in**, which
+is not a suggestion: `~/.bashrc` is read by a new shell, `~/.config/sway` by the
+compositor (or `Alt+Shift+C` for a reload), and the agents read their account
+directories at startup. A terminal opened before the restore keeps the old
+environment until it is closed.
+
+* **ssh refuses the restored key** (`UNPROTECTED PRIVATE KEY FILE`): the modes
+  travel inside the archive, so this means the extraction did not preserve them -
+  `chmod 700 ~/.ssh && chmod 600 ~/.ssh/id_*` is the two-line repair.
+* **gpg says a key is unusable after a restore**: an agent started with the old
+  `~/.gnupg` may still be holding it. `gpgconf --kill gpg-agent` and try again.
+* **The wrong archive was restored.** The restore wrote the profile that was
+  there before to
+  `~/.cache/lazyos/backups/profile-before-restore-<date>.tar.zst`; extract it
+  the same way (`tar --zstd -x -C ~`), or pass it to `lazyos-profile import` from
+  a terminal.
+* **The archive will not open**: the passphrase is the only way in (there is no
+  recovery key), and gpg's own error is on the card - `Bad passphrase` is a typo,
+  `decryption failed` is a damaged archive. Check its size against the `.txt`
+  manifest beside it, and re-export from the machine that made it.
+
 ## Nothing responds, the machine is thrashing
 
 4 GB and a compressed swap: a runaway process can make everything crawl before

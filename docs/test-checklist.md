@@ -571,6 +571,31 @@ queue; the manual is `04-software.md` § *Files in a window* and
 A **Mount** row that fails says why in a critical notification, in udisks' own
 words. `vfat`/`exFAT`/`NTFS` need no helper package: the kernel has the drivers.
 
+## Developer - `Alt+Ctrl+D`
+
+The rows carry `~/.ssh` and `~/.gnupg`, so the test is as much about what the
+archive refuses as about what it saves.
+
+| Step | Expected |
+|---|---|
+| `Alt+Ctrl+D` | three rows: **Export my profile**, **Restore a profile**, **Save a diagnostics bundle**, and the dim line saying the archive carries the keys |
+| **Export my profile** with a stick inserted | the target list offers its partitions (a mounted one by label, an unmounted one as **Mount LABEL**) and `~/Downloads`; the eMMC and the card this system boots from are never in it |
+| pick the stick | the busy card turns to **Waiting for the passphrase…** and a masked rofi prompt appears - launched from the key, never a prompt on the VT (that was the bug: `[ -t 0 ]` is true for tty7 in a sway `exec`) |
+| type the passphrase twice | a busy card, then the path and size of `lazyos-profile-<host>-<date>.tar.zst.gpg`; a `.txt` manifest sits beside it |
+| `ls -l` on the stick | both files are `0600` (on exFAT the bits are a no-op, which is why the archive is encrypted) |
+| `sed -n '1,12p'` the manifest | date, host, image revision, the paths and `apt-mark showmanual` - and no key material |
+| `gpg -d <archive> \| tar --zstd -t` with the passphrase | `.ssh/`, `.gnupg/`, `.bashrc`, `.config/...`, the agents' homes and `.config/mozilla/firefox/<profile>/` with `places.sqlite`, `logins.db` and `key4.db`; `tar -tv` shows `-rw-------` on `id_ed25519` |
+| `gpg -d <archive> \| tar --zstd -t \| grep -E 'storage/\|security_state\|cache2\|sqlite-wal'` | nothing: the Firefox site data and the caches never travel (the profile is 238 MB, the archive a few) |
+| export again with a different passphrase at the second prompt | "The two passphrases differ", and the prompt asks again: nothing is written |
+| export with no stick inserted, pick `~/Downloads` | the archive lands there; copying it to a stick later is the same file |
+| **Restore a profile**, pick the archive | the passphrase, then the count of files and **Cancel as the first row** |
+| **Escape** at the confirmation | "Nothing was restored", and the files are untouched |
+| **Restore** over a file you changed | the file comes back, the card says to log out and back in, and `~/.cache/lazyos/backups/profile-before-restore-<date>.tar.zst` holds the version from before |
+| `~/.config/bin/lazyos-profile import <archive>` from ssh | the same work with a terminal prompt (typed `restore`), no rofi |
+| **Save a diagnostics bundle** | `lazyos-report-<host>-<date>.tar.zst` with `report.txt`, `journal.txt`, `dmesg.txt`, `hardware.txt`, `sysinfo.txt` and a `README.txt`; `report.txt` has the `check-system.sh` summary and no colour escapes |
+| `check-system.sh` | `developer menu complete`, the gpg round-trip, `--dry-run` naming `.ssh`/`.gnupg`, the agents' homes, the Firefox profile and the three ways in, all OK; no `unexpected user unit` after the round-trip |
+| after a report run | `systemctl --user is-active gpg-agent.service` is `inactive` if it was not running before the check |
+
 ## The shell - `cd -`, the aliases and the prompt
 
 | Step | Expected |
@@ -787,7 +812,7 @@ clipboard's watcher and workstyle). This is the test of that sentence.
 | `pgrep -fx 'wl-paste --watch cliphist store'` | one pid: no clipboard history without a watcher |
 | `pgrep -x 'udiskie\|swaync\|dunst\|picom\|blueman-applet\|packagekitd'` | **nothing**: each one is a package this port answered "no" to |
 | `pgrep -f '[t]racker-miner-fs-3\|[l]ocalsearch-3'` | nothing: the file manager is pcmanfm, which starts no indexer |
-| `systemctl --user list-units --type=service --state=running --no-legend` | PipeWire, WirePlumber, the portals, gvfs (while pcmanfm has a window), dconf, mpris - and nothing else |
+| `systemctl --user list-units --type=service --state=running --no-legend` | PipeWire, WirePlumber, the portals, gvfs (while pcmanfm has a window), dconf, mpris - and `gpg-agent` only while gpg is using it, which idles out on its own (`gpgconf --kill gpg-agent` ends it now) - and nothing else |
 | `systemctl status udisks2` | *inactive (dead)* until a stick is mounted: it is D-Bus activated |
 | open `Alt+Ctrl+O`, then close it | the menu is one rofi process that ends with the window: `pgrep -x rofi` is empty afterwards |
 | open and close every menu once, then check | no leftover `rofi` or `foot --app-id=popup`; `pgrep -c -x swayidle` is still `1`, and no menu has left a helper behind |

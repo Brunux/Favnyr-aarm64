@@ -13,6 +13,7 @@ daemon).
 | **Alt+Ctrl+K** | `rofi-keys` | every key binding this session defines, parsed from `/etc/sway` and `~/.config/sway`. Enter copies the command |
 | **Alt+Ctrl+F** | `rofi-files` | the filesystem: directories first, sizes and dates dimmed. Enter opens a directory or reads a text file in foot; the dotfiles are one row away |
 | **Alt+Ctrl+G** | `rofi-grep` | **search inside the files**: ripgrep over your home, one row per match; Enter opens the file at that line |
+| **Alt+Ctrl+D** | `rofi-dev` | **developer**: export your profile (keys, configs, package list) into an encrypted archive on a disk, restore one, or save a diagnostics bundle |
 | **Download** (root menu, launcher) | `rofi-download` | a link - or the one in the clipboard - kept in `~/Downloads`, as a video or as audio |
 | **Alt+Ctrl+C** | `rofi-capture` | **capture**: a screenshot (screen, area or window), annotate it, read the text or a QR code out of a region, and start or stop a recording |
 | **Alt+Ctrl+O** | `rofi-quick` | **Settings**: the switches (Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation, display arrangement, screen sharing) and the panels, in one list |
@@ -55,10 +56,12 @@ read-only on the loopback address, so another machine can look at it through the
 ssh login — the menu carries the tunnel command, and `05-system.md` has the how
 and the why),
 **DNS** (which resolver this connection uses), **Packages** (search the archive
-and install one), **Colour** (the hex of any pixel, and the palette this session
-is drawn with), **Reminders** (be told later), **About** (kernel, uptime,
-memory, battery, the revision this image was built from, and the errors since
-this boot).
+and install one), **Developer** (Alt+Ctrl+D: your profile into an encrypted
+archive on a stick, the way back from it, and a diagnostics bundle for a bug
+report - `04-software.md` has the detail), **Colour** (the hex of any pixel, and
+the palette this session is drawn with), **Reminders** (be told later), **About**
+(kernel, uptime, memory, battery, the revision this image was built from, and the
+errors since this boot).
 
 ## Something is happening
 

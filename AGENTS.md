@@ -1642,6 +1642,75 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   offline; the manual pages are `02-rofi.md` § Translate, `04-software.md` § Translate and
   `06-troubleshooting.md` § *The translation says the engine refused*; the welcome card and
   `03-shortcuts.md` teach the key.
+- **The Developer menu is the account as an archive, and three decisions make it
+  safe.** `rofi-dev` (`Alt+Ctrl+D`, the root menu's *Developer* row, the launcher
+  entry `org.lazyos.dev.desktop`) is a three-row front end over
+  `~/.config/bin/lazyos-profile`, and the helper is usable from a terminal - this
+  image answers ssh, and a machine whose session will not start still has a
+  profile worth saving - so the passphrase is `read` with `stty -echo` on a
+  terminal and `bar-pick -password` in the session, and the destructive
+  confirmation is the typed word `restore` there and two rofi rows (**Cancel
+  first**) here. **A terminal is not `[ -t 0 ]`**: sway's `exec` inherits the VT
+  the compositor was started on (`/dev/tty7` here), so a menu opened by a key has
+  a tty on stdin that nobody is looking at - the first card that tried it showed
+  `Packing the profile…` while `read` waited on that VT for ever and the session
+  showed no prompt at all (reported on hardware; the fix is `on_terminal()`,
+  which also requires the process to be the terminal's *foreground* group, `ps -o
+  tpgid=` equal to `ps -o pgid=`, with `bar-pick` as the fallback whenever
+  `WAYLAND_DISPLAY` is there). `have_prompt` uses the same predicate, so a
+  scripted run is refused before the tar is built and not after, and the card
+  says `Waiting for the passphrase…` before the prompt opens. **The
+  archive is a tar, not a copy**: the disks this menu is pointed at are exFAT,
+  which drops modes and symlinks, so a copied `~/.ssh/id_ed25519` would lose its
+  `0600` and ssh would refuse it on the machine that restored it; the modes ride
+  inside the tar. **The encryption is gpg symmetric**, because the archive
+  carries `~/.ssh` and `~/.gnupg` and a lost stick must not be a lost identity;
+  `age -p` was the smaller first choice and cannot take a passphrase from a
+  program (it reads a TTY), while gpg's `--passphrase-fd` can, with
+  `--pinentry-mode loopback` making the fd authoritative in 2.1+ - the
+  passphrase is a `0600` file in the private staging dir handed over as fd 3,
+  never argv, and the plaintext tar is removed by a trap on every exit path
+  (which is also why `build_tar` writes tar to a file and runs zstd on it
+  instead of piping: `pipefail` is not set in sh, so a tar that failed halfway
+  would look like a good archive). `gnupg` (not the bare `gpg` package) is in
+  `packages/tools.list`, for the agent that makes `git commit -S` work - and an
+  export does start `gpg-agent.service`, because gpg 2.x routes even a symmetric
+  passphrase through it; the packaged socket activates it, nothing enables it,
+  and it idles out, which is why `check-system.sh`'s expected user units name
+  it and its own round-trip kills the agent it started. **The
+  profile list is the feature**: `~/.ssh`, `~/.gnupg`, the shell and the configs
+  of the tools the image ships, `~/.local/bin`, the user applications and the
+  agents - the menu's account directories (`~/.local/share/lazyos/agents`, which
+  hold the sign-ins), OpenCode's config and the CLIs' own homes (`~/.claude`,
+  `~/.codex`, `~/.gemini`, `~/.copilot`, `~/.config/github-copilot`), whose
+  credentials and settings travel but whose conversation transcripts and caches
+  (`.claude/projects`, `.codex/sessions`, `.copilot/session-state`,
+  `plugins/repos`) are excluded by pattern - and the **Firefox profile**
+  (`~/.config/mozilla`, the XDG path Debian's Firefox uses here, or `~/.mozilla`
+  with `MOZ_LEGACY_HOME=1`: `places.sqlite`, `logins.db` + `key4.db`, `cert9.db`,
+  cookies and `extensions/`, minus `storage/`, `security_state`,
+  `sessionstore-backups` and the `-wal`/`-shm` checkpoints, which is how a
+  238 MB profile becomes a few MB) - plus a plaintext manifest with the
+  revision, `apt-mark showmanual` and `npm ls -g`; caches, `~/.cache/mozilla`,
+  `~/Dev` and `~/.local/share/opencode/opencode.db` (the OpenCode sign-in and
+  49 MB of session history here) are deliberately out, and the manual says so. **Restore backs up first** to
+  `~/.cache/lazyos/backups/profile-before-restore-<date>.tar.zst` (unencrypted,
+  `0600`, same machine and same account) and refuses an archive with an absolute
+  path or a `..` before extracting anything; it is not stoppable (a killed
+  extract is a half-restored home) while the export is, with
+  `BUSY_STOP='pkill -f "[l]azyos-profile\../archive\.tar"'` matching the
+  staging path and never the script's own command line. The diagnostics bundle
+  (`report`) is the system report, this boot's journal, `dmesg` and one page of
+  hardware/package facts, unencrypted because nothing in it is a secret, and its
+  README says the journal still names networks and paths. Witnesses:
+  `check-system.sh` FAILs on the tools, the two scripts, the gpg round-trip (the
+  exact `--pinentry-mode loopback --passphrase-fd` pipeline on a throwaway
+  passphrase), `export --dry-run` naming `.ssh` and `.gnupg`, and the three ways
+  in, and WARNs when the launcher icon or the manual section goes; the manual is
+  `04-software.md` § *Your profile, on a stick`, the key is in
+  `03-shortcuts.md`, and the two symptom lists are `06-troubleshooting.md`
+  §§ *The Developer menu does not offer the stick* and *The restored profile did
+  not take effect*.
 - **The About windows name `Alt+Q`, not foot's close key.** `Ctrl+Shift+W` is foot's
   built-in and did not reach the held windows on this keyboard; `Alt+Q` is sway's own `kill`
   and closes them. The three footers (fastfetch, boot time, devices) and

@@ -1,0 +1,781 @@
+#!/bin/sh
+# The developer profile: one encrypted archive of the things that make this
+# account yours, and the way back from it.
+#
+#   lazyos-profile export [DIR] [--no-encrypt] [--passphrase-file FILE]
+#   lazyos-profile import ARCHIVE
+#   lazyos-profile report [DIR]
+#   lazyos-profile list-archives
+#   lazyos-profile export --dry-run
+#
+# The menu (bin/rofi-dev, Alt+Ctrl+D) is the front end: it picks the disk and
+# the archive, and every row it offers ends in one of the verbs above.  The
+# verbs are usable from a terminal, which is the point - this image answers ssh,
+# and a machine whose session will not start still has a profile to save.  So
+# the interaction is chosen by where the script is running: a passphrase is read
+# with `read` on a terminal and with rofi's masked prompt (`bar-pick -password`)
+# in the session, and the destructive confirmation is the typed word `restore`
+# on a terminal and two rows in rofi otherwise.
+#
+# **The archive is a tar, and that is not a detail.**  The menu that makes sticks
+# (Format a disk) writes exFAT, which has no modes and no symlinks: a plain copy
+# would leave ~/.ssh/id_ed25519 with no 0600 and ssh would refuse it on the
+# machine that restored it.  Permissions travel *inside* the tar, where the
+# filesystem underneath cannot drop them.
+#
+# **The encryption is gpg's symmetric mode**, because the archive carries
+# ~/.ssh and ~/.gnupg and a lost stick must not be a lost identity.  `age -p` is
+# the smaller tool and was the first choice, but it reads its passphrase from
+# the terminal and has no way to accept one from a program, which is exactly
+# what a rofi prompt is; gpg's --passphrase-fd is.  The passphrase is typed,
+# written to a 0600 file inside the private staging directory and handed over as
+# file descriptor 3 - never on the command line, where /proc/PID/cmdline would
+# show it to every process of the session.  The plaintext tar never leaves that
+# directory: a trap removes it on every exit path, including Ctrl-C.
+#
+# **What is inside** is the list in ENTRIES below: the keys, the shell, the
+# configs of the tools this image ships, the agents' account directories (which
+# hold their sign-ins) and a manifest of the packages and the revision.  What is
+# not inside is as deliberate: $HOME/.cache, the browser profiles, node_modules,
+# the code in ~/Dev (git remotes are its backup) and
+# ~/.local/share/opencode/opencode.db, which is 63 MB of session history on this
+# machine and would be signed in again instead.  The manual says so too.
+#
+# Nothing here is resident and nothing is written outside the target, the cache
+# staging directory and ~/.cache/lazyos/backups (the copy taken before a restore
+# overwrites anything).
+
+set -eu
+
+dir=$(dirname "$0")
+. "$dir/lib-rofi.sh"
+
+CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/lazyos
+BACKUPS=$CACHE/backups
+WORK=
+
+# The entries, relative to $HOME, in the order they are added.  Directories are
+# added whole; anything that does not exist is skipped, so a machine with no
+# ~/.gnupg or no ~/.config/kitty still exports what it has.  This list is also
+# what `--dry-run` prints and what check-system.sh looks for, so a path that
+# leaves it stops travelling.
+ENTRIES='
+.ssh
+.gnupg
+.bashrc
+.bash_aliases
+.bash_profile
+.profile
+.bash_logout
+.gitconfig
+.config/git
+.config/foot
+.config/kitty
+.config/nvim
+.config/vim
+.config/starship.toml
+.config/glow
+.config/sway
+.config/mako
+.config/rofi
+.config/gtk-3.0
+.config/gtk-4.0
+.config/lazyos
+.config/opencode
+.config/github-copilot
+.claude
+.codex
+.gemini
+.copilot
+.config/pcmanfm
+.config/mozilla
+.mozilla
+.config/mpv
+.config/yt-dlp
+.config/tmux
+.config/htop
+.config/btop
+.config/go
+.config/pip
+.config/cargo
+.config/rustup
+.config/user-dirs.dirs
+.config/mimeapps.list
+.local/bin
+.local/share/applications
+.local/share/lazyos/agents
+.local/share/opencode/auth.json
+'
+
+# on_terminal: 0 when stdin is a terminal somebody can see and type into.
+# `[ -t 0 ]` alone is not that test in this session: sway's `exec` inherits the
+# VT the compositor was started on (tty7 here), so a menu opened by a key has a
+# *terminal* on stdin that nobody is looking at.  The prompt went to that VT and
+# the read blocked for ever while the session showed only "Packing the
+# profile…" (reported on hardware).  The terminal's foreground process group is
+# the difference: a shell, ssh or a console makes this script the foreground
+# group of its terminal, while a child of the compositor is not - its TPGID is
+# not its PGID (and is -1 when there is no controlling terminal at all).
+on_terminal() {
+	[ -t 0 ] || return 1
+	_tpg=$(ps -o tpgid= -p $$ 2>/dev/null | tr -d ' ')
+	_pg=$(ps -o pgid= -p $$ 2>/dev/null | tr -d ' ')
+	[ -n "$_tpg" ] && [ -n "$_pg" ] && [ "$_tpg" = "$_pg" ]
+}
+
+# in_session: 0 when rofi can be asked - the compositor's environment and the
+# shared picker are both there.  bar-pick's password mode sends stdin from
+# /dev/null itself, so the inherited VT on fd 0 cannot make rofi wait for EOF.
+in_session() {
+	[ -n "${WAYLAND_DISPLAY:-}" ] && [ -x "$UI_BIN/bar-pick" ]
+}
+
+# say TITLE BODY [URGENCY] [ICON]: the card, and also the terminal's stderr when
+# this runs over ssh - a notification nobody can see is not an answer.
+say() {
+	if on_terminal; then
+		printf '%s: %s\n' "${1:-LazyOS}" "${2:-}" >&2
+	fi
+	ui_say "$@"
+}
+
+die() {
+	say "Developer" "$*" critical "$UI_ICON_ERROR"
+	printf 'lazyos-profile: %s\n' "$*" >&2
+	exit 1
+}
+
+# cleanup: the staging directory holds the plaintext tar and the passphrase, so
+# it goes on every exit path - a successful run, a failure, a Ctrl-C or a click
+# on the bar's stop button.
+cleanup() {
+	if [ -n "${WORK:-}" ]; then
+		rm -rf "$WORK"
+	fi
+	WORK=
+}
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT TERM
+
+work_dir() {
+	WORK=$(mktemp -d "$CACHE/lazyos-profile.XXXXXX") || die "cannot create a staging directory in $CACHE"
+	chmod 700 "$WORK"
+}
+
+# sanitize TEXT: a host name that is safe in a file name (the image's default is
+# `lazyos`, but a machine renamed with spaces or a colon must not make a path
+# that the archive name cannot carry).
+sanitize() {
+	printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '-'
+}
+
+stamp() {
+	date +%Y%m%d-%H%M
+}
+
+hostname_short() {
+	sanitize "$(hostname 2>/dev/null || printf 'lazyos')"
+}
+
+present_entries() {
+	for _e in $ENTRIES; do
+		if [ -e "$HOME/$_e" ]; then
+			printf '%s\n' "$_e"
+		fi
+	done
+}
+
+entries_size_kb() {
+	_esk=0
+	for _e in $(present_entries); do
+		_ek=$(du -sk "$HOME/$_e" 2>/dev/null | awk '{ print $1 }') || _ek=
+		case ${_ek:-} in
+		'' | *[!0-9]*) _ek=0 ;;
+		esac
+		_esk=$((_esk + _ek))
+	done
+	printf '%s\n' "$_esk"
+}
+
+# have_prompt: 0 when a passphrase can be asked for - a terminal this process
+# owns (ssh and a console included) or the session's rofi.  A scripted run with
+# neither is refused before any work is done, with the flag that solves it,
+# instead of after the tar is built.
+have_prompt() {
+	on_terminal || in_session
+}
+
+# ask_passphrase CONFIRM: print one passphrase on stdout.  CONFIRM is `confirm`
+# when it has to be typed twice (export) and empty when it is the way into an
+# archive (import).  A terminal is asked with stty -echo because that is what a
+# passphrase prompt is; the session asks rofi, whose -password masks the line.
+ask_passphrase() {
+	_ap_confirm=${1:-}
+	_ap_first=
+	while :; do
+		if on_terminal; then
+			stty -echo 2>/dev/null || :
+			printf 'Passphrase: ' >&2
+			IFS= read -r _ap_first || _ap_first=
+			stty echo 2>/dev/null || :
+			printf '\n' >&2
+		elif in_session; then
+			_ap_first=$("$UI_BIN/bar-pick" 'Passphrase for the profile' -password) || return 1
+		else
+			die "no terminal and no session to ask for the passphrase"
+		fi
+		if [ -z "$_ap_first" ]; then
+			say 'Developer' 'A passphrase is required: it is what makes the archive safe to lose' normal
+			continue
+		fi
+		if [ "$_ap_confirm" != confirm ]; then
+			printf '%s\n' "$_ap_first"
+			return 0
+		fi
+		_ap_second=
+		if on_terminal; then
+			stty -echo 2>/dev/null || :
+			printf 'Again: ' >&2
+			IFS= read -r _ap_second || _ap_second=
+			stty echo 2>/dev/null || :
+			printf '\n' >&2
+		else
+			_ap_second=$("$UI_BIN/bar-pick" 'The same passphrase again' -password) || return 1
+		fi
+		if [ "$_ap_first" = "$_ap_second" ]; then
+			printf '%s\n' "$_ap_first"
+			return 0
+		fi
+		say 'Developer' 'The two passphrases differ; try again' normal
+	done
+}
+
+# passphrase_file PASS OUT: write PASS, one line, into a 0600 file.  The file is
+# how gpg gets it (--passphrase-fd 3 < FILE); the alternative, --passphrase, is
+# visible in /proc/PID/cmdline for as long as gpg runs.
+passphrase_file() {
+	(umask 077; printf '%s\n' "$1" >"$2") || die "cannot write the passphrase file in $WORK"
+	chmod 600 "$2"
+}
+
+# manifest SOURCE: the plaintext note that travels beside the archive, so a stick
+# can be read without the passphrase (it names paths, packages and the machine;
+# it contains no key material and no secret value).
+manifest() {
+	_out=$1
+	{
+		printf 'LazyOS profile\n'
+		printf 'created: %s\n' "$(date -Ins)"
+		printf 'host: %s\n' "$(hostname 2>/dev/null || :)"
+		printf 'user: %s\n' "${USER:-$(id -un)}"
+		printf 'system: %s\n' "$(uname -a)"
+		if [ -r /etc/debian-aarch64-revision ]; then
+			printf 'revision:\n'
+			sed -e 's/^/  /' /etc/debian-aarch64-revision
+		fi
+		printf 'entries:\n'
+		present_entries | sed -e 's/^/  /'
+		printf 'packages (apt-mark showmanual):\n'
+		_pkgs=$(apt-mark showmanual 2>/dev/null) || _pkgs='(apt-mark unavailable)'
+		printf '%s\n' "$_pkgs" | sed -e 's/^/  /'
+		printf 'npm global packages:\n'
+		if command -v npm >/dev/null 2>&1; then
+			_npm=$(npm ls -g --depth=0 2>/dev/null) || _npm='(npm ls failed)'
+			printf '%s\n' "$_npm" | sed -e 's/^/  /'
+		else
+			printf '  (npm not installed)\n'
+		fi
+		printf '\nRestore this on another machine with:\n'
+		printf '  gpg -d <file>.gpg | tar --zstd -x -C ~\n'
+		printf 'or let the Developer menu do it: Alt+Ctrl+D > Restore a profile.\n'
+	} >"$_out"
+}
+
+# build_tar OUT: the archive, compressed, before it is encrypted.  The
+# tar is built from $HOME with relative names, so extraction puts everything
+# back where it came from; --numeric-owner keeps the ids stable and
+# --one-file-system refuses to walk into anything mounted under a config
+# directory.  Sockets and the keyring's lock files are skipped because they are
+# session state, not configuration.
+build_tar() {
+	_bt_out=$1
+	set --
+	for _e in $(present_entries); do
+		set -- "$@" "$_e"
+	done
+	[ $# -gt 0 ] || die "nothing to export: none of the profile paths exist in $HOME"
+	_bt_tar=$WORK/archive.tar
+	(
+		cd "$HOME" || exit 1
+		exec tar --numeric-owner -p --one-file-system \
+			--exclude='.cache' \
+			--exclude='node_modules' \
+			--exclude='.ssh/control*' \
+			--exclude='.gnupg/S.*' \
+			--exclude='.gnupg/*.lock' \
+			--exclude='.gnupg/random_seed*' \
+			--exclude='*.sock' \
+			--exclude='*.socket' \
+			--exclude='.claude/projects' \
+			--exclude='.claude/todos' \
+			--exclude='.claude/shell-snapshots' \
+			--exclude='.claude/statsig' \
+			--exclude='.claude/debug' \
+			--exclude='.claude/downloads' \
+			--exclude='.claude/file-history' \
+			--exclude='.claude/history.jsonl' \
+			--exclude='.claude/plugins/cache' \
+			--exclude='.claude/plugins/repos' \
+			--exclude='.claude/plugins/marketplaces' \
+			--exclude='.codex/sessions' \
+			--exclude='.codex/log' \
+			--exclude='.codex/tmp' \
+			--exclude='.codex/shell_snapshots' \
+			--exclude='.codex/history.jsonl' \
+			--exclude='.gemini/tmp' \
+			--exclude='.gemini/logs' \
+			--exclude='.copilot/session-state' \
+			--exclude='.copilot/logs' \
+			--exclude='.copilot/history' \
+			--exclude='*mozilla/firefox/*/cache2' \
+			--exclude='*mozilla/firefox/*/startupCache' \
+			--exclude='*mozilla/firefox/*/shader-cache' \
+			--exclude='*mozilla/firefox/*/security_state' \
+			--exclude='*mozilla/firefox/*/storage' \
+			--exclude='*mozilla/firefox/*/sessionstore-backups' \
+			--exclude='*mozilla/firefox/*/sessionstore.jsonlz4' \
+			--exclude='*mozilla/firefox/*/crashes' \
+			--exclude='*mozilla/firefox/*/minidumps' \
+			--exclude='*mozilla/firefox/*/datareporting' \
+			--exclude='*mozilla/firefox/*/saved-telemetry' \
+			--exclude='*mozilla/firefox/*/thumbnails' \
+			--exclude='*mozilla/firefox/*/gmp-*' \
+			--exclude='*mozilla/firefox/*/features' \
+			--exclude='*mozilla/firefox/*/*.sqlite-wal' \
+			--exclude='*mozilla/firefox/*/*.sqlite-shm' \
+			--exclude='*mozilla/firefox/*/*.sqlite-journal' \
+			--exclude='*mozilla/firefox/*/lock' \
+			--exclude='*mozilla/firefox/*/.parentlock' \
+			--exclude='*mozilla/firefox/Crash Reports' \
+			-cf "$_bt_tar" -- "$@"
+	) || return 1
+	zstd -q -3 -T0 -o "$_bt_out" "$_bt_tar" || return 1
+	rm -f "$_bt_tar"
+}
+
+# gpg_encrypt IN OUT PASSFILE / gpg_decrypt IN OUT PASSFILE
+# --pinentry-mode loopback is what makes --passphrase-fd authoritative in gpg
+# 2.1 and later; without it the agent is asked instead and the fd is ignored.
+gpg_encrypt() {
+	gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 \
+		--cipher-algo AES256 --s2k-digest-algo SHA512 -c \
+		-o "$2" "$1" 3<"$3" 2>"$WORK/gpg.log"
+}
+
+gpg_decrypt() {
+	gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 \
+		-d -o "$2" "$1" 3<"$3" 2>"$WORK/gpg.log"
+}
+
+# The one line of gpg's own message that explains a failure ("Bad passphrase",
+# "No secret key", "decryption failed").
+gpg_error() {
+	_last=$(tail -n 1 "$WORK/gpg.log" 2>/dev/null | sed -e 's/^gpg: //' || :)
+	printf '%s' "${_last:-gpg failed}"
+}
+
+# available_kb DIR
+available_kb() {
+	df -Pk "$1" 2>/dev/null | awk 'NR == 2 { print $4 }'
+}
+
+# archive_name DIR SUFFIX: lazyos-profile-<host>-<stamp><suffix>
+archive_path() {
+	printf '%s/%s' "$1" "lazyos-profile-$(hostname_short)-$(stamp)$2"
+}
+
+cmd_export() {
+	_target=
+	_encrypt=yes
+	_pass_file=
+	_dry=no
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--no-encrypt) _encrypt=no ;;
+		--passphrase-file)
+			shift
+			_pass_file=${1:-}
+			[ -n "$_pass_file" ] || die "--passphrase-file needs a file"
+			;;
+		--dry-run) _dry=yes ;;
+		-*) die "unknown option: $1" ;;
+		*) _target=$1 ;;
+		esac
+		shift
+	done
+
+	_entries=$(present_entries)
+	[ -n "$_entries" ] || die "nothing to export: none of the profile paths exist in $HOME"
+
+	_suffix=.tar.zst
+	if [ "$_encrypt" = yes ]; then
+		_suffix=${_suffix}.gpg
+	fi
+
+	if [ "$_dry" = yes ]; then
+		printf 'profile: %s\n' "lazyos-profile-$(hostname_short)-$(stamp)$_suffix"
+		printf 'entries:\n'
+		printf '%s\n' "$_entries" | sed -e 's/^/  /'
+		printf 'estimate: %s MB\n' "$((($(entries_size_kb) + 1023) / 1024))"
+		return 0
+	fi
+
+	[ -n "$_target" ] || die "usage: lazyos-profile export DIR"
+	[ -d "$_target" ] || die "not a directory: $_target"
+	[ -w "$_target" ] || die "not writable: $_target"
+
+	mkdir -p "$CACHE"
+	work_dir
+	_stage=$WORK/archive.tar.zst
+
+	# Room for the archive plus the encrypted copy, with slack.  The staging tar
+	# is written to ~/.cache, so what the target needs is the compressed size,
+	# but an estimate that is too kind is a half-written stick: ask for both.
+	_need=$((( $(entries_size_kb) / 2 ) + 4096))
+	_free=$(available_kb "$_target" || :)
+	if [ -n "${_free:-}" ] && [ "$_free" -lt "$_need" ]; then
+		die "not enough free space on $_target: $((_need / 1024)) MB needed, $((_free / 1024)) MB free"
+	fi
+
+	_archive=$(archive_path "$_target" "$_suffix")
+	if [ -e "$_archive" ]; then
+		die "$_archive already exists: wait a minute and try again"
+	fi
+
+	_busy_started=
+	if BUSY_STOP='pkill -f "[l]azyos-profile\..*/archive\.tar"' \
+		"$UI_BIN/busy" start dev 'Developer' 'Packing the profile…' package-x-generic 2>/dev/null; then
+		_busy_started=yes
+	fi
+	build_tar "$_stage" || {
+		"$UI_BIN/busy" fail dev 'Developer' 'Packing the profile failed' dialog-error 2>/dev/null || :
+		die "tar/zstd failed to build the archive"
+	}
+
+	if [ "$_encrypt" = yes ]; then
+		if [ -n "$_pass_file" ]; then
+			[ -r "$_pass_file" ] || die "cannot read the passphrase file: $_pass_file"
+			pass_file=$WORK/pass
+			head -n 1 "$_pass_file" >"$pass_file" || :
+			chmod 600 "$pass_file"
+		else
+			have_prompt || die "no terminal and no session for the passphrase (use --passphrase-file FILE)"
+			"$UI_BIN/busy" update dev 'Waiting for the passphrase…' 2>/dev/null || :
+			_pass=$(ask_passphrase confirm) || {
+				"$UI_BIN/busy" stop dev 2>/dev/null || :
+				exit 0
+			}
+			pass_file=$WORK/pass
+			passphrase_file "$_pass" "$pass_file"
+			_pass=
+		fi
+		"$UI_BIN/busy" update dev 'Encrypting the profile…' 2>/dev/null || :
+		if ! gpg_encrypt "$_stage" "$_archive" "$pass_file"; then
+			rm -f "$_archive"
+			"$UI_BIN/busy" fail dev "$(gpg_error)" dialog-error 2>/dev/null || :
+			die "encryption failed: $(gpg_error)"
+		fi
+	else
+		cp -- "$_stage" "$_archive" || die "cannot write $_archive"
+	fi
+	chmod 600 "$_archive"
+
+	_manifest=${_archive%.gpg}
+	_manifest=${_manifest%.tar.zst}.txt
+	manifest "$_manifest"
+	chmod 600 "$_manifest"
+
+	_size=$(du -h "$_archive" 2>/dev/null | awk '{ print $1 }' || printf '?')
+	"$UI_BIN/busy" end dev "Profile saved ($_size): $(basename "$_archive")" 2>/dev/null || :
+	say 'Profile saved' "$_archive ($_size)"
+	printf '%s\n' "$_archive"
+}
+
+cmd_import() {
+	_archive=${1:-}
+	[ -n "$_archive" ] || die "usage: lazyos-profile import ARCHIVE"
+	[ -r "$_archive" ] || die "cannot read: $_archive"
+
+	mkdir -p "$CACHE"
+	work_dir
+	_unpacked=$WORK/restore.tar.zst
+	_pass_file=
+
+	"$UI_BIN/busy" start dev 'Developer' "Opening $(basename "$_archive")…" package-x-generic 2>/dev/null || :
+
+	case $_archive in
+	*.gpg)
+		have_prompt || die "no terminal and no session for the passphrase"
+		"$UI_BIN/busy" update dev 'Waiting for the passphrase…' 2>/dev/null || :
+		_pass=$(ask_passphrase) || {
+			"$UI_BIN/busy" stop dev 2>/dev/null || :
+			exit 0
+		}
+		_pass_file=$WORK/pass
+		passphrase_file "$_pass" "$_pass_file"
+		_pass=
+		if ! gpg_decrypt "$_archive" "$_unpacked" "$_pass_file"; then
+			die "cannot open the archive: $(gpg_error)"
+		fi
+		;;
+	*)
+		_unpacked=$_archive
+		;;
+	esac
+
+	# A tar made by this script only ever carries relative names.  Anything else
+	# (an absolute path, a `..`) is refused before a single file is written:
+	# extraction happens in $HOME, and one bad member would land outside it.
+	_members=$(tar --zstd -tf "$_unpacked" 2>/dev/null) ||
+		die 'that is not a LazyOS profile archive (tar could not read it)'
+	_bad=$(printf '%s\n' "$_members" | awk '/^\// || /(^|\/)\.\.(\/|$)/ { print; exit }')
+	[ -z "$_bad" ] || die "refusing an archive with a path that leaves \$HOME: $_bad"
+	_count=$(printf '%s\n' "$_members" | grep -c . || true)
+
+	# What the person is agreeing to: the manifest beside the archive says where
+	# it came from and when, and rofi's message line carries that plus the count.
+	_manifest=${_archive%.gpg}
+	_manifest=${_manifest%.tar.zst}.txt
+	_about=
+	if [ -r "$_manifest" ]; then
+		_about=$(sed -n 's/^created: //p' "$_manifest" | head -n 1) || :
+	fi
+	_about="${_about:+$_about · }$_count files"
+	if [ -n "${_about:-}" ]; then
+		"$UI_BIN/busy" update dev "$_about" 2>/dev/null || :
+	fi
+	if on_terminal; then
+		printf 'About to restore %s into %s, overwriting the files it carries:\n' "$_archive" "$HOME" >&2
+		printf '%s\n' "$_members" | sed -n '1,20p' | sed -e 's/^/  /' >&2
+		if [ "$_count" -gt 20 ]; then
+			printf '  … and %s more\n' "$((_count - 20))" >&2
+		fi
+	fi
+
+	_confirm=no
+	if on_terminal; then
+		printf 'Type restore to go ahead: ' >&2
+		IFS= read -r _answer || _answer=
+		if [ "$_answer" = restore ]; then
+			_confirm=yes
+		fi
+	else
+		_choice=$(printf 'Cancel\nRestore\n' |
+			"$UI_BIN/bar-pick" 'Restore the profile' \
+				-mesg "$_about · the current files are backed up first") || :
+		if [ "$_choice" = Restore ]; then
+			_confirm=yes
+		fi
+	fi
+	if [ "$_confirm" != yes ]; then
+		"$UI_BIN/busy" stop dev 2>/dev/null || :
+		say 'Developer' 'Nothing was restored' normal
+		return 0
+	fi
+
+	# The copy that makes a wrong restore recoverable is taken first, in the
+	# cache, unencrypted and 0600: it is the same account's own data on the same
+	# machine, and it must be readable without a passphrase nobody wrote down.
+	if [ -n "$(present_entries)" ]; then
+		mkdir -p "$BACKUPS"
+		chmod 700 "$BACKUPS"
+		_before=$BACKUPS/profile-before-restore-$(stamp).tar.zst
+		"$UI_BIN/busy" update dev 'Backing up the current profile…' 2>/dev/null || :
+		if build_tar "$_before"; then
+			chmod 600 "$_before"
+		else
+			die 'could not back up the current profile; nothing was restored'
+		fi
+	fi
+
+	# Not stoppable on purpose: a killed extraction leaves a home half restored,
+	# which is worse than waiting for a few seconds of disk.
+	"$UI_BIN/busy" update dev 'Restoring the profile…' 2>/dev/null || :
+	if ! tar --zstd --no-same-owner -xpf "$_unpacked" -C "$HOME"; then
+		"$UI_BIN/busy" fail dev 'Extraction failed; the backup is in ~/.cache/lazyos/backups' dialog-error 2>/dev/null || :
+		exit 1
+	fi
+
+	if [ -n "${_before:-}" ]; then
+		"$UI_BIN/busy" end dev "Profile restored · the previous one is $(basename "$_before")" 2>/dev/null || :
+	else
+		"$UI_BIN/busy" end dev 'Profile restored' 2>/dev/null || :
+	fi
+	say 'Profile restored' "Log out and back in: the shell, the session and the agents read their configuration at login.${_before:+ The previous profile is $_before}"
+	[ -n "${_before:-}" ] && printf 'backup: %s\n' "$_before"
+	return 0
+}
+
+# cmd_report: the diagnostics bundle.  Nothing here is encrypted, because
+# nothing here is a secret: it is the system report, this boot's journal, the
+# kernel's messages and one page of hardware and package facts.  The journal can
+# name Wi-Fi networks and file paths, which the card says before it is written.
+cmd_report() {
+	_target=${1:-$HOME/Downloads}
+	[ -d "$_target" ] || mkdir -p "$_target" || die "cannot create $_target"
+	[ -w "$_target" ] || die "not writable: $_target"
+
+	mkdir -p "$CACHE"
+	work_dir
+	_bundle=$WORK/bundle
+	mkdir -p "$_bundle"
+
+	_report=/usr/local/sbin/check-system.sh
+	[ -x "$_report" ] || _report=$(command -v check-system.sh 2>/dev/null || :)
+
+	_busy_started=
+	if BUSY_STOP='pkill -f "[c]heck-system.sh"; pkill -f "[j]ournalctl"' \
+		"$UI_BIN/busy" start dev 'Developer' 'Collecting the system report…' dialog-information 2>/dev/null; then
+		_busy_started=yes
+	fi
+
+	{
+		printf 'LazyOS diagnostics\n'
+		printf 'created: %s\n' "$(date -Ins)"
+		printf 'host: %s\n' "$(hostname 2>/dev/null || :)"
+		printf 'kernel: %s\n' "$(uname -r)"
+		printf 'cmdline: %s\n' "$(cat /proc/cmdline 2>/dev/null || :)"
+		if [ -r /etc/debian-aarch64-revision ]; then
+			printf 'revision:\n'
+			sed -e 's/^/  /' /etc/debian-aarch64-revision
+		fi
+	} >"$_bundle/sysinfo.txt"
+
+	if [ -n "${_report:-}" ]; then
+		if on_terminal; then printf 'system report…\n' >&2; fi
+		# check-system.sh exits non-zero when something FAILs, which is a
+		# finding, not a failure of the bundle: the exit status is recorded.
+		if timeout 180 "$_report" >"$_bundle/report.txt" 2>&1; then
+			printf '\n(exit status: 0)\n' >>"$_bundle/report.txt"
+		else
+			printf '\n(exit status: %s)\n' "$?" >>"$_bundle/report.txt"
+		fi
+		if sed -e 's/\x1B\[[0-9;]*m//g' "$_bundle/report.txt" >"$_bundle/report.clean"; then
+			mv "$_bundle/report.clean" "$_bundle/report.txt"
+		else
+			rm -f "$_bundle/report.clean"
+		fi
+	else
+		printf 'check-system.sh is not installed: /usr/local/sbin/check-system.sh is missing.\n' \
+			>"$_bundle/report.txt"
+	fi
+
+	"$UI_BIN/busy" update dev 'Reading the journal of this boot…' 2>/dev/null || :
+	if sudo -n journalctl -b --no-pager -n 3000 >"$_bundle/journal.txt" 2>"$_bundle/journal.err"; then
+		rm -f "$_bundle/journal.err"
+	elif journalctl -b --no-pager -n 3000 >"$_bundle/journal.txt" 2>"$_bundle/journal.err"; then
+		rm -f "$_bundle/journal.err"
+	else
+		printf 'journalctl could not read this boot: %s\n' \
+			"$(cat "$_bundle/journal.err" 2>/dev/null)" >"$_bundle/journal.txt"
+		rm -f "$_bundle/journal.err"
+	fi
+	sed -i -e 's/\x1B\[[0-9;]*m//g' "$_bundle/journal.txt" 2>/dev/null || :
+	# Clicking the spinner during the report is a cancel: the bundle is not a
+	# half-written file, it is nothing at all.
+	if [ -n "$_busy_started" ] && "$UI_BIN/busy" cancelled dev 2>/dev/null; then
+		exit 0
+	fi
+
+	if sudo -n dmesg >"$_bundle/dmesg.txt" 2>/dev/null; then
+		:
+	elif dmesg >"$_bundle/dmesg.txt" 2>/dev/null; then
+		:
+	else
+		printf 'dmesg is restricted on this machine (kernel.dmesg_restrict=1).\n' >"$_bundle/dmesg.txt"
+	fi
+
+	{
+		printf '## ip\n'; ip -br a 2>&1 || :
+		printf '\n## links\n'; ip -br link 2>&1 || :
+		printf '\n## memory\n'; free -h 2>&1 || :
+		printf '\n## disk\n'; df -h 2>&1 || :
+		printf '\n## usb\n'; lsusb 2>&1 || :
+		printf '\n## modules\n'; lsmod 2>&1 || :
+		printf '\n## pci\n'; lspci -nn 2>&1 || :
+		printf '\n## packages (apt-mark showmanual)\n'; apt-mark showmanual 2>&1 || :
+		printf '\n## packages (dpkg selections)\n'; dpkg --get-selections 2>&1 || :
+	} >"$_bundle/hardware.txt"
+
+	{
+		printf 'This bundle was written by ~/.config/bin/lazyos-profile report.\n'
+		printf '\n'
+		printf '  sysinfo.txt    the machine, its kernel command line and the image revision\n'
+		printf '  report.txt     the output of check-system.sh\n'
+		printf '  journal.txt    the last 3000 lines of this boot'"'"'s journal\n'
+		printf '  dmesg.txt      the kernel ring buffer, if the kernel lets a user read it\n'
+		printf '  hardware.txt   interfaces, memory, disks, USB, modules, PCI and the package list\n'
+		printf '\n'
+		printf 'It contains no keys, passwords or archives. The journal does name Wi-Fi\n'
+		printf 'networks, file paths and errors, which is what it is for; read it before\n'
+		printf 'posting it somewhere public.\n'
+	} >"$_bundle/README.txt"
+
+	_out="lazyos-report-$(hostname_short)-$(stamp).tar.zst"
+	_out=$_target/$_out
+	tar --zstd -cf "$_out" -C "$_bundle" . || {
+		rm -f "$_out"
+		"$UI_BIN/busy" fail dev 'Could not write the bundle' dialog-error 2>/dev/null || :
+		die "could not write $_out"
+	}
+	chmod 600 "$_out"
+	_size=$(du -h "$_out" 2>/dev/null | awk '{ print $1 }' || printf '?')
+	"$UI_BIN/busy" end dev "Diagnostics saved ($_size): $(basename "$_out")" 2>/dev/null || :
+	say 'Diagnostics saved' "$_out"
+	printf '%s\n' "$_out"
+}
+
+# list_archives: path, size and mtime of every exported profile on a mounted
+# filesystem a person can see, newest first.  The menu turns each line into a
+# row; import takes the path back.  The filter is the same one rofi-places uses
+# for its disk list (/ and /boot are not places to look for a profile).
+cmd_list_archives() {
+	{
+		findmnt -rn -o TARGET,FSTYPE 2>/dev/null |
+			while read -r _target _fstype; do
+				case $_fstype in
+				ext2 | ext3 | ext4 | vfat | exfat | btrfs | xfs | f2fs | ntfs | ntfs3) ;;
+				*) continue ;;
+				esac
+				case $_target in
+				/ | /boot | /boot/*) continue ;;
+				esac
+				printf '%s\n' "$_target"
+			done
+		[ -d "$HOME/Downloads" ] && printf '%s\n' "$HOME/Downloads"
+	} | while IFS= read -r _root; do
+		[ -r "$_root" ] || continue
+		find "$_root" -maxdepth 3 -type f \
+			\( -name 'lazyos-profile-*.tar.zst' -o -name 'lazyos-profile-*.tar.zst.gpg' \) \
+			-printf '%T@\t%s\t%p\n' 2>/dev/null || :
+	done | sort -rn | awk -F'\t' '{ printf "%s\t%s\t%s\n", $3, $2, $1 }'
+}
+
+usage() {
+	cat <<'EOF'
+usage: lazyos-profile export [DIR] [--no-encrypt] [--passphrase-file FILE]
+       lazyos-profile export --dry-run
+       lazyos-profile import ARCHIVE
+       lazyos-profile report [DIR]
+       lazyos-profile list-archives
+EOF
+}
+
+case ${1:-} in
+export) shift; cmd_export "$@" ;;
+import) shift; cmd_import "$@" ;;
+report) shift; cmd_report "$@" ;;
+list-archives) cmd_list_archives ;;
+help | --help | -h | '') usage ;;
+*) usage; exit 1 ;;
+esac

@@ -1570,6 +1570,138 @@ else
 	fail "file actions incomplete:$_missing_actions (Alt+1 offers rows that cannot run)"
 fi
 
+# The Developer menu (Alt+Ctrl+D, rofi-dev, the root menu's Developer row and
+# org.lazyos.dev.desktop) exports ~/.ssh, ~/.gnupg and the dotfiles into an
+# encrypted archive, restores one, and writes a diagnostics bundle. Every piece
+# is needed at a different moment: a missing gpg fails after the passphrase, a
+# missing tar/zstd fails before it, and a missing udisksctl means a stick that is
+# not mounted yet cannot be offered.
+_missing_dev=""
+for _c in tar zstd gpg udisksctl; do have "$_c" || _missing_dev="$_missing_dev $_c"; done
+for _s in rofi-dev lazyos-profile; do
+	[ -x "$HOME/.config/bin/$_s" ] || _missing_dev="$_missing_dev bin/$_s"
+done
+if [ -z "$_missing_dev" ]; then
+	ok "developer menu complete (tar, zstd, gpg, udisksctl, rofi-dev, lazyos-profile)"
+else
+	fail "developer menu incomplete:$_missing_dev (Alt+Ctrl+D loses those actions)"
+fi
+
+# The passphrase pipeline is the one part that can break without a binary going
+# missing: gpg 2.1 and later ignore --passphrase-fd unless the pinentry is told
+# to loop back, and the symptom is a gpg that waits for an agent dialog that
+# nobody is there to answer. This runs the exact command the menu runs - AES256,
+# passphrase through fd 3 - on a throwaway passphrase and two bytes, so the
+# encryption is proven without touching the account's keys.
+if have gpg && _dev_tmp=$(mktemp -d "${TMPDIR:-/tmp}/lazyos-gpg.XXXXXX"); then
+	_dev_agent=
+	if have systemctl; then
+		[ "$(systemctl --user is-active gpg-agent.service 2>/dev/null)" = active ] && _dev_agent=was
+	fi
+	(umask 077; printf 'lazyos-check\n' >"$_dev_tmp/pass")
+	printf 'lazyos' >"$_dev_tmp/plain"
+	_dev_gpg=ok
+	gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 \
+		--cipher-algo AES256 --s2k-digest-algo SHA512 -c \
+		-o "$_dev_tmp/plain.gpg" "$_dev_tmp/plain" 3<"$_dev_tmp/pass" 2>/dev/null || _dev_gpg=
+	gpg --batch --yes --pinentry-mode loopback --passphrase-fd 3 \
+		-d -o "$_dev_tmp/plain.out" "$_dev_tmp/plain.gpg" 3<"$_dev_tmp/pass" 2>/dev/null || _dev_gpg=
+	[ "$(cat "$_dev_tmp/plain.out" 2>/dev/null)" = lazyos ] || _dev_gpg=
+	if [ -n "$_dev_gpg" ]; then
+		ok "gpg round-trips the Developer menu's passphrase pipeline (AES256, fd 3)"
+	else
+		fail "gpg cannot round-trip with --pinentry-mode loopback --passphrase-fd: the profile export would hang"
+	fi
+	rm -rf "$_dev_tmp"
+	# Only when this check started it: an agent the user was already running
+	# (a signed commit, an ssh-agent session) is theirs to keep.
+	if [ -z "$_dev_agent" ] && have gpgconf; then
+		gpgconf --kill gpg-agent >/dev/null 2>&1 || :
+	fi
+fi
+
+# The two lists the export is built from are the feature: the paths travel in
+# the tar, and the dry run prints them without writing anything. A path that
+# leaves the list stops being saved, silently.
+if [ -x "$HOME/.config/bin/lazyos-profile" ]; then
+	_dev_dry=$("$HOME/.config/bin/lazyos-profile" export --dry-run 2>/dev/null || :)
+	# Both names have to be in it, not just one of them.
+	_dev_paths=ok
+	case $_dev_dry in *".ssh"*) ;; *) _dev_paths= ;; esac
+	case $_dev_dry in *".gnupg"*) ;; *) _dev_paths= ;; esac
+	if [ -n "$_dev_paths" ]; then
+		ok "the profile export still includes ~/.ssh and ~/.gnupg (export --dry-run)"
+	else
+		fail "bin/lazyos-profile export --dry-run no longer names ~/.ssh and ~/.gnupg: the keys would stop travelling"
+	fi
+	# The agents are half of what "the account" means now: the menu's account
+	# directories and the CLIs' own homes. The inclusion test is a whole-line
+	# fixed-string match, because the exclusions below it also name the path and a
+	# substring test would pass with the entry gone.
+	_dev_agents=ok
+	for _p in .claude .codex .gemini .copilot .config/github-copilot \
+		.local/share/lazyos/agents .config/opencode; do
+		grep -qsxF -- "$_p" "$HOME/.config/bin/lazyos-profile" || _dev_agents=
+	done
+	grep -qsF -- "--exclude='.claude/projects'" "$HOME/.config/bin/lazyos-profile" ||
+		_dev_agents=
+	if [ -n "$_dev_agents" ]; then
+		ok "the profile export covers the agents' homes and account directories (transcripts excluded)"
+	else
+		fail "bin/lazyos-profile lost an agent path or its transcript excludes: sign-ins or 100s of MB of history"
+	fi
+	# Firefox is the other half of "the account": bookmarks, passwords and
+	# add-ons travel, the site data (202 MB here), the session and the SQLite
+	# checkpoints do not. Both roots are in ENTRIES because the XDG path is what
+	# Debian's Firefox uses here and MOZ_LEGACY_HOME=1 moves it to ~/.mozilla; one
+	# `*mozilla/firefox/*` exclude pattern covers either.
+	_dev_ff=ok
+	for _p in .config/mozilla .mozilla; do
+		grep -qsxF -- "$_p" "$HOME/.config/bin/lazyos-profile" || _dev_ff=
+	done
+	grep -qsF -- "--exclude='*mozilla/firefox/*/storage'" "$HOME/.config/bin/lazyos-profile" || _dev_ff=
+	if [ -n "$_dev_ff" ]; then
+		ok "the profile export covers the Firefox profile (site data, session and caches excluded)"
+	else
+		fail "bin/lazyos-profile lost the Firefox profile or its storage/cache excludes: bookmarks and passwords or 200 MB of site data"
+	fi
+	# A passphrase prompt that lands on the VT is worse than no prompt at all:
+	# the session shows a busy card and nothing ever asks. `[ -t 0 ]` alone was
+	# that bug - sway's exec inherits /dev/tty7 - so the foreground-group test
+	# and the rofi fallback are part of the feature, not an implementation
+	# detail.
+	if grep -qs 'tpgid' "$HOME/.config/bin/lazyos-profile" &&
+		grep -qs 'in_session' "$HOME/.config/bin/lazyos-profile"; then
+		ok "the passphrase prompt cannot land on an invisible terminal (tpgid test, rofi fallback)"
+	else
+		fail "bin/lazyos-profile asks the passphrase with a bare [ -t 0 ]: from a key the prompt goes to the VT and the export hangs"
+	fi
+fi
+
+# Three places reach the menu and one is enough to lose: the root menu's row
+# (bar-menu), the key (24-keys.conf) and the launcher entry (whose Exec is a
+# $HOME script, so its execute bit is also part of it).
+_dev_reach=ok
+grep -qs 'rofi-dev' "$HOME/.config/bin/bar-menu" || _dev_reach=
+grep -rqs 'Ctrl+d exec .*rofi-dev' /etc/sway/config.d/ || _dev_reach=
+[ -r /usr/share/applications/org.lazyos.dev.desktop ] || _dev_reach=
+if [ -n "$_dev_reach" ]; then
+	ok "the Developer menu is reachable three ways (root menu, Alt+Ctrl+D, launcher)"
+else
+	fail "the Developer menu lost the root-menu row, the Alt+Ctrl+D binding or org.lazyos.dev.desktop"
+fi
+grep -qs 'Icon=applications-development' /usr/share/applications/org.lazyos.dev.desktop 2>/dev/null &&
+	[ -r /usr/share/icons/LazyOS/48x48/apps/applications-development.png ] &&
+	ok "the Developer launcher entry asks for a picture the theme carries" ||
+	warn "org.lazyos.dev.desktop has no applications-development icon: the launcher row is a hole"
+
+# The manual is where the passphrase recipe and the restore steps live; the
+# section is one heading, and losing it makes the feature undiscoverable from a
+# terminal.
+grep -qs 'Your profile, on a stick' /usr/share/doc/lazyos/04-software.md &&
+	ok "the manual has the profile section (04-software.md)" ||
+	warn "04-software.md lost 'Your profile, on a stick': the export and restore are undocumented"
+
 # Format a disk writes a partition table and an exFAT or ext4 filesystem, so both
 # halves have to be there before the menu is allowed to list anything - and the
 # menu is reached from Places, where a missing script is a row that does nothing.
@@ -2991,7 +3123,10 @@ else
 	fail "declined daemon(s) running:$_declined (each is a package this port answered no to; it spends battery and nothing says why)"
 fi
 # The session's own units (PipeWire, WirePlumber, the portals, gvfs while the
-# file manager has a window, dconf) are expected.  An unknown one is a warning
+# file manager has a window, dconf) are expected, and so is gpg-agent: gpg 2.x
+# routes the passphrase of a symmetric archive through the agent, so the
+# Developer menu's export starts it on demand and it idles out by itself (there
+# is no enabled unit; the packaged socket activates it).  An unknown one is a warning
 # rather than a failure: a distribution update can add one, and the report
 # should name it instead of hiding it.  The two agreed residents are `exec`'d by
 # the sway configuration, not units, which is why the process checks above
@@ -3003,7 +3138,8 @@ if have systemctl; then
 		dbus.service|dconf.service|gvfs-*.service|mpris-proxy.service|\
 		pipewire.service|pipewire-pulse.service|filter-chain.service|\
 		wireplumber.service|wireplumber@*.service|xdg-desktop-portal*.service|\
-		xdg-document-portal.service|xdg-permission-store.service) ;;
+		xdg-document-portal.service|xdg-permission-store.service|\
+		gpg-agent.service|keyboxd.service) ;;
 		*) _unknown_units="$_unknown_units $_u" ;;
 		esac
 	done
