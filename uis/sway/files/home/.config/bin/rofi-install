@@ -34,15 +34,9 @@ set -eu
 dir=$(dirname "$0")
 . "$dir/lib-rofi.sh"
 
-# The session may not export the sbin directories (greetd does not), and half of
-# the installer's tools live there (parted, mkfs.*): without this the preflight
-# would refuse an install the machine can run.  check-system.sh fixes its own
-# PATH for the same reason.
-case ":$PATH:" in
-*:/usr/sbin:*) ;;
-*) PATH="$PATH:/usr/sbin:/sbin" ;;
-esac
-export PATH
+# The sbin directories are on PATH from lib-rofi.sh (the session does not export
+# them and half of the installer's tools - parted, mkfs.* - live there), so the
+# preflight below cannot refuse an install the machine can run.
 
 target=${DEVICE_BLOCK:-/dev/mmcblk0}
 name=${target##*/}

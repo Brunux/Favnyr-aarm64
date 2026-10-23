@@ -336,6 +336,25 @@ binding (`(?i)^(firefox|code)` and so on), then `swaymsg reload`: two
 `bindgesture` lines for the same swipe are the duplicate that raises the red
 bar above.
 
+## Auxiliary swap or Format a disk says the tools are missing
+
+The menu answered `Missing: parted mkswap swapon swapoff blkid` while every one of
+them was installed. The reason is the session's `PATH`: greetd starts sway with
+the PAM environment, and Debian keeps `/usr/sbin` and `/sbin` for root, so a
+`command -v` inside a menu found none of them. Both disk menus source
+`~/.config/bin/lib-rofi.sh`, and that file appends `/usr/sbin:/sbin` once for
+every menu - one line instead of a check in each script:
+
+```sh
+. ~/.config/bin/lib-rofi.sh
+command -v mkswap          # /usr/sbin/mkswap after that line, nothing before
+```
+
+`check-system.sh` asks the same question in a session-shaped `PATH` and fails
+while the line is gone. An image built before it needs a rebuild; until then the
+tools still work from a terminal with their full path (`/usr/sbin/parted`), and
+the menu's own rows are the part that cannot see them.
+
 ## Nothing responds, the machine is thrashing
 
 4 GB and a compressed swap: a runaway process can make everything crawl before

@@ -289,6 +289,7 @@ card the system is running from either, whatever their partition tables say.
 
 | Step | Expected |
 |---|---|
+| open it | the disk list, never `Missing:`: `parted`, `mkswap`, `swapon`, `swapoff` and `blkid` live in `/sbin`, which the session's `PATH` does not carry, and `~/.config/bin/lib-rofi.sh` is the line that adds it |
 | open it with only the eMMC and the boot card attached | "Nothing to offer: every disk here is mounted, built into the machine, or the one this system runs from" |
 | open it with the boot card and a spare, unmounted card/SD | the spare card only, with model and size |
 | pick it → **Cancel** | no partition table is written |

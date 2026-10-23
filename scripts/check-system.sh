@@ -1324,6 +1324,23 @@ else
 	fail "the disk guard is gone from lib-rofi.sh or from one of the two disk menus: the internal eMMC can be offered for formatting"
 fi
 
+# The two disk menus test their tools with `command -v` before they draw a row,
+# and greetd's session does not export the sbin directories: without the PATH
+# line in lib-rofi.sh, parted, mkswap, swapon, swapoff and blkid are all
+# reported missing on a machine that has every one of them (the card answered
+# "Missing: parted mkswap swapon swapoff blkid", and Format a disk had the same
+# hole). This asks the shared file in a session-shaped environment, which is the
+# thing that breaks, instead of trusting that the line is still there; a tool
+# that is really absent is the FAIL below.
+if ! have mkswap; then
+	skip "disk menu PATH not asked (mkswap is not installed; the next check fails)"
+elif env -i HOME="$HOME" PATH=/usr/local/bin:/usr/bin:/bin \
+	sh -c 'cd "$HOME/.config/bin" && . ./lib-rofi.sh && command -v mkswap' >/dev/null 2>&1; then
+	ok "Auxiliary swap and Format a disk resolve the sbin tools (lib-rofi.sh adds /usr/sbin:/sbin)"
+else
+	fail "bin/lib-rofi.sh lost the /usr/sbin:/sbin PATH line: both disk menus report installed tools as missing"
+fi
+
 # Auxiliary swap (rofi-swap) writes a swap partition and the fstab block that
 # activates it at boot. parted, mkswap, swapon/swapoff and blkid are the commands
 # it runs; a missing one is a menu that fails halfway, and the two rows that reach

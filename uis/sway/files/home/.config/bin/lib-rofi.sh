@@ -29,6 +29,22 @@
 # Notifications (mako) carry a named icon instead of a glyph: ui_say's fourth
 # argument, resolved through the icon theme that ~/.config/mako/config points at.
 
+# The way to the sbin directories.  The session's PATH is the one greetd hands
+# down (the PAM environment, and Debian keeps /usr/sbin and /sbin for root), so
+# `command -v mkswap` there answers "missing" on a machine where every tool is
+# installed.  The two disk menus check parted, mkfs.exfat, mkfs.ext4, mkswap,
+# swapon, swapoff and blkid before they draw a row and half of those live in
+# /sbin - Auxiliary swap said `Missing: parted mkswap swapon swapoff blkid` on
+# the card, and Format a disk had the same hole.  It is one line here because
+# every menu sources this file, and it is appended, never prepended, so a system
+# package still wins over a user copy of the same name.  check-system.sh fixes
+# its own PATH the same way, because it sources nothing by design.
+case ":$PATH:" in
+	*:/usr/sbin:*) ;;
+	*) PATH="$PATH:/usr/sbin:/sbin" ;;
+esac
+export PATH
+
 UI_BIN=$(cd -- "$(dirname -- "$0")" && pwd)
 
 UI_CYAN="#2aa198"

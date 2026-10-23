@@ -1011,9 +1011,18 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   resolve `LABEL=` to whichever device carries it), so setup refuses a disk while a different
   device already carries the label. Not stoppable, like Format: a killed `parted`/`mkswap` leaves
   half a card. `parted`, `mkswap`/`swapon` (util-linux) and `blkid` are already in the image, so the
-  menu adds no package. `check-system.sh` FAILs on a missing tool or script and when Places loses
-  the row; when the fstab block exists it WARNs if `nofail`, the device timeout or a priority below
-  100 went away, SKIPs when the card is not inserted, and WARNs when it is inserted but not active.
+  menu adds no package - but they live in `/sbin`, and the session's `PATH` is the one greetd hands
+  down (the PAM environment; Debian keeps `/usr/sbin` and `/sbin` for root), so the first card
+  answered `Missing: parted mkswap swapon swapoff blkid` with all five installed, and Format a disk
+  had the same hole. **The fix is one line where every menu already looks**: `lib-rofi.sh` appends
+  `/usr/sbin:/sbin` to `PATH` once (appended, so a system package still wins over a user copy), and
+  `rofi-install`'s copy of that block is gone with it - `check-system.sh` had grown the same block
+  for its own report, and it now also asks the shared file in a session-shaped `PATH` and FAILs
+  while the line is missing, because the failure is silent in every other witness: the tools are
+  present, the row draws, and only the answer is "Missing". `check-system.sh` also FAILs on a
+  missing tool or script and when Places loses the row; when the fstab block exists it WARNs if
+  `nofail`, the device timeout or a priority below 100 went away, SKIPs when the card is not
+  inserted, and WARNs when it is inserted but not active.
 - **Install LazyOS is a front end, not a second installer, and the delegation is what
   `check-system.sh` asks of the file.** The root menu's red row (and
   `org.lazyos.install.desktop`) opens `~/.config/bin/rofi-install`, one rofi process that only
