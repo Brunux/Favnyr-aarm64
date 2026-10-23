@@ -33,7 +33,7 @@ and on `Alt+D`, waybar and the foot terminal.
 | `home/.config/bin/dictate`, `dictate-model` | Dictation with whisper.cpp; the model is fetched (pinned SHA256) on first use. |
 | `home/.config/bin/translate` | **Alt+Ctrl+T**: the text selected with the mouse (or the clipboard) into the language Settings sets - English until it is - with Google's JSON endpoint and MyMemory as the fallback; the answer goes to the clipboard and, when long, to a read window. |
 | `home/.config/bin/sway-hibernate` | Hibernate, gated on a disk swap and `resume=`. |
-| `home/.config/bin/rofi-agents` | **Agents**: launch a coding agent, install one, keep accounts per agent. |
+| `home/.config/bin/rofi-agents` | **Agents**: launch a coding agent, install one, keep accounts per agent; `--default` is the root menu's one-click `Agent session` row. |
 | `home/.config/bin/rofi-capture`, `rofi-qr`, `screenshot` | **Capture** (screenshot, annotate, OCR, QR, record), the Wi-Fi QR code, and the one place a screenshot's folder is decided (`~/Pictures/Screenshots/<today>/`). |
 | `home/.config/bin/rofi-files`, `lazyos-thumbnail`, `lazyos-view` | The file browser, the thumbnail generator it calls, and the "open with LazyOS" rule (text/bat, document/papers, image/imv, video/mpv, the rest/Firefox). |
 | `home/.config/bin/lazyos-find` | **Alt+Ctrl+Shift+F**: `fd` streamed into `fzf` over the whole home, with a preview pane (see **Files in a terminal**). |
@@ -606,6 +606,11 @@ Claude Code (`CLAUDE_CONFIG_DIR`) and Codex (`CODEX_HOME`) - as one directory pe
 arm64 tarball; `scripts/rootfs-setup.sh` installs it into `~/.opencode/bin`), because it is the agent
 this port is built with and a fresh card should not have to fetch it first: that layout is the one
 its own `opencode upgrade` recognises and rewrites without root, and the image ships it signed out.
+The root menu's AI group opens with **Agent session** rather than with the list: that row runs
+`rofi-agents --default`, which starts the agent marked `●` (OpenCode until *Set the default agent…*
+names another) in `~/Work`, falls back to OpenCode when the recorded default is not installed, and
+raises a card instead of an empty terminal when no agent CLI is present - so the section is an
+action and a list, and the common case costs one click.
 Omarchy's usage meters are deliberately absent: they read provider
 APIs that change shape, and a broken meter is worse than none; if they return, the fitting shape is a
 `python3` script printing one line for a waybar `custom` module, not a daemon.

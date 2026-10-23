@@ -33,8 +33,14 @@
 # which is the fallback if that directory is gone.
 #
 #   rofi-agents                 the menu (also Alt+Ctrl+Shift+A)
+#   rofi-agents --default       start a session with the default agent
 #   rofi-agents --env <a> <acc> print the env assignment for an account
 #   rofi-agents --new <agent>   create an account directory
+#
+# `--default` is what the root menu's AI group calls: the list is the menu, and a
+# session is the one action an agent exists for, so that row does not make the
+# person open the list and pick again. OpenCode is the default on a fresh card
+# because the image ships it (see above); "Set the default agent…" moves it.
 #
 # Every row carries the session's glyph from lib-rofi.sh - a code sign for an
 # agent, two people for its accounts, a download arrow for an install, a gear
@@ -91,6 +97,38 @@ notify() { notify-send -a Agents -i system-users "$@" 2>/dev/null || true; }
 installed() { command -v "$1" >/dev/null 2>&1; }
 
 default_agent() { [ -r "$default_file" ] && head -n1 "$default_file" || true; }
+
+# default_entry: the agent a session starts with, as one AGENTS entry. The default
+# the menu records comes first; when it names nothing, or names an agent that is
+# not installed any more, OpenCode is next - the image ships it, so a fresh card
+# has a working default without a trip to the menu - and then the menu's own
+# order. Prints nothing when no agent CLI is installed at all, which is the one
+# case the caller reports instead of opening a terminal that exits at once.
+default_entry() {
+	local want=$1 e name bin npm envvar
+	for e in "${AGENTS[@]}"; do
+		IFS='|' read -r name bin npm envvar <<<"$e"
+		if [ "$bin" = "$want" ] && installed "$bin"; then
+			printf '%s' "$e"
+			return 0
+		fi
+	done
+	for e in "${AGENTS[@]}"; do
+		IFS='|' read -r name bin npm envvar <<<"$e"
+		[ "$bin" = opencode ] || continue
+		if installed "$bin"; then
+			printf '%s' "$e"
+			return 0
+		fi
+	done
+	for e in "${AGENTS[@]}"; do
+		IFS='|' read -r name bin npm envvar <<<"$e"
+		if installed "$bin"; then
+			printf '%s' "$e"
+			return 0
+		fi
+	done
+}
 
 launch() { # name, binary, envvar, account
 	local name=$1 bin=$2 envvar=$3 account=${4:-}
@@ -255,6 +293,22 @@ menu() {
 }
 
 case "${1:-}" in
+--default)
+	# A session with the default agent: the AI group's own row, so one click
+	# starts an agent instead of opening the list to pick the same one again.
+	entry=$(default_entry "$(default_agent)")
+	if [ -z "$entry" ]; then
+		notify "No agent CLI is installed" \
+			"The Agents menu installs one with npm"
+		exit 1
+	fi
+	IFS='|' read -r name bin npm envvar <<<"$entry"
+	acc=""
+	if [ -n "$envvar" ] && [ -r "$data/$bin/default" ]; then
+		acc=$(head -n1 "$data/$bin/default")
+	fi
+	launch "$name" "$bin" "$envvar" "$acc"
+	;;
 --env)
 	# Print the assignment for one account, for use in a shell:
 	#   eval "$(rofi-agents --env 'Claude Code' work)"
@@ -283,7 +337,7 @@ case "${1:-}" in
 	;;
 "") menu ;;
 *)
-	printf 'usage: rofi-agents [--env <agent> <account> | --new <agent>]\n' >&2
+	printf 'usage: rofi-agents [--default | --env <agent> <account> | --new <agent>]\n' >&2
 	exit 2
 	;;
 esac

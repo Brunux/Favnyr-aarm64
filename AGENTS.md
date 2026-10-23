@@ -1607,7 +1607,15 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   Omarchy's agents feature: launch (in foot, from `~/Work`, because the agents refuse to remember
   trust in `$HOME`), install (`npm install -g --prefix ~/.local <pkg>` - an explicit prefix, so npm
   never needs root and never touches `/usr/local`, and `~/.local/bin` is already on PATH), default
-  agent, and accounts. An "account" is a directory under
+  agent, and accounts. **The root menu's AI group opens with the action, not the list**: its
+  `Agent session` row runs `rofi-agents --default`, which starts the agent the menu marks `●` - the
+  recorded default, OpenCode on a fresh card because the image ships it, then the menu's own order
+  when the recorded one is no longer installed - in `~/Work`, so a session is one click instead of a
+  click and a pick of the same row. With no agent CLI at all it raises a card ("the Agents menu
+  installs one with npm"), because a foot window on a missing binary closes at once and reads as a
+  dead key. `check-system.sh` FAILs when either half goes (`--default` in the script, the row in
+  `bar-menu`), and the manual paragraph is `07-agents.md` § *A session in one click*. An "account"
+  is a directory under
   `~/.local/share/lazyos/agents/<agent>/<name>` used through the variable the CLI itself documents:
   **`CLAUDE_CONFIG_DIR`** for Claude Code and **`CODEX_HOME`** for Codex. Gemini and
   Copilot have no such variable, and OpenCode's `OPENCODE_CONFIG_DIR` moves only its

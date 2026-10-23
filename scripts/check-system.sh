@@ -2663,6 +2663,20 @@ if grep -qs '\.opencode/bin' "$HOME/.config/bin/rofi-agents"; then
 else
 	fail "bin/rofi-agents no longer adds ~/.opencode/bin: OpenCode's row becomes an install row"
 fi
+# The root menu's AI group opens with the action an agent is for - a session -
+# so the section is an action and a list, not only a list. It calls
+# `rofi-agents --default`, which starts the recorded default and falls back to
+# OpenCode; both halves are asked because either one missing makes the row a
+# no-op: a flag the script does not have exits 2 into the journal, and a row
+# nobody draws is simply not there.
+if grep -qs -- '--default' "$HOME/.config/bin/rofi-agents"; then
+	ok "the agents menu starts a session with the default agent (rofi-agents --default)"
+else
+	fail "bin/rofi-agents lost --default: the AI group's Agent session row does nothing"
+fi
+grep -qs 'rofi-agents" --default' "$HOME/.config/bin/bar-menu" &&
+	ok "the root menu's AI group starts a session with the default agent" ||
+	fail "bar-menu lost the Agent session row: its AI group can only open the list"
 
 # The session's own launcher entries. They are the only way to reach the bar's
 # panels and the session actions by typing, and a missing one is invisible: the

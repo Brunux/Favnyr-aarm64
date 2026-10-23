@@ -31,6 +31,16 @@ dir=$(dirname "$0")
 tmp=$(mktemp "${TMPDIR:-/tmp}/menu.XXXXXX")
 trap 'rm -f "$tmp"' EXIT
 
+# The AI group opens with the action an agent exists for - a session - and the
+# agent it starts is the one the Agents menu marks as the default, which is
+# OpenCode until someone picks another (the image ships it: tools/opencode/).
+# The name is read once, here, so the row says what it will start instead of
+# making the person open the list to find out. rofi-agents --default applies the
+# same rule and does the fallback itself; a send-off to an agent that is not
+# installed is therefore a card, never a terminal that closes at once.
+agent_default=$(head -n1 "${XDG_CONFIG_HOME:-$HOME/.config}/lazyos/agents/default" 2>/dev/null || :)
+[ -n "$agent_default" ] || agent_default=opencode
+
 while :; do
 	{
 		ui_row "$UI_I_TERM" 'Terminal' 'foot' terminal
@@ -50,6 +60,10 @@ while :; do
 		ui_row "$UI_I_TERM" 'SSH' 'hosts from ~/.ssh/config' ssh
 
 		ui_heading 'ai'
+		# Leftmost is the short route: a session with the default agent, in
+		# ~/Work, one click. The list below it is where another agent is picked,
+		# installed or given a second account.
+		ui_row "$UI_I_CODE" 'Agent session' "$agent_default, in ~/Work" agent
 		ui_row "$UI_I_USERS" 'Agents' 'Claude Code, Codex and the others' agents
 		ui_row "$UI_I_MIC" 'Dictation' 'speak, and it is typed' dictate
 
@@ -122,6 +136,9 @@ while :; do
 	settings) exec "$dir/rofi-quick" ;;
 	learn) exec "$dir/rofi-learn" ;;
 	keys) exec "$dir/rofi-keys" ;;
+	# The default agent, not the list: rofi-agents --default applies the
+	# rule the menu marks with ● and falls back to OpenCode.
+	agent) exec "$dir/rofi-agents" --default ;;
 	agents) exec "$dir/rofi-agents" ;;
 	calc) exec "$dir/rofi-calc" ;;
 	emoji) exec "$dir/rofi-emoji" ;;

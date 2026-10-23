@@ -8,6 +8,16 @@ that - launching and account profiles - and not the usage meters.
 **The menu**: `rofi-agents`, on **Alt+Ctrl+Shift+A** (Omarchy's `Super+Shift+Ctrl+A`),
 or "Agents" in the root menu / the launcher.
 
+**A session in one click.** The root menu's AI group (`Alt+Space`) opens with
+**Agent session**: it starts the agent the list marks `●` - OpenCode on a fresh
+card, because the image ships it - in `~/Work`, without opening the list first.
+The list below it is where another agent is picked, installed or given a second
+account, and `Set the default agent…` is the row the menu's first row follows.
+From a shell the same thing is `rofi-agents --default`; when the recorded default
+is not installed any more it starts OpenCode instead of failing, and with no
+agent CLI installed at all it raises a card ("the Agents menu installs one with
+npm") rather than opening a terminal that closes at once.
+
 | Row | Does |
 |---|---|
 | `<Agent>` | runs it in foot, in `~/Work` when that directory exists (agents remember trust per directory, and they refuse `$HOME`) |
