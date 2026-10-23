@@ -1,0 +1,503 @@
+//! Golden snapshots: every widget, at the popup grid and at the panel grid.
+//!
+//! A change that moves a border, drops a column or loses the key bar fails this
+//! suite, which is the point: the design system is a promise about layout, and
+//! layout is the one thing a unit test cannot read from the code.
+//!
+//! Regenerate deliberately with `UPDATE_SNAPSHOTS=1 cargo test -p lazyos-ui`
+//! and read the diff - a snapshot updated without reading it is a test that
+//! agrees with whatever the code does.
+//!
+//! The text is compared, not the colours: colours are covered on the other side
+//! by `tests/colours.rs` (only `design.rs` may name one) and by the design
+//! module's own token tests, while a cell's style is asserted by the widget
+//! tests that care (selection fill, title accent, danger summary).
+
+use std::fmt::Write as _;
+use std::fs;
+use std::path::PathBuf;
+
+use lazyos_ui::widgets::put;
+use lazyos_ui::{
+    App, BodyCtx, ColorRole, Confirm, Design, EmptyScreen, FailureScreen, GLYPHS, Header, KeyHint,
+    ListState, LogPane, Row, Screen, TextStyle, draw_badge, draw_card, draw_empty, draw_failure,
+    draw_gauge, draw_header, draw_keybar, draw_progress,
+};
+use ratatui::Terminal;
+use ratatui::backend::TestBackend;
+use ratatui::buffer::Buffer;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::layout::Rect;
+
+/// The two grids the session has: a 900x600 popup (80x24 at 11 pt) and the
+/// 1366x912 panel (152x45).
+const SIZES: [(u16, u16); 2] = [(80, 24), (152, 45)];
+
+fn snapshots_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots")
+}
+
+fn screen(buf: &Buffer) -> String {
+    let mut out = String::with_capacity((buf.area.width as usize + 1) * buf.area.height as usize);
+    for y in 0..buf.area.height {
+        for x in 0..buf.area.width {
+            out.push_str(buf.cell((x, y)).map(|c| c.symbol()).unwrap_or(" "));
+        }
+        // Trailing spaces are noise in a committed file and invisible in a
+        // diff, so a row is stored with its right margin trimmed.
+        while out.ends_with(' ') {
+            out.pop();
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// Compare (or, with `UPDATE_SNAPSHOTS=1`, rewrite) one snapshot file.
+fn compare(name: &str, rendered: String) {
+    let path = snapshots_dir().join(format!("{name}.txt"));
+    if std::env::var("UPDATE_SNAPSHOTS").as_deref() == Ok("1") {
+        fs::create_dir_all(snapshots_dir()).unwrap();
+        fs::write(&path, &rendered).unwrap();
+        return;
+    }
+    let expected = fs::read_to_string(&path).unwrap_or_else(|_| {
+        panic!(
+            "missing snapshot {}: run UPDATE_SNAPSHOTS=1 cargo test -p lazyos-ui",
+            path.display()
+        )
+    });
+    assert_eq!(
+        rendered,
+        expected,
+        "snapshot {} changed:\n{}",
+        path.display(),
+        first_difference(&expected, &rendered)
+    );
+}
+
+/// A widget that draws into a buffer, at both grids.
+fn check(name: &str, mut draw: impl FnMut(&mut Buffer, Rect, &Design)) {
+    let mut rendered = String::new();
+    for (width, height) in SIZES {
+        let design = Design::solarized();
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| {
+                let area = frame.area();
+                draw(frame.buffer_mut(), area, &design);
+            })
+            .unwrap();
+        let _ = writeln!(rendered, "===== {width}x{height} =====");
+        rendered.push_str(&screen(terminal.backend().buffer()));
+    }
+    compare(name, rendered);
+}
+
+/// A whole window (the `App` shell owns the frame), at both grids.
+fn check_terminal(name: &str, mut render: impl FnMut(&mut Terminal<TestBackend>)) {
+    let mut rendered = String::new();
+    for (width, height) in SIZES {
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        render(&mut terminal);
+        let _ = writeln!(rendered, "===== {width}x{height} =====");
+        rendered.push_str(&screen(terminal.backend().buffer()));
+    }
+    compare(name, rendered);
+}
+
+/// The first differing line, with both sides, so a failure reads like a diff
+/// instead of a 70-line string comparison.
+fn first_difference(expected: &str, got: &str) -> String {
+    for (number, (want, have)) in expected.lines().zip(got.lines()).enumerate() {
+        if want != have {
+            return format!("line {}:\n  want: {want:?}\n  got:  {have:?}", number + 1);
+        }
+    }
+    format!(
+        "the file has {} lines and the render {}",
+        expected.lines().count(),
+        got.lines().count()
+    )
+}
+
+fn body_rows() -> ListState {
+    let mut list = ListState::new().with_empty("no file matches");
+    list.set_rows(vec![
+        Row::new("Files")
+            .glyph("\u{f07b}")
+            .detail("rofi-files")
+            .value("Alt+Ctrl+F"),
+        Row::new("Files (window)")
+            .glyph("\u{f07b}")
+            .detail("pcmanfm")
+            .value("Search+Shift"),
+        Row::new("Capture")
+            .glyph("\u{f030}")
+            .detail("screenshot")
+            .value("Alt+Ctrl+C"),
+        Row::new("Translate")
+            .glyph("\u{f0ac}")
+            .detail("selection")
+            .value("Alt+Ctrl+T"),
+        Row::new("Search inside files")
+            .glyph("\u{f002}")
+            .detail("ripgrep")
+            .value("Alt+Ctrl+G"),
+        Row::new("Download")
+            .glyph("\u{f019}")
+            .detail("yt-dlp")
+            .value("Alt+Ctrl+U"),
+        Row::new("Settings")
+            .glyph("\u{f013}")
+            .detail("radios")
+            .value("Alt+Ctrl+O"),
+        Row::new("Notifications")
+            .glyph("\u{f0f3}")
+            .detail("mako history")
+            .value("Alt+Ctrl+N"),
+        Row::new("Clipboard")
+            .glyph("\u{f0ea}")
+            .detail("cliphist")
+            .value("Alt+Ctrl+V"),
+        Row::new("Emoji")
+            .glyph("\u{f118}")
+            .detail("1,296 rows")
+            .value("Alt+Ctrl+E"),
+        Row::new("Camera")
+            .glyph("\u{f030}")
+            .detail("uvcvideo")
+            .value("row"),
+        Row::new("Power")
+            .glyph("\u{f011}")
+            .detail("rofi-power")
+            .value("Alt+Escape"),
+    ]);
+    list
+}
+
+struct ListScreen {
+    list: ListState,
+}
+
+impl ListScreen {
+    fn inner(area: Rect, design: &Design) -> Rect {
+        // `draw_card`'s inner area: one border cell and `Space::One` padding
+        // (plus one on the tablet) on each side, one border on top and bottom.
+        let pad = design.padding(lazyos_ui::Space::One);
+        Rect {
+            x: area.x + 1 + pad,
+            y: area.y + 1,
+            width: area.width.saturating_sub(2 * (1 + pad)),
+            height: area.height.saturating_sub(2),
+        }
+    }
+}
+
+impl Screen for ListScreen {
+    fn draw(&mut self, ctx: &mut BodyCtx) {
+        let inner = draw_card(
+            ctx.buf,
+            ctx.area,
+            ctx.design,
+            Some("the session menu"),
+            true,
+        );
+        self.list.render(inner, ctx.buf, ctx.design, true);
+    }
+
+    fn hit(&self, area: Rect, x: u16, y: u16, design: &Design) -> Option<usize> {
+        self.list.hit_row(Self::inner(area, design), x, y, design)
+    }
+}
+
+#[test]
+fn header() {
+    check("header", |buf, area, design| {
+        let band = Rect {
+            height: design.header_height(),
+            ..area
+        };
+        draw_header(
+            buf,
+            band,
+            design,
+            &Header::new("LazyOS")
+                .subtitle("the session menu")
+                .status("12 rows"),
+        );
+    });
+}
+
+#[test]
+fn keybar() {
+    check("keybar", |buf, area, design| {
+        let band = Rect {
+            y: area.bottom() - 1,
+            height: 1,
+            ..area
+        };
+        draw_keybar(
+            buf,
+            band,
+            design,
+            &[
+                KeyHint::new("Enter", "open"),
+                KeyHint::new("Alt+1", "actions"),
+                KeyHint::new("type", "filter"),
+                KeyHint::new("Esc", "close"),
+            ],
+        );
+    });
+}
+
+#[test]
+fn list() {
+    check("list", |buf, area, design| {
+        let mut list = body_rows();
+        list.set_cursor(2);
+        list.render(area, buf, design, true);
+    });
+}
+
+#[test]
+fn list_without_focus() {
+    check("list-unfocused", |buf, area, design| {
+        let mut list = body_rows();
+        list.set_cursor(2);
+        list.render(area, buf, design, false);
+    });
+}
+
+#[test]
+fn list_filtered() {
+    check("list-filtered", |buf, area, design| {
+        let mut list = body_rows();
+        list.set_filter("window");
+        let shown = list.visible_len();
+        list.render(area, buf, design, true);
+        let note = format!("{shown} of 12");
+        let x = area.right().saturating_sub(note.len() as u16 + 1);
+        draw_badge(
+            buf,
+            x,
+            area.bottom() - 1,
+            design,
+            &note,
+            ColorRole::SurfaceAlt,
+        );
+    });
+}
+
+#[test]
+fn empty_list_says_so() {
+    check("list-empty", |buf, area, design| {
+        let list = ListState::new().with_empty("nothing here yet");
+        list.render(area, buf, design, true);
+    });
+}
+
+#[test]
+fn card() {
+    check("card", |buf, area, design| {
+        let inner = draw_card(buf, area, design, Some("Free space"), true);
+        let list = body_rows();
+        list.render(inner, buf, design, true);
+    });
+}
+
+#[test]
+fn badge_gauge_progress() {
+    check("badges", |buf, area, design| {
+        let mut y = area.y;
+        let mut x = draw_badge(buf, area.x, y, design, "connected", ColorRole::Ok);
+        x = draw_badge(buf, x, y, design, "warning", ColorRole::Warn);
+        draw_badge(buf, x, y, design, "battery", ColorRole::Danger);
+        y += 1;
+        draw_gauge(
+            buf,
+            Rect {
+                y,
+                height: 1,
+                ..area
+            },
+            design,
+            0.42,
+            "battery",
+        );
+        y += 1;
+        draw_gauge(
+            buf,
+            Rect {
+                y,
+                height: 1,
+                ..area
+            },
+            design,
+            0.91,
+            "disk",
+        );
+        y += 1;
+        draw_progress(
+            buf,
+            Rect {
+                y,
+                height: 1,
+                ..area
+            },
+            design,
+            0.63,
+            "downloading",
+            ColorRole::Accent,
+        );
+        put(
+            buf,
+            area.x,
+            y + 1,
+            "the label carries the meaning, the bar the motion",
+            area.width,
+            design.style(TextStyle::Dim),
+        );
+    });
+}
+
+#[test]
+fn empty_state() {
+    check("empty", |buf, area, design| {
+        draw_empty(
+            buf,
+            area,
+            design,
+            "the session menu",
+            "arrives in spec 007 - Esc closes",
+        );
+    });
+}
+
+#[test]
+fn failure_card() {
+    check("failure", |buf, area, design| {
+        draw_failure(
+            buf,
+            area,
+            design,
+            "the menu does not know that name",
+            "try: lazyos menu",
+        );
+    });
+}
+
+#[test]
+fn confirmation_starts_on_cancel() {
+    check("confirm", |buf, area, design| {
+        let confirm = Confirm::new("Format the card?", "Every byte on it is erased.");
+        confirm.render(area, buf, design);
+    });
+}
+
+#[test]
+fn confirmation_on_continue() {
+    check("confirm-continue", |buf, area, design| {
+        let mut confirm = Confirm::new("Format the card?", "Every byte on it is erased.");
+        confirm.handle(KeyEvent::new(KeyCode::Right, KeyModifiers::NONE));
+        confirm.render(area, buf, design);
+    });
+}
+
+#[test]
+fn log_pane() {
+    check("logpane", |buf, area, design| {
+        let mut log = LogPane::new();
+        for i in 0..40 {
+            log.push(format!(
+                "==> step {i:02}: {}",
+                ["copying", "syncing", "installing the kernel", "done"][i % 4]
+            ));
+        }
+        log.render(area, buf, design);
+    });
+}
+
+#[test]
+fn log_pane_paused() {
+    check("logpane-paused", |buf, area, design| {
+        let mut log = LogPane::new();
+        for i in 0..40 {
+            log.push(format!("==> step {i:02}"));
+        }
+        let _ = log.handle(
+            KeyEvent::new(KeyCode::PageUp, KeyModifiers::NONE),
+            area.height,
+        );
+        log.render(area, buf, design);
+    });
+}
+
+#[test]
+fn the_app_shell_with_the_menu() {
+    let mut body = ListScreen { list: body_rows() };
+    let mut app = App::new(
+        Header::new("LazyOS")
+            .subtitle("the session menu")
+            .status("12 rows"),
+    )
+    .design(Design::solarized().with_reduced_motion(true))
+    .keybar(vec![
+        KeyHint::new("Enter", "open"),
+        KeyHint::new("Alt+1", "actions"),
+        KeyHint::new("Esc", "close"),
+    ])
+    .screen(&mut body);
+    check_terminal("app-menu", |terminal| {
+        terminal.draw(|frame| app.render(frame)).unwrap();
+    });
+}
+
+#[test]
+fn the_app_shell_with_the_failure_card() {
+    let mut body = FailureScreen::new("the menu does not know that name", "try: lazyos menu");
+    let mut app = App::new(Header::new("LazyOS").subtitle("failed"))
+        .design(Design::solarized().with_reduced_motion(true))
+        .keybar(vec![KeyHint::new("any key", "close")])
+        .screen(&mut body);
+    // The failure card is the one window whose key bar says "any key".
+    check_terminal("app-failure", |terminal| {
+        terminal.draw(|frame| app.render(frame)).unwrap();
+    });
+}
+
+#[test]
+fn the_app_shell_with_the_empty_state() {
+    let mut body = EmptyScreen::new("the session menu", "arrives in spec 007");
+    let mut app = App::new(Header::new("LazyOS").subtitle("the session menu"))
+        .design(Design::solarized().with_reduced_motion(true))
+        .keybar(vec![
+            KeyHint::new("Esc", "close"),
+            KeyHint::new("q", "close"),
+        ])
+        .screen(&mut body);
+    check_terminal("app-empty", |terminal| {
+        terminal.draw(|frame| app.render(frame)).unwrap();
+    });
+}
+
+#[test]
+fn every_glyph_in_the_table_is_drawn_or_comes_from_a_border() {
+    // A glyph in the table that nothing draws is a font check for a character
+    // that never appears. The four corners and the vertical rule come from
+    // ratatui's rounded border, so they are not in widgets.rs as literals.
+    let from_ratatui = ['\u{256d}', '\u{256e}', '\u{256f}', '\u{2570}', '\u{2502}'];
+    let source =
+        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/widgets.rs"))
+            .unwrap();
+    for glyph in GLYPHS {
+        if from_ratatui.contains(glyph) {
+            continue;
+        }
+        let escape = format!("\\u{{{:04x}}}", *glyph as u32);
+        assert!(
+            source.contains(&escape),
+            "widgets.rs does not draw {escape}"
+        );
+    }
+}

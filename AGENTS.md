@@ -104,6 +104,31 @@ yet present in `scripts/` as not implemented.
   costume); SIGKILL promises nothing. The binary's `--version` is the committed `VERSION`,
   compiled in, so `--version` and `/etc/debian-aarch64-revision` cannot disagree, and
   `check-system.sh` compares them. Cargo's package versions are placeholders for that reason.
+- **The design system is a vocabulary, and the tests are what keep it one** (spec 002).
+  `lazyos-ui::design` holds `ColorRole`/`Space`/`TextStyle`/`Border`/`Density`; a widget asks for
+  `ColorRole::Accent`, never a hex value, and `lazyos-ui/tests/colours.rs` fails when
+  `Color::Rgb` appears outside `design.rs` - a widget that names a colour cannot follow the theme
+  engine (spec 004), and the palette itself stays in `lazyos-theme` (`colours.rs` also refuses a
+  hex literal in `design.rs`). Density (normal/tablet) is read once from
+  `$XDG_RUNTIME_DIR/lazyos-tablet` and decides the row stride and the bands, so the touch target
+  is a second value and not a second theme. **The shell owns the window**: `App` draws the
+  header, the body and the key bar, a command implements `Screen` and draws into `BodyCtx`, and
+  `lazyos-cli/tests/frame.rs` (plus the same grep in `check-system.sh`) fails when `lazyos-cli`
+  mentions `ratatui::Frame` - one shape instead of thirty. `Screen::key` and `Screen::hit`
+  receive the `Design` instead of caching one, because a hit region computed with a stale
+  density opens the row above the finger (`tests/app.rs` clicks the third row at both densities
+  and the blank line between two touch rows, which must do nothing). Widgets copy cached rows
+  into the buffer: 40 rows at 152x45 cost **424 µs** a tick in release and 6.2 ms unoptimised,
+  with **0 allocations per frame** (`tests/no_alloc.rs` counts them with a global allocator - the
+  445 µs in `optimization.md` §13 was `format!` per row per frame, not ratatui), and the golden
+  snapshots (`lazyos-ui/tests/snapshots/`, every widget at 80x24 and 152x45,
+  `UPDATE_SNAPSHOTS=1` to regenerate) are what makes a moved border visible in review. Motion is
+  one tachyonfx sweep of at most **300 ms** at a 10 fps tick, skipped by
+  `LAZYOS_REDUCED_MOTION=1`; nothing loops, and the loop draws on events only - the 10 fps tick
+  exists only while the opening animation runs. `lazyos --glyphs` prints the codepoints the
+  widgets draw and `check-system.sh` asks fontconfig for each one in a single call: a box-drawing
+  glyph no font has is a hole in the frame that logs nothing, the same failure the menu alphabet
+  already had in another surface.
 - **Work ships as a spec, one branch and one PR each.** [`specs/`](specs/README.md) turns
   [`docs/plan-ui.md`](docs/plan-ui.md) §16 into 14 mergeable specs, each naming its scope,
   acceptance criteria, three witnesses, tests and the `opencode go` model that builds it. The

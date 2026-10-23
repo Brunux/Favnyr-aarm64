@@ -42,6 +42,32 @@ question only something watching can answer. The table is
 title or its app_id, and the next window or workspace change picks it up - no
 restart, and an app with no line of its own shows a plain window outline.
 
+## The windows the framework draws
+
+Some of the session's menus are already one program (`lazyos`, the same binary
+under every old name), and every window it opens has the same three bands, so a
+window you have never seen is readable the first time:
+
+| Band | What it says |
+|---|---|
+| top | what this is, in cyan; a second line of context when there is one; and the one number worth showing while it runs, right-aligned over a rule |
+| middle | the list or the body. The selected row has a cyan bar down its left edge and its whole width filled; everything else is dim |
+| bottom | the keys that are not obvious, in brackets: `[Enter] open   [Esc] close` |
+
+The keys are letters and Enter, never Alt chords: sway sees every Alt chord
+before the window does, so an Alt hint in a window would be a hint the session
+swallows. Type to filter the list, `Up`/`Down` (or `k`/`j`) to move, `Enter` to
+open, `Esc` to close with nothing done. A click on a row does what moving to it
+and pressing `Enter` does; fold the keyboard back and the rows become two lines
+tall so a finger can hit one, and a click on the blank line between two of them
+does nothing at all.
+
+The pictures in these windows are **Nerd Font** codepoints drawn by the
+terminal's font, not the Font Awesome images the launcher uses: foot cannot
+render Font Awesome, so a picture there would be a box with a number in it. A
+window fades in over a third of a second and nothing else animates;
+`LAZYOS_REDUCED_MOTION=1` starts it at its final frame.
+
 ## The mark
 
 The mark is a prompt: **z_**, a cyan `z` and an orange cursor, and the

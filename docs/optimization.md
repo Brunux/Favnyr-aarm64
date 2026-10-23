@@ -648,6 +648,34 @@ zstd(level=3)`, which recompresses idle pages - parses and does nothing. Wholesa
 starved, while doubling the cap buys 100 %. The A/B (`stress-ng --vm`) is still the thing to run
 before changing the algorithm; enabling MULTI_COMP is a separate kernel-config decision.
 
+### The shell as shipped (spec 002)
+
+The design system was measured the same way, on this device, with the real shell rather than a
+synthetic widget:
+
+| what | release | unoptimised | allocations per frame |
+|---|---|---|---|
+| shell at 152x45, 40-row list, key bar | **424 µs** | 6.2 ms | **0** |
+| empty draw (ratatui alone, §13 above) | 154 µs | - | - |
+
+The extra 270 µs over the empty floor is cell copies (40 rows plus the 152-cell rule under the
+header) and the backend's own diff - not formatting: a counting global allocator
+(`tests/no_alloc.rs`, 100 frames after a warm-up) reports **zero** allocations, which is the
+mechanical form of the "build the tree once per state" rule above. Two things were changed to get
+there: `ListState` owns its rows and renders them into the buffer, and the shell computes its
+three bands with arithmetic instead of `Layout::split`, which otherwise allocates a `Vec` of
+rectangles every frame.
+
+The tick is only paid while something changes: the loop blocks on `event::poll` with no timeout
+when idle, and wakes at 10 fps only for the 300 ms opening sweep (tachyonfx). An idle window
+therefore costs nothing, which is the same rule the session's "nothing resident" already applies
+to processes.
+
+The golden snapshots (`lazyos-ui/tests/snapshots/`, every widget at 80x24 and 152x45) are the
+other half of the budget: the frame test says a tick is cheap, and the snapshots say what that
+cheap frame actually looks like, so a change that moves a border is visible in review instead of
+being inferred from a timing.
+
 ### How to check it took
 
 `cat /sys/block/zram0/disksize` should be within 10 % of `MemTotal` (the generator rounds to whole

@@ -3313,6 +3313,73 @@ for _fw_shape in pick task; do
 	fi
 done
 
+# The widgets draw box-drawing and block characters - the frame's corners, the
+# selection bar, the gauge's cells - and a codepoint no font carries is a hole in
+# the window that logs nothing, the same failure the menu alphabet has in
+# another surface.  `lazyos --glyphs` prints the list from the binary, so the
+# check cannot drift from what the widgets actually draw, and the union of the
+# installed charsets answers for all of them in one fc-list call.
+if have lazyos && have fc-list; then
+	_fw_glyphs=$(lazyos --glyphs 2>/dev/null)
+	_fw_glyph_total=$(printf '%s\n' "$_fw_glyphs" | awk 'NF { n++ } END { print n + 0 }')
+	if [ "$_fw_glyph_total" -eq 0 ]; then
+		fail "lazyos --glyphs printed nothing: the widget glyph list is empty or the binary predates it"
+	else
+		_fw_missing=$(fc-list -f '%{charset}\n' 2>/dev/null | tr ' ' '\n' | sort -u |
+			awk -v glyphs="$_fw_glyphs" '
+			function dec(h,   i, v) {
+				v = 0
+				for (i = 1; i <= length(h); i++)
+					v = v * 16 + index("0123456789abcdef", substr(h, i, 1)) - 1
+				return v
+			}
+			BEGIN {
+				n = split(glyphs, line, "\n")
+				for (i = 1; i <= n; i++) {
+					if (line[i] == "") continue
+					want[i] = dec(tolower(substr(line[i], 3)))
+					name[i] = line[i]
+				}
+			}
+			{
+				lo = $1
+				if (index(lo, "-")) {
+					split(lo, r, "-")
+					a = dec(r[1])
+					b = dec(r[2])
+				} else {
+					a = b = dec(lo)
+				}
+				for (i = 1; i <= n; i++)
+					if (!seen[i] && want[i] >= a && want[i] <= b) seen[i] = 1
+			}
+			END {
+				for (i = 1; i <= n; i++)
+					if (want[i] && !seen[i]) out = out " " name[i]
+				print out
+			}')
+		if [ -z "$_fw_missing" ]; then
+			ok "the framework's frame renders ($_fw_glyph_total glyphs, every codepoint covered by a font)"
+		else
+			fail "no installed font renders:$_fw_missing (a hole in every window that draws it, and nothing logs it)"
+		fi
+	fi
+fi
+
+# A command that draws its own frame is the first step back to thirty windows
+# with thirty shapes; the shell in lazyos-ui owns the header, the body and the
+# key bar.  This is the same grep the crate's own test runs, so a checkout
+# edited without the test suite is still caught on the device.
+if [ -n "$REPO" ] && [ -d "$REPO/rust/crates/lazyos-cli/src" ]; then
+	if grep -rqs 'ratatui::Frame\|&mut Frame' "$REPO/rust/crates/lazyos-cli/src"; then
+		fail "a command in lazyos-cli draws its own Frame (the App shell owns the window)"
+	else
+		ok "every command draws through the App shell (no Frame in lazyos-cli)"
+	fi
+else
+	skip "no checkout: cannot confirm the commands draw through the shell"
+fi
+
 # ---------------------------------------------------------------------------
 section "The brand"
 # ---------------------------------------------------------------------------
