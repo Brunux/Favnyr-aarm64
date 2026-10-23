@@ -105,6 +105,19 @@ mpv-mpris
 # docs/omarchy-gap.md said - so an EPUB still goes to the browser, and foliate
 # (12.4 MB, in forky) is the package that would fix that if it is wanted.
 papers
+# The camera application: guvcview 2.2 draws the preview, exposes the device's
+# own controls (exposure, gain, white balance - which is the difference between
+# a black rectangle and a face in a dim room) and keeps a photo or a clip.
+# 514 kB plus libguvcview (496 kB), libportaudio2 (216 kB, so a clip can carry
+# the microphone), libwebcam0 (84 kB, the UVC control names) and libgsl (3.3 MB,
+# its image filters) - and no new toolkit: it is GTK3, which waybar, rofi and
+# pcmanfm already pull in, so it inherits the solarized gtk-3.0/gtk.css instead
+# of looking like a foreign program. The camera itself needs no package: a USB
+# UVC camera is driven by uvcvideo, a module of this kernel, and udev creates
+# /dev/video0 when the device (the internal one sits on the hub at 1-1.4) is on
+# the bus. ~/.config/bin/lazyos-camera is the wrapper that finds that node by
+# driver and starts the window; nothing here is resident.
+guvcview
 # Mounting removable media as an unprivileged session, which until now was not
 # possible at all: udisks2 3.2 MB plus libblockdev (eight modules) and
 # libcryptsetup/libnvme, providing /usr/bin/udisksctl and the

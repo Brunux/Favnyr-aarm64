@@ -2375,6 +2375,69 @@ else
 	warn "papers is missing: a PDF opens in Firefox instead of the reader (the fallback works, it is just the browser)"
 fi
 
+# The webcam. The camera is a USB UVC device - the internal one sits on the hub
+# at 1-1.4, and it is the only one this tablet has: the device tree carries no
+# MIPI sensor, so there is nothing for libcamera to drive and no image pipeline
+# to miss. uvcvideo is a module of this kernel, so the *device* half needs no
+# package at all; what can disappear is the window, and each of the failures
+# below is silent on the machine - a row that opens nothing, or a window that
+# never appears - which is why they are FAILs and not warnings.
+_cam_sys= _cam_node=
+for _v in /sys/class/video4linux/video*; do
+	[ -e "$_v" ] || continue
+	_drv=$(readlink -f "$_v/device/driver" 2>/dev/null) || continue
+	[ "${_drv##*/}" = uvcvideo ] || continue
+	_cam_sys=$_v
+	_cam_node=/dev/${_v##*/}
+	break
+done
+if [ -n "$_cam_node" ]; then
+	ok "webcam found ($_cam_node, uvcvideo: $(cat "$_cam_sys/name" 2>/dev/null))"
+elif [ -d /sys/module/uvcvideo ]; then
+	fail "uvcvideo is loaded but no /dev/video* node is bound to it: the camera cannot be opened (sudo dmesg | grep -i uvc)"
+else
+	skip "no webcam (uvcvideo is not loaded: no UVC device on the bus)"
+fi
+if have guvcview; then
+	ok "camera application installed (guvcview $(dpkg-query -W -f='${Version}' guvcview 2>/dev/null))"
+else
+	fail "guvcview is missing: the Camera row opens nothing - there is a camera and no window for it"
+fi
+if [ -x "$HOME/.config/bin/lazyos-camera" ]; then
+	ok "the camera wrapper runs (bin/lazyos-camera, executable)"
+else
+	fail "bin/lazyos-camera is missing or not executable: the Camera row and the launcher entry do nothing"
+fi
+if [ -r /usr/share/applications/org.lazyos.camera.desktop ]; then
+	ok "Camera is in the launcher (org.lazyos.camera.desktop)"
+else
+	fail "org.lazyos.camera.desktop is missing: the launcher has no Camera entry"
+fi
+if [ -r /usr/share/icons/LazyOS/48x48/apps/camera-web.png ]; then
+	ok "the Camera entry has its picture (camera-web in the LazyOS theme)"
+else
+	fail "the LazyOS theme has no camera-web.png: the Camera launcher row is a hole"
+fi
+if grep -qs 'lazyos-camera' "$HOME/.config/bin/bar-menu"; then
+	ok "the root menu carries the Camera row (Alt+Space)"
+else
+	fail "bar-menu lost its Camera row: Alt+Space cannot open the webcam"
+fi
+# The camera portal is a different road to the same device, and this image has
+# no backend that implements it: the only portal backend here is the wlr one
+# (Screenshot and ScreenCast), so xdg-desktop-portal logs "The camera portal
+# requires an access impl" on every session while guvcview, ffmpeg and Firefox
+# open /dev/video* directly. It is a stated limit (04-software.md), not a
+# regression - but it is the answer to "why does this Flatpak see no camera",
+# so the report says it instead of leaving the journal line to be found.
+if [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/bus" ] && have busctl; then
+	if ! _portal=$(busctl --user call org.freedesktop.portal.Desktop \
+			/org/freedesktop/portal/desktop \
+			org.freedesktop.portal.Camera IsCameraPresent 2>&1); then
+		info "no camera portal (${_portal#Call failed: }): a Flatpak app cannot use the camera; guvcview, ffmpeg and Firefox read ${_cam_node:-the device} directly"
+	fi
+fi
+
 # Every row of the file browser carries an icon *name* the LazyOS theme has to
 # resolve; a missing PNG is a blank 32 px column with no log line anywhere.
 _missing_row_icons=""

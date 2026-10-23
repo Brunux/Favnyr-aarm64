@@ -49,6 +49,10 @@ while :; do
 		ui_row "$UI_I_SEARCH" 'Search inside files' 'the text in them, with ripgrep' grep
 		ui_row "$UI_I_DISK" 'Places' 'home, disks, the configuration' places
 		ui_row "$UI_I_CAMERA" 'Capture' 'screenshot, OCR, QR, recording' capture
+		# The webcam, not the screen: guvcview's preview, its controls and its
+		# photo/clip buttons. The glyph is the video camera, because Capture
+		# already owns the still-camera one.
+		ui_row "$UI_I_VIDEO" 'Camera' 'look through the webcam, take a photo' camera
 		ui_row "$UI_I_DOWNLOAD" 'Download' 'a link, into ~/Downloads' download
 		ui_row "$UI_I_COG" 'Settings' 'Wi-Fi, Bluetooth, night light, tablet mode, rotation' settings
 		ui_row "$UI_I_BOOK" 'Learn' 'the manual, with search' learn
@@ -133,6 +137,7 @@ while :; do
 		;;
 	places) exec "$dir/rofi-places" ;;
 	capture) exec "$dir/rofi-capture" ;;
+	camera) exec "$dir/lazyos-camera" ;;
 	settings) exec "$dir/rofi-quick" ;;
 	learn) exec "$dir/rofi-learn" ;;
 	keys) exec "$dir/rofi-keys" ;;

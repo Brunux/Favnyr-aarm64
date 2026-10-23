@@ -973,6 +973,55 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   FAILs on a missing `imv`/`papers`/`mpv`, on the missing `/usr/local/bin/imv`, on a missing
   `mpris.so`, and warns when `application/pdf` does not resolve to
   `org.gnome.Papers.desktop`.
+- **The camera needed no driver, only a window, and that is the whole of this feature.**
+  The Hayato's camera is a **USB UVC device on the internal hub** (`lsusb`: `0408:30d5 Quanta
+  USB2.0 HD UVC WebCam`, at `1-1.4`), so `uvcvideo` - a module of this kernel
+  (`CONFIG_USB_VIDEO_CLASS=m`) - binds it and udev creates `/dev/video0`; the tablet's
+  `/dev/video2`/`video3` are the SoC's `mtk_vcodec` encoder and decoder, which is why
+  `lazyos-camera` selects the node **by driver** and never by number (a replug reorders the
+  minors, the same lesson as `disk_layout_parts()`), and why a report of "there is no driver"
+  is answered with `lsusb` + `dmesg | grep -i uvc` + one `ffmpeg -f v4l2` frame rather than a
+  package. The device tree carries **no MIPI sensor and no `seninf`**, so the rear camera a
+  detachable is expected to have is *not* a missing module: it has no sensor to drive, and
+  WirePlumber's `api.libcamera.enum.manager could not be loaded` line on every boot is about
+  that path, not about this one (its v4l2 monitor still publishes the UVC node, `media.role
+  Camera`). The window is **guvcview** - 4.7 MB with libguvcview/libportaudio2/libwebcam0/
+  libgsl, GTK3 so it inherits `gtk-3.0/gtk.css` and looks like the rest of the session, and the
+  one thing a bare preview is not: the camera's own UVC controls (exposure, gain, white
+  balance), which is what a dark frame in a dim room actually needs. `~/.config/bin/lazyos-camera`
+  is the whole wrapper and it exists for five reasons: the node choice above; guvcview's default
+  photo and video paths are **`$HOME`** (`photo_path`, `video_path`, so the first capture would
+  land among the dotfiles - the bug grimshot had), so it passes `-i ~/Pictures/Camera/photo.jpg`
+  and `-j ~/Videos/camera.mkv` (guvcview appends `-N` and continues the numbering across runs,
+  so nothing is overwritten); a window that dies at once sends its stderr to
+  `~/.cache/lazyos-camera.log` and raises a card, because "the row does nothing" is what a silent
+  failure looks like (a window *killed* with `Alt+Q` is SIGTERM and is not a failure, hence the
+  elapsed-time half of the test); **`-g gtk3 -r sdl` is passed on every start**, because
+  guvcview *remembers* the gui and render api in `~/.config/guvcview2/<device>` and a headless
+  run (`-g none -r none`, which is how one captures a photo from a script - and how this feature
+  was tested) stores exactly that, after which every later launch reads `gui=none` back, opens
+  **no window at all** and still holds the camera - measured here, and it reads as a dead row with
+  a live process behind it; and a second instance would do the same, so when `pgrep -x guvcview`
+  answers the wrapper runs `swaymsg '[app_id="guvcview"] focus'` and says the camera is already
+  open instead of starting an invisible one (the device opens exclusively - the same fact the
+  troubleshooting entry states). It is the only viewer here that is **not** handed a
+  file by `lazyos-view`: there is no camera *file* to double click. Rows: the root menu's
+  `Camera` (with `UI_I_VIDEO`, because `UI_I_CAMERA` is Capture's), the launcher entry
+  `org.lazyos.camera.desktop` (whose `Icon=camera-web` is a **name** in the first table of
+  `scripts/make-icons.sh`, rendered from the same `f030` as Capture - rofi resolves a `.desktop`
+  `Icon=` by name, so a glyph that exists under another name is a hole on that row).
+  **The camera portal is the road that is deliberately closed**: `org.freedesktop.portal.Camera`
+  needs a backend, the only one here is `xdg-desktop-portal-wlr` (Screenshot and ScreenCast), and
+  the portal therefore logs *The camera portal requires an access impl* once per session - which
+  is a limitation `04-software.md` states and `check-system.sh` prints as an `info` line, because
+  the alternative is a resident portal daemon for one boolean, the answer the GTK4 section already
+  gave. Native programs do not care: **Firefox reads V4L2 directly** (verified: a headless
+  `getUserMedia` page enumerated a `videoinput` and opened 640x480 at 30 fps with the portal
+  missing), so a video call works while a Flatpak app sees no camera. Witnesses: `check-system.sh`
+  FAILs on a missing `guvcview`, `lazyos-camera`, `org.lazyos.camera.desktop`, `camera-web.png`
+  and Camera row in `bar-menu`, FAILs when `uvcvideo` is loaded and no node is bound to it, and
+  SKIPs when there is no UVC device at all; the manual is `04-software.md` § *The camera* and the
+  symptom list is `06-troubleshooting.md` § *The camera shows nothing, or an app cannot find it*.
 - **Removable media is `udisks2`, and mounting it is a row in Places.** An unprivileged session
   cannot `mount(8)` anything - that is a root operation - so a USB stick used to be unusable:
   no mount point, no `udisksctl`, and pcmanfm's Devices pane had nothing to talk to.

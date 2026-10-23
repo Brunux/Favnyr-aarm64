@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Camera
+GenericName=Webcam
+Comment=Look through the webcam, and keep a photo or a clip from it
+Exec=/home/brunux/.config/bin/lazyos-camera
+Icon=camera-web
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=camera;webcam;photo;picture;record;clip;video;mirror;

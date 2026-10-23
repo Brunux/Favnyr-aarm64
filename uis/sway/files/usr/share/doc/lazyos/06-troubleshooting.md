@@ -90,6 +90,52 @@ The controller (`hci0`) is attached to `serial0-0` and needs its RTL8822CS
 firmware; if `bluetoothctl show` says *Powered: no*, check
 `journalctl -u bluetooth` and that the `bluez` package is installed.
 
+## The camera shows nothing, or an app cannot find it
+
+**Check the device first, the program second.**
+
+```sh
+lsusb | grep -i cam                        # 0408:30d5 ... UVC WebCam
+sudo dmesg | grep -i uvc                   # uvcvideo: Found UVC 1.10 device ...
+ffmpeg -f v4l2 -i /dev/video0 -frames:v 1 /tmp/cam.png
+```
+
+If that PNG is a picture of what is in front of the tablet, the camera and its
+driver are fine and the problem is whatever is displaying it. `ffmpeg -f v4l2
+-list_formats all -i /dev/video0` shows what the device offers (MJPEG and YUYV,
+1280x720 down to 160x120 here).
+
+**The Camera row opens nothing.** guvcview is missing (`sudo apt install
+guvcview`, 4.7 MB with its libraries) or `~/.config/bin/lazyos-camera` lost its
+executable bit (`chmod 755`). `check-system.sh` FAILs on both, on a `/dev/video*`
+node that no `uvcvideo` is bound to, and on the launcher entry or its icon.
+
+**The window is open and everything is black.** Light, then exposure: the
+**Image Controls** window has brightness, gain and exposure, and auto exposure
+needs a second or two after the window appears, so the first frame is darker than
+the second. If the `ffmpeg` frame above is bright and the window is not, move the
+exposure slider; if the frame is dark too, the room is dark.
+
+**There is no `/dev/video0` at all.** The camera is on the internal USB hub at
+`1-1.4`. `lsusb` listing it while `/dev/video*` stays empty means the module did
+not bind: `sudo modprobe uvcvideo`, then `sudo dmesg | tail`. `check-system.sh`
+prints `FAIL uvcvideo is loaded but no /dev/video* node is bound to it` in
+exactly that state. A node that exists but answers `Permission denied` means
+your user is not in the `video` group: `id`, then `sudo usermod -aG video $USER`
+and log in again.
+
+**Nothing can use the camera while something else does.** The device opens
+exclusively: a second program gets a black preview or an error, which looks like
+"the camera stopped working" until the first one is closed - the guvcview window
+(**Alt+Q**), or the browser tab that holds it.
+
+**A Flatpak application sees no camera.** It asks
+`org.freedesktop.portal.Camera`, and this image has no portal backend for it -
+the journal says *The camera portal requires an access impl* once per session.
+Native programs (guvcview, Firefox, `ffmpeg`) read the device directly and are
+not affected. `04-software.md` states the limit; the portal is not going to
+appear by itself.
+
 ## The screen stays black after a kernel update
 
 The firmware boots `p1`, not `/boot`. If the machine comes back to the firmware

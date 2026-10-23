@@ -233,6 +233,52 @@ own interface and get it from the compositor (see the next section); the bar's
 coffee cup is the manual switch for everything else - a long download, a recipe,
 a page you are reading from across the room.
 
+## The camera
+
+**The camera works because the kernel drives it, not because something was
+installed for it.** It is a USB device on the internal hub (`lsusb`:
+`0408:30d5 Quanta USB2.0 HD UVC WebCam`, at `1-1.4`), and `uvcvideo` - a module
+of this kernel - turns it into `/dev/video0`. `/dev/video2` and `/dev/video3`
+are the SoC's hardware video encoder and decoder, not cameras. This device tree
+carries no MIPI sensor, so there is no second (rear) camera to open: a machine
+with one would need a kernel and an image pipeline, not a package.
+
+**To open it: Camera, in the root menu (Alt+Space) and the launcher.** It runs
+`~/.config/bin/lazyos-camera`, which finds the node bound to `uvcvideo` - by
+driver, because the numbering is what a replug reorders - sends a notification
+when there is no camera at all, and starts **guvcview**: the preview, the
+camera's own controls, and two capture buttons. **Alt+Q** closes the window
+(sway's kill; guvcview's own quit is the **Quit** button). The device opens
+exclusively, so pressing **Camera** again while it is open brings that window
+back instead of starting a second one.
+
+**The controls are half of what it is for.** The preview and **Image Controls**
+are two windows: exposure, gain, brightness, contrast, white balance and
+sharpness come from the camera itself through UVC, and a camera that looks black
+in a dim room is usually exposure, not a broken driver. Auto exposure takes a
+moment to settle, so the first frame after the window appears is darker than the
+second one - that is the sensor ramping, not a fault. **Cap. Image (I)** writes
+`~/Pictures/Camera/photo-N.jpg`, **Cap. Video (V)** writes
+`~/Videos/camera-N.mkv`; guvcview continues that numbering across runs, so
+nothing is overwritten, and a clip carries the internal microphone.
+
+**Without the window**, from a terminal:
+`ffmpeg -f v4l2 -i /dev/video0 -frames:v 1 /tmp/cam.png` captures one frame, and
+`ffmpeg -f v4l2 -list_formats all -i /dev/video0` lists what this camera offers
+(MJPEG and YUYV, from 1280x720 down to 160x120). That is the test that separates
+"the camera is broken" from "the window is broken", and it is the same device
+`check-system.sh` reports on.
+
+**A browser reads the camera directly.** A video call in Firefox needs none of
+the above: Firefox asks the kernel for the device and prompts for permission in
+its own window. **The camera *portal* is what this image does not have** -
+`org.freedesktop.portal.Camera` needs a portal backend that implements it, the
+only backend here is the wlr one (Screenshot and ScreenCast), and
+`xdg-desktop-portal` therefore logs *The camera portal requires an access impl*
+once per session. Native programs are unaffected; a Flatpak application, which
+may only reach a camera through that portal, sees none at all. That is a stated
+limit rather than a reason to run one more daemon.
+
 ## Files in a window
 
 **Search+Shift** opens **pcmanfm**: the files **Alt+Search** and **Alt+Ctrl+F**

@@ -1,0 +1,105 @@
+#!/bin/sh
+# The camera: look through the webcam, and keep a photo or a clip from it.
+#
+# The camera in this machine is a USB UVC device on the internal hub
+# (`lsusb`: 0408:30d5 Quanta, at `1-1.4`), so nothing has to be installed for it
+# to *exist*: uvcvideo is a module of this kernel, udev loads it, and
+# /dev/video0 appears. What the image was missing is a window - guvcview draws
+# the preview, exposes the camera's own controls (exposure, gain, white balance,
+# which is the difference between a black rectangle and a face in a dim room)
+# and writes a photo or a clip.
+#
+# The device is chosen by *driver*, never by number: the MT8192's hardware
+# encoder and decoder are /dev/video2 and /dev/video3 (drivers mtk_vcodec_enc
+# and mtk_vcodec_dec), and the camera is whichever node uvcvideo bound. The
+# numbering is exactly what a replug reorders.
+#
+# The photo and video names are passed on the command line so both land in
+# ~/Pictures/Camera and ~/Videos: guvcview's own default for each is $HOME,
+# which is how grimshot used to put every screenshot among the dotfiles.
+# guvcview appends -N to the name and continues the numbering across runs, so a
+# second photo does not overwrite the first.
+#
+# Started from the root menu (Alt+Space), the launcher entry
+# org.lazyos.camera.desktop, and by name. Nothing is resident: the window is the
+# camera, and this script is only its parent (which is what lets it say why the
+# window did not appear).
+set -eu
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/lib-rofi.sh"
+
+# The first node bound to uvcvideo. A machine without a camera has none, and
+# that is a state to report rather than a crash with no screen.
+dev=
+for node in /sys/class/video4linux/video*; do
+	[ -e "$node" ] || continue
+	driver=$(readlink -f "$node/device/driver" 2>/dev/null) || continue
+	[ "${driver##*/}" = uvcvideo ] || continue
+	dev=/dev/${node##*/}
+	break
+done
+
+if [ -z "$dev" ]; then
+	ui_say Camera \
+		'No webcam: no /dev/video* node is bound to uvcvideo. The driver is a module of this kernel - `sudo dmesg | grep -i uvc` says whether the camera was found on the bus at all.' \
+		critical "$UI_ICON_ERROR"
+	exit 0
+fi
+
+if ! command -v guvcview >/dev/null 2>&1; then
+	ui_say Camera \
+		'There is a camera but nothing to look at it with: guvcview is not installed (package guvcview).' \
+		critical "$UI_ICON_ERROR"
+	exit 0
+fi
+
+photos=$HOME/Pictures/Camera
+videos=$HOME/Videos
+mkdir -p "$photos" 2>/dev/null || :
+mkdir -p "$videos" 2>/dev/null || :
+
+log=$HOME/.cache/lazyos-camera.log
+mkdir -p "${log%/*}" 2>/dev/null || :
+
+# One program holds the camera at a time, and a second guvcview does not fail
+# loudly: it opens the device, gets no window and leaves the first one holding
+# it (measured), which reads as "the row did nothing". So focus the window
+# that is already up and say so, instead of starting an invisible instance.
+if pgrep -x guvcview >/dev/null 2>&1; then
+	swaymsg -q '[app_id="guvcview"] focus' 2>/dev/null || :
+	ui_say Camera 'The camera is already open (one program can use it at a time).' \
+		normal "$UI_ICON_INFO"
+	exit 0
+fi
+
+# guvcview's stderr is a wall of `V4L2_CORE: (UVCIOC_CTRL_MAP)` and ALSA
+# `Unknown PCM cards` lines on this device, all harmless; they go to a file
+# instead of the journal, and that file is what the card below quotes when the
+# window never appears. (It also prints its own noise when it *does* work, so
+# the log is not evidence of a failure by itself.)
+#
+# -g gtk3 -r sdl are not defaults repeated for symmetry: guvcview *remembers*
+# the gui and render api in ~/.config/guvcview2/<device>, and a headless run
+# (`-g none -r none`, which is how one captures a photo from a script) stores
+# exactly that - after which every later launch reads gui=none back and opens no
+# window at all while holding the camera. It looks like a dead row with a
+# process behind it. Passing both on the command line wins over the file.
+start=$(date +%s)
+rc=0
+guvcview -d "$dev" -g gtk3 -r sdl \
+	-i "$photos/photo.jpg" \
+	-j "$videos/camera.mkv" >"$log" 2>&1 || rc=$?
+elapsed=$(( $(date +%s) - start ))
+
+# A window that closes immediately is the failure a person would otherwise read
+# as "the row does nothing", so it is said out loud. A window that ran and was
+# then closed is the normal end (Alt+Q is sway's kill, which is SIGTERM), which
+# is why the elapsed time is part of the test and not only the exit status.
+if [ "$rc" -ne 0 ] && [ "$elapsed" -lt 5 ]; then
+	reason=$(grep -vE 'UVCIOC_CTRL_MAP|Unknown PCM cards' "$log" 2>/dev/null | tail -n 1) || :
+	ui_say Camera "The camera did not start (guvcview exited $rc). ${reason:-See $log}" \
+		critical "$UI_ICON_ERROR"
+	exit 1
+fi
+exit 0

@@ -111,6 +111,11 @@ system-suspend-hibernate           f186
 system-shutdown                    f011
 preferences-desktop-screensaver    f06e
 applets-screenshooter              f030
+# The webcam row (org.lazyos.camera.desktop) asks for camera-web, the GNOME name
+# for a camera application. It is the same Font Awesome camera as Capture's row
+# above, and it is a second *name* because rofi resolves a .desktop Icon= by
+# name: the glyph existing under another one is a hole on the launcher row.
+camera-web                         f030
 media-record                       f03d
 audio-input-microphone             f130
 preferences-desktop-display        f108

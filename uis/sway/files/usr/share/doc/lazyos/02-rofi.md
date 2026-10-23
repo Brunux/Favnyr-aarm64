@@ -6,7 +6,7 @@ daemon).
 
 | You press | What opens | What it lists |
 |---|---|---|
-| **Alt+D** | `rofi -show drun` | the applications: the `.desktop` entries, including this image's own (LazyOS Menu, Settings, Wi-Fi, Bluetooth, audio, media, notifications, power, Files, Learn, Keys, Dictate, Agents…) |
+| **Alt+D** | `rofi -show drun` | the applications: the `.desktop` entries, including this image's own (LazyOS Menu, Settings, Wi-Fi, Bluetooth, audio, media, notifications, power, Files, Camera, Learn, Keys, Dictate, Agents…) |
 | **Alt+Tab** | `rofi -show window` | the open windows (sway has no switcher of its own; this uses wlroots' foreign-toplevel protocol) |
 | **Alt+Shift+D** | `rofi -show run` | every executable in `$PATH`. **Enter** runs it, **Shift+Enter** runs it in foot |
 | **Alt+Space** | `bar-menu` | the root menu: what opens something, the system panels, and the session actions |
