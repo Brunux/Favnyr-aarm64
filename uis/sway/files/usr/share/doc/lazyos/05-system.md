@@ -55,11 +55,17 @@ left something on:
 | 5 minutes | the session locks (`sway-lock`, the same lock every other path uses) |
 | 6 minutes | the panel goes dark (`swaymsg "output * power off"`, i.e. DPMS) |
 
-Any input brings all three back at once: swayidle's `resume` command turns the
+Any input ends the idle screen and brings the panel back: a key, a moving mouse
+or trackpad, a tap on the touchscreen. swayidle's `resume` command turns the
 panel on again, and `after-resume` does the same after a suspend, which is a
-different event and would otherwise wake to a dark screen. The idle chain is
-`/etc/sway/config.d/23-lazyos-screensaver.conf`; `check-system.sh` reads it and
-fails when a step or either wake line is missing.
+different event and would otherwise wake to a dark screen. The lock answers
+typing only - `swaylock` ignores the pointer - so at five minutes a mouse move
+only lights the screen and the password ends the lock. The
+idle chain is `/etc/sway/config.d/23-lazyos-screensaver.conf`; `check-system.sh`
+reads it and fails when a step or either wake line is missing, when the pointer
+can no longer end the idle screen, and when the 150 s command stops returning at
+once (swayidle waits for it, and the lock and the panel-off timer would never
+arrive).
 
 A **fullscreen video or presentation** in Firefox or `papers`, and a video in
 **mpv**, are exempt: they ask the compositor to inhibit the idle timer while

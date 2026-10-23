@@ -59,7 +59,8 @@ up when nobody is looking.
 150 s without input and the screen becomes **lazyOS_**: the z_ mark, the wordmark, `:: lazy by
 design ::` and the arcade line `» press any key to play «`, drawn in cyan. One terminal-text
 effect rebuilds the letters, then the next one does it differently, and so on while the machine waits. Any
-key returns you to the session and the 150 s starts over.
+key, any movement of the mouse or trackpad, or a tap on the touchscreen returns you to the
+session, and the 150 s starts over.
 
 At 300 s the screen locks instead: the wallpaper inside a base03 frame. The lock stops the animation
 first and refuses to draw a second time over itself, and the suspend shortcuts lock the screen

@@ -489,6 +489,42 @@ A `timeout 360 'swaymsg "output * power off"'` line that is missing is the whole
 fault - the panel is not the compositor's to turn off otherwise. The first input
 turns it back on (`resume`), and `after-resume` does the same after a suspend.
 
+## The idle screen ignores the mouse, or the session never locks
+
+Two separate things have to hold, and each fails on its own.
+
+**The wordmark only answered keys.** A terminal forwards the pointer only when
+the program inside asks for it, so `lazyos-screensaver` turns mouse reporting on
+before it reads (`ESC [ ? 1003 h` for all motion, `ESC [ ? 1006 h` for the
+encoding) and off again on the way out. Without it, moving the mouse and
+clicking do nothing at all while a key still works: motion and clicks are the
+terminal's own business (a click starts a text selection). `check-system.sh`
+FAILs when the escape is gone. A touchscreen tap counts, because the terminal
+turns it into a left click.
+
+**The chain stopped at the idle screen.** `swayidle` runs with `-w`, which makes
+it wait for each timed command to finish before it handles anything else - that
+is what holds the machine awake until the lock is drawn, so it cannot simply be
+dropped. A 150 s command that stayed in the foreground therefore kept the 300 s
+lock, the 360 s panel-off (`resume` included) and `before-sleep` from ever
+running: the machine sat at the wordmark, never locked, and a lid close slept
+after logind's five-second inhibitor timeout with no lock in front of it.
+`lazyos-screensaver` now starts its window and returns; `check-system.sh` runs
+it against a stub terminal and FAILs when it does not return at once. If the
+session never locks, ask
+
+```sh
+pgrep -af swayidle
+pgrep -x swaylock
+```
+
+while the animation is up: no `swaylock` at five minutes is this, not a problem
+with the lock.
+
+The **lock** is deliberately pointer-blind: `swaylock` answers motion, buttons
+and the wheel with a comment and nothing else, so a mouse that does nothing at
+five minutes is not a bug - typing is the unlock.
+
 ## The brightness keys do nothing
 
 `brightnessctl` needs write access to `/sys/class/backlight/*/brightness`. The

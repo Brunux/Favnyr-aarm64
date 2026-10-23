@@ -1,8 +1,9 @@
 #!/bin/bash
 # The LazyOS idle screen: a fullscreen terminal that loops the wordmark until a
-# key is pressed.
+# key is pressed or the pointer moves.
 #
-#   lazyos-screensaver          launch it (idempotent; also the bar menu entry)
+#   lazyos-screensaver          launch it (idempotent, and it returns at once;
+#                               also the bar menu entry)
 #   lazyos-screensaver --run    what runs *inside* the terminal (do not call)
 #
 # The idle screen is where the wordmark lives: the terminal draws the text art,
@@ -14,7 +15,12 @@
 # "press any key to play".
 #
 # The chain lives in etc/sway/config.d/23-lazyos-screensaver.conf: swayidle runs
-# this at 150 s and ~/.config/bin/sway-lock at 300 s.
+# this at 150 s and ~/.config/bin/sway-lock at 300 s.  The launcher returns as
+# soon as the window is started instead of waiting for it: swayidle runs the
+# chain with `-w`, which blocks its whole event loop until each timed command
+# exits (main.c, cmd_exec: waitpid), so a saver held in the foreground would
+# keep the 300 s lock, the 360 s DPMS, the resume lines and before-sleep from
+# ever running - the session would never lock while the wordmark was up.
 #
 # The animation is terminaltexteffects (`tte`), looping with --reuse-canvas so
 # the wordmark never blinks between effects. Deboma loops ttfx at 120 fps; the
@@ -107,11 +113,25 @@ run() {
 		esac
 	done
 
-	# Any key ends it, one byte at a time: canonical mode would wait for Enter.
+	# Any input ends it, one byte at a time: canonical mode would wait for Enter.
 	stty -icanon -echo min 1 time 0 2>/dev/null || true
+	# And the pointer reports too.  A terminal forwards the mouse only when the
+	# program inside asks for it, so without these two escapes the loop below
+	# only ever saw key bytes: motion and clicks were foot's own business (a
+	# click started a selection), which is why the idle screen answered the
+	# keyboard and nothing else.  1003 is all-motion tracking and 1006 the SGR
+	# encoding it is read in; foot implements both (foot-ctlseqs(7)).
+	printf '\033[?1003h\033[?1006h'
 	# And no cursor: tte is told not to restore it, and nothing else draws.
 	printf '\033[?25l'
 
+	# Every way out gives the terminal back.  Left on, mouse reporting turns
+	# the prompt of a `--run` in a real shell into a stream of escapes, and
+	# leaves the cursor hidden after it.
+	restore_terminal() {
+		printf '\033[?1006l\033[?1003l\033[?25h'
+	}
+	trap restore_terminal EXIT
 	trap 'exit 0' INT TERM HUP
 
 	if ! have_tte || [ ! -r "$LOGO" ]; then
@@ -137,11 +157,13 @@ run() {
 			--random-effect --no-eol --no-restore-cursor 2>/dev/null \
 			--include-effects $EFFECTS </dev/null &
 		pid=$!
-		# Poll for a key while the effect runs: killing tte is what makes the
+		# Poll for input while the effect runs - a key or any mouse event, both
+		# of which arrive as bytes on the pty: killing tte is what makes the
 		# dismissal immediate instead of waiting for the effect to end.  A read
-		# that times out (bash answers >128) means "no key yet"; anything else is
-		# eof or an error, i.e. the terminal is gone, and a loop that kept
-		# restarting tte against a closed pty would spin.
+		# that times out (bash answers >128) means "nothing yet"; anything else
+		# is a byte, eof or an error, i.e. the screen is wanted back or the
+		# terminal is gone, and a loop that kept restarting tte against a closed
+		# pty would spin.
 		while kill -0 "$pid" 2>/dev/null; do
 			read -rsn1 -t 1
 			rc=$?
@@ -200,5 +222,11 @@ if [ ! -r "$LOGO" ]; then
 	exit 1
 fi
 
-exec foot --app-id="$APP_ID" --config="$FOOT_INI" --title LazyOS \
-	"$(readlink -f "$0")" --run
+# The window is started and left to itself, so this returns at once: swayidle
+# runs the chain with `-w` and waits for each timed command to exit, so a
+# foreground saver would hold the 300 s lock, the 360 s DPMS, the resume lines
+# and before-sleep for as long as it animated.  `</dev/null` because the
+# terminal inherited here is sway's and nothing below reads it; stderr stays, so
+# a foot that cannot start still lands in the journal.
+foot --app-id="$APP_ID" --config="$FOOT_INI" --title LazyOS \
+	"$(readlink -f "$0")" --run </dev/null &

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
 Name=Screensaver
-Comment=The LazyOS idle screen: the wordmark, looping until a key is pressed
+Comment=The LazyOS idle screen: the wordmark, looping until a key is pressed or the pointer moves
 Exec=/home/brunux/.config/bin/lazyos-screensaver
 Icon=preferences-desktop-screensaver
 Terminal=false

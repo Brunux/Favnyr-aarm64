@@ -160,10 +160,14 @@ one a person notices on the battery.
 | Step | Expected |
 |---|---|
 | leave the machine alone for 2½ minutes | the **LazyOS** wordmark starts animating; nothing else changes |
+| move the mouse or drag a finger on the trackpad | the wordmark goes away **at once**, without a key, and the 150 s starts over; the pointer is hidden again a moment later |
+| tap the touchscreen while the wordmark runs | the same - the tap is a click, and a click ends the screen |
 | leave it for five minutes | the session is **locked** (the mountain photograph), and the idle screen is gone (not animating underneath) |
 | leave it for six minutes | the **panel goes dark** (`swaymsg "output * power off"`); look at it from the side - the backlight is off, not a black image |
 | press a key or touch the touchpad | the panel comes back on **and** the lock is still up: one input, both effects, no second press |
+| move the mouse, then type the password | the move only lights the panel; nothing on the lock reads the pointer, so the password is what ends it |
 | `pgrep -af swayidle` during all of it | one process, with the 150/300/360 timeouts and both wake lines |
+| `pgrep -x swaylock` at five minutes | one process: with `swayidle -w` the rest of the chain only runs if the 150 s command returned |
 | play a video in mpv, fullscreen or in a window | no idle screen, no lock, no panel off **while the window is visible** (the mpv rule is `visible`, not `fullscreen`, so a paused film also holds it); close the player and the timers start over |
 | fullscreen a YouTube page in Firefox for six minutes | the same: the screen stays awake (the `fullscreen` scope is deliberate - the browser merely open does not inhibit) |
 | open a PDF in `papers` and go fullscreen | the same |
@@ -174,6 +178,18 @@ one a person notices on the battery.
 
 What a failure means:
 
+* **the wordmark ignores the mouse**: `~/.config/bin/lazyos-screensaver` lost its
+  `?1003h`/`?1006h` escapes (a terminal reports the pointer only when the
+  program asks), so only keys end the screen. `check-system.sh` FAILs on the
+  missing enable; the restore (`?1003l`) is the other half, because `--run` in a
+  shell would otherwise leave the prompt writing escapes.
+* **the session never locks while the wordmark is up**: the 150 s command is
+  still staying in the foreground, and `swayidle -w` waits for it, so the 300 s
+  lock, the 360 s DPMS and `resume` never run. `check-system.sh` runs the
+  launcher against a stub terminal and FAILs when it does not return at once.
+  `pgrep -ax swaylock` at five minutes is the check that matters.
+* **the mouse does nothing at the lock**: it is not meant to. `swaylock` ignores
+  the pointer and the password ends it; a move only turns the panel back on.
 * **the lock appears but the panel stays lit**: the `timeout 360` line is missing
   from `/etc/sway/config.d/23-lazyos-screensaver.conf`; `check-system.sh` FAILs
   on it. `swaymsg -t get_outputs` still reports the output as on.

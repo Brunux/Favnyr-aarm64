@@ -1914,7 +1914,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   so the colour lives in the terminal profile (`~/.config/foot/screensaver.ini`,
   `foreground=2aa198`, the brand's cyan) for the effects that paint in the terminal's foreground,
   and the static frame prints its own SGR.
-  Four things are not obvious. **`tte`'s stdout is the animation** - the first version redirected it
+  Five things are not obvious. **`tte`'s stdout is the animation** - the first version redirected it
   to `/dev/null` while silencing the log and the screen stayed black for the whole run ("the
   screensaver does not work, nothing moves"). **A terminal allocates an 80x24 pty and resizes it only
   after the compositor maps the window**, so the script waits for `stty size` to change before it
@@ -1926,6 +1926,18 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `center_logo` runs `LC_ALL=C awk` and strips UTF-8 continuation bytes before `length()`, which is
   the one form that behaves the same in mawk (the image) and gawk (a build host); a byte-range regex
   on lifted characters is a *collation error* under a UTF-8 locale, not a width.
+  A fifth trap is **the pointer**: a pty hears the mouse only when the program inside asks for it,
+  so the dismissal on a mouse move is `\033[?1003h\033[?1006h` (all-motion tracking, SGR encoding -
+  foot maps them to `MOUSE_MOTION`/`MOUSE_SGR` in `csi.c` and reports button-0 motion in
+  `term_mouse_motion`), printed with the raw-mode setup and turned off (`?1006l ?1003l ?25h`) from an
+  `EXIT` trap so `--run` in a real shell does not leave the prompt writing escapes. Without the
+  enable the loop saw key bytes only, because motion and clicks are the terminal's own business (a
+  left click starts a selection, and a middle click pastes the primary selection into the pty - the
+  one pointer event that could end the screen at all): the card's report - "the screensaver does
+  not end with mouse movement" - is that line, and `check-system.sh` FAILs when it goes. A
+  touchscreen tap counts, because foot maps a tap to a left click. Verified on this machine with a
+  throwaway uinput pointer (a device with `REL_X`/`REL_Y` and `BTN_LEFT`, created and destroyed
+  around the test): the real idle screen, started by the launcher, ended on the first motion event.
   **The lock is `~/.config/bin/sway-lock`, and its reason is the readiness line.** The idle timer,
   `Alt+Ctrl+L`, the Lock key and the two suspend shortcuts all call it instead of `swaylock`
   directly: it passes `-R, --ready-fd` (swaylock's own handshake, written once the compositor
@@ -1941,7 +1953,25 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   hear. `check-system.sh` FAILs on a missing `tte`/`swayidle`/art/launcher/`sway-lock`/terminal
   profile, reads the drop-in for the 150 s, 300 s, 360 s, the `resume` and `after-resume` wake
   lines, `before-sleep` and `after-resume` **and** that `swayidle` is running (a missing chain
-  means no lock at all), and WARNs when an idle screen is found running under `swaylock`. Deboma's launcher (`hyprctl monitors`, a special workspace per
+  means no lock at all), WARNs when an idle screen is found running under `swaylock`, and FAILs
+  when the pointer enable or the launcher's early return goes (see below).
+  **`swayidle -w` waits for the command it runs, so the 150 s command must return at once.** `-w` is
+  load-bearing for sleep: swayidle holds logind's delay inhibitor for the whole session and releases
+  it in `prepare_for_sleep` *after* `before-sleep` returns, which is how the lock is up before the
+  machine goes down (`sway-lock --wait` is the bounded wait that makes that true), and without `-w`
+  the release happens as soon as the command is forked - the desktop visible on the way down, the bug
+  the readiness line was built for. But it waits in the event loop itself (`main.c`, `cmd_exec` ->
+  `waitpid`), so a 150 s command that stayed in the foreground held the 300 s lock, the 360 s DPMS,
+  the `resume` lines and `before-sleep` for as long as the wordmark animated: a session left alone
+  never locked and the panel never went dark, and a lid close slept after logind's 5 s inhibitor
+  timeout with no lock in front of it. Measured here on a headless sway: with `-w` a
+  `timeout 1 'sleep 100'` kept a 2 s timeout from firing within 5 s, and without `-w` it fired at
+  2 s. `lazyos-screensaver` therefore starts its foot and exits (`foot ... </dev/null &`), and
+  `check-system.sh` runs the launcher against a stub `foot` and FAILs when it does not return.
+  **The lock itself is pointer-blind and that is not a bug**: `swaylock`'s `seat.c` answers motion,
+  buttons and the wheel with `// Who cares`, so typing is the unlock and a mouse move at five
+  minutes only turns the panel back on.
+  Deboma's launcher (`hyprctl monitors`, a special workspace per
   monitor, its socket2 event stream) has no sway equivalent worth building: there is one output,
   and the drop-in fullscreens `[app_id="org.lazyos.screensaver"]` on the current workspace.
   Deboma's `ttfx` shim exists only because Omarchy's scripts call the Rust port by that name; this

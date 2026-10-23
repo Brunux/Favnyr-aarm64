@@ -765,13 +765,18 @@ The art is `~/.config/lazyos/screensaver.txt`: the **z_** mark in block characte
 art, the fastfetch logo, the wallpaper and the launcher icon all come from `scripts/make-brand.sh`;
 `brand/README.md` has the rules.
 
-Any key dismisses it (`read -rsn1 -t 1` polls while the effect runs, so the dismissal does not wait
-for the effect to end; `tte` gets stdin on `/dev/null`, or it would swallow the key). Three details
-cost a round each and are commented at the line that does them: a terminal allocates an 80x24 pty and
-resizes it only after the window is mapped, so `tte` has to wait for `stty size` to change; `tte`'s
-**stdout** is the animation (the first version sent it to `/dev/null` and the screen stayed black);
-and the art is measured in characters with `LC_ALL=C awk` after stripping UTF-8 continuation bytes,
-which is the same answer in mawk (the image) and gawk (a build host).
+Any key, or any movement of the pointer, dismisses it (`read -rsn1 -t 1` polls while the effect runs,
+so the dismissal does not wait for the effect to end; `tte` gets stdin on `/dev/null`, or it would
+swallow the key). The pointer needs the terminal's own mouse reporting (`ESC [ ? 1003 h` with the SGR
+encoding `ESC [ ? 1006 h`, turned off on the way out): a pty hears nothing about the mouse unless the
+program inside asks, which is why the idle screen used to answer keys only. The launcher also returns
+as soon as the window is up, because `swayidle` runs the chain with `-w` and waits for each timed
+command to exit — a foreground saver would keep the 300 s lock and the 360 s panel-off from ever
+running. Three details cost a round each and are commented at the line that does them: a terminal
+allocates an 80x24 pty and resizes it only after the window is mapped, so `tte` has to wait for `stty
+size` to change; `tte`'s **stdout** is the animation (the first version sent it to `/dev/null` and
+the screen stayed black); and the art is measured in characters with `LC_ALL=C awk` after stripping
+UTF-8 continuation bytes, which is the same answer in mawk (the image) and gawk (a build host).
 
 **The lock is `~/.config/bin/sway-lock`.** The idle timer, `Alt+Ctrl+L`, the Lock key and the two
 suspend shortcuts call it instead of `swaylock`: it stops the idle screen first (a lock put up with

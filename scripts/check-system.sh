@@ -1134,6 +1134,56 @@ else
 	fail "idle screen incomplete:$_saver (the idle screen is blank or never starts)"
 fi
 
+# And the pointer has to end it.  A pty forwards the mouse only when the program
+# inside asks for it, so the dismissal on a mouse move is one escape: DECSET 1003
+# (all motion) with 1006 (the SGR encoding it is read in).  Without the first,
+# the loop sees key bytes only - motion and clicks stay foot's own business (a
+# click starts a selection) and the wordmark keeps animating with no log line
+# anywhere, which is what the card reported.  Leaving the mode on is the other
+# half: a `--run` in a real shell would then write escape sequences into the
+# prompt for the rest of the session.
+_saver_bin="$HOME/.config/bin/lazyos-screensaver"
+if [ -x "$_saver_bin" ]; then
+	_saver_ptr=""
+	grep -q '?1003h' "$_saver_bin" || _saver_ptr="no-1003h"
+	grep -q '?1003l' "$_saver_bin" || _saver_ptr="$_saver_ptr no-1003l"
+	case $_saver_ptr in
+	'') ok "idle screen ends on the pointer too (mouse reporting on, and off again on exit)" ;;
+	*no-1003h*)
+		fail "idle screen does not ask the terminal for the mouse (?1003h): motion and clicks cannot end it" ;;
+	*) warn "idle screen leaves mouse reporting on (?1003l): --run in a shell writes escapes into the prompt" ;;
+	esac
+fi
+
+# The 150 s command has to return at once, or the rest of the chain never runs.
+# swayidle runs it with `-w`, which blocks its whole event loop until the command
+# exits (main.c, cmd_exec: waitpid), and a saver held in the foreground would
+# keep the 300 s lock, the 360 s DPMS, the resume lines and before-sleep waiting
+# for as long as the wordmark animated: the session would never lock, the panel
+# would never go dark, and a lid close would sleep after logind's inhibitor
+# timeout without the lock in front of it.  The stub foot sleeps, so a launcher
+# that detaches returns in milliseconds and a foreground one cannot.  (Measured,
+# not assumed: with `-w` a `timeout 1 'sleep 100'` kept a 2 s timeout from firing
+# within 5 s; without `-w` it fired at 2 s.)
+_saver_tmp=$(mktemp -d "${TMPDIR:-/tmp}/lazyos-saver.XXXXXX" 2>/dev/null || true)
+if [ -n "$_saver_tmp" ] && [ -x "$_saver_bin" ]; then
+	if pgrep -x swaylock >/dev/null 2>&1 || pgrep -f '[o]rg.lazyos.screensaver' >/dev/null 2>&1; then
+		# Both make the launcher return before it reaches foot, which would be
+		# an OK for the wrong reason.
+		warn "idle screen launcher not tested: a lock or an idle screen is already up"
+	else
+		printf '%s\n' '#!/bin/sh' 'sleep 30' >"$_saver_tmp/foot"
+		chmod +x "$_saver_tmp/foot"
+		if PATH="$_saver_tmp:$PATH" timeout 5 "$_saver_bin" >/dev/null 2>&1; then
+			ok "idle screen launcher returns at once (swayidle -w reaches the 300 s lock)"
+		else
+			fail "idle screen launcher stays in the foreground: with swayidle -w the lock, the panel-off timer and resume never run"
+		fi
+	fi
+	pkill -f "$_saver_tmp/foot" 2>/dev/null || true
+	rm -rf "$_saver_tmp"
+fi
+
 # The chain itself, read from the drop-in that owns it: a missing line means the
 # screen never appears (150 s), the session never locks (300 s), the panel stays
 # lit after the lock (360 s), the panel never comes back (resume) or the machine

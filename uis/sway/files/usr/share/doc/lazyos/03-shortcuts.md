@@ -129,7 +129,10 @@ with `Super+Ctrl`:
 **An idle screen is three steps, not one.** After 2½ minutes the LazyOS wordmark
 starts looping; at five minutes the session locks; at six the panel itself goes
 dark (DPMS), which is what actually saves the battery on a lit LCD. Any input
-brings all three back at once.
+ends the wordmark at once - a key, a moving mouse, a tap on the screen - and the
+same input brings the panel back on. The lock is the one step that answers
+typing only: nothing on the lock surface reads the pointer, so there a mouse
+move turns the screen back on and the password is what ends it.
 
 Two applications are exempt while they are being watched: a **fullscreen video or
 presentation** in Firefox or the document reader, and a video in **mpv**. They ask
