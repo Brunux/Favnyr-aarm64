@@ -65,7 +65,8 @@ keyboard.
 always in cursor orange `#e8743b`, about 1.3x the size of the line around it. It is a pixel face,
 the one place the brand plays. Where it is drawn:
 
-- the wallpaper: outlined as paths in `brand/wallpaper.svg`, so the build host needs no pixel font;
+- the wallpaper: outlined as paths in `brand/wallpaper.svg`, like all of that file's type, so it
+  draws the same in any viewer and the build host needs no pixel font;
 - the landing page and the 404: self-hosted `site/fonts/Silkscreen-Bold.woff2` (OFL);
 - the idle screen: a terminal cannot change face, so `play` is only orange there, and only in the
   static frame (`tte` reads the art as plain text and would draw colour escapes as characters).
