@@ -144,6 +144,12 @@ WORKSTYLE_SRC="$SRC_DIR/$WORKSTYLE-$WORKSTYLE_VERSION"
 WORKSTYLE_TARBALL="$WORKSTYLE-$WORKSTYLE_VERSION.crate"
 WORKSTYLE_URL="https://static.crates.io/crates/$WORKSTYLE/$WORKSTYLE_TARBALL"
 
+# The session's Rust framework (`lazyos`): one multi-call binary that the 64
+# scripts become symlinks to (docs/plan-ui.md §2). Built from the workspace in
+# this repository, so there is nothing to fetch or pin; scripts/build-lazyos.sh
+# stages it and scripts/install-lazyos.sh puts it in /usr/bin.
+LAZYOS_STAGE="$WORK_DIR/lazyos-stage"
+
 # ---------------------------------------------------------------------------
 # Agents
 # ---------------------------------------------------------------------------
@@ -291,6 +297,7 @@ KPART="${KPART:-$WORK_DIR/$DEVICE.vmlinuz.kpart}"
 export REPO_DIR BUILD_ROOT WORK_DIR SRC_DIR DEVICE DEVICE_DIR KERNEL_DIR
 export UI UIS_DIR UI_DIR WIFI_DIR
 export WORKSTYLE WORKSTYLE_DIR WORKSTYLE_VERSION WORKSTYLE_STAGE
+export LAZYOS_STAGE
 export OPENCODE OPENCODE_DIR OPENCODE_VERSION OPENCODE_TARBALL OPENCODE_URL
 export LOCALE TIMEZONE
 export BOOT_SIZE_MIB BOOT_FS KERNEL_RELEASE

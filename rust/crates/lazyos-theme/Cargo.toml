@@ -1,0 +1,9 @@
+[package]
+name = "lazyos-theme"
+# The version the binary reports comes from the repository's VERSION file,
+# compiled in by lazyos-cli; this one only satisfies cargo and never ships.
+version = "0.0.0"
+edition = "2024"
+description = "The LazyOS session palette (spec 001 ships only the roles)"
+
+[dependencies]

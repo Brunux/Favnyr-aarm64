@@ -33,6 +33,7 @@ only applications - the bar's left-most button and this entry open the same
 window.
 
 The rest of the menus live in the root menu and the launcher: **Places**
+
 (home, documents, downloads, pictures, every mounted disk, and a **Mount** row
 for each unmounted one - a USB stick or an SD card - where Enter mounts it and
 opens it in Files and **Alt+1** unmounts a disk; its last two rows are the disk
@@ -62,6 +63,40 @@ report - `04-software.md` has the detail), **Colour** (the hex of any pixel, and
 the palette this session is drawn with), **Reminders** (be told later), **About**
 (kernel, uptime, memory, battery, the revision this image was built from, and the
 errors since this boot).
+
+## The menus are becoming one program
+
+Everything in the table above is a shell script that starts rofi and exits. The
+next version of the session replaces that plumbing with **one binary**,
+`/usr/bin/lazyos`, and the old names become symlinks to it: the binding, the
+`.desktop` entry and the manual keep saying `rofi-files` while the program
+behind the name is the framework. The point is not fewer files - it is that a
+menu becomes a *window that changes state* (a list, then a prompt, then a
+progress row, then the result) instead of a process that can only answer once.
+
+You can call it yourself, today:
+
+```sh
+lazyos --help        # the commands this build carries, from the same table
+                     # the session's checks and the installer read
+lazyos --version     # the version this image was built from
+lazyos menu          # opens one floating window; Esc closes it
+```
+
+From the session (a sway binding, a `.desktop` entry, `rofi` replaced by the
+frame) that last line asks `foot` for the window itself, with the app-id and the
+size its command table declares, and returns immediately - so the key is never
+blocked by a window. From a terminal that already is one, it draws in place;
+`LAZYOS_UI=1` is how a process tells the framework "I am already the UI, do not
+open another window", and the framework sets it for the child it starts. Run
+`lazyos menu` inside foot and press Escape: the prompt comes back with the
+cursor where it was, which is the whole terminal contract in one try.
+
+Which menus answer today: the two the table lists (`menu` and `menu files`),
+each with an empty-state card naming the version that fills it in. They are the
+skeleton, not the product - and `check-system.sh` fails if the binary is missing,
+if a symlink the installer creates points at a command `--help` does not list,
+or if sway lost the rule that floats the window.
 
 ## Something is happening
 

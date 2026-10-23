@@ -1,0 +1,11 @@
+[package]
+name = "lazyos-ui"
+# The version the binary reports comes from the repository's VERSION file; this
+# one only satisfies cargo and never ships.
+version = "0.0.0"
+edition = "2024"
+description = "The LazyOS session widgets (spec 001 ships the frame and its two states)"
+
+[dependencies]
+lazyos-theme = { path = "../lazyos-theme" }
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
