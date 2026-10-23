@@ -109,8 +109,12 @@ dist_assert_clean() {
 		_bad="$_bad$_d/root/.ssh or $_d/home/*/.cache/debian-aarch64 (not empty)"
 	fi
 	# The agent the image ships keeps its sign-ins in a database; an artifact that
-	# still has one was made from a used tree.
-	_oc_left="$(find "$_d"/home/*/.local/share/opencode -mindepth 1 -print -quit 2>/dev/null)"
+	# still has one was made from a used tree.  `|| true` is load-bearing: find
+	# exits 1 for a path that does not exist, which is exactly the state
+	# dist_sanitize leaves this one in, and with the message discarded by
+	# 2>/dev/null and `set -e` in the callers the assignment would end the run
+	# with no output at all (hit cutting v0.4.1).
+	_oc_left="$(find "$_d"/home/*/.local/share/opencode -mindepth 1 -print -quit 2>/dev/null || true)"
 	if [ -n "$_oc_left" ]; then
 		_bad="$_bad$_d/home/*/.local/share/opencode (not empty)"
 	fi
