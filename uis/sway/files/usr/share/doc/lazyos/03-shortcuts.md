@@ -6,7 +6,9 @@ modifier; the table at the end says so where it matters.
 
 The live list is **Alt+Ctrl+K** (`rofi-keys`): it is parsed from the
 configuration files, so it is never stale, it can be searched, and Enter copies
-the command. This page is the tour.
+the command. Every row carries a picture as well - the tool the binding runs, the
+action it sends, or its section - so the list is scanned by shape before it is
+read. This page is the tour.
 
 ## Getting around
 

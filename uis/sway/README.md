@@ -29,7 +29,7 @@ and on `Alt+D`, waybar and the foot terminal.
 | `home/.config/bin/osd` | The volume and brightness overlay: the key's `pactl`/`brightnessctl` step plus one mako card with its progress bar and the matching icon (no process, no daemon). |
 | `home/.config/gtk-4.0/{settings.ini,gtk.css}` | The GTK4/libadwaita half of the palette (`papers` and anything else GTK4): the dark preference the missing Settings portal would otherwise answer, and the solarized named colours. The GTK3 pair next door does not reach it. |
 | `home/.config/bin/rofi-learn` | **Learn**: the manual, one page at a time. |
-| `home/.config/bin/rofi-keys` | **Keybindings**: every binding, parsed from the configuration, one icon per section. |
+| `home/.config/bin/rofi-keys` | **Keybindings**: every binding, parsed from the configuration, a picture on every row (its tool, its action, or its section). |
 | `home/.config/bin/dictate`, `dictate-model` | Dictation with whisper.cpp; the model is fetched (pinned SHA256) on first use. |
 | `home/.config/bin/translate` | **Alt+Ctrl+T**: the text selected with the mouse (or the clipboard) into the language Settings sets - English until it is - with Google's JSON endpoint and MyMemory as the fallback; the answer goes to the clipboard and, when long, to a read window. |
 | `home/.config/bin/sway-hibernate` | Hibernate, gated on a disk swap and `resume=`. |

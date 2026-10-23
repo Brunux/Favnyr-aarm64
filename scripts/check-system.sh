@@ -1756,14 +1756,36 @@ if [ -r "$HOME/.config/bin/bar-menu" ]; then
 		warn "root-menu rows with no action: $_dead_rows"
 fi
 
-# The key view draws one picture per section by name; a dropped flag makes the
-# list silently text-only, the same class of bug as the file browser's.
+# The key view draws one picture per row by name, and a dropped flag makes the
+# list silently text-only - the same class of bug as the file browser's.
 if [ -r "$HOME/.config/bin/rofi-keys" ] &&
 	grep -qs -- '-show-icons' "$HOME/.config/bin/rofi-keys" &&
 	grep -qs -- '-icon-theme LazyOS' "$HOME/.config/bin/rofi-keys"; then
-	ok "rofi-keys asks the theme for a picture per section (-show-icons, LazyOS)"
+	ok "rofi-keys asks the theme for a picture per row (-show-icons, LazyOS)"
 else
 	warn "rofi-keys no longer passes -show-icons/-icon-theme LazyOS: the key view shows no pictures"
+fi
+# And a name the theme does not carry is worse than a missing picture: rofi drops
+# the icon column for that row alone, so its text starts 34 px to the left of its
+# neighbours (that is what the key view looked like when only its section lines had
+# one).  Every name the script can emit is asked of the theme: the pictures its
+# icon() returns and the tool names it recognises in a command, both read out of the
+# script itself - its awk returns them as `return "name"` and as one list in
+# split("...", tl).
+if [ -r "$HOME/.config/bin/rofi-keys" ]; then
+	_keys_pics=$(sed -n 's/.*return "\([a-z0-9.-]*\)".*/\1/p' "$HOME/.config/bin/rofi-keys"
+		sed -n 's/.*split("\([a-z0-9 .-]*\)", tl.*/\1/p' "$HOME/.config/bin/rofi-keys" | tr ' ' '\n')
+	_keys_missing=""
+	for _k in $_keys_pics; do
+		[ -r "/usr/share/icons/LazyOS/48x48/apps/$_k.png" ] || _keys_missing="$_keys_missing $_k"
+	done
+	if [ -z "$_keys_pics" ]; then
+		warn "rofi-keys names no pictures at all: the key view is text-only"
+	elif [ -z "$_keys_missing" ]; then
+		ok "the key view's pictures all resolve in the LazyOS theme (sections, actions and tools)"
+	else
+		fail "LazyOS theme has no key-view icon for:$_keys_missing (those rows lose the icon column)"
+	fi
 fi
 
 # fastfetch exits when it has drawn, so without --hold the About window flashes

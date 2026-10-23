@@ -1566,7 +1566,19 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `~/.config/sway/config`: it expands `set $var`, takes the comment above each binding as its
   description, and shows the list with `rofi -dmenu -markup-rows` (bold keys, dim descriptions); the
   row-to-command mapping lives in a temp TSV because a markup string cannot be parsed back, and Enter
-  copies the command. A hand-written list would drift the first time someone edits the configuration,
+  copies the command. **Every row carries a picture**, not only its section line: rofi drops the icon
+  column for a row without one, so that row's text starts 34 px to the left of its neighbours - which
+  is what the maintainer's report ("no icons in Alt+Ctrl+K") was looking at. The name is the tool the
+  binding runs (the theme has one per binary: `rofi-power`, `rofi-files`, `rofi-clip`, `bar-audio`,
+  `dictate`, `sway-lock`…), the action it sends (`window-close` for a kill, `view-refresh` for a
+  reload, `application-exit` for an exit, and the `go-*` arrow of each direction of `focus`/`move`), or
+  the section's own picture for everything else (`preferences-system-windows` for the workspace and
+  window bindings). The tool step exists so the picture says what the row does, the action step
+  because a list of 43 identical window outlines earns nothing; every name is one
+  `scripts/make-icons.sh` renders, and `check-system.sh` reads them out of the awk (the `return`
+  names and the `split(..., tl)` tool list) and FAILs when the theme stops carrying one, since a name
+  nobody draws is a row that silently loses its column and logs nothing.
+  A hand-written list would drift the first time someone edits the configuration,
   which is why this one is parsed. `dictate` (Alt+Ctrl+X, Omarchy's Super+Ctrl+X) records with
   `parecord` at 16 kHz, **normalises the level with `ffmpeg -af dynaudnorm`** (the internal DMIC is
   quiet and whisper is very sensitive to it, which is what "a little bit low" meant),

@@ -775,7 +775,7 @@ allowlist is the agreement, not the names.
 
 | Step | Expected |
 |---|---|
-| `Alt+Ctrl+K` (key view) | the Clipboard and Emoji bindings with their descriptions, and **one picture per section** (terminal, gear, lock, sun, speaker…) on the section line |
+| `Alt+Ctrl+K` (key view) | the Clipboard and Emoji bindings with their descriptions, and **a picture on every row**: the tool (power, files, clipboard, capture…), the action (an arrow for focus and move, a cross for close, a refresh arrow for reload) or the section (windows, gear, lock, sun, speaker…). Every row's text starts in the same column |
 | **Search**, **Alt+Search**, **Alt+Ctrl+Shift+F** | the applications menu, then the file list (`rofi-files --search`), then the fzf window in foot - and Search alone does not open either file view |
 | `Alt+Escape` | the power menu (not the battery banner) |
 | a slow action (Wi-Fi scan, DNS change) | a mako card that becomes the result, and the bar's spinner while it runs |

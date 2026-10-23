@@ -54,7 +54,8 @@ configuration {
      * which costs nothing, follows the palette and is already how the bar is
      * drawn - except the file browser, whose rows carry a real thumbnail
      * (rofi-files, 32 px, made by ~/.config/bin/lazyos-thumbnail), and rofi-keys,
-     * which asks this theme for one icon per category by name (-show-icons).
+     * which asks this theme for a picture by name on every row - the tool the
+     * binding runs, the action it sends, or its section (-show-icons).
      *
      * bar-pick passes -no-show-icons, so the bar's popups keep the tighter
      * text-only layout.

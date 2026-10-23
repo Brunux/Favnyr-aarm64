@@ -89,9 +89,9 @@ element {
 }
 
 /* Used by the modes that show real images: drun and window (config.rasi), the
- * file browser (32 px, per menu) and rofi-keys, which asks the theme for one icon
- * per category.  The lists built by lib-rofi.sh keep a font glyph in the text
- * instead and bar-pick passes -no-show-icons, so they never reserve this
+ * file browser (32 px, per menu) and rofi-keys, which asks the theme for a picture
+ * by name on every row.  The lists built by lib-rofi.sh keep a font glyph in the
+ * text instead and bar-pick passes -no-show-icons, so they never reserve this
  * column. */
 element-icon {
     size: 26px;

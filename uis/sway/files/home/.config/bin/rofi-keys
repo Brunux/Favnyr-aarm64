@@ -10,13 +10,18 @@
 #
 # Enter copies the command to the clipboard, Escape closes. $mod is Alt here.
 #
-# Each section gets a picture: rofi's dmenu can draw one image per row by name
-# (`-show-icons -icon-theme LazyOS`, the icon marker appended to the row), and a
-# section line is exactly where a picture says what the text repeats - one per
-# section, not one per binding, since nine identical pictures down a column add
-# nothing to the header they sit in.  The names are the ones scripts/make-icons.sh
-# renders into that theme; a name it does not ship draws nothing, which is a header
-# without a picture and not an error.
+# Every row gets a picture: rofi's dmenu can draw one image per row by name
+# (`-show-icons -icon-theme LazyOS`, the icon marker appended to the row), and this
+# list is scanned rather than read, so the picture is the fastest thing on it.  A row
+# without one is not merely text-only - rofi drops the icon column for that row and
+# its text starts 34 px to the left of its neighbours, which is what a list with
+# pictures only on its section lines looks like (the reported bug).  So a binding
+# carries the picture of the tool it runs, of the action it sends, or of its section
+# - the last of the three is the one every row is guaranteed, so no row can be left
+# without a picture.  Every name is one scripts/make-icons.sh renders into the theme
+# (they are the binaries of the second table and the nouns of the fourth); a name it
+# does not ship draws nothing and logs nothing, which is why check-system.sh asks
+# the theme for each and every name this file can emit.
 #
 # The icon marker lives *after* the row text and after a NUL (rofi's own format:
 # text, NUL, "icon", US, name), and rofi hands back the text only up to that NUL.
@@ -88,7 +93,40 @@ function icon(c) {
     if (c == "Session") return "utilities-terminal"
     return "preferences-system-windows"
 }
+# The picture a binding itself earns: the one the theme carries for the tool it
+# runs, or for what it does.  A binding is a shell command, so the tool is the
+# first word of it that names one - after a directory path has been taken off
+# (`~/.config/bin/rofi-power` is `rofi-power`) - and the rest is the sway verb it
+# sends: the arrow of a focus or move binding, the cross of a kill, the refresh of
+# a reload, the door of an exit.  What neither answers keeps the picture of its
+# section, which is the association the row already has; nothing here can leave a
+# row without one.
+function row_icon(cmd, c,    m, i, t, a) {
+    m = split(cmd, tok, /[^A-Za-z0-9._+-]+/)
+    for (i = 1; i <= m; i++) {
+        t = tok[i]
+        sub(/^.*\//, "", t)
+        if (t in tools) return t
+    }
+    a = cmd
+    sub(/^exec[ \t]+/, "", a)
+    if (a ~ /(^|[^A-Za-z0-9_-])kill([^A-Za-z0-9_-]|$)/) return "window-close"
+    if (a ~ /(^|[^A-Za-z0-9_-])reload([^A-Za-z0-9_-]|$)/) return "view-refresh"
+    if (a ~ /(^|[^A-Za-z0-9_-])exit([^A-Za-z0-9_-]|$)/) return "application-exit"
+    if (a ~ /(^|[ \t])(focus|move)[ \t]+left([ \t]|$)/) return "go-previous"
+    if (a ~ /(^|[ \t])(focus|move)[ \t]+right([ \t]|$)/) return "go-next"
+    if (a ~ /(^|[ \t])(focus|move)[ \t]+up([ \t]|$)/) return "go-up"
+    if (a ~ /(^|[ \t])(focus|move)[ \t]+down([ \t]|$)/) return "go-down"
+    return icon(c)
+}
 BEGIN {
+    # The tools this session ships, under the names scripts/make-icons.sh renders
+    # them (second table: the binary names the command palette asks for).  A name left
+    # out of this list is simply not claimed - that binding keeps the picture of its
+    # section - so a tool added tomorrow is a missing picture at worst, never a wrong
+    # one.
+    m = split("bar-audio bar-bt bar-busy bar-key bar-menu bar-net bar-pick bar-power bar-updates busy dictate dictate-model lazyos-screensaver rofi-about rofi-agents rofi-calc rofi-capture rofi-clean rofi-clip rofi-color rofi-dns rofi-emoji rofi-files rofi-keys rofi-kill rofi-learn rofi-media rofi-notify rofi-pkg rofi-places rofi-power rofi-qr rofi-quick rofi-remind rofi-tz sway-hibernate sway-lock sway-suspend", tl, " ")
+    for (i = 1; i <= m; i++) tools[tl[i]] = 1
     n = split(ENVIRON["SWAY_FILES"], files, " ")
     for (i = 1; i <= n; i++) {              # pass 1: set $var value
         while ((getline line < files[i]) > 0) {
@@ -136,12 +174,11 @@ BEGIN {
             if (mode != "") desc = mode ": " desc
             gsub(/&/, "\\&amp;", desc); gsub(/</, "\\&lt;", desc); gsub(/>/, "\\&gt;", desc)
             # 17 columns: the longest binding on this keyboard is 16 characters
-            # (Alt+Shift+Return), and the icon column the list now carries takes
-            # about four of them off the right edge.  The picture stays on the
-            # section line: the same icon on nine bindings in a row says nothing
-            # the section header has not said already, so a binding row has two
-            # fields and no marker (the row builder below draws what it has).
-            printf "<span weight=\"bold\">%-17s</span> <span size=\"small\" foreground=\"#586e75\">%s</span>\t%s\n", keys, desc, cmd >> out
+            # (Alt+Shift+Return), and the icon column takes about four of them off
+            # the right edge.  Field two is the command Enter copies and field three
+            # is the picture; the row builder below appends the marker from that
+            # third field, so a row and its picture cannot get out of step.
+            printf "<span weight=\"bold\">%-17s</span> <span size=\"small\" foreground=\"#586e75\">%s</span>\t%s\t%s\n", keys, desc, cmd, row_icon(cmd, c) >> out
         }
         close(files[i])
     }

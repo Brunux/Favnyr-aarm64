@@ -16,8 +16,8 @@
 # inherits the palette and is already how the bar draws itself.  The launcher and
 # the window switcher are the two places where real application icons are worth
 # that cost, and config.rasi enables them for exactly those two modes - plus
-# rofi-keys, whose list has one picture per section and asks the icon theme for it
-# by name (-show-icons).
+# rofi-keys, whose list has a picture on every row, the tool or the action of the
+# binding, and asks the icon theme for it by name (-show-icons).
 #
 # A row is one line and rofi cannot scroll it sideways: no listview or textbox
 # property moves the text horizontally (-scroll-method only chooses how the list

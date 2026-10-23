@@ -428,9 +428,14 @@ Three kinds of picture, because rofi has three:
 * the launcher, the window switcher and the **key view** show an **image icon**,
   which rofi resolves through the icon theme. The launcher and the switcher ask
   for the application's own icon and cost about 13 MB of memory for ten rows
-  while the window is open; the key view asks for one picture per section
-  (terminal, gear, lock, sun, speaker, touchpad…) and draws it on the section
-  line, not on each of the nine bindings under it;
+  while the window is open; the key view has a picture on **every row**, in three
+  steps: the tool the binding runs (`rofi-power`, `rofi-files`, `rofi-clip`,
+  `dictate`, `sway-lock`…), the action it sends (the arrow of a focus or move
+  binding, the cross of a close, the refresh of a reload, the door of an exit), and
+  for everything else its section (windows, gear, lock, sun, speaker, touchpad…).
+  Every row and not only the section line, because rofi drops the icon column for a
+  row that has no picture: that row's text starts 34 px to the left of its
+  neighbours, which is what the list looked like before;
 * **notifications** show a picture too - `clipboard-history`, `dialog-error`,
   `user-trash`, `folder`… - which mako looks up on its `icon-path`. A name the
   theme does not carry draws nothing: the card is text-only, with no error
