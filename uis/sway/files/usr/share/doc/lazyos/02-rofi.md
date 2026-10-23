@@ -135,11 +135,11 @@ script over `rofi -dmenu`, because rofi 2.0 has no filebrowser mode:
 
 **It opens where you left it.** The first time, Files starts in your home
 directory; after that it starts in the directory you were last browsing, and
-opening a file - from a row or from the Search key - remembers that file's
+opening a file - from a row or from the file search - remembers that file's
 folder instead, so the next **Alt+Ctrl+F** is already where the file lives. The
 memory is one line in `~/.local/state/lazyos/files-last` (under `$XDG_STATE_HOME`
 when that is set); deleting the file sends the browser back to your home
-directory. The Search key itself still searches all of `$HOME` and does not move
+directory. The file search itself still searches all of `$HOME` and does not move
 that memory.
 
 **Alt+1 acts on the row instead of opening it.** Enter *opens* what is under the
@@ -153,7 +153,7 @@ pick something, an existing name is refused rather than overwritten, and every
 long action is a `busy` card with the bar's spinner - with the stop button where
 stopping is safe (a killed `mkfs` would leave a disk that looks formatted).
 
-**Search key: the files, not the launcher.** The Search key (and
+**Alt+Search: the files, not the launcher.** Alt+Search (and
 `rofi-files --search`) opens one list of every file under your home directory,
 newest first, filtered as you type: type `notes` and the row list narrows to the
 notes; Enter opens the choice exactly as the browser does. It is one `fd` run
@@ -164,7 +164,7 @@ broad, type one more letter rather than scrolling. The dotfiles are still one ro
 away, and Escape closes it without opening anything. With `fd` missing the
 script says so and opens the browser instead.
 
-**Alt+Search: the same files, in a terminal.** The 500-row cap is the list's
+**Alt+Ctrl+Shift+F: the same files, in a terminal.** The 500-row cap is the list's
 trade - it is what makes it open like a menu - so the question "where is the file
 I would recognise but cannot name" has a different answer: `lazyos-find` streams
 the whole tree through `fd` into `fzf`, with the same four exclusions and the

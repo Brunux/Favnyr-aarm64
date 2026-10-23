@@ -302,6 +302,24 @@ if [ -d /tmp/ui-files ]; then
 			install -d -o "$USERNAME" -g "$USERNAME" "/home/$USERNAME/$_d"
 		done
 	fi
+	# The two caches the first session would otherwise build, built here once:
+	# fontconfig's system cache (`fc-cache -s`) and the icon theme's index.  Both
+	# are the kind of cost nobody attributes to a cold cache - the first
+	# terminal takes noticeably longer to draw its first glyph and the first
+	# `rofi -show drun` walks 220 icons before it shows a row - and both are
+	# free to remove now that the chroot has the theme and the fonts.  A tool
+	# that is missing (or a failed run) is a warning, not a build failure: the
+	# result is still a correct image, just a slower first launch, and
+	# `check-system.sh` reports which cache is absent.
+	if command -v fc-cache >/dev/null 2>&1; then
+		fc-cache -f -s >/dev/null 2>&1 ||
+			warn "fc-cache failed: the first font lookup will walk every font directory"
+	fi
+	if command -v gtk-update-icon-cache >/dev/null 2>&1 &&
+		[ -d /usr/share/icons/LazyOS ]; then
+		gtk-update-icon-cache -q -t -f /usr/share/icons/LazyOS 2>/dev/null ||
+			warn "gtk-update-icon-cache failed: the first launcher scan will walk the theme"
+	fi
 	# A script without the execute bit is the quietest bug in this tree: it is
 	# in the image, `-r` passes, and the key that runs it does nothing at all
 	# (sway's `exec` gets EACCES and the message goes to the journal, which

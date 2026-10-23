@@ -44,6 +44,43 @@ Memory: `zram` provides a 1.9 GB compressed swap device (zram-generator,
 at 50 % pressure instead of letting the machine freeze. `swapon --show` and
 `zramctl` show what is in use.
 
+## When you leave it alone
+
+The session sleeps in three steps, and each one exists because the previous one
+left something on:
+
+| After | What happens |
+|---|---|
+| 2½ minutes | the LazyOS idle screen starts (one foot window, 30 fps, nothing else) |
+| 5 minutes | the session locks (`sway-lock`, the same lock every other path uses) |
+| 6 minutes | the panel goes dark (`swaymsg "output * power off"`, i.e. DPMS) |
+
+Any input brings all three back at once: swayidle's `resume` command turns the
+panel on again, and `after-resume` does the same after a suspend, which is a
+different event and would otherwise wake to a dark screen. The idle chain is
+`/etc/sway/config.d/23-lazyos-screensaver.conf`; `check-system.sh` reads it and
+fails when a step or either wake line is missing.
+
+A **fullscreen video or presentation** in Firefox or `papers`, and a video in
+**mpv**, are exempt: they ask the compositor to inhibit the idle timer while
+they are being watched, so a film is not interrupted and the screen stays on.
+The automatic half is `/etc/sway/config.d/32-idle-inhibit.conf`; the manual half
+is the **coffee cup on the bar**, yellow while the screen is kept awake and dim
+when it may sleep. It is waybar's own module and starts no process.
+
+## The first launch
+
+Two caches are built once, inside the image, instead of on your first session:
+
+* **fontconfig's system cache** (`/var/cache/fontconfig`) - without it the first
+  terminal to draw a glyph walks every font directory;
+* **the icon theme's index** (`/usr/share/icons/LazyOS/icon-theme.cache`) -
+  without it the first `rofi -show drun` scans 220 files before it shows a row.
+
+Both are rebuilt by `scripts/rootfs-setup.sh` at build time. `check-system.sh`
+warns when either is missing - a rebuilt theme that did not refresh its index is
+the silent case, because the launcher still opens, just later.
+
 ## Health and backups
 
 ```sh
@@ -53,6 +90,15 @@ check-system.sh ~/Dev/LazyOS    # OK / WARN / FAIL, one line per check
 Every check corresponds to a bug this port has already hit, so a `FAIL` is a
 regression, not a theory. The image ships the script as
 `/usr/local/sbin/check-system.sh` too.
+
+The session half of the report is worth knowing about: it reads the **idle chain**
+(150 s screen, 300 s lock, 360 s panel off, both wake lines and the lock before
+sleep), the **resident set** (a declined daemon such as `udiskie`, `swaync` or an
+indexer is a `FAIL`; a user unit outside PipeWire/WirePlumber/portals/gvfs is a
+`WARN`), the **two caches** above, the **non-Latin font**, the **GTK4 files**, the
+**overlay** behind the volume and brightness keys, and the **`ip`/`ping`/`ss`**
+trio. A `WARN` there usually names a missing piece of the look rather than a
+broken machine.
 
 Backups are made of the *parts* a disk cannot be regenerated from:
 
@@ -65,6 +111,29 @@ The kernel partition, the partition table, `/boot` and the root filesystem go
 into tars (ACLs and xattrs preserved) plus a `README.md` with the restore steps
 and a `SHA256SUMS`. `restore-system.sh` wants a disk of the same size and
 `CONFIRM=yes`, and refuses to run from the disk it would overwrite.
+
+## Remote login (ssh)
+
+`openssh-server` is installed and `ssh.service` is **enabled on every boot**, on
+purpose: it is the recovery path. A machine whose session will not start, or
+whose screen is not usable, can still be reached from another computer, and a
+card that installs the eMMC is the same system that can rebuild its own kernel
+partition - over ssh if that is the only way in.
+
+That also means the machine answers a login prompt on whatever network it joins.
+The build's default credentials are **`brunux` / `debian`** with passwordless
+`sudo`; change the password on the first day:
+
+```sh
+passwd
+```
+
+`check-system.sh` prints the fact (`---- remote login is enabled (ssh, …)`) so the
+state is never a surprise, and to turn it off:
+
+```sh
+sudo systemctl disable --now ssh
+```
 
 ## Looking at the screen from another machine
 
@@ -120,6 +189,7 @@ them:
   menu says so — with wayvnc's own message — instead of starting half a server.
 * `~/.config/bin/rofi-vnc status` prints the state in one line, which is the
   quickest answer to "is this machine being watched right now".
+
 ## Suspend and hibernate
 
 Suspend-to-RAM works and resumes cleanly. Two paths lead to it, and they are

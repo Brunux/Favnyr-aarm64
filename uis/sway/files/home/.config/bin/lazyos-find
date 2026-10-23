@@ -1,19 +1,19 @@
 #!/bin/sh
-# The terminal file search behind Alt+Search: every file under $HOME (or DIR)
-# in one fzf, narrowed by typing, with a preview pane, and Enter hands the
+# The terminal file search behind Alt+Ctrl+Shift+F: every file under $HOME (or
+# DIR) in one fzf, narrowed by typing, with a preview pane, and Enter hands the
 # choice to lazyos-view - the same program a double click in pcmanfm uses.
 #
 #   lazyos-find            search $HOME
 #   lazyos-find <dir>      search that directory instead
 #
 # The session has two answers to "where is that file", and they are different
-# questions. The Search key opens `rofi-files --search`, one bounded fd run
-# listed as rofi rows with icons and thumbnails: it is the right tool for a file
-# whose name you know, because the list is up in a menu and Enter opens it. This
-# is the other one - fd streams the *whole* tree into fzf, so the prompt is up
-# before the walk has finished, nothing is capped, and the preview pane answers
-# "is this the one" without opening anything. Neither is resident: one fzf
-# process while the window is open.
+# questions. The file list (Alt+Search) opens `rofi-files --search`, one bounded
+# fd run listed as rofi rows with icons and thumbnails: it is the right tool for
+# a file whose name you know, because the list is up in a menu and Enter opens
+# it. This is the other one - fd streams the *whole* tree into fzf, so the
+# prompt is up before the walk has finished, nothing is capped, and the preview
+# pane answers "is this the one" without opening anything. Neither is resident:
+# one fzf process while the window is open.
 #
 # Why fzf and not a separate picker: it is already in the image for the shell's
 # Ctrl-R/Ctrl-T/Alt-C bindings (`packages/tools.list`), it filters as the

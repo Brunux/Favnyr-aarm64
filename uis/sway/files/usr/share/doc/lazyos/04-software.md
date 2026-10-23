@@ -170,6 +170,12 @@ table is a file.
   runs `sshd`, so you can log in from another computer.
 * `journalctl -b -p err` shows this boot's errors; `dmesg` the kernel's.
 * `/usr/share/doc/<package>/` and `man` are local; `tldr` is the shortcut.
+* The network's three questions are `ip -br addr`, `ping` and `ss -tunlp` (the
+  first two packages are `iproute2` and `iputils-ping`, in the base list because
+  no "is it up" answer starts without them).
+* `zip` is the writing half of `unzip`, `strace` is the debugger when a program
+  fails without a message, and `ncdu` is the disk walk to reach for when this
+  58 GB eMMC fills (`du` prints the same numbers as a wall of text).
 
 ## The browser
 
@@ -220,9 +226,16 @@ It is one card per session (the state file is
 opens in imv - not for text, a document or a video - and it is queued in the
 background, so it never delays the picture.
 
+**A film keeps the screen awake.** mpv asks the compositor for an idle inhibitor
+while its window is visible, so the idle screen and the lock do not arrive in the
+middle of one. Firefox and the document reader ask the same thing through their
+own interface and get it from the compositor (see the next section); the bar's
+coffee cup is the manual switch for everything else - a long download, a recipe,
+a page you are reading from across the room.
+
 ## Files in a window
 
-**Search+Shift** opens **pcmanfm**: the files the Search key and **Alt+Ctrl+F**
+**Search+Shift** opens **pcmanfm**: the files **Alt+Search** and **Alt+Ctrl+F**
 list, with a mouse. It is a second entry and not a replacement, because the two
 answer different questions - a list is one keystroke and no window, a window is
 what drag and drop, several files at once, renaming in place and the trash need.
@@ -262,6 +275,20 @@ one: tile it, move it to another workspace, close it with **Alt+Q**.
   already animates the window). It is the only window whose look comes from the
   GTK theme (waybar is GTK3 too but paints the bar from its own stylesheet), which
   is why the two files exist rather than a whole GTK theme package.
+* **The document reader gets the same palette, from a different pair of files.**
+  `papers` is GTK4/libadwaita, which does not read `gtk-3.0/` at all: it asks the
+  *settings portal* for the desktop's colour scheme, and this image runs no
+  Settings portal (the only backend is the wlr one, for screenshots and screen
+  casting). It therefore opened in libadwaita's light default, a white rectangle
+  in a base03 session. `~/.config/gtk-4.0/settings.ini` states the dark
+  preference and `~/.config/gtk-4.0/gtk.css` paints the libadwaita named colours
+  in the same solarized values as the GTK3 file next door. Any other GTK4 or
+  libadwaita application you install inherits it, and no portal daemon is
+  installed for one boolean.
+* **A document can be read, searched, zoomed and annotated; printing needs a
+  print service.** "Print" in `papers` answers that it cannot find one, because
+  the image ships no `cups` daemon (it is a system service, not a viewer). If you
+  print, install it (`sudo apt install cups`) and configure a queue once.
 
 ## USB sticks and SD cards
 
@@ -377,6 +404,27 @@ is a secret in both, and the clipboard menu's last row clears that history.
 machine with a captcha page; the package would be a command that never works
 here. `check-system.sh` reports the tools this script does need (`curl`, `jq`,
 `wl-paste`) and SKIPs the network probe when the machine is offline.
+
+## Text in other languages
+
+`fonts-noto-core` is installed, so Arabic, Hebrew, Devanagari, Thai, Armenian,
+Georgian and the rest of Noto's non-CJK families have a face: a file name, a web
+page or an EPUB in one of those scripts is text instead of a row of boxes, in the
+terminal and in the browser alike. Nothing has to be configured - fontconfig's
+fallback finds them.
+
+Chinese, Japanese and Korean are **not** installed. `fonts-noto-cjk` is 91 MB
+installed, the largest single item left after the browser, and a card that only
+needs Latin should not pay for it. If you read those scripts:
+
+```sh
+sudo apt install fonts-noto-cjk
+```
+
+No logout is needed; fontconfig picks the new faces up on the next lookup, and
+`fc-cache -f` forces it if an application cached the miss. `fc-list :lang=ja`
+answers whether a Japanese face is there, and `check-system.sh` reports the
+non-Latin case with `fc-list :lang=ar`.
 
 ## What is deliberately not installed
 

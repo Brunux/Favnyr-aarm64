@@ -5,6 +5,11 @@
 build/
 out/
 
+# The build's record of what it staged (commit, device, UI, kernel, version,
+# date). It is written into the image next to the tree and says what that copy
+# is; a root-level one on a development machine is a leftover of a build.
+REVISION
+
 # NetworkManager Wi-Fi profiles: they contain the network PSK, so they are
 # exported to $BUILD_ROOT/wifi (outside the repo) and never committed.
 *.nmconnection

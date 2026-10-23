@@ -30,11 +30,11 @@ whole image is ~4 GiB.
 | Theme | Package | Size | What it buys |
 |---|---|---|---|
 | Media | `foliate` | 12.4 MB | An EPUB reader that is not a browser. `papers` is now the document viewer and it reads **no EPUB at all** (`org.gnome.Papers.desktop`'s `MimeType=` has no `application/epub+zip`), so an EPUB still opens in Firefox. |
-| Fonts | `fonts-noto-core` | 42.5 MB | Cyrillic, Greek, Arabic, Hebrew, Devanagari… coverage. The image ships DejaVu + JetBrains + the icon fonts, which is Latin only. |
-| Fonts | `fonts-noto-cjk` | 91 MB | Chinese/Japanese/Korean. Optional: it is the single biggest item here. |
+| Fonts | ~~`fonts-noto-core`~~ | — | **done**: 42.5 MB, in `uis/sway/packages.list`. Arabic, Hebrew, Devanagari, Thai and the rest of the non-CJK Noto set now have a face (the image used to ship DejaVu + JetBrains + the icon fonts, i.e. Latin/Cyrillic/Greek only). |
+| Fonts | `fonts-noto-cjk` | 91 MB | Chinese/Japanese/Korean. Optional and still out: it is the single biggest item here, documented as an `apt install` in `04-software.md`. |
 | Storage | `gnome-disk-utility` | 7.2 MB | Formatting/partitioning with a GUI. Today it is `parted`/`cgpt` in a terminal. |
 | Secrets | `gnome-keyring` + `libsecret-1-0` | 4.6 MB + 414 kB | Somewhere for applications to store a password/token (Git, Nextcloud, Firefox Sync). |
-| Portals | `xdg-desktop-portal-gtk` | 776 kB | The backend for GTK file choosers and the screenshot dialog. With only `xdg-desktop-portal-wlr`, an application that asks the portal for a file has no implementation. |
+| Portals | `xdg-desktop-portal-gtk` | 776 kB | The backend for GTK file choosers and the screenshot dialog. With only `xdg-desktop-portal-wlr`, an application that asks the portal for a file has no implementation. The two interfaces it would also answer are handled without it: **Settings** by `gtk-4.0/` (libadwaita's colour scheme) and **Inhibit** by `config.d/32-idle-inhibit.conf` (the compositor holds the inhibitor for Firefox and papers), so the remaining reason to install it is a file chooser. |
 | Network | `nm-connection-editor` | 5.5 MB | VPN and 802.1x editing. `bar-net` lists and connects Wi-Fi; it cannot author a VPN profile. |
 
 **The file manager is `pcmanfm` + `gvfs`, not `nautilus`** (measured on forky: `pcmanfm 1.4.0-1+b1`
@@ -48,7 +48,7 @@ on the eMMC - and glycin's sandboxed per-thumbnail decoders, which `plan-rofi.md
 (`search:///` is a plain walk, provided by `libfm-modules`), no glycin and no ICU. It ships in
 `uis/sway/packages.list` with `gvfs` (431 kB: the trash and the local volume monitor) and without
 `gvfs-backends`, which is where `samba-libs` comes from. It is the *windowed* half of the file
-story, not a replacement for the menu: the Search key and `Alt+Ctrl+F` still open `rofi-files` (one
+story, not a replacement for the menu: `Alt+Search` and `Alt+Ctrl+F` still open `rofi-files` (one
 process, no window), while `Search+Shift` and the root menu's **Files (window)** row open pcmanfm.
 Three limits stay documented at the setting: its thumbnails come from libfm's own gdk-pixbuf
 loader, so they are **images only** (the freedesktop `.thumbnailer` files are invisible to it); its
@@ -117,7 +117,7 @@ has that are still missing:
 | **DNS switcher** | **done**: `rofi-dns` sets `ipv4.dns`/`ipv4.ignore-auto-dns` on the connection that is up and brings it back, with common resolvers, typed servers or DHCP | — |
 | **Reminders** | **done**: `rofi-remind` starts transient `systemd-run --user` timers that fire `notify-send` once, listed back from systemd and cancelled by choosing one | — |
 | **Theme switcher, appearance, animations, monitor layout** | fixed solarized theme | A real project: the palette lives in waybar CSS, foot.ini, rofi's rasi, mako, sway `client.*` and swaybg. Not a menu. |
-| **OSD (volume/brightness overlay)** | mako + the bar show values | An overlay that must not take focus; `swayosd` is not packaged. |
+| **OSD (volume/brightness overlay)** | **done**: `~/.config/bin/osd` (Alt+volume/brightness) draws a mako card with the `value` hint as a progress bar and the matching Font Awesome icon; no process, no package. `swayosd` **is** packaged in forky (`0.3.0-4`, 7.7 MB), and the reason it is not used is the daemon: a resident GTK4 server for the same picture. | — |
 
 Not portable from Omarchy at all: its **Install/Remove trees** (pacman/AUR/mise for Arch packages -
 on Debian they are `apt` one-liners with different names), its **Quickshell plugins/dock/agents

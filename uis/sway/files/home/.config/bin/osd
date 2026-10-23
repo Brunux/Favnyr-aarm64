@@ -1,0 +1,102 @@
+#!/bin/sh
+# The on-screen display for the top row's volume and brightness keys.
+#
+# The keys used to change the value and say nothing: the only feedback was the
+# 12 px number on the bar, and a fullscreen window covers the bar.  Every other
+# desktop draws an overlay for this; this one is a mako card, so it costs no
+# package and no process, and it is the same card the rest of the session
+# already uses for an answer.
+#
+# Two details make it an overlay instead of a pile of notifications:
+#
+#   * the x-canonical-private-synchronous tag: mako groups notifications that
+#     carry the same value, so holding a key moves one card instead of stacking
+#     twenty (the same tag `busy` uses to replace its own card);
+#   * the `value` hint: mako(5) says "Progress can be indicated in a
+#     notification by setting a hint, 'value' to an integer between 0 and 100",
+#     and ~/.config/mako/config sets `progress-color=over #2aa198ff` - so the
+#     card carries the solarized bar the task spinner has.
+#
+# The level picks the icon: Font Awesome's volume-off/down/up (f026/f027/f028)
+# rendered by scripts/make-icons.sh as audio-volume-{muted,low,high}, plus
+# display-brightness (f185), which the theme already draws.
+#
+# Usage:
+#   osd volume up|down|mute
+#   osd brightness up|down
+#
+# Nothing here is resident: one notify-send per key press, and the call ends.
+
+set -eu
+
+usage() {
+	echo "usage: osd volume up|down|mute | osd brightness up|down" >&2
+	exit 2
+}
+
+sink=@DEFAULT_SINK@
+
+card() { # ICON TITLE BODY VALUE
+	notify-send -a LazyOS -i "$1" -u low -t 1200 \
+		-h string:x-canonical-private-synchronous:lazyos-osd \
+		-h "int:value:$4" "$2" "$3" 2>/dev/null || true
+}
+
+# The first NN% of the sink's volume line. awk's match()/RSTART/RLENGTH is the
+# one form that behaves the same in mawk (the image) and gawk (a build host).
+sink_pct() {
+	pactl get-sink-volume "$sink" 2>/dev/null |
+		awk 'match($0, /[0-9]+%/) { print substr($0, RSTART, RLENGTH - 1); exit }'
+}
+
+sink_muted() {
+	[ "$(pactl get-sink-mute "$sink" 2>/dev/null | sed -n 's/^Mute:[[:space:]]*//p')" = yes ]
+}
+
+volume_icon() { # PCT
+	if [ "$1" -ge 50 ]; then
+		printf 'audio-volume-high'
+	else
+		printf 'audio-volume-low'
+	fi
+}
+
+case ${1:-} in
+volume)
+	case ${2:-} in
+	up) pactl set-sink-volume "$sink" +5% >/dev/null 2>&1 || true ;;
+	down) pactl set-sink-volume "$sink" -5% >/dev/null 2>&1 || true ;;
+	mute) pactl set-sink-mute "$sink" toggle >/dev/null 2>&1 || true ;;
+	*) usage ;;
+	esac
+	pct=$(sink_pct || true)
+	case ${pct:-} in '' | *[!0-9]*) pct=0 ;; esac
+	# pactl allows over 100%; the hint is 0-100 and the bar stops at 100%, so the
+	# card does the same rather than leaving a full bar with "130%" beside it.
+	[ "$pct" -le 100 ] || pct=100
+	if sink_muted; then
+		card audio-volume-muted 'Volume' 'Muted' 0
+	else
+		card "$(volume_icon "$pct")" 'Volume' "$pct%" "$pct"
+	fi
+	;;
+brightness)
+	case ${2:-} in
+	up) step=+5% ;;
+	down) step=-5% ;;
+	*) usage ;;
+	esac
+	if ! brightnessctl set "$step" >/dev/null 2>&1; then
+		card dialog-error 'Brightness' 'could not change the backlight' 0
+		exit 1
+	fi
+	# brightnessctl -m prints "device,class,current,percent,max": the percent is
+	# the fourth field and already carries its sign.
+	pct=$(brightnessctl -m 2>/dev/null | head -n 1 | cut -d, -f4 | tr -d '%')
+	case ${pct:-} in '' | *[!0-9]*) pct=0 ;; esac
+	card display-brightness 'Brightness' "$pct%" "$pct"
+	;;
+*)
+	usage
+	;;
+esac

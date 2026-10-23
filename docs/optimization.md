@@ -409,8 +409,8 @@ host with forky's rofi 2.0.0-0.2:
 
 ## 9. The terminal file search
 
-`Alt+Search` runs `~/.config/bin/lazyos-find`, which is `fd` piped into `fzf` with a preview pane.
-It answers the same question the Search key does, in a different way: `rofi-files --search` is
+`Alt+Ctrl+Shift+F` runs `~/.config/bin/lazyos-find`, which is `fd` piped into `fzf` with a preview pane.
+It answers the same question the file list (`Alt+Search`) does, in a different way: `rofi-files --search` is
 bounded (500 rows, 92 ms end to end, icons and thumbnails) and lives in a menu, while this one is
 uncapped with a preview and lives in a terminal. The numbers below decide the settings that are not
 obvious - the excludes, `--scheme=path`, and where the picture comes from - and were measured on the

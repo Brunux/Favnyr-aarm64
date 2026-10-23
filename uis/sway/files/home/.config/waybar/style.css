@@ -45,6 +45,7 @@ tooltip label {
 #network,
 #pulseaudio,
 #backlight,
+#idle_inhibitor,
 #battery {
     margin: 4px 0;
     padding: 0 9px;
@@ -68,6 +69,9 @@ tooltip label {
 #pulseaudio           { color: #6c71c4; } /* violet */
 #pulseaudio.muted     { color: #dc322f; }
 #backlight            { color: #b58900; }
+/* The coffee cup is a switch: dim is its off state, yellow is on. */
+#idle_inhibitor       { color: #586e75; } /* base01: the screen may sleep */
+#idle_inhibitor.activated { color: #b58900; } /* yellow: kept awake */
 #battery              { color: #859900; }
 #battery.warning      { color: #b58900; }
 #battery.critical:not(.charging) {
@@ -87,6 +91,7 @@ tooltip label {
 #network:hover,
 #pulseaudio:hover,
 #backlight:hover,
+#idle_inhibitor:hover,
 #battery:hover {
     background: rgba(11, 70, 82, 0.86);
 }

@@ -39,13 +39,22 @@ menu=$(
 [ -n "$menu" ] || menu='No audio outputs'
 
 choice=$(
-	printf '%s\n' "$menu" 'Mute / unmute output' 'Mute / unmute microphone' |
+	printf '%s\n' "$menu" 'Volume per application' \
+		'Mute / unmute output' 'Mute / unmute microphone' |
 		"$dir/bar-pick" 'Audio output'
 ) || exit 0
 
 case $choice in
 	'') exit 0 ;;
 	'No audio outputs') exit 0 ;;
+	'Volume per application')
+		# pavucontrol is the one window that answers "which stream is this and
+		# where is it going": one slider per application, the sink list with
+		# its ports and profiles, and the recording side.  It is a window, not
+		# a resident mixer (nothing starts it before it is picked).  setsid
+		# lets it outlive this script, which exits as soon as rofi does.
+		setsid pavucontrol >/dev/null 2>&1 &
+		;;
 	'Mute / unmute output')
 		pactl set-sink-mute @DEFAULT_SINK@ toggle || fail 'Audio: could not toggle the sink mute'
 		;;

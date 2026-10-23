@@ -286,6 +286,9 @@ audio-x-generic                    f1c7
 application-x-executable           f085
 package-x-generic                  f1c6
 x-office-document                  f1c2
+audio-volume-muted                 f026
+audio-volume-low                   f027
+audio-volume-high                  f028
 display-brightness                 f185
 input-touchpad                     f245
 input-keyboard                     f11c

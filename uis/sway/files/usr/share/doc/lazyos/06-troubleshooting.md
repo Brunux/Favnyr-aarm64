@@ -44,6 +44,24 @@ access point sets one; it is not a failure. A saved profile that never connects
 is usually bound to an interface name (`interface-name=wlan0`) - the profiles
 this image imports have that line stripped on purpose.
 
+## Is the network up?
+
+The three commands every answer starts with are installed (`iproute2` and
+`iputils-ping` are in the base list; Debian's base system does not pull them in):
+
+```sh
+ip -br addr                     # the interface and its address
+ip route                        # the default gateway
+ping -c3 1.1.1.1                # the link and the gateway, without DNS
+ping -c3 deb.debian.org         # DNS and the internet
+ss -tunlp                       # what is listening, and on which port
+```
+
+`ping` answering "Destination Host Unreachable" is the local link; the first
+`ping` working and the second failing is DNS (next section). `ss -tunlp` is also
+how to confirm that `ssh` is listening on port 22 (see `05-system.md` § *Remote
+login*).
+
 ## DNS: what a name resolves to
 
 The resolver is NetworkManager's (`/etc/resolv.conf` is written from the active
@@ -137,6 +155,22 @@ A video that opens in Firefox instead of mpv means mpv is missing; a document
 that opens in the browser means `papers` is; a picture that opens in the browser
 means both `imv` and `chafa` are.
 
+## A GTK4 window is white
+
+`papers` is GTK4/libadwaita, which does not read `~/.config/gtk-3.0/` at all: it
+asks the **settings portal** for the desktop's colour scheme, and this image runs
+no Settings portal (the only backend is the wlr one, for screenshots and screen
+casting). With no answer libadwaita uses its light default, so the document
+reader was a white window in a base03 session. The fix is the pair of files
+`~/.config/gtk-4.0/settings.ini` (the dark preference) and
+`~/.config/gtk-4.0/gtk.css` (the solarized named colours); `check-system.sh`
+reports both. The other answer would be `xdg-desktop-portal-gtk`, a resident
+daemon this port does not carry for one boolean.
+
+**"Print" says it cannot find a print service**: the image ships no `cups` - it
+is a system service, not a viewer. `sudo apt install cups` and add a queue once if
+you print.
+
 ## The bar shows a spinner that never ends
 
 That card belongs to `~/.config/bin/bar-busy`: one file per running task lives in
@@ -177,6 +211,18 @@ Emoji are a second, separate font: `fonts-noto-color-emoji` is what draws them,
 and without it an inserted emoji is a tofu box in the same way an icon without a
 symbol font is. `fc-match emoji` names the font that would be used, and
 `check-system.sh` fails when there is none.
+
+**Text in another script** is the same class of box and a different font.
+`fonts-noto-core` covers Arabic, Hebrew, Devanagari and Thai; Chinese, Japanese
+and Korean are a documented `apt install fonts-noto-cjk` (91 MB, deliberately not
+in the image). Ask fontconfig, not the application:
+
+```sh
+fc-list :lang=ar               # anything at all = the script has a face
+fc-list :lang=ja               # empty = install fonts-noto-cjk
+```
+
+`check-system.sh` reports `fc-list :lang=ar` in one line.
 
 ## The clipboard history is empty
 
@@ -298,6 +344,55 @@ session	required	pam_env.so readenv=1 envfile=/etc/default/locale
 Log out and back in afterwards. `check-system.sh` reports the session locale, so
 this is one line in the report rather than a warning you have to notice.
 
+## The volume or brightness keys change the value but show nothing
+
+The overlay is a mako card drawn by `~/.config/bin/osd`: the key runs the helper,
+the helper changes the value and sends the notification (icon plus the level as
+a bar). Three things remove it, each silently:
+
+* the helper lost its executable bit - `ls -l ~/.config/bin/osd` must show `x`,
+  and a rebuild puts the mode back (the image stages files with the mode they
+  were committed with);
+* a notification daemon is not running - `Alt+Ctrl+N` (notifications) is empty
+  and `check-system.sh` says no one owns `org.freedesktop.Notifications`; mako
+  starts with the session from `config.d/20-notifications.conf`;
+* `~/.config/mako/config` lost `icons=1` or its `progress-color`, in which case
+  the card is text only, with no picture and no bar.
+
+The value is still changed either way: `wpctl status` and
+`cat /sys/class/backlight/backlight-lcd0/brightness` are the sources.
+
+## The screen turns off while you are watching something
+
+A fullscreen video in Firefox or the reader, and any video in mpv, ask the
+compositor to keep the screen awake; the rules are
+`/etc/sway/config.d/32-idle-inhibit.conf`. If a film is interrupted:
+
+* it is **not** fullscreen (the Firefox and papers rules apply to a fullscreen
+  window; fullscreen it, or turn on the bar's coffee cup);
+* the application is running under Xwayland (`MOZ_ENABLE_WAYLAND=0`), where it
+  has no Wayland app id and no rule can match it;
+* a Firefox page playing in a background tab does not inhibit, by design - the
+  page that is not on screen should not hold the machine awake.
+
+The **coffee cup** on the bar is the manual override (yellow = kept awake) and
+works regardless of what the window is.
+
+## The screen stays lit after the lock
+
+The chain is 150 s idle screen, 300 s lock and **360 s panel off** (DPMS), in
+`/etc/sway/config.d/23-lazyos-screensaver.conf`. If the lock appears but the
+panel stays lit, `swayidle` is the process to ask:
+
+```sh
+pgrep -af swayidle
+swaymsg -t get_outputs | grep -i power
+```
+
+A `timeout 360 'swaymsg "output * power off"'` line that is missing is the whole
+fault - the panel is not the compositor's to turn off otherwise. The first input
+turns it back on (`resume`), and `after-resume` does the same after a suspend.
+
 ## The brightness keys do nothing
 
 `brightnessctl` needs write access to `/sys/class/backlight/*/brightness`. The
@@ -341,6 +436,7 @@ The paths in order, because each one fails in its own way:
 
 There is no audio over VNC, and nothing to configure: the sound stays on this
 machine.
+
 ## A key does nothing at all
 
 keyd grabs the keyboard, and it reads its configuration only at start:

@@ -288,6 +288,10 @@ render() { # OUTFILE
 	) >"$_s/4" &
 	(
 		ui_row "$UI_I_VOLUME" 'Audio output' "$(audio_detail)" audio
+		# The bar's panel picks the output; this is the other question (which
+		# application is making the sound, and where does it go), which is
+		# pavucontrol's window and nothing this menu can draw.
+		ui_row "$UI_I_MIXER" 'Volume per application' 'pavucontrol' mixer
 		ui_row "$UI_I_MUSIC" 'Media' "$(media_detail)" media
 	) >"$_s/5" &
 	(
@@ -359,6 +363,7 @@ while :; do
 	layout) exec "$dir/rofi-layout" ;;
 	translate) "$dir/translate" config ;;
 	audio) exec "$dir/bar-audio" ;;
+	mixer) exec pavucontrol ;;
 	media) exec "$dir/rofi-media" ;;
 	power) exec "$dir/bar-power" ;;
 	*) exit 0 ;;

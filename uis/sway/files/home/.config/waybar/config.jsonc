@@ -44,6 +44,7 @@
         "network",
         "pulseaudio",
         "backlight",
+        "idle_inhibitor",
         "battery"
     ],
     "custom/menu": {
@@ -189,6 +190,29 @@
         "interval": 5,
         "on-scroll-up": "brightnessctl set 5%+",
         "on-scroll-down": "brightnessctl set 5%-"
+    },
+    // Keep the screen awake, on purpose, for the length of a film, a recipe or a
+    // download watch.  This is waybar's own module: it holds a
+    // zwp_idle_inhibitor_v1 on the bar's surface, so the session gains no helper
+    // process and no script, and a click is the whole interface.  The coffee cup
+    // is always visible (dim = the screen may sleep, yellow = it may not),
+    // because the control has to be visible to be turned on; `start-activated`
+    // stays false so a login never inherits it.
+    //
+    // Sway's own `inhibit_idle` is not what this uses: it has no `toggle` (only
+    // focus|fullscreen|open|none|visible) and its user inhibitors belong to a
+    // view, which would tie "keep awake" to a window.  The applications that
+    // must not be interrupted are handled in config.d/32-idle-inhibit.conf, and
+    // mpv asks for its own inhibitor.
+    "idle_inhibitor": {
+        "format": "<span font_desc='JetBrains Mono 13'>{icon}</span>",
+        "format-icons": {
+            "activated": "\uf0f4",
+            "deactivated": "\uf0f4"
+        },
+        "tooltip-format-activated": "Keeping the screen awake\nClick to let it sleep",
+        "tooltip-format-deactivated": "Click to keep the screen awake",
+        "start-activated": false
     },
     "battery": {
         "bat": "sbs-8-000b",

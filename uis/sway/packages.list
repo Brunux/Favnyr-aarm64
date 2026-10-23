@@ -268,4 +268,11 @@ fonts-materialdesignicons-legacy
 # renders as tofu in the terminal and in waybar, so the picker would work and
 # look broken. 10.9 MB installed.
 fonts-noto-color-emoji
+# Non-Latin text: Arabic, Hebrew, Devanagari, Thai, Armenian, Georgian and the
+# rest of Noto's non-CJK set were boxes before this (fc-list :lang=ja/:lang=hi
+# and :lang=th answered nothing, and :lang=ar only found four faces).  A file
+# name, a web page or an EPUB in one of those scripts is the case this buys.
+# fonts-noto-cjk (91 MB) stays out by default and is a documented
+# `apt install`; a card that only needs Latin should not pay for it.
+fonts-noto-core
 playerctl

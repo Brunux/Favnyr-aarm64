@@ -47,6 +47,13 @@ yet present in `scripts/` as not implemented.
   watching can answer the question: `cliphist`'s watcher (no history without one) and `workstyle`
   (which windows are in which workspace, see the UI section). A slow action gets a `busy` card
   **and** a bar spinner, and says whether it can be stopped.
+  The rule is a test, not only a paragraph: `check-system.sh` FAILs when a **declined daemon** is
+  running (`udiskie`, `swaync`, `dunst`, `picom`, `blueman-applet`, `packagekitd`,
+  `localsearch-3`, `tracker-miner-fs-3` - each is a package the comments and `docs/omarchy-gap.md`
+  already answered "no" to) and WARNs when a user unit outside the session's own set (PipeWire,
+  WirePlumber, the portals, gvfs, dconf, mpris) appears. The two agreed exceptions are `exec`'d by
+  the sway configuration rather than running as units, which is why their checks are process
+  checks and not unit checks.
 
 ## Critical upstream facts
 
@@ -388,6 +395,17 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   host keys, and `install-emmc.sh` blanks the id and the keys of the copy, so each card and each
   install gets its own identity instead of sharing one journal, one DHCP identity and one SSH
   host key (`lib-dist.sh` makes the same choice for published artifacts).
+- **Remote login is on by design, and it is documented rather than hidden.** `openssh-server` is in
+  `packages/base.list` and Debian enables `ssh.service`, so the machine answers a login prompt on
+  every network it joins - with the build's default `brunux`/`debian` and passwordless `sudo`
+  until the password is changed. That is the agreed decision (the maintainer keeps it as the
+  recovery path: a session that will not start, or a screen that is not usable, is still reachable,
+  and a card can put a working kernel partition back over ssh), so it is not to be "cleaned up" by
+  disabling the unit without asking. What the port owes it is honesty: `05-system.md` § *Remote
+  login (ssh)* says it is enabled, gives the default credentials and the `passwd` /
+  `systemctl disable --now ssh` commands, and `check-system.sh` prints an info line when it is
+  enabled (a WARN when it is enabled but not running), because a machine whose ssh is expected to
+  answer and does not is the other surprise.
 - `nmtui` lives in the separate **`network-manager-tui`** package (no longer part of
   `network-manager`).
 - `wireless-regdb` provides `regulatory.db`; without it cfg80211 logs
@@ -617,6 +635,14 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   Verify with the engine waybar actually uses:
   `pango-view --no-display --font="JetBrains Mono 13" --output=/tmp/i.png <text>` (package
   `pango1.0-tools`) and look at the PNG.
+  **The same class of box is text in another script**, and it is a different package:
+  `fonts-noto-core` (42.5 MB) is in `uis/sway/packages.list` because `fc-list :lang=ja`, `:lang=hi`
+  and `:lang=th` answered nothing and a file name, a web page or an EPUB in Arabic, Hebrew, an
+  Indic script or Thai was a row of boxes. It covers the non-CJK Noto set; `fonts-noto-cjk`
+  (91 MB) is deliberately out and documented as an `apt install` in `04-software.md` (§ *Text in
+  other languages*) - it is the largest item left after the browser and a Latin card should not pay
+  for it. `check-system.sh` WARNs when `fc-list :lang=ar` is empty (one line, not a font-by-font
+  audit).
 - **Wi-Fi profiles**: Nura and Debian name the wireless interface differently (Nura: `wlan0`,
   Debian/systemd: `wlp1s0`), so a NetworkManager profile copied verbatim is never activated.
   `scripts/wifi.sh import` drops `interface-name=` to bind the profile to any Wi-Fi device. The
@@ -682,20 +708,22 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `bar-pick` is `rofi -dmenu`. It replaced tofi (launcher) and fuzzel (bar popups), so the session
   has one picker instead of two; measured PSS while open: drun 15.7-17.1 MB, dmenu 14.2-15.6 MB,
   window 16.7 MB, against **40.5 MB for each fuzzel popup** it replaced and 62.1 MB for wofi.
-  **The Chromebook Search key is the file search** (`rofi-files --search`: one bounded `fd` run
-  over `$HOME`), bound in `~/.config/sway/config` and not in `19-launcher.conf` - the launcher had
-  it and the key found applications, which is the one thing the launcher already does better one
-  key away (`$mod+d`). The binding is `--release --no-repeat` because the top row doubles as
-  F1-F10 with Search held down (keyd). `Alt+d` is the launcher and was never unbound: the overlay
-  used to carry `unbindsym Mod1+d`, which is why the key did nothing, and it is gone.
+  **The Chromebook Search key opens the applications** (the same `$launcher` as `$mod+d`), and
+  **`Alt+Search` is the file search** (`rofi-files --search`: one bounded `fd` run over `$HOME`).
+  The two were the other way around for a while, and this is the maintainer asking for the
+  magnifier to show all apps again: the file list moved one chord over to `Alt+Search`, and the
+  terminal filter that already lived there moved to `Alt+Ctrl+Shift+F`. The Search-key bindings
+  live in `~/.config/sway/config`, not in `19-launcher.conf` (which documents the launcher
+  alone), and both release bindings are `--release --no-repeat` because the top row doubles as
+  F1-F10 with Search held down (keyd). `Alt+d` stays the launcher and was never unbound: the
+  overlay used to carry `unbindsym Mod1+d`, which is why the key did nothing, and it is gone.
   **`Alt+Search` has two paths so either press order works**: keyd's `[alt]` layer maps the Search
   key to `F20` (`leftmeta = f20`), and sway binds `F20` on the press, so holding Alt and tapping
-  Search opens `lazyos-find` immediately and keyd consumes Search (no release binding fires).
+  Search opens the file list immediately and keyd consumes Search (no release binding fires).
   Pressed the other way around, Search reaches sway as `Super_L` and the `--release Super_L+Mod1`
-  binding catches it when Search comes up with Alt still down; without Alt it falls through to the
-  file list. The window is wrapped in `lazyos-find`, not `exec`'d: a missing `fd`/`fzf`/opener
-  prints its reason and waits for Enter instead of closing the window, which is what "the key does
-  nothing" looked like.
+  binding catches it when Search comes up with Alt still down; without Alt it falls through to
+  the launcher. A missing `fd` makes `rofi-files` say so and browse `$HOME` instead, so the chord
+  is never a key that does nothing.
   **Icons: a font glyph in the lists, an image in the launcher.** The lists this port draws put a
   Font Awesome codepoint in the row text (`~/.config/bin/lib-rofi.sh`), so they cost nothing, follow
   the palette and are filtered away by typing; the launcher and the window switcher show the real
@@ -818,7 +846,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   (verified: `-filter span` matches nothing); `-L` makes a symlink to a directory navigate and
   leaves only broken links as `l`; the name column is padded to the longest name because the
   theme is monospace; and text is told from binary by the first 4 kB, because bat would render a
-  binary as an empty page. **`rofi-files --search` is the Search key's mode**: one bounded `fd`
+  binary as an empty page. **`rofi-files --search` is Alt+Search's mode**: one bounded `fd`
   run over `$HOME` (`--type f --max-results 500`, `--exclude .cache .git node_modules
   .local/share/containers`, hidden only with `--hidden` - Debian's binary is `fdfind` and the
   image also has `/usr/local/bin/fd`), one `stat` for the metadata of whatever it found, sorted
@@ -887,7 +915,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   cache is unwritable or `rofi-files` stops passing `-show-icons`/`thumbnail://` - a dropped flag
   makes the list silently text-only.
 - **Files exists twice on purpose: `rofi-files` is the list and `pcmanfm` is the window.** The
-  Search key and `Alt+Ctrl+F` open the list (one process, no window); **`Search+Shift`** opens
+  file list (`Alt+Search`) and `Alt+Ctrl+F` open the list (one process, no window); **`Search+Shift`** opens
   pcmanfm, and the launcher and the root menu carry both rows - **Files** and **Files (window)**
   (`pcmanfm.desktop` is shadowed by a user-level copy with that name, so the launcher says what it
   opens). nautilus was measured and rejected (`docs/omarchy-gap.md` §1: 504 packages, GTK4 +
@@ -1119,16 +1147,40 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   for by name; the theme is 225 files in each of `48x48/apps` and `scalable/apps` - 224 from
   `make-icons.sh`, plus the mark from `make-brand.sh`), and `check-system.sh`
   asks the theme for the names pcmanfm draws instead of trusting the picture.
+  **GTK4 is a different settings store and a different pair of files**, which is why `papers` - the
+  one GTK4/libadwaita window in the image - opened white: libadwaita asks the settings portal for
+  the desktop colour scheme, this image runs no Settings portal (`busctl --user` lists only the wlr
+  backend, Screenshot/ScreenCast), and it fell back to its light default.
+  `gtk-4.0/settings.ini` states `gtk-application-prefer-dark-theme=1`, the LazyOS icons and
+  JetBrains Mono 10; `gtk-4.0/gtk.css` redefines the **libadwaita named colours**
+  (`window_bg_color`, `view_bg_color`, `headerbar_bg_color`, `card_bg_color`, the cyan
+  `accent_*`, `destructive`/`success`/`warning`/`error`, `sidebar_*`, `thumbnail_*`) with the same
+  solarized values - named colours rather than the GTK3 file's selectors, because libadwaita paints
+  from them while an equal-specificity selector only reaches the widgets it happens to match.
+  `xdg-desktop-portal-gtk` (the other answer) is deliberately not installed: a resident daemon for
+  one boolean. `check-system.sh` WARNs when either file is missing or the dark preference line is
+  gone.
+- **Two caches are built into the image, not paid on the first session.** After the UI tree is
+  overlaid, `rootfs-setup.sh` runs `fc-cache -f -s` and
+  `gtk-update-icon-cache -q -t -f /usr/share/icons/LazyOS`, so `/var/cache/fontconfig` and
+  `/usr/share/icons/LazyOS/icon-theme.cache` travel in the image. Without them the first terminal
+  walks every font directory and the first `rofi -show drun` scans 220 files - a one-time cost that
+  reads as "the launcher is slow", and the icon half comes back silently after a rebuilt theme
+  unless the cache is refreshed. Both tools are already in the chroot (`fontconfig`;
+  `gtk-update-icon-cache`, which `adwaita-icon-theme` pulls in through `libgtk-3-0`), and a missing
+  tool or a failed run is a warning, not a failed build: the image is still correct, just slower on
+  first use. `check-system.sh` WARNs when either cache is absent; the manual is `05-system.md`
+  § *The first launch*.
 - **`Search+Shift` is the window, and both halves are release bindings**: sway matches a release
   binding against the modifiers held when the key comes up, so Search released with Shift still
-  down lands on `pcmanfm "$HOME"`, Search alone falls through to `rofi-files --search`, and
+  down lands on `pcmanfm "$HOME"`, Search alone falls through to the launcher, and
   neither fires on the press - the top row doubles as F1-F10 while Search is held (keyd), so a
-  press binding would open a menu on the way to an F-key. Releasing Shift first gives the file
-  search rather than the window, which answers a narrower question instead of the wrong one.
+  press binding would open a menu on the way to an F-key. Releasing Shift first gives the
+  launcher rather than the window, which answers a narrower question instead of the wrong one.
   Nothing of this is resident: the menu is one rofi process while it is open, and the window is
   the window.
-- **`Alt+Search` is the same question in a terminal** (`~/.config/bin/lazyos-find`): `fd` streams
-  the whole tree under `$HOME` into **fzf**, the fruit of typing narrows it while the walk is
+- **`Alt+Ctrl+Shift+F` is the same question in a terminal** (`~/.config/bin/lazyos-find`): `fd`
+  streams the whole tree under `$HOME` into **fzf**, the fruit of typing narrows it while the walk is
   still running, the right 55 % is a preview pane, and Enter hands the choice to **`lazyos-view`**
   - the same opener a double click in pcmanfm uses - so the list, the window and the key never
   disagree about where a file goes. The two searches are deliberately different questions:
@@ -1164,7 +1216,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   the opener takes one file: a Tab that marked three rows would open the first and say nothing
   about the other two. The window is a foot with `--app-id=lazyos-find`, floated and centred by
   `etc/sway/config.d/29-file-search.conf`, and started from a shell it runs in that shell
-  instead - the key and the command are the same program. `check-system.sh` FAILs on a missing
+  instead - the key and the command are the same program. The script starts `foot` itself and
+  wraps the search instead of `exec`'ing it, so a missing `fd`/`fzf`/opener prints its reason and
+  waits for Enter instead of the window closing at once, which is what "the key does nothing"
+  looked like. `check-system.sh` FAILs on a missing
   binding, on a script that lost its executable bit (the window would flash and close), on a
   missing `fzf` (an empty list reads as "no such file", never as a missing package) and on a
   missing `lazyos-view`, and warns on the icon. Nothing is resident: one fzf process while the
@@ -1470,10 +1525,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `-` to `builtin cd -` (which prints the path), not to zoxide.
 - **The first boot gets one welcome window, and it is once per install, not once per login.**
   `~/.config/bin/lazyos-welcome` (started by `~/.config/sway/config.d/30-welcome.conf`, which also
-  floats and centres it) opens one `foot --app-id=lazyos-welcome` page with the eight keys a new
-  install needs - `Alt+Space` (menu), `Alt+D` (launcher), `Search` (file search), `Alt+Ctrl+F`
-  (file list), `Alt+Return` (terminal), `Alt+Q` (close), `Alt+Escape` (power) and `Alt+Ctrl+K`
-  (bindings) - and `read` closes it on Enter. The marker is
+  floats and centres it) opens one `foot --app-id=lazyos-welcome` page with the nine keys a new
+  install needs - `Alt+Space` (menu), `Search`/`Alt+D` (launcher), `Alt+Search` (file search),
+  `Alt+Ctrl+F` (file list), `Alt+Ctrl+T` (translate), `Alt+Return` (terminal), `Alt+Q` (close),
+  `Alt+Escape` (power) and `Alt+Ctrl+K` (bindings) - and `read` closes it on Enter. The marker is
   `${XDG_STATE_HOME:-$HOME/.local/state}/lazyos/welcome` and holds `/etc/machine-id`; it is written
   **after** the window closes, so a missing or failing `foot` leaves no marker and the next login
   tries again, while a session restart with the same machine id stays quiet. A rebuilt card and an
@@ -1607,7 +1662,11 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   `ttfx` at 120 fps - measured here, 78 MB of Python and 74-86 % of one core on a 200x60 canvas, i.e.
   120 full 1920x1200 repaints per second through panfrost, which is what the battery notices. The same
   chain runs here (`config.d/23-lazyos-screensaver.conf`: `swayidle -w` with 150 s screen, 300 s lock,
-  `before-sleep` lock, and `after-resume` cleanup plus `night-light resume`), with Debian's `tte`
+  **360 s `swaymsg "output * power off"`** - DPMS, because the lock covers the screen but leaves the
+  panel lit, which on this IPS panel is the largest idle consumer; `resume` turns it back on for an
+  idle period and `after-resume` for a suspend, which is not an idle timeout and would otherwise
+  wake to a dark screen - `before-sleep` lock, and `after-resume` cleanup plus `night-light resume`),
+  with Debian's `tte`
   instead of `ttfx`, at **30 fps**,
   looping with `--reuse-canvas` over a curated list (`decrypt middleout print sweep wipe slide
   expand`; the effects that end with the text sitting still, so the next one starts from the wordmark).
@@ -1651,13 +1710,51 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   colour; if swaylock does not report back and is not running at all, it raises a critical
   `dialog-error` notification, because a lock that failed quietly is the one failure a person must
   hear. `check-system.sh` FAILs on a missing `tte`/`swayidle`/art/launcher/`sway-lock`/terminal
-  profile, reads the drop-in for the 150 s, 300 s, `before-sleep` and `after-resume` lines **and**
-  that `swayidle` is running (a missing chain means no lock at all), and WARNs when an idle screen
-  is found running under `swaylock`. Deboma's launcher (`hyprctl monitors`, a special workspace per
+  profile, reads the drop-in for the 150 s, 300 s, 360 s, the `resume` and `after-resume` wake
+  lines, `before-sleep` and `after-resume` **and** that `swayidle` is running (a missing chain
+  means no lock at all), and WARNs when an idle screen is found running under `swaylock`. Deboma's launcher (`hyprctl monitors`, a special workspace per
   monitor, its socket2 event stream) has no sway equivalent worth building: there is one output,
   and the drop-in fullscreens `[app_id="org.lazyos.screensaver"]` on the current workspace.
   Deboma's `ttfx` shim exists only because Omarchy's scripts call the Rust port by that name; this
   script calls Debian's `tte` directly, so no shim is shipped.
+- **A film survives the idle chain, and the bar keeps a switch for everything else.**
+  `config.d/32-idle-inhibit.conf` is two `for_window` criteria plus one: a **fullscreen** Firefox
+  window, a **fullscreen** `papers` window and a **visible** mpv window each get
+  `inhibit_idle`. The Firefox and papers rules exist because both ask
+  `org.freedesktop.portal.Inhibit`, and this image runs no portal backend for that interface
+  (`busctl --user` lists only the wlr impl, which is Screenshot/ScreenCast); mpv needs nothing
+  (`--stop-screensaver` defaults to yes and it holds `zwp_idle_inhibitor_v1` itself), and the rule
+  only makes that independent of a profile. `fullscreen` is the deliberate scope - a browser merely
+  open must not hold the machine awake all day. The manual switch is waybar's own
+  **`idle_inhibitor`** module, the coffee cup between the backlight and the battery: it holds one
+  `zwp_idle_inhibitor_v1` on the bar's surface, so the session gains **no helper process and no
+  script**, the cup is always visible (dim = the screen may sleep, yellow = it may not) because a
+  control has to be visible to be turned on, and `start-activated` stays false so a login never
+  inherits it. Sway's own `inhibit_idle` is not it: it has no `toggle` (only
+  `focus|fullscreen|open|none|visible`) and its user inhibitors belong to a *view*, which would tie
+  "keep awake" to a window; for the same reason there is no root-menu row - a menu cannot share
+  waybar's inhibitor without a second mechanism. `check-system.sh` FAILs on a missing rule and
+  WARNs on a missing module or its `.activated` style; the manual paragraphs are `03-shortcuts.md`
+  § *Panels, lock and power* and § *What was copied from Omarchy*, `04-software.md` § *Playing a
+  video*, and `06-troubleshooting.md` § *The screen turns off while you are watching something*.
+- **The volume and brightness keys draw an overlay without adding a program.**
+  `~/.config/bin/osd` is one POSIX sh script behind four bindings in `config.d/20-brightness.conf`
+  and `21-volume.conf`: it runs the same `pactl`/`brightnessctl` step the keys used to run and then
+  a `notify-send` card, so the session gains no daemon, no package and no process after the key. It
+  is a mako notification with two hints: `x-canonical-private-synchronous:lazyos-osd` makes a held
+  key move one card instead of stacking twenty (mako groups by that tag, the same trick `busy`
+  uses), and `int:value:N` is what makes mako draw the progress bar (`mako(5)`: "Progress can be
+  indicated ... by setting a hint, 'value' to an integer between 0 and 100"; `~/.config/mako/config`
+  already had `progress-color=over #2aa198ff`). The level picks the icon: Font Awesome's
+  volume-off/down/up (`f026`/`f027`/`f028`) rendered by `scripts/make-icons.sh` as
+  **`audio-volume-muted`/`-low`/`-high`**, plus the theme's existing `display-brightness` (`f185`);
+  `< 50 %` is the low glyph, muted ignores the level. Volume over 100 % (pactl allows it) is
+  clamped to the bar's 100. The overlay is a *card*, not `swayosd` - that one is packaged in forky
+  (0.3.0-4) but is a resident GTK4 server for the same picture. `check-system.sh` FAILs on the
+  helper, `notify-send`, either binding or any of the four icons, and WARNs when mako lost `icons=1`
+  or `progress-color` (text-only card); the manual is `03-shortcuts.md` § *Sound, light and
+  screenshots* and `06-troubleshooting.md` § *The volume or brightness keys change the value but
+  show nothing*.
 - **The CLI tools are Deboma's, in `packages/tools.list`** (a third list next to base and the UI
   one, installed by `rootfs-setup.sh` between the two). It is deliberately *only* tools: everything
   Deboma installs that is a service, a daemon or a timer stays out, which is why `plocate` is
@@ -1671,7 +1768,13 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   gets the list is where the *Icons first, never forced* rule starts: one that draws and reads
   well in foot (`eza --icons`, `bat`, `glow`, `btop`, `lazygit`) wins over a plainer one that
   prints the same facts, but nothing is added for looks alone and nothing resident (the reason
-  `plocate` stays out is its timer, not its output).
+  `plocate` stays out is its timer, not its output). Three kinds of gap were closed at once:
+  **`ip`, `ping` and `ss`** are `iproute2` + `iputils-ping` in `packages/base.list` (base, not
+  tools: Debian's base system no longer pulls them in and the first troubleshooting question, "is
+  the network up", answered `command not found`, which reads as a broken system); **`zip`** is the
+  writing half of `unzip`; **`strace`** is the debugger a device with no gdb reaches for; **`ncdu`**
+  is the `du` walk a 58 GB eMMC needs when it fills up. `check-system.sh` FAILs on a missing
+  `ip`/`ping`/`ss`.
 - **The editors are `nano` (in `packages/base.list`, the one that is always there) plus
   `neovim` and `vim` (in `packages/tools.list`)**, and `EDITOR`/`VISUAL` name `nvim` - guarded on
   the binary, because an `EDITOR` pointing at a program that is not installed makes `git commit`,

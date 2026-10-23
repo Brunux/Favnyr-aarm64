@@ -12,15 +12,16 @@ the command. This page is the tour.
 
 | Keys | Does |
 |---|---|
-| Search key | file search: every file under your home, narrowed by typing (Enter opens it, Enter on a folder browses there) |
-| Alt+Search | the same files in a terminal (`lazyos-find`): live filtering as you type, a preview on the right, Enter opens the file |
+| Search key | launcher: every application, narrowed by typing (the same menu as Alt+D) |
+| Alt+Search | file search: every file under your home, narrowed by typing (Enter opens it, Enter on a folder browses there) |
 | Search+Shift | the file manager in a window (pcmanfm): drag and drop, several files at once, rename, the trash |
-| Alt+D | launcher: applications |
+| Alt+D | launcher: applications (the Search key opens the same menu) |
 | Alt+Space | the root menu (the bar's menu button, on the keyboard) |
 | Alt+Tab | window switcher |
 | Alt+Shift+D | command palette (`$PATH`; Shift+Enter runs it in foot) |
 | Alt+Ctrl+K | every key binding, searchable, Enter copies the command |
 | Alt+Ctrl+F | files: browse a directory, Enter reads a text file in foot, Alt+1 acts on the row |
+| Alt+Ctrl+Shift+F | the file search in a terminal (`lazyos-find`): live filtering as you type, a preview on the right, Enter opens the file |
 | Alt+Ctrl+G | search inside the files: ripgrep over your home, Enter opens the file at the matching line |
 | Alt+Ctrl+T | translate the selected text (or the clipboard): the answer is copied, and the card names the direction |
 | Alt+Ctrl+O | settings: the radio switches, night light, touchpad, rotation |
@@ -36,38 +37,45 @@ the command. This page is the tour.
 | Alt+grave / Alt+Shift+grave | scratchpad: show the hidden window / send the focused one there |
 | Alt+R | resize mode (arrows, Return or Escape to leave) |
 
-The **Search key** is the file search; the applications are **Alt+D**, one key
-away. The search is one `fd` run over your home (queues, caches and build trees
-left out), listed with the same icons the file browser draws, so typing
-`invoice` finds the file by its name wherever it is.
+The **Search key** and **Alt+D** open the same launcher: every application, one
+row each, narrowed as you type. The Search key is the magnifier; Alt+D is the
+other way to the same menu, so a keyboard that is not this Chromebook's can still
+reach it.
 
-**Alt+Search is the same search in a terminal.** It opens `lazyos-find`: `fzf`
-over every file under your home - the same four exclusions, but with the dotfiles
-included, since the whole tree is the pool and `~/.config` is a place people look
-for things. The list narrows as you type and the pane on the right previews the
-row under the cursor: text is read in place, a picture or the first page of a PDF
-is decoded once and drawn in the terminal, anything else is named by its type and
-size. Enter opens the choice with the same rules the file browser uses (text in
-`bat`, a picture in `imv`, a video in `mpv`, a PDF in the reader); **Ctrl+Y**
-copies its path instead, which is what a search in a terminal can do that a menu
-cannot, and Escape closes it.
+**Alt+Search is the file search.** It opens `rofi-files --search`: one `fd` run
+over your home (queues, caches and build trees left out), capped at 500 rows,
+listed with the same icons the file browser draws, so typing `invoice` finds the
+file by its name wherever it is. Enter opens the choice with the program that
+fits it, Enter on a folder browses there, and Escape closes the list without
+opening anything.
 
-Press **Alt first, then Search**: keyd turns that chord into `F20`, so the window
+Press **Alt first, then Search**: keyd turns that chord into `F20`, so the list
 opens on the press. Pressing Search first also works - it reaches sway as the
-Search key, and releasing it while Alt is still down opens the same search - but
+Search key, and releasing it while Alt is still down opens the same list - but
 the Alt-first order is the one that does not depend on which key comes up first.
 
-The two keys sit next to each other because they answer different questions. The
-Search key opens a *menu* - rows with icons and thumbnails, ready before you can
-type, one bounded run over the tree, and a list you scroll. Alt+Search *filters
-everything*, uncapped, while the walk is still running, and shows you the file
-before you open it. Neither stays resident: one process while its window is open.
+**Alt+Ctrl+Shift+F is the same file search in a terminal.** It opens
+`lazyos-find`: `fzf` over every file under your home - the same four exclusions,
+but with the dotfiles included, since the whole tree is the pool and `~/.config`
+is a place people look for things. The list narrows as you type and the pane on
+the right previews the row under the cursor: text is read in place, a picture or
+the first page of a PDF is decoded once and drawn in the terminal, anything else
+is named by its type and size. Enter opens the choice with the same rules the
+file browser uses (text in `bat`, a picture in `imv`, a video in `mpv`, a PDF in
+the reader); **Ctrl+Y** copies its path instead, which is what a search in a
+terminal can do that a menu cannot, and Escape closes it.
+
+The two searches answer different questions. Alt+Search opens a *menu* - rows
+with icons and thumbnails, ready before you can type, one bounded run over the
+tree, and a list you scroll. Alt+Ctrl+Shift+F *filters everything*, uncapped,
+while the walk is still running, and shows you the file before you open it.
+Neither stays resident: one process while its window is open.
 
 **Search+Shift** is the same key with Shift held: it opens the file manager in a
 window (**pcmanfm**), which is what a list cannot do - drag a file onto a folder,
 select several, rename in place, send to the trash. Both are bound on *release*,
 so which one fires is decided by whether Shift is still down when Search comes
-up; releasing Shift first gives you the file search, which answers a narrower
+up; releasing Shift first gives you the launcher, which answers a narrower
 question rather than the wrong one. The same window is on the root menu
 (**Alt+Space**) as **Files (window)**, and on the launcher.
 
@@ -86,7 +94,7 @@ with `Super+Ctrl`:
 
 | Keys | Does |
 |---|---|
-| Alt+Ctrl+A | audio output (sinks, and the two mutes) |
+| Alt+Ctrl+A | audio output (sinks, volume per application, and the two mutes) |
 | Alt+Ctrl+B | Bluetooth (scan, connect, disconnect) |
 | Alt+Ctrl+W | network (Wi-Fi list, strongest first) |
 | Alt+Ctrl+P | power menu: lock, suspend, hibernate, log out, reboot, shut down |
@@ -100,6 +108,20 @@ with `Super+Ctrl`:
 | Alt+Ctrl+V | clipboard history (Enter copies back, Alt+1 deletes the entry) |
 | Alt+Ctrl+E | emoji picker (Enter inserts, Alt+1 copies only) |
 | Alt+Shift+Escape / Alt+Ctrl+Escape | lock then suspend / suspend |
+
+**An idle screen is three steps, not one.** After 2½ minutes the LazyOS wordmark
+starts looping; at five minutes the session locks; at six the panel itself goes
+dark (DPMS), which is what actually saves the battery on a lit LCD. Any input
+brings all three back at once.
+
+Two applications are exempt while they are being watched: a **fullscreen video or
+presentation** in Firefox or the document reader, and a video in **mpv**. They ask
+the compositor to keep the screen awake, so the lock does not interrupt a film.
+
+The **coffee cup on the bar** is the manual switch: while it is yellow the screen
+stays awake (a long download, a recipe, a page you are reading from across the
+room), and a click on it puts it back to dim, which means "let it sleep". It is
+the bar's own module and it starts nothing.
 
 ## Windows
 
@@ -150,6 +172,19 @@ swipes work.
 | the brightness keys (or F3/F4 with Search) | brightness -5% / +5% |
 | Alt+Shift+S / Alt+Shift+F / Alt+Ctrl+S | screenshot area / full screen / copy area (each one says so in a notification: the file, or the clipboard) |
 | Alt+Ctrl+C | capture menu: screenshot, annotate, OCR, QR code, record the screen |
+
+**The volume and brightness keys draw an overlay** - a notification card with the
+level as a bar, the icon for what changed and "Muted" when that is the answer. It
+replaces itself on every press (holding the key moves one bar instead of stacking
+twenty) and it is the only feedback that survives a fullscreen window, which is
+where the bar's own number is covered. The card is the session's own notification
+system - no extra program runs - and pressing a key while an overlay is up only
+updates it.
+
+**Volume per application** is the audio panel's third row (`Alt+Ctrl+A`): it opens
+`pavucontrol`, one slider per application and per input, for the case the sink
+list cannot answer ("which window is that sound coming from"). It is a window,
+not a mixer in the bar, and nothing starts it until the row is picked.
 
 A saved screenshot goes to **`~/Pictures/Screenshots/<today>/`**, under the name
 grimshot generates (`2026-10-21T18-04-11.png`), which is the name the
@@ -232,7 +267,7 @@ wherever sway does not already own the key.
 | Action | Omarchy | Here |
 |---|---|---|
 | terminal | Super+Return | Alt+Return |
-| apps | Super+Alt+Space | Alt+D (the Search key is the file search) |
+| apps | Super+Alt+Space | Alt+D or the Search key |
 | root menu | Super+Space | **Alt+Space** |
 | window switcher | Alt+Tab | **Alt+Tab** (rofi's window mode) |
 | keybindings | Super+K | **Alt+Ctrl+K** (Alt+K is vim focus up, Alt+Shift+K moves the window) |
@@ -253,7 +288,7 @@ wherever sway does not already own the key.
 | browser | no key (its launcher) | **Alt+Shift+Return** (firefox-esr) |
 | screenshot | Super+Shift+S, Print | Alt+Shift+S, Alt+Shift+F, Alt+Ctrl+S |
 | capture menu (screenshot, OCR, QR, recording) | Super+Ctrl+C | **Alt+Ctrl+C** |
-| files | Super+Shift+F opens the file manager | Alt+Ctrl+F or the Search key: `rofi-files` (a list); **Search+Shift**: pcmanfm, the same files in a window; **Alt+Search**: `lazyos-find`, the same files in a terminal |
+| files | Super+Shift+F opens the file manager | Alt+Search: `rofi-files --search` (a list); **Search+Shift**: pcmanfm, the same files in a window; **Alt+Ctrl+Shift+F**: `lazyos-find`, the same files in a terminal; **Alt+Ctrl+F**: browse a directory |
 | fullscreen | Super+F | Alt+F |
 | volume, brightness, media keys | XF86 keys | the same keys |
 | workspaces | Super+Tab cycles | Alt+1..0 and three-finger swipe |

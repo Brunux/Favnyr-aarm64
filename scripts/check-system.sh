@@ -427,6 +427,29 @@ elif [ "${_profiles:-0}" -ge 1 ]; then
 	ok "no Wi-Fi profile pins an interface name"
 fi
 have nmtui && ok "nmtui present" || warn "nmtui missing (package network-manager-tui)"
+# iproute2 (ip, ss) and iputils-ping (ping): the three commands every "is the
+# network up" answer starts with.  Debian's base system does not pull iproute2
+# in, and a missing `ip` turns the first troubleshooting step into "command not
+# found", which reads as a broken system rather than a missing package.
+_missing_net=""
+for _c in ip ping ss; do have "$_c" || _missing_net="$_missing_net $_c"; done
+if [ -z "$_missing_net" ]; then
+	ok "network diagnostics present (ip, ping, ss)"
+else
+	fail "network diagnostics missing:$_missing_net (the first troubleshooting step answers 'command not found')"
+fi
+# Remote login is on by design: it is the maintainer's recovery path (the same
+# way a card can put a working system back on the eMMC), and turning it off is a
+# decision, not a cleanup.  The report states it rather than leaving it implicit,
+# because a machine whose ssh is expected to answer and does not is a surprise
+# either way.  The default password is documented in 04-software.md.
+if systemctl is-enabled ssh >/dev/null 2>&1; then
+	if systemctl is-active ssh >/dev/null 2>&1; then
+		info "remote login is enabled (ssh, default password documented in 04-software.md)"
+	else
+		warn "ssh is enabled but not running: remote login does not answer"
+	fi
+fi
 
 # ---------------------------------------------------------------------------
 section "Bluetooth"
@@ -949,22 +972,95 @@ else
 fi
 
 # The chain itself, read from the drop-in that owns it: a missing line means the
-# screen never appears (150 s), the session never locks (300 s) or the machine
+# screen never appears (150 s), the session never locks (300 s), the panel stays
+# lit after the lock (360 s), the panel never comes back (resume) or the machine
 # suspends before the lock is covered (before-sleep).  The numbers are compared,
-# because a different timeout is the same as none.
+# because a different timeout is the same as none.  The resume half is asked for
+# twice on purpose: swayidle's own `resume` covers an idle period, and
+# `after-resume` covers a suspend, which is not an idle timeout and would
+# otherwise wake to a black panel that nothing turns back on.
 _idle_cfg=/etc/sway/config.d/23-lazyos-screensaver.conf
 _idle=""
 [ -r "$_idle_cfg" ] || _idle=" $_idle_cfg"
 if [ -r "$_idle_cfg" ]; then
 	grep -q "timeout 150 .*lazyos-screensaver" "$_idle_cfg" || _idle="$_idle no-150s-screen"
 	grep -q "timeout 300 .*sway-lock" "$_idle_cfg" || _idle="$_idle no-300s-lock"
+	grep -q "timeout 360 .*power off" "$_idle_cfg" || _idle="$_idle no-360s-dpms"
+	grep -q "^[[:space:]]*resume .*power on" "$_idle_cfg" || _idle="$_idle no-dpms-resume"
+	grep -q "after-resume .*power on" "$_idle_cfg" || _idle="$_idle no-dpms-after-resume"
 	grep -q "before-sleep .*sway-lock --wait" "$_idle_cfg" || _idle="$_idle no-lock-before-sleep"
 fi
 pgrep -x swayidle >/dev/null 2>&1 || _idle="$_idle swayidle-not-running"
 if [ -z "$_idle" ]; then
-	ok "idle chain armed (150 s idle screen, 300 s lock, lock before sleep)"
+	ok "idle chain armed (150 s idle screen, 300 s lock, 360 s panel off, lock before sleep)"
 else
 	fail "idle chain broken:$_idle"
+fi
+
+# A fullscreen film or presentation must not be interrupted by the lock, and
+# mpv asks the compositor for that itself (zwp_idle_inhibitor_v1); Firefox and
+# papers ask org.freedesktop.portal.Inhibit instead, which this image has no
+# backend for, so the compositor holds the inhibitor on their behalf.  Without
+# those lines the screen locks in the middle of a video, with no error anywhere.
+# The bar's coffee cup is the manual override (waybar's own idle_inhibitor
+# module); a missing module leaves the "keep awake" toggle unreachable, which is
+# a warning rather than a failure because the automatic rules still work.
+_inhib_cfg=/etc/sway/config.d/32-idle-inhibit.conf
+_inhib=""
+if [ -r "$_inhib_cfg" ]; then
+	grep -qs 'firefox.*inhibit_idle fullscreen' "$_inhib_cfg" ||
+		_inhib="$_inhib no-firefox"
+	grep -qs 'Papers.*inhibit_idle fullscreen' "$_inhib_cfg" ||
+		_inhib="$_inhib no-papers"
+	grep -qs 'mpv.*inhibit_idle visible' "$_inhib_cfg" ||
+		_inhib="$_inhib no-mpv"
+else
+	_inhib="$_inhib $_inhib_cfg"
+fi
+if [ -z "$_inhib" ]; then
+	ok "fullscreen video inhibits the idle chain (Firefox, papers, mpv)"
+else
+	fail "idle inhibition incomplete:$_inhib (the lock interrupts a film)"
+fi
+if ! grep -qs '"idle_inhibitor"' "$HOME/.config/waybar/config.jsonc"; then
+	warn "the bar has no idle_inhibitor module: there is no way to keep the screen awake by hand"
+elif ! grep -qs 'idle_inhibitor\.activated' "$HOME/.config/waybar/style.css"; then
+	warn "style.css has no #idle_inhibitor.activated rule: the coffee cup does not show whether it is on"
+else
+	ok "the bar carries a keep-awake toggle (idle_inhibitor, yellow when on)"
+fi
+
+# The on-screen display the volume and brightness keys draw.  The keys used to
+# change the value and say nothing, and the only feedback was the bar's 12 px
+# number - which a fullscreen window covers.  Three things break it silently: the
+# helper loses its executable bit (the key presses and nothing appears), a
+# binding goes back to the raw pactl/brightnessctl call (the value changes with
+# no card), or the theme loses one of the three volume icons (the card is
+# text-only, with no log line).  The mako side is asked too: without `icons=1`
+# the icon is not drawn at all, and without a progress-color the `value` hint
+# draws no bar.
+_osd=""
+[ -x "$HOME/.config/bin/osd" ] || _osd="$_osd bin/osd"
+have notify-send || _osd="$_osd notify-send"
+grep -qs 'bin/osd volume' /etc/sway/config.d/21-volume.conf ||
+	_osd="$_osd config.d/21-volume.conf"
+grep -qs 'bin/osd brightness' /etc/sway/config.d/20-brightness.conf ||
+	_osd="$_osd config.d/20-brightness.conf"
+for _i in audio-volume-muted audio-volume-low audio-volume-high display-brightness; do
+	[ -r "/usr/share/icons/LazyOS/48x48/apps/$_i.png" ] || _osd="$_osd icon:$_i"
+done
+if [ -z "$_osd" ]; then
+	ok "volume and brightness keys draw an overlay (bin/osd, three volume icons, the theme's brightness icon)"
+else
+	fail "the volume/brightness overlay is incomplete:$_osd"
+fi
+if [ -r "$HOME/.config/mako/config" ]; then
+	if grep -qs '^icons=1' "$HOME/.config/mako/config" &&
+		grep -qs '^progress-color=' "$HOME/.config/mako/config"; then
+		ok "the overlay can carry its icon and its level bar (mako icons=1, progress-color)"
+	else
+		warn "mako/config loses icons=1 or progress-color: the overlay shows text only"
+	fi
 fi
 
 # The night light is one helper now: the login line, the Settings switch and
@@ -1075,6 +1171,21 @@ else
 	fi
 fi
 
+# Non-Latin coverage in one question.  A file name, a web page or an EPUB in
+# Arabic is a row of boxes when no installed font claims the script, and nothing
+# logs it.  fonts-noto-core is the package that answers for Arabic, Hebrew,
+# Devanagari, Thai and the rest of the non-CJK set; CJK is a documented
+# `apt install` in 04-software.md (fonts-noto-cjk is 91 MB), so its absence is
+# not a failure here.
+if have fc-list; then
+	_nl=$(fc-list :lang=ar 2>/dev/null)
+	if [ -n "$_nl" ]; then
+		ok "non-Latin text has a font (Arabic, Hebrew, Indic; CJK is an install away)"
+	else
+		warn "fc-list :lang=ar finds nothing: Arabic, Hebrew and Indic text render as boxes (package fonts-noto-core)"
+	fi
+fi
+
 # The editors. /usr/bin/vi is the part that goes missing on its own: it is an
 # update-alternatives link that vim's postinst registers, so a `vim` installed
 # without its postinst running leaves `vim` working and `vi` absent, which only
@@ -1147,22 +1258,29 @@ if [ -r "$HOME/.config/rofi/config.rasi" ]; then
 	fi
 fi
 
-# The Search key is the file search and $mod+d is the launcher: they used to be the
-# same menu, so a binding that goes back to the launcher is a key that no longer
-# does what the manual says. --search is a mode of bin/rofi-files itself, so both
-# halves are asked for: without the binding the key is dead, without the mode it
-# exits with a usage error and looks dead.
-if grep -qs 'Super_L exec .*rofi-files --search' "$HOME/.config/sway/config"; then
-	ok "the Search key opens the file search (rofi-files --search)"
+# The Search key is the launcher and Alt+Search is the file search; they used to
+# be the other way around, so a key that goes back to the other menu no longer
+# does what the manual says. The file search needs all three halves asked for:
+# the --search mode of bin/rofi-files (without it the key exits with a usage
+# error and looks dead) and both press paths of the chord (keyd turns Alt-first
+# into F20; the release binding catches Search-first).
+if grep -qs 'Super_L exec .*\$launcher' "$HOME/.config/sway/config"; then
+	ok "the Search key opens the applications launcher (\$launcher)"
 else
-	fail "the Search key does not run 'rofi-files --search' in ~/.config/sway/config (it opens the launcher again, or nothing)"
+	fail "the Search key does not run '\$launcher' in ~/.config/sway/config (it opens the file search, or nothing)"
+fi
+if grep -qs 'F20 exec .*rofi-files --search' "$HOME/.config/sway/config" &&
+	grep -qs 'Super_L+Mod1 exec .*rofi-files --search' "$HOME/.config/sway/config"; then
+	ok "Alt+Search opens the file search (rofi-files --search)"
+else
+	fail "Alt+Search is missing its F20 press binding or its Super_L+Mod1 release fallback in ~/.config/sway/config"
 fi
 grep -qs -- '--search)' "$HOME/.config/bin/rofi-files" ||
-	fail "bin/rofi-files has no --search mode: the Search key exits with a usage error"
+	fail "bin/rofi-files has no --search mode: Alt+Search exits with a usage error"
 
-# The launcher is Alt+D and it is one key away from the file search. The overlay
-# used to carry `unbindsym Mod1+d`, which removed the launcher while the Search
-# key was still the launcher; the key then did nothing and looked broken.
+# Alt+D stays the launcher even though the Search key opens the same menu: an
+# overlay that unbinds it takes away the launcher key that does not go through
+# keyd, and it reads as a key that does nothing.
 if grep -qs '^unbindsym Mod1+d' "$HOME/.config/sway/config"; then
 	fail "~/.config/sway/config still unbinds Alt+d: the launcher is gone"
 else
@@ -1179,22 +1297,16 @@ else
 	fail "fd is missing (package fd-find): rofi-files --search falls back to browsing"
 fi
 
-# Alt+Search asks the same question in a terminal: lazyos-find streams fd into
-# fzf and hands the choice to lazyos-view. There are four separate ways for that
-# key to look dead - no binding, a script without its executable bit, no fzf, no
-# opener - and the fzf one is a FAIL rather than a warning because a missing
-# filter is an *empty list*: the window opens, prints nothing, and reads as "no
-# such file" instead of as a missing package.
-#
-# The chord has two paths: keyd turns Alt-first into F20 (so it fires on the
-# press), and the release binding catches Search-first with Alt still down. A
-# config with only one of them works in one press order and looks dead in the
-# other, so both are asked for, plus the keyd line that creates F20.
-if grep -qs 'F20 exec .*lazyos-find' "$HOME/.config/sway/config" &&
-	grep -qs 'Super_L+Mod1 exec .*lazyos-find' "$HOME/.config/sway/config"; then
-	ok "Alt+Search opens the terminal file search (lazyos-find)"
+# The terminal file search (Alt+Ctrl+Shift+F) asks the same question with fzf:
+# lazyos-find streams fd into fzf and hands the choice to lazyos-view. There are
+# four separate ways for that key to look dead - no binding, a script without its
+# executable bit, no fzf, no opener - and the fzf one is a FAIL rather than a
+# warning because a missing filter is an *empty list*: the window opens, prints
+# nothing, and reads as "no such file" instead of as a missing package.
+if grep -qs 'Ctrl+Shift+f exec .*lazyos-find' /etc/sway/config.d/; then
+	ok "Alt+Ctrl+Shift+F opens the terminal file search (lazyos-find)"
 else
-	fail "Alt+Search is missing its F20 press binding or its Super_L+Mod1 release fallback in ~/.config/sway/config"
+	fail "no 'Ctrl+Shift+f exec ...lazyos-find' binding in /etc/sway/config.d/: the key does nothing"
 fi
 if grep -qs '^leftmeta = f20$' /etc/keyd/default.conf; then
 	ok "keyd maps Alt+Search to F20"
@@ -1204,22 +1316,23 @@ fi
 if [ -x "$HOME/.config/bin/lazyos-find" ]; then
 	ok "terminal file search (lazyos-find) is executable"
 else
-	fail "bin/lazyos-find is missing or not executable: Alt+Search opens a foot window that closes at once"
+	fail "bin/lazyos-find is missing or not executable: Alt+Ctrl+Shift+F opens a foot window that closes at once"
 fi
 if have fzf; then
 	ok "fzf present, which the terminal file search filters with"
 else
-	fail "fzf is missing (package fzf): Alt+Search lists nothing"
+	fail "fzf is missing (package fzf): Alt+Ctrl+Shift+F lists nothing"
 fi
 # Its notifications carry the search glyph, and a name mako cannot resolve draws
 # no picture at all: the card is text-only with no log line.
 [ -r /usr/share/icons/LazyOS/48x48/apps/system-search.png ] ||
 	warn "the LazyOS theme has no system-search icon: lazyos-find's notifications are text-only"
 
-# Search inside files (Alt+Ctrl+G) is the other half of the Search key: rofi-files
-# finds a file by its name, rofi-grep by what is written in it. Two things take it
-# away and neither says so - a missing binding (the key does nothing) or a missing
-# ripgrep (the menu opens, refuses, and reads as "no matches").
+# Search inside files (Alt+Ctrl+G) is the other half of the file search (Alt+Search):
+# rofi-files finds a file by its name, rofi-grep by what is written in it. Two
+# things take it away and neither says so - a missing binding (the key does
+# nothing) or a missing ripgrep (the menu opens, refuses, and reads as "no
+# matches").
 if grep -rqs 'Ctrl+g exec .*rofi-grep' /etc/sway/config.d/; then
 	ok "Alt+Ctrl+G searches inside the files (rofi-grep)"
 else
@@ -1532,7 +1645,6 @@ fi
 	fail "bin/rofi-keys is missing: the key view has no script"
 [ -x "$HOME/.config/bin/rofi-files" ] && ok "file browser (rofi-files) is executable" ||
 	fail "bin/rofi-files is missing: Alt+Ctrl+F and the Files menu entry do nothing"
-
 # The translate key is taught in one place, the shortcuts page, and the Settings
 # row only says what it does - not that it exists.  A manual that lost the row
 # is a key nobody finds.
@@ -1708,6 +1820,7 @@ if [ -r /usr/share/applications/org.lazyos.screenshot-area.desktop ]; then
 		ok "the Screenshot (area) launcher entry uses bin/screenshot" ||
 		fail "org.lazyos.screenshot-area.desktop still runs grimshot: that entry saves into \$HOME"
 fi
+
 # Screen sharing (Settings > Share this screen, and the root menu) is wayvnc
 # served on the loopback address.  Three things fail quietly and one fails
 # loudly, and only the last is visible: a missing binary (the menu says so when
@@ -2270,9 +2383,26 @@ if grep -qs '^gtk-icon-theme-name=LazyOS' "$HOME/.config/gtk-3.0/settings.ini" &
 else
 	warn "gtk-3.0/settings.ini does not select LazyOS + dark: pcmanfm looks like a foreign program"
 fi
+# The GTK4 half is a different settings store, so the two files above reach
+# nothing here.  `papers` is the one GTK4/libadwaita window in the image, and it
+# opened white: libadwaita asks the settings portal for the colour scheme, and
+# this image runs no Settings portal (the only portal backend is the wlr one,
+# which implements Screenshot and ScreenCast).  With no portal it falls back to
+# Adwaita's light default unless gtk-4.0/settings.ini prefers dark.
+if [ -r "$HOME/.config/gtk-4.0/settings.ini" ] &&
+	grep -qs '^gtk-application-prefer-dark-theme=1' "$HOME/.config/gtk-4.0/settings.ini"; then
+	ok "GTK4 windows prefer the dark palette (gtk-4.0/settings.ini)"
+else
+	warn "gtk-4.0/settings.ini is missing or not dark: papers renders in libadwaita's light default"
+fi
+if [ -r "$HOME/.config/gtk-4.0/gtk.css" ] && [ -s "$HOME/.config/gtk-4.0/gtk.css" ]; then
+	ok "GTK4 windows use the solarized palette (gtk-4.0/gtk.css)"
+else
+	warn "$HOME/.config/gtk-4.0/gtk.css is missing or empty: papers keeps libadwaita's own colours"
+fi
 
-# The windowed file manager is pcmanfm (the Files menu stays rofi-files, and the
-# Search key finds files). What fails here does so silently: without its config
+# The windowed file manager is pcmanfm (the Files menu stays rofi-files, and
+# Alt+Search finds files). What fails here does so silently: without its config
 # the terminal command is x-terminal-emulator, which this image does not have, so
 # "Open Terminal Here" does nothing; without the association a double click on a
 # photo starts the browser (280 MB) or nothing; and libfm's own loader is the only
@@ -2558,6 +2688,66 @@ if [ -n "$_bl" ]; then
 		ok "waybar backlight device $_bl exists"
 	else
 		fail "waybar names backlight device '$_bl'; /sys/class/backlight has: $(ls /sys/class/backlight 2>/dev/null | tr '\n' ' ')"
+	fi
+fi
+
+# The caches the first launch would otherwise build.  rootfs-setup.sh runs both
+# commands inside the chroot, where the committed theme already is, so the first
+# terminal and the first launcher do not walk the trees.  A rebuilt theme that
+# did not regenerate its cache is the silent half: the launcher still opens, it
+# just scans 220 files before it draws.
+if [ -s /usr/share/icons/LazyOS/icon-theme.cache ]; then
+	ok "the icon theme ships its cache (the first launcher scan is a read)"
+else
+	warn "/usr/share/icons/LazyOS/icon-theme.cache is missing: the first icon scan walks the theme (gtk-update-icon-cache -f /usr/share/icons/LazyOS)"
+fi
+if [ -d /var/cache/fontconfig ] && [ -n "$(ls -A /var/cache/fontconfig 2>/dev/null)" ]; then
+	ok "the system font cache exists (the first font lookup does not walk every face)"
+else
+	warn "/var/cache/fontconfig is empty or missing: the first font lookup walks every font directory (fc-cache -s)"
+fi
+
+# The resident set is the session's strongest rule and had no test: the bar, the
+# notification daemon, the idle chain and sway itself are expected, workstyle
+# and the cliphist watcher are the two agreed exceptions, and everything else
+# should not be running.  The declined daemons are named because each one is a
+# package the comments and docs/omarchy-gap.md already answered "no" to, and a
+# running one means the rule was broken without anything saying so.
+_declined=""
+for _p in udiskie swaync dunst picom blueman-applet packagekitd localsearch-3; do
+	pgrep -x "$_p" >/dev/null 2>&1 && _declined="$_declined $_p"
+done
+# `pgrep -x` compares the 15-character comm, and this one's name is longer:
+# tracker-miner-fs-3 would never match. The bracketed pattern matches the full
+# command line and does not match pgrep's own.
+pgrep -f "[t]racker-miner-fs-3" >/dev/null 2>&1 &&
+	_declined="$_declined tracker-miner-fs-3"
+if [ -z "$_declined" ]; then
+	ok "no declined daemon is running (udiskie, swaync, dunst, picom, blueman, packagekit, indexers)"
+else
+	fail "declined daemon(s) running:$_declined (each is a package this port answered no to; it spends battery and nothing says why)"
+fi
+# The session's own units (PipeWire, WirePlumber, the portals, gvfs while the
+# file manager has a window, dconf) are expected.  An unknown one is a warning
+# rather than a failure: a distribution update can add one, and the report
+# should name it instead of hiding it.  The two agreed residents are `exec`'d by
+# the sway configuration, not units, which is why the process checks above
+# (workstyle, the cliphist watcher) are where they are seen.
+if have systemctl; then
+	_unknown_units=""
+	for _u in $(systemctl --user list-units --type=service --state=running --no-legend 2>/dev/null | awk '{ print $1 }'); do
+		case $_u in
+		dbus.service|dconf.service|gvfs-*.service|mpris-proxy.service|\
+		pipewire.service|pipewire-pulse.service|filter-chain.service|\
+		wireplumber.service|wireplumber@*.service|xdg-desktop-portal*.service|\
+		xdg-document-portal.service|xdg-permission-store.service) ;;
+		*) _unknown_units="$_unknown_units $_u" ;;
+		esac
+	done
+	if [ -z "$_unknown_units" ]; then
+		ok "the user units are the expected ones (PipeWire, WirePlumber, portals, gvfs)"
+	else
+		warn "unexpected user unit(s):$_unknown_units (the resident set grew; AGENTS.md says nothing resident)"
 	fi
 fi
 

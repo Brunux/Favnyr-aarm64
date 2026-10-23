@@ -87,6 +87,7 @@ UI_I_TRASH=$(printf '\357\207\270')   # f1f8
 UI_I_BUG=$(printf '\357\206\210')   # f188
 UI_I_CALC=$(printf '\357\207\254')   # f1ec
 UI_I_MIC=$(printf '\357\204\260')   # f130
+UI_I_MIXER=$(printf '\357\207\236') # f1de, sliders: per-application volume
 UI_I_LOCK=$(printf '\357\200\243')   # f023
 UI_I_EYE=$(printf '\357\201\256')   # f06e
 UI_I_PAUSE=$(printf '\357\201\214')   # f04c

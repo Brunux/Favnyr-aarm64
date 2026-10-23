@@ -13,46 +13,24 @@ input type:keyboard {
     repeat_rate 33
 }
 
-# Use the Chromebook Search key by itself to find *files*: it opens rofi-files
-# in its --search mode, one bounded fd run over $HOME listed by rofi, and Enter
-# opens the choice with the program that fits it (text in bat, a picture in
-# chafa, a video in mpv, a PDF in Firefox), or browses the folder that was
-# chosen. The applications are on $mod+d (the system launcher, see
-# etc/sway/config.d/19-launcher.conf), and this is the one thing the launcher
-# cannot do - there is no way to land on a file by typing its name from a list
-# of .desktop entries.
+# Use the Chromebook Search key by itself for the applications: it opens the
+# same launcher as $mod+d ($launcher in /etc/sway/config, rofi -show drun, the
+# .desktop entries including this port's own session actions). That is what the
+# key did before the file search borrowed it, and it is the question the
+# magnifier answers for most people.
 #
 # The Search key is a Super_L press, so this is bound on release and without
 # repeat: the top row doubles as F1-F10 with Search held down (keyd, see
-# etc/keyd/default.conf), and firing on press would open the file search on the
+# etc/keyd/default.conf), and firing on press would open the launcher on the
 # way to those.
-bindsym --no-repeat --release Super_L exec /home/brunux/.config/bin/rofi-files --search
+bindsym --no-repeat --release Super_L exec $launcher
 
-# Search+Shift is the same key held with Shift: the *windowed* file manager
-# (pcmanfm), for what a list cannot do - drag and drop, a multi-selection,
-# renaming in place, the trash. The two do not compete: a release binding is
-# matched against the modifiers held at the moment the key comes up, so Search
-# released while Shift is still down lands here, and Search on its own falls
-# through to the file search above. `$HOME` is passed explicitly because the
-# window would otherwise open at the session's working directory.
-#
-# It is bound on release for the same reason as the line above - the top row
-# doubles as F1-F10 while Search is held (keyd), and it is `--no-repeat` because
-# holding the key has nothing to repeat.
-bindsym --no-repeat --release Super_L+Shift exec pcmanfm "$HOME"
-
-# Alt+Search is the same question asked in a terminal: `lazyos-find` streams
-# every file under $HOME through fd into fzf, so the prompt is up before the
-# walk is done and there is no cap on what an empty query offers, with a preview
-# pane on the right (text read with bat, a picture or a PDF page decoded once and
-# drawn with chafa) and Enter handing the choice to lazyos-view - the same opener
-# a double click in pcmanfm reaches.
-#
-# It sits next to the Search key because the two are one feature with two
-# answers: rofi's list is a menu of rows with icons and thumbnails that is open
-# before you know the name of the file, and fzf is live filtering of everything
-# with a preview for when you would recognise it. Neither stays resident, and
-# the fd excludes are the same four both of them use.
+# Alt+Search is what the Search key used to be: rofi-files in its --search
+# mode, one bounded fd run over $HOME listed by rofi, and Enter opens the
+# choice with the program that fits it (text in bat, a picture in imv, a video
+# in mpv, a PDF in papers), or browses the folder that was chosen. This is the
+# one thing the launcher cannot do - there is no way to land on a file by
+# typing its name from a list of .desktop entries.
 #
 # The chord has two paths because Search is a Super_L press and the order the
 # keys are pressed in decides which one is taken:
@@ -62,9 +40,19 @@ bindsym --no-repeat --release Super_L+Shift exec pcmanfm "$HOME"
 #     Search key, so the release bindings never see it and nothing opens twice.
 #   * Search first, Alt still down when Search comes up: keyd forwarded
 #     Super_L, and the release binding below matches the modifiers held at the
-#     release. Released without Alt, it falls through to the file list above.
+#     release. Released without Alt, it falls through to the launcher above.
+bindsym --no-repeat F20 exec /home/brunux/.config/bin/rofi-files --search
+bindsym --no-repeat --release Super_L+Mod1 exec /home/brunux/.config/bin/rofi-files --search
+
+# Search+Shift is the same key held with Shift: the *windowed* file manager
+# (pcmanfm), for what a list cannot do - drag and drop, a multi-selection,
+# renaming in place, the trash. The two do not compete: a release binding is
+# matched against the modifiers held at the moment the key comes up, so Search
+# released while Shift is still down lands here, and Search on its own falls
+# through to the launcher above. `$HOME` is passed explicitly because the
+# window would otherwise open at the session's working directory.
 #
-# `foot --app-id=lazyos-find` is floated and centred by
-# etc/sway/config.d/29-file-search.conf.
-bindsym --no-repeat F20 exec /home/brunux/.config/bin/lazyos-find
-bindsym --no-repeat --release Super_L+Mod1 exec /home/brunux/.config/bin/lazyos-find
+# It is bound on release for the same reason as the line above - the top row
+# doubles as F1-F10 while Search is held (keyd), and it is `--no-repeat` because
+# holding the key has nothing to repeat.
+bindsym --no-repeat --release Super_L+Shift exec pcmanfm "$HOME"

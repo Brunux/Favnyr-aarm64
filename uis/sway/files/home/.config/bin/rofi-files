@@ -36,7 +36,7 @@
 # a video, the path in the clipboard, a terminal in that folder. That needs
 # `global-kb: true` in ~/.config/rofi/config.rasi, or sway answers Alt+1 with
 # "workspace number 1" and the browser never sees the key.
-# Alt+Ctrl+F opens the browser from the session, the Search key opens
+# Alt+Ctrl+F opens the browser from the session, Alt+Search opens
 # `--search`, and it is also in the root menu and the launcher ("Files").
 #
 # The search is one bounded fd run (--max-results 500, caches and build
@@ -107,7 +107,7 @@ if [ "$mode" = search ]; then
 	# alias the shell and FZF_DEFAULT_COMMAND use), so ask $PATH and accept
 	# either name. Without it the search is the one thing that cannot run, and
 	# falling back to the browser is better than a key that does nothing - it
-	# says so, because the Search key opening a directory listing instead of a
+	# says so, because Alt+Search opening a directory listing instead of a
 	# prompt would otherwise read as a broken binding.
 	fd=$(command -v fd || command -v fdfind || :)
 	if [ -z "$fd" ]; then

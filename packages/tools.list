@@ -61,7 +61,15 @@ gum
 # npm) expect it.
 curl
 unzip
+# zip: unzip ships alone, so creating an archive is the half that was missing.
+zip
 whois
+# strace: the tool a device with no debugger reaches for, and the one that
+# answers "which file is it opening" without a rebuild.
+strace
+# ncdu: the disk usage walk a 58 GB eMMC needs when it fills up; `du` prints the
+# same numbers as a wall of text.
+ncdu
 # socat and inotify-tools (inotifywait): the two that make "watch this until
 # that happens" a one-liner.
 socat

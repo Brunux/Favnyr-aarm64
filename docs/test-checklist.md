@@ -29,11 +29,29 @@ cat /etc/debian-aarch64-revision ~/Dev/LazyOS/REVISION ~/Dev/LazyOS/VERSION
 * `check-system.sh` must end with **0 FAIL**. WARN and SKIP lines are expected
   and explained in `reports/README.md`; anything else stops the run here.
 
+## The first launch - the caches built at build time
+
+Two caches are built inside the image so the first session does not pay for
+them. Both are invisible when present and only noticeable as a slow first
+terminal or a slow first launcher, which is why they are a step of their own.
+
+| Step | Expected |
+|---|---|
+| `ls -l /usr/share/icons/LazyOS/icon-theme.cache` | the file exists and is newer than the PNGs beside it (it is built after the theme is overlaid) |
+| `ls -l /var/cache/fontconfig \| head` | files, not an empty directory: `fc-cache -f -s` ran in the chroot |
+| `time rofi -show drun` (Escape at once) | the list draws without a visible scan of the theme; a card that takes a beat on first open is the cache missing |
+| `sudo gtk-update-icon-cache -q -t -f /usr/share/icons/LazyOS` | regenerates the index (this is the command the build runs); `check-system.sh` stops warning |
+
+A missing cache is a `WARN` in `check-system.sh` (the image is still correct,
+just slower on first use). `rootfs-setup.sh` is the place both are built; a
+missing `gtk-update-icon-cache` in a hand-built chroot is the same warning, not a
+broken image. The manual is `05-system.md` § *The first launch*.
+
 ## First boot - the welcome card
 
 | Step | Expected |
 |---|---|
-| log in on a card that has never been logged into | one foot window (`--app-id=lazyos-welcome`) with nine keys: `Alt+Space` menu, `Alt+D` launcher, `Search` file search, `Alt+Ctrl+F` file list, `Alt+Ctrl+T` translate, `Alt+Return` terminal, `Alt+Q` close, `Alt+Escape` power, `Alt+Ctrl+K` bindings. Enter closes it |
+| log in on a card that has never been logged into | one foot window (`--app-id=lazyos-welcome`) with nine keys: `Alt+Space` menu, `Search`/`Alt+D` launcher, `Alt+Search` file search, `Alt+Ctrl+F` file list, `Alt+Ctrl+T` translate, `Alt+Return` terminal, `Alt+Q` close, `Alt+Escape` power, `Alt+Ctrl+K` bindings. Enter closes it |
 | log out and back in | no window: it is once per install, not once per login |
 | `cat ~/.local/state/lazyos/welcome` | the content of `/etc/machine-id` |
 | delete that file, log out and back in | the window returns |
@@ -107,6 +125,49 @@ effect on the screen - warm at 22:00, daylight at 22:05. `check-system.sh` FAILs
 when `bin/night-light` is missing and WARNs when the idle drop-in loses
 `night-light resume`; whether the screen is warm is only the eye's answer.
 
+## The idle chain - the screen, the lock, and the panel
+
+Three timers, each with a job the previous one does not do. The last one is the
+one a person notices on the battery.
+
+| Step | Expected |
+|---|---|
+| leave the machine alone for 2½ minutes | the **LazyOS** wordmark starts animating; nothing else changes |
+| leave it for five minutes | the session is **locked** (the mountain photograph), and the idle screen is gone (not animating underneath) |
+| leave it for six minutes | the **panel goes dark** (`swaymsg "output * power off"`); look at it from the side - the backlight is off, not a black image |
+| press a key or touch the touchpad | the panel comes back on **and** the lock is still up: one input, both effects, no second press |
+| `pgrep -af swayidle` during all of it | one process, with the 150/300/360 timeouts and both wake lines |
+| play a video in mpv, fullscreen or in a window | no idle screen, no lock, no panel off **while the window is visible** (the mpv rule is `visible`, not `fullscreen`, so a paused film also holds it); close the player and the timers start over |
+| fullscreen a YouTube page in Firefox for six minutes | the same: the screen stays awake (the `fullscreen` scope is deliberate - the browser merely open does not inhibit) |
+| open a PDF in `papers` and go fullscreen | the same |
+| leave a page playing in a Firefox **background** tab | it does **not** inhibit: the screen sleeps. That is deliberate |
+| click the **coffee cup** on the bar | it turns yellow and the tooltip says the screen is kept awake; wait past six minutes - no idle screen, no lock, no panel off |
+| click it again | it turns dim; the timers run again from the next idle period |
+| `systemctl suspend`, then wake | the panel is on at the lock: `after-resume` turned it on (a suspend is not an idle timeout) |
+
+What a failure means:
+
+* **the lock appears but the panel stays lit**: the `timeout 360` line is missing
+  from `/etc/sway/config.d/23-lazyos-screensaver.conf`; `check-system.sh` FAILs
+  on it. `swaymsg -t get_outputs` still reports the output as on.
+* **the panel stays dark after a key**: the `resume` line (or the
+  `after-resume` one for a suspend) is missing; the first is inside the swayidle
+  chain and the second is the logind hook. Both are checked.
+* **a fullscreen video locks anyway**: the application has no Wayland app id
+  (Firefox under Xwayland, `MOZ_ENABLE_WAYLAND=0`), or
+  `/etc/sway/config.d/32-idle-inhibit.conf` is missing; `check-system.sh` FAILs
+  on the rules. The coffee cup is the manual override for anything else.
+* **the coffee cup does nothing**: `idle_inhibitor` is not in waybar's
+  `modules-right` (FAIL) or `style.css` lost `#idle_inhibitor.activated` (WARN -
+  then it stays dim, because both states draw the same glyph). The module holds
+  the inhibitor on the bar's own surface; there is no separate process and no
+  `swaymsg` command to check.
+
+The manual is `03-shortcuts.md` § *Panels, lock and power* and `05-system.md`
+§ *When you leave it alone*; the symptom list is `06-troubleshooting.md` § *The
+screen turns off while you are watching something* and § *The screen stays lit
+after the lock*.
+
 ## Clipboard history - `Alt+Ctrl+V`
 
 | Step | Expected |
@@ -145,7 +206,7 @@ Tofu boxes instead of glyphs mean `fonts-noto-color-emoji` is missing (a FAIL in
 | `Alt+Ctrl+T` with nothing selected, after copying a sentence | the clipboard's sentence is the one translated (the clipboard is the second source) |
 | select an English sentence | the card says **Already English** and the clipboard is untouched |
 | select a long paragraph (half a screen) | the card and a floated `foot` read window with the translation and the selection underneath; Alt+Q closes it |
-| **Settings** (`Alt+Ctrl+O`) → **Translate** | the list opens with the current language marked and the how-to rows; pick **Spanish**, Escape, open Settings again | the row says `into Spanish` |
+| **Settings** (`Alt+Ctrl+O`) → **Translate** | the list opens with the current language marked and the how-to rows; pick **Spanish**, Escape, open Settings again, and the row says `into Spanish` |
 | select English text and press `Alt+Ctrl+T` | `English → Spanish`, which is the configured direction |
 | `cat ~/.config/lazyos/translate.conf` | `target=es` |
 | disconnect Wi-Fi, select text, press the key | one critical card, *No answer from the translator: is the network up?*, and nothing on the clipboard |
@@ -169,6 +230,26 @@ offline instead of failing.
 
 Changing a connection needs root: without a passwordless `sudo` the menu says so
 and changes nothing, which is the intended behaviour.
+
+## The toolbox - `ip`, `ping`, `ss`, `zip`, `strace`, `ncdu`
+
+These answer the questions an image without them answers with `command not
+found`, which reads as a broken system instead of a missing package.
+
+| Step | Expected |
+|---|---|
+| `ip -br addr` | the interfaces and their addresses (`wlp1s0`, `lo`); a missing command is the `iproute2` package |
+| `ip route` | a default via the gateway; `ping -c3 1.1.1.1` answers after it |
+| `ping -c3 deb.debian.org` | answers: DNS works (the previous row is the link, this one is the resolver) |
+| `ss -tunlp` | what is listening - `sshd` on `:22` is the expected one; `127.0.0.1:5900` appears only while screen sharing is on |
+| `echo test \| zip -q /tmp/t.zip - && unzip -p /tmp/t.zip` | `test`: `zip` is the writing half of `unzip` |
+| `strace -V` and `strace -e trace=openat true` | the version and one traced call; the debugger a device with no gdb reaches for |
+| `ncdu /tmp` then `q` | the disk walk; a full eMMC is what this is for, and `du` prints the same numbers as a wall of text |
+
+`check-system.sh` FAILs on a missing `ip`/`ping`/`ss` and on a declared package
+that is not installed. The manual route is `04-software.md` § *Working in the
+terminal all day*, and `06-troubleshooting.md` § *Is the network up?* is the
+ordered list to follow when the second `ping` is the one that fails.
 
 ## Packages - root menu -> **Packages**
 
@@ -236,7 +317,7 @@ with an explicit `--prefix ~/.local`, so npm never needs root and never touches
 |---|---|
 | open `~/Pictures` | rows with a **32 px** thumbnail for images, videos and PDFs; the icon is the picture, not a mimetype glyph |
 | open a directory, then Escape, then `Alt+Ctrl+F` again | it reopens that directory, not `$PWD`; a fresh home with no state file starts in `$HOME` (`cat ~/.local/state/lazyos/files-last`) |
-| press `Search` (the file search) from another directory, then `Alt+Ctrl+F` | still the directory the list last had: `--search` writes nothing to that state file |
+| press `Alt+Search` (the file search) from another directory, then `Alt+Ctrl+F` | still the directory the list last had: `--search` writes nothing to that state file |
 | open a directory of source files or dotfiles | **every** row still has an icon (a page, an executable, a folder), so the names line up in one column - no bare text list |
 | reopen the same directory | instant: the thumbnails come from `~/.cache/thumbnails/normal/` and are not decoded again |
 | Enter on an image | **imv** in its own window (zoom, pan, rotate; the arrow keys walk the folder). The first picture of a session also raises a notification naming those keys (`lazyos-image-hint`), and only the first. A foot window drawing sixels means imv could not get an EGL context, which is the fallback |
@@ -355,33 +436,45 @@ than fail after the disk has been formatted. The copy is not interruptible (a
 killed `rsync` or `mkfs` leaves a disk that looks written and is not) and the log
 stays in `~/.local/state/lazyos/install-<timestamp>.log`.
 
-## Search key - the file search
+## Search key - the launcher
 
 | Step | Expected |
 |---|---|
-| press **Search** (nothing else) | a list of files from all over `$HOME`, newest first, each with the same icon the browser draws |
+| press **Search** (nothing else) | the applications menu, the same one as `Alt+D`: one row per `.desktop` entry, narrowed as you type |
+| type `fire` and press Enter | `firefox-esr` starts |
+| hold **Search**, tap a top-row key | an F-key reaches the focused window; no launcher opens on the way |
+| press **Search+Shift** | the file manager window (see below), not the launcher |
+
+Both keys are one rofi process while the menu is open and nothing afterwards.
+
+## Alt+Search - the file search
+
+| Step | Expected |
+|---|---|
+| hold **Alt**, tap **Search**, release Search then Alt | a list of files from all over `$HOME`, newest first, each with the same icon the browser draws |
+| hold **Search**, tap **Alt**, then release Search | the same list: the chord works in either press order |
 | type `conf` | the list narrows as you type; a path is shown as `~/relative/path` |
 | Enter on a text file | it opens exactly as it does from `Alt+Ctrl+F` |
 | Escape | nothing opens |
-| press Search twice in a row | two lists, no leftover window and no second process after both close |
+| press Alt+Search twice in a row | two lists, no leftover window and no second process after both close |
 
 `rofi-files --search` is the same mode from a terminal. An empty list on a home
 with files means `fd`/`fdfind` is missing (`check-system.sh` FAILs).
 
-## Alt+Search - the terminal file search
+## Alt+Ctrl+Shift+F - the terminal file search
 
 | Step | Expected |
 |---|---|
-| hold **Alt**, tap **Search**, release Search then Alt | a floated, centred foot window with an `fzf` prompt showing `~ > ` and rows filling in as the walk runs |
+| press **Alt+Ctrl+Shift+F** | a floated, centred foot window with an `fzf` prompt showing `~ > ` and rows filling in as the walk runs |
 | type part of a path, two segments | the list narrows while you type, with no pause between keystrokes (the whole tree is the pool: nothing is capped at 500 rows) |
 | put the cursor on a text file | the right 55 % shows its first lines through `bat` (`BAT_THEME=ansi`, solarized) |
 | put it on a photo or a PDF | the preview draws a picture in the pane (symbols, not sixels - it survives the next redraw) |
 | put it on a `.zip` or a binary | the pane names the type and the size instead of trying to draw it |
 | **Ctrl+Y** | `copied the path` in the header; `wl-paste` is `~/relative/path` |
 | Enter on a text file / a photo / a video | opens exactly as a double click in pcmanfm does (`bat`, `imv`, `mpv`) |
-| type `config` | dotfiles are found here (`~/.config/...`), unlike the Search key's list |
+| type `config` | dotfiles are found here (`~/.config/...`), unlike the file list (Alt+Search) |
 | Escape | the window closes and nothing opens |
-| press Alt+Search twice in a row | two windows, and no `fzf` process left after both close |
+| press Alt+Ctrl+Shift+F twice in a row | two windows, and no `fzf` process left after both close |
 | `lazyos-find` from a foot prompt | the same search runs *in that terminal* instead of a new window |
 
 A window that flashes and closes means `bin/lazyos-find` lost its executable
@@ -395,7 +488,8 @@ correctly absent.
 | Step | Expected |
 |---|---|
 | hold **Shift**, tap **Search**, release Search then Shift | pcmanfm opens on `$HOME`, in the solarized palette (base03 window, cyan selection), JetBrains Mono, LazyOS icons |
-| tap **Search** on its own | the file search, not the window (`rofi-files --search`) |
+| tap **Search** on its own | the launcher, not the window |
+| press **Alt+Search** | the file search, not the window |
 | hold **Search**, tap a top-row key | an F-key reaches the focused window; no menu opens on the way |
 | right-click a file -> **Open With** | the first entry is what a double click does: text in `bat`, a document in `papers`, a picture in `imv` (or `chafa`), a video in `mpv`. Two deliberate exceptions: an HTML page is text to the Files list (`bat`) and a page to a double click (**Firefox**), and an EPUB goes to Firefox because `papers` reads none |
 | press **F4** | `foot` opens in the current directory (not an error about `x-terminal-emulator`) |
@@ -410,6 +504,28 @@ missing; icons that are empty squares mean a name the LazyOS theme does not carr
 (`check-system.sh` warns with the list). A double click that does nothing means
 `~/.config/bin/lazyos-view` is not executable: `gio mime image/png` then answers
 "no default application" instead of naming `org.lazyos.view.desktop`.
+
+## The document reader - GTK4, the palette and printing
+
+`papers` is GTK4/libadwaita, so the GTK3 files above do not reach it. It was the
+one white window in the session.
+
+| Step | Expected |
+|---|---|
+| open a PDF (Alt+Ctrl+F, Enter on a `.pdf`) | the reader opens **dark**: base03 page background, base1 text, the headerbar in base02 and the cyan accent on the selected control |
+| `papers`, then **Print** | the print dialog opens with no printer available and says so (no `cups` in the image): not a crash, and not a silent no-op |
+| `ls ~/.config/gtk-4.0/` | `settings.ini` and `gtk.css` |
+| `grep prefer-dark ~/.config/gtk-4.0/settings.ini` | `gtk-application-prefer-dark-theme=1` |
+| move `gtk-4.0/gtk.css` away (put it back afterwards), reopen a document | the window falls back to libadwaita's dark default (grey cards, blue accent) - proof the first row is the CSS, not the preference |
+| move `gtk-4.0/settings.ini` away too (put it back), reopen | the light default comes back: that is the state the card shipped in |
+
+A white window means `gtk-4.0/settings.ini` is missing or lost its dark line
+(`check-system.sh` WARNs); that grey-but-dark look means the preference is there
+and `gtk.css` is not. Do **not** "fix" it with `xdg-desktop-portal-gtk`: the
+Settings portal is a resident daemon for one boolean, and the two files are read
+by GTK4 without it. Printing needs `sudo apt install cups` and one configured
+queue; the manual is `04-software.md` § *Files in a window* and
+`06-troubleshooting.md` § *A GTK4 window is white*.
 
 ## USB sticks and SD cards - Places
 
@@ -454,6 +570,24 @@ A `vi` that is missing while `vim` works means the `vim` postinst never ran
 (`update-alternatives --display vi` says so); `check-system.sh` asks for `vi` by
 name for that reason.
 
+## Text in other languages
+
+| Step | Expected |
+|---|---|
+| `fc-list :lang=ar` | several faces (`fonts-noto-core`), not an empty list |
+| `echo 'مرحبا بالعالم'` in foot, and the same text in Firefox | Arabic letters, joined and right-to-left; not a row of boxes |
+| `echo 'नमस्ते दुनिया'`, `echo 'שלום עולם'`, `echo 'สวัสดี'` | Devanagari, Hebrew and Thai text in the same way |
+| `fc-list :lang=ja` | **empty**: CJK is deliberately not installed |
+| `echo '日本語'` before installing CJK | boxes - the documented gap, not a fault |
+| `sudo apt install fonts-noto-cjk`, then `echo '日本語'` | the glyphs appear without a logout (fontconfig picks the new face up); `fc-list :lang=ja` is no longer empty |
+
+Boxes for Arabic, Hebrew or an Indic script mean `fonts-noto-core` is missing
+(`check-system.sh` WARNs with `fc-list :lang=ar`). There is nothing to configure:
+fontconfig's fallback finds the family in the terminal, the browser and waybar.
+The manual is `04-software.md` § *Text in other languages* and
+`06-troubleshooting.md` § *Icons render as boxes*, which carries the same
+`fc-list` questions.
+
 ## Screenshots
 
 | Step | Expected |
@@ -463,6 +597,32 @@ name for that reason.
 | `Alt+Ctrl+C` -> annotate | `swappy` opens on the newest file and writes the edits back over it |
 | `Alt+Ctrl+C` -> the last row | opens the screenshots folder (or `~/Pictures` before the first one) |
 | `ls -d ~/Pictures/Screenshots/*/` | one directory per day, no `*.png` left in `$HOME` |
+
+## Volume and brightness - the overlay
+
+The keys used to change the value and say nothing; the only feedback was the
+bar's 12 px number, which a fullscreen window covers.
+
+| Step | Expected |
+|---|---|
+| press volume up / down | one card under the bar: the speaker icon, the level as a **cyan progress bar** and `NN%`; the value changes by 5% |
+| hold volume up | one card that moves, not a stack of cards (the synchronous tag replaces it) |
+| press Mute | the mute glyph and **Muted**, with an empty bar; press it again and the level comes back |
+| press brightness up / down | the sun icon and `NN%`; the panel changes at the same time |
+| a fullscreen video, then a volume key | the card is drawn **over** it: this is the case the bar cannot answer |
+| lock the screen (`Alt+Ctrl+L`) and press volume | the value changes (the bindings are `--locked`); the card is behind the lock, which is expected |
+| scroll the volume or brightness module on the bar | the value changes with **no** card: the bar already shows the number and a toast per scroll would be noise |
+| `Alt+Ctrl+A` -> **Volume per application** | `pavucontrol` opens: one slider per application, plus the output's port/profile |
+| `Settings` (`Alt+Ctrl+O`) -> **Volume per application** | the same window |
+
+A card with text and no picture is a name mako cannot resolve - the theme needs
+`audio-volume-{muted,low,high}` and `display-brightness` (FAIL in
+`check-system.sh` when one is missing). No card at all is `bin/osd` without its
+executable bit, a binding that went back to raw `pactl`/`brightnessctl`, or no
+notification daemon; `check-system.sh` FAILs on the first two and WARNs on the
+mako side (`icons=1`, `progress-color`). The manual is `03-shortcuts.md`
+§ *Sound, light and screenshots* and `06-troubleshooting.md` § *The volume or
+brightness keys change the value but show nothing*.
 
 ## Share this screen - Settings -> **Share this screen**
 
@@ -493,6 +653,25 @@ What a failure means:
 * **the viewer cannot connect**: the tunnel is closed (it has to stay open), or the
   viewer was pointed at `lazyos:5900` instead of `localhost:5900` - the port is on the
   loopback address by design. `06-troubleshooting.md` has the ordered list.
+
+## Remote login - ssh
+
+`sshd` is enabled on every boot on purpose: it is the recovery path, and the
+same login carries the VNC tunnel above. The image's default credentials are
+`brunux` / `debian`.
+
+| Step | Expected |
+|---|---|
+| `systemctl is-enabled ssh` and `systemctl is-active ssh` | `enabled` and `active` |
+| `ss -ltn \| grep ':22 '` | sshd listening on `0.0.0.0:22` (or `[::]:22`) |
+| from another computer: `ssh brunux@lazyos`, password `debian` | a shell; `sudo -n true` answers without a prompt |
+| `passwd` there, then reconnect with the new password | the old one is refused |
+| `check-system.sh \| grep ssh` | the `---- remote login is enabled` info line (a WARN if enabled but not running) |
+| as a test: `sudo systemctl disable --now ssh`, then `ss` again | no port 22; re-enable it with `sudo systemctl enable --now ssh` |
+| after a fresh card, if ssh refuses the connection | `sudo ssh-keygen -A && sudo systemctl restart ssh`: the host keys are generated on a first boot that lacks them (`sshd-keygen.service` is adjusted for a copied image), and `journalctl -u ssh` names the reason |
+
+Turning it off is a decision, not a cleanup: `sudo systemctl disable --now ssh`.
+The manual is `05-system.md` § *Remote login (ssh)*.
 
 ## Touchpad swipes
 
@@ -569,11 +748,35 @@ What a failure means:
   keyboards; the emoji picker's notification says the same thing, and pending
   `zwp_virtual_keyboard_manager_v1` support is in wlroots, not wvkbd.
 
+## Nothing resident - the agreed set
+
+The session starts nothing that stays, with two agreed exceptions (the
+clipboard's watcher and workstyle). This is the test of that sentence.
+
+| Step | Expected |
+|---|---|
+| `pgrep -x waybar`, `pgrep -x mako`, `pgrep -x swayidle` | one pid each: the bar, the notification daemon, the idle chain |
+| `pgrep -x workstyle` | one pid: the workspace icons need something watching the tree |
+| `pgrep -fx 'wl-paste --watch cliphist store'` | one pid: no clipboard history without a watcher |
+| `pgrep -x 'udiskie\|swaync\|dunst\|picom\|blueman-applet\|packagekitd'` | **nothing**: each one is a package this port answered "no" to |
+| `pgrep -f '[t]racker-miner-fs-3\|[l]ocalsearch-3'` | nothing: the file manager is pcmanfm, which starts no indexer |
+| `systemctl --user list-units --type=service --state=running --no-legend` | PipeWire, WirePlumber, the portals, gvfs (while pcmanfm has a window), dconf, mpris - and nothing else |
+| `systemctl status udisks2` | *inactive (dead)* until a stick is mounted: it is D-Bus activated |
+| open `Alt+Ctrl+O`, then close it | the menu is one rofi process that ends with the window: `pgrep -x rofi` is empty afterwards |
+| open and close every menu once, then check | no leftover `rofi` or `foot --app-id=popup`; `pgrep -c -x swayidle` is still `1`, and no menu has left a helper behind |
+
+`check-system.sh` FAILs on a declined daemon and WARNs on an unexpected user
+unit; the two agreed residents are exec'd by the sway configuration, which is why
+they are process checks and not units. A process that is here but is not in the
+list above is the thing to write down in `reports/` before deleting it: the
+allowlist is the agreement, not the names.
+
 ## Regressions this round could have touched
 
 | Step | Expected |
 |---|---|
 | `Alt+Ctrl+K` (key view) | the Clipboard and Emoji bindings with their descriptions, and **one picture per section** (terminal, gear, lock, sun, speaker…) on the section line |
+| **Search**, **Alt+Search**, **Alt+Ctrl+Shift+F** | the applications menu, then the file list (`rofi-files --search`), then the fzf window in foot - and Search alone does not open either file view |
 | `Alt+Escape` | the power menu (not the battery banner) |
 | a slow action (Wi-Fi scan, DNS change) | a mako card that becomes the result, and the bar's spinner while it runs |
 | **click the spinner** during a Wi-Fi scan | the card turns into "Stopped Wi-Fi" (or whatever it was), no second toast, and the Wi-Fi menu opens nothing instead of half a list |
@@ -589,6 +792,10 @@ What a failure means:
 | lock (`Alt+Ctrl+L`, the Lock key, and the 300 s idle timer) | the **mountain photograph** on base03, then back to the session; no idle screen left behind (it is stopped before the lock) |
 | idle for 150 s without touching anything | the **LazyOS** wordmark, the caption and the arcade line, with an effect rebuilding them and another one after it (a still frame means `tte` did not start) |
 | press any key while the idle screen animates | it closes at once, not at the end of the effect |
+| stay idle past the lock and then a minute more | the panel goes dark (360 s) and the first input brings it back with the lock still up (see *The idle chain*) |
+| volume, mute and brightness keys | the value changes and the overlay appears; the bar's scroll still changes the value with no card |
+| `Alt+Ctrl+A` and `Alt+Ctrl+O` | both carry **Volume per application**, and it opens `pavucontrol` |
+| a fullscreen video left alone past five minutes | it is not locked (the inhibit rule); leaving fullscreen lets the next idle period lock the screen |
 | `Alt+Shift+Escape` | the screen locks, *then* the machine suspends; on resume the lock is still up |
 | shut down from the power menu | the machine powers off (the question is asked once) |
 
