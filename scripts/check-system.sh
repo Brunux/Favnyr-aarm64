@@ -730,13 +730,49 @@ esac
 # only sees units, and the generator (not a swapon in a script) is what creates
 # dev-zram0.swap.
 case "$(cat /proc/swaps 2>/dev/null)" in
-	*/dev/zram0*) ok "swap is zram ($(awk '/zram0/ { print $4 " kB" }' /proc/swaps | head -1))" ;;
+	*/dev/zram0*) ok "swap is zram ($(awk '/zram0/ { print $4 " kB in use"; exit }' /proc/swaps))" ;;
 	*) fail "no zram swap: memory pressure has nowhere to go" ;;
 esac
 case "$(systemctl list-units --all --no-legend 'dev-zram0.swap' 2>/dev/null)" in
 	*dev-zram0.swap*) ok "zram swap is a systemd unit (systemd-oomd can manage it)" ;;
 	*) warn "zram swap is not a dev-zram0.swap unit: systemd-oomd cannot manage it" ;;
 esac
+
+# The size of the zram device is the one tuning value whose regression is entirely
+# silent: half of RAM still "works", it just sends pages to the card while RAM is
+# free. Both halves are asked - what the generator will do on the next boot, and
+# what this boot actually got, because a machine whose file was edited in place
+# keeps the device it created at boot until it reboots.
+_zrc=/etc/systemd/zram-generator.conf
+if [ -r "$_zrc" ]; then
+	_zrsize=$(awk -F= '/^[[:space:]]*zram-size[[:space:]]*=/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$_zrc")
+	case $_zrsize in
+	ram) ok "zram-size = ram (the cap is RAM, not half of it)" ;;
+	"") warn "$_zrc sets no zram-size: the packaged min(ram/2, 4096) applies, so the card is reached with RAM still free" ;;
+	*) warn "zram-size = $_zrsize, not ram (a smaller cap spills to the SD card while RAM is still free)" ;;
+	esac
+	# A limit looks like the valve for incompressible data and is the wrong one: the
+	# store fails with BLK_STS_IOERR and the allocator keeps choosing zram anyway
+	# (it picks by slot exhaustion, not by write success), so the overflow never
+	# reaches the card. See docs/optimization.md, "zram sizing".
+	if grep -qs '^[[:space:]]*zram-resident-limit' "$_zrc"; then
+		warn "$_zrc sets zram-resident-limit: a limit fails the store (I/O error) instead of handing the page to the card at priority 10"
+	fi
+else
+	warn "no $_zrc: the packaged zram-size default (half of RAM) applies"
+fi
+# What this boot really has: `ram` is MemTotal, so a device within 10 % of it is
+# the configured size (the generator rounds to whole MiB).
+if [ -r /sys/block/zram0/disksize ]; then
+	_zdisk=$(($(cat /sys/block/zram0/disksize) / 1024))
+	_zmem=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
+	if [ "$_zdisk" -ge $((_zmem * 9 / 10)) ]; then
+		ok "zram device is $_zdisk MiB against $_zmem kB of RAM"
+	else
+		fail "zram device is $_zdisk MiB but RAM is $_zmem kB: pages go to the card while RAM is free (rebuild, or reboot after editing $_zrc)"
+	fi
+fi
+
 check_svc systemd-oomd "systemd-oomd is active (kills a hog on memory pressure)"
 
 [ "$(cat /proc/sys/vm/swappiness 2>/dev/null || echo 0)" -ge 100 ] &&

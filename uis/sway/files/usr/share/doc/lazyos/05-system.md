@@ -39,10 +39,16 @@ machine's tuning:
 * **1000 Hz** timers, full preemption;
 * transparent huge pages set to `madvise` on the command line.
 
-Memory: `zram` provides a 1.9 GB compressed swap device (zram-generator,
-`/etc/systemd/zram-generator.conf`, lz4), and `systemd-oomd` kills a memory hog
-at 50 % pressure instead of letting the machine freeze. `swapon --show` and
-`zramctl` show what is in use.
+Memory: `zram` provides a **3.7 GB** compressed swap device - as much as the machine
+has RAM, because the pages it holds are compressed and cost about a quarter of the
+RAM their size suggests (measured here: 427 MB of pages in 98 MB). The size is
+deliberate: the cap is the point where pages move to the *next* tier, and the next
+tier is the SD card, where the same page takes 30-100 times longer. So it fills
+only when the machine needs it, and the card is reached once 3.7 GB are already
+held compressed (zram-generator, `/etc/systemd/zram-generator.conf`, lz4).
+`systemd-oomd` kills a memory hog at 50 % pressure instead of letting the machine
+freeze. `swapon --show`, `zramctl` and `cat /sys/block/zram0/mm_stat` show what is
+in use.
 
 ## When you leave it alone
 

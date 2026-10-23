@@ -159,17 +159,36 @@ echo "%sudo ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/99-$USERNAME
 chmod 440 /etc/sudoers.d/99-$USERNAME
 
 log "System tuning for this device (see docs/optimization.md)"
-# zram: swap in compressed RAM. systemd-zram-generator reads this file (the
-# package's own /usr/lib/systemd/zram-generator.conf already creates a zram0 at
-# min(ram/2, 4096); these are the values written out so they are visible and
-# deliberate). zram-size and swap-priority repeat the defaults; the algorithm is
-# the choice: lz4 compresses and decompresses fast, which is what matters when
-# the machine is already under pressure, and zstd is the alternative to measure
-# if the ratio turns out to matter more than the CPU (docs/optimization.md).
+# zram: swap in compressed RAM. systemd-zram-generator reads this file, and two of
+# the three lines are not the package's defaults on purpose.
+#
+# zram-size = ram. The packaged default is min(ram / 2, 4096), i.e. 1.9 GiB on this
+# machine, and that cap is reached while there is still memory free: a captured
+# session sat at 1.4 GB of 1.948 GB (72 %) with ~2.7 GiB of RAM unused, one page
+# away from spilling to an SD card. The cap decides when the *slow* tier starts, so
+# it belongs where RAM actually runs out, not at half of it. Measured on this
+# hardware, swapped pages cost 4.4x less RAM than their size suggests (427 MiB held
+# in 98 MiB, zsmalloc overhead included; 6.9:1 on the bitstream alone, and half the
+# pages are duplicates), so filling `ram` costs ~0.85 GiB of real RAM - and only as
+# the pages appear.
+#
+# No zram-resident-limit, deliberately. It reads like the valve for incompressible
+# data, but a limit fails the store with BLK_STS_IOERR (zram_bio_write) and the swap
+# allocator keeps choosing zram anyway: it picks by slot exhaustion, not by write
+# success. The overflow would become an I/O error on swapped-out data instead of a
+# page handed to the card at priority 10, and the auxiliary swap this port ships
+# would become hibernate-only. Only the nominal cap falls through cleanly.
+#
+# The algorithm stays lz4: it compresses and decompresses fast, which is what
+# matters when the machine is already under pressure. zstd buys ~20-30 % ratio for
+# 2-4x the CPU on the A55 cluster, and CONFIG_ZRAM_MULTI_COMP (recompress idle
+# pages) is not built, so the cheap form of that idea does nothing yet.
+#
+# The measurements are docs/optimization.md, "zram sizing".
 install -d /etc/systemd
 cat >/etc/systemd/zram-generator.conf <<'EOF'
 [zram0]
-zram-size = min(ram / 2, 4096)
+zram-size = ram
 compression-algorithm = lz4
 swap-priority = 100
 EOF
