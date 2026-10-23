@@ -365,20 +365,59 @@ impl Row {
         self
     }
 
+    /// `needle` arrives already lowercased (`ListState` does that once per
+    /// keystroke, not once per row).
     fn matches(&self, needle: &str) -> bool {
         if needle.is_empty() {
             return true;
         }
-        let needle = needle.to_lowercase();
-        self.label.to_lowercase().contains(&needle)
+        let ascii = needle.is_ascii();
+        contains_fold(&self.label, needle, ascii)
             || self
                 .detail
                 .as_deref()
-                .is_some_and(|d| d.to_lowercase().contains(&needle))
+                .is_some_and(|d| contains_fold(d, needle, ascii))
             || self
                 .value
                 .as_deref()
-                .is_some_and(|v| v.to_lowercase().contains(&needle))
+                .is_some_and(|v| contains_fold(v, needle, ascii))
+    }
+}
+
+/// Does `haystack` contain `needle`, ignoring case?
+///
+/// An **ASCII needle takes the byte path** and allocates nothing: UTF-8 never
+/// encodes an ASCII byte inside a multi-byte character, so folding `a-z`/`A-Z`
+/// is the whole of case-insensitivity for it - and it is what makes typing in
+/// a 5,000-row list a scan instead of a reallocation of every row
+/// (`tests/filter.rs` counts both). Any other needle falls back to
+/// `to_lowercase`, the only form that folds `Ü` to `ü`; a row pays one
+/// allocation, and only while the needle itself carries an accent.
+fn contains_fold(haystack: &str, needle_lower: &str, needle_is_ascii: bool) -> bool {
+    if needle_is_ascii {
+        contains_ascii_fold(haystack.as_bytes(), needle_lower.as_bytes())
+    } else {
+        haystack.to_lowercase().contains(needle_lower)
+    }
+}
+
+fn contains_ascii_fold(haystack: &[u8], needle: &[u8]) -> bool {
+    match needle {
+        [] => true,
+        // One character is what the list looks like after the first key.
+        [only] => {
+            let only = only.to_ascii_lowercase();
+            haystack.iter().any(|b| b.to_ascii_lowercase() == only)
+        }
+        _ => {
+            if needle.len() > haystack.len() {
+                return false;
+            }
+            let first = needle[0].to_ascii_lowercase();
+            haystack
+                .windows(needle.len())
+                .any(|w| w[0].to_ascii_lowercase() == first && w.eq_ignore_ascii_case(needle))
+        }
     }
 }
 
@@ -402,6 +441,12 @@ pub struct ListState {
     cursor: usize,
     offset: usize,
     filter: String,
+    /// `filter`, lowercased once per change; `Row::matches` takes the folded
+    /// form so no row allocates to compare.
+    needle: String,
+    /// The needle `visible` was computed for. When the next one extends it,
+    /// the visible set can only shrink, so the pass is a `retain`.
+    applied: String,
     empty: String,
     /// The widest glyph cell among the rows, reserved for every row so a text
     /// token (`bt`) does not shift the labels under it.  Computed when the rows
@@ -417,6 +462,8 @@ impl ListState {
             cursor: 0,
             offset: 0,
             filter: String::new(),
+            needle: String::new(),
+            applied: String::new(),
             empty: "nothing here yet".to_string(),
             glyph_width: 0,
         }
@@ -435,6 +482,12 @@ impl ListState {
             .max()
             .unwrap_or(0);
         self.rows = rows;
+        // The visible set belonged to the old rows. Every index is a match
+        // again until `refilter` says otherwise, which is what lets its
+        // narrowing pass (a `retain`) walk the new list exactly once.
+        self.visible.clear();
+        self.visible.extend(0..self.rows.len());
+        self.applied.clear();
         self.refilter();
     }
 
@@ -472,18 +525,32 @@ impl ListState {
 
     pub fn set_filter(&mut self, filter: impl Into<String>) {
         self.filter = filter.into();
+        self.needle = self.filter.to_lowercase();
         self.refilter();
     }
 
+    /// Recompute the visible set for the current needle.
+    ///
+    /// Typing appends to the needle, and a longer needle can only match a
+    /// subset of a shorter one's matches (`"repo"` matches nothing `"rep"`
+    /// did not), so the common case - one more character - tests the rows that
+    /// are already visible and keeps the vector in place: no scan of the full
+    /// list and no allocation. Anything else (a backspace, a pasted word, a
+    /// cleared filter, new rows) rebuilds from scratch.
     fn refilter(&mut self) {
-        let needle = self.filter.clone();
-        self.visible = self
-            .rows
-            .iter()
-            .enumerate()
-            .filter(|(_, row)| row.matches(&needle))
-            .map(|(i, _)| i)
-            .collect();
+        let narrowing =
+            self.needle.len() > self.applied.len() && self.needle.starts_with(&self.applied);
+        let rows = &self.rows;
+        let needle = &self.needle;
+        if narrowing {
+            self.visible.retain(|&i| rows[i].matches(needle));
+        } else {
+            self.visible.clear();
+            self.visible
+                .extend((0..rows.len()).filter(|&i| rows[i].matches(needle)));
+        }
+        self.applied.clear();
+        self.applied.push_str(needle);
         if self.cursor >= self.visible.len() {
             self.cursor = self.visible.len().saturating_sub(1);
         }
