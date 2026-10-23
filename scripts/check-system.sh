@@ -1303,7 +1303,7 @@ fi
 # executable bit, no fzf, no opener - and the fzf one is a FAIL rather than a
 # warning because a missing filter is an *empty list*: the window opens, prints
 # nothing, and reads as "no such file" instead of as a missing package.
-if grep -qs 'Ctrl+Shift+f exec .*lazyos-find' /etc/sway/config.d/; then
+if grep -rqs 'Ctrl+Shift+f exec .*lazyos-find' /etc/sway/config.d/; then
 	ok "Alt+Ctrl+Shift+F opens the terminal file search (lazyos-find)"
 else
 	fail "no 'Ctrl+Shift+f exec ...lazyos-find' binding in /etc/sway/config.d/: the key does nothing"
