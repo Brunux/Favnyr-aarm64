@@ -287,7 +287,13 @@ gets corrupted.
 * **Auxiliary swap** is the row above it: it takes a card that is not a system card
   and turns the whole thing - or 2, 4 or 8 GiB of it - into a swap partition
   labelled `lazyos_swap`, adds the `/etc/fstab` line that activates it at every
-  boot, and turns it on now. The priority is 10 against zram's 100, so the
+  boot, and turns it on now. "Not a system card" is the list: nothing mounted on
+  it, no bootable kernel partition, and not the disk this system runs from. The
+  card that installed the eMMC has one of those kernel partitions, so with it
+  attached the row answers *Nothing to offer* - that is the guard, not a fault,
+  and the same sentence names the reason. Repurposing such a card is a deliberate
+  root action (`sudo wipefs -a /dev/mmcblk1`, which erases the rescue system too),
+  never a menu row. The priority is 10 against zram's 100, so the
   compressed RAM is used first and the card is the spillover; `nofail` plus a 15 s
   device timeout keep a boot without the card from waiting or failing. It is a
   dedicated swap card, not a filesystem, so it never appears as a Mount row.

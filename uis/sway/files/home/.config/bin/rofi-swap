@@ -209,8 +209,12 @@ fi
 # Nothing is set up yet: the card, then how much of it, then one confirmation.
 ui_disks swap >"$tmp/rows"
 if [ ! -s "$tmp/rows" ]; then
+	# The fourth reason is the one a person actually hits: the card that
+	# installed the eMMC is removable, unmounted and therefore a candidate on
+	# every other count, and only its kernel partition says it is bootable.
+	# Leaving that out made the guard read as "the menu is broken".
 	ui_say 'Auxiliary swap' \
-		'Nothing to offer: every disk here is mounted, built into the machine, or the one this system runs from' \
+		'Nothing to offer: every disk here is mounted, built into the machine, carries a bootable kernel partition (the card that installed this system), or is the one this system runs from' \
 		normal "$UI_ICON_DISK"
 	exit 0
 fi

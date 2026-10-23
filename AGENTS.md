@@ -954,7 +954,11 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   which is the case the old list missed. The list also skips zram, loop, ram, optical and pseudo
   devices, **`mtd*`** (the SPI flash this port must never write) and **`mmcblk*boot*`** (the eMMC's
   4 MB hardware boot partitions) - see the next bullet for the hardware that made those two
-  necessary. What is left has nothing this system needs, and the
+  necessary. What is left has nothing this system needs, and the empty-list card names the fourth
+  reason the list enforces - `carries a bootable kernel partition (the card that installed this
+  system)` - because a removable, unmounted card that installed the eMMC is a candidate on every
+  other count, so the three reasons the message used to give did not describe it and the refusal
+  read as a broken menu; Format a disk's card says the same. The
   confirmation still names the device, its model and its size, with **Cancel as the first row** so a
   stray Enter does nothing; the filesystem is **exFAT** (label `LAZYOS`, via `mkfs.exfat -F -L`,
   from `exfatprogs`) or ext4, and the whole disk becomes one partition (`parted -s mktable gpt` +

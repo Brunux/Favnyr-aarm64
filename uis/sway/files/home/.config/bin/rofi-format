@@ -49,7 +49,7 @@ ui_disks fmt >"$tmp/rows"
 
 if [ ! -s "$tmp/rows" ]; then
 	ui_say 'Format a disk' \
-		'Nothing to format: every disk here is mounted, built into the machine, or the one this system runs from' \
+		'Nothing to format: every disk here is mounted, built into the machine, carries a bootable kernel partition (the card that installed this system), or is the one this system runs from' \
 		normal "$UI_ICON_DISK"
 	exit 0
 fi

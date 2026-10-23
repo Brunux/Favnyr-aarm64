@@ -290,7 +290,8 @@ card the system is running from either, whatever their partition tables say.
 | Step | Expected |
 |---|---|
 | open it | the disk list, never `Missing:`: `parted`, `mkswap`, `swapon`, `swapoff` and `blkid` live in `/sbin`, which the session's `PATH` does not carry, and `~/.config/bin/lib-rofi.sh` is the line that adds it |
-| open it with only the eMMC and the boot card attached | "Nothing to offer: every disk here is mounted, built into the machine, or the one this system runs from" |
+| open it with only the eMMC and the boot card attached | "Nothing to offer": the eMMC is the disk this system runs from and the card carries a bootable kernel partition, and the sentence says so |
+| boot from the eMMC with the card that installed it inserted | "Nothing to offer ... carries a bootable kernel partition (the card that installed this system)": the card is removable and unmounted, and only its kernel partition excludes it |
 | open it with the boot card and a spare, unmounted card/SD | the spare card only, with model and size |
 | pick it → **Cancel** | no partition table is written |
 | pick it → **The whole card** → the confirmation | a busy card, then a notification with the partition and "priority 10"; `swapon --show` lists it, `blkid -L lazyos_swap` resolves it |
