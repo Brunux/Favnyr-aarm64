@@ -15,7 +15,7 @@ daemon).
 | **Alt+Ctrl+G** | `rofi-grep` | **search inside the files**: ripgrep over your home, one row per match; Enter opens the file at that line |
 | **Download** (root menu, launcher) | `rofi-download` | a link - or the one in the clipboard - kept in `~/Downloads`, as a video or as audio |
 | **Alt+Ctrl+C** | `rofi-capture` | **capture**: a screenshot (screen, area or window), annotate it, read the text or a QR code out of a region, and start or stop a recording |
-| **Alt+Ctrl+O** | `rofi-quick` | **Settings**: the switches (Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation, screen sharing) and the panels, in one list |
+| **Alt+Ctrl+O** | `rofi-quick` | **Settings**: the switches (Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation, display arrangement, screen sharing) and the panels, in one list |
 | **Alt+Ctrl+P** or **Alt+Escape** | `rofi-power` | **power**: lock, suspend, hibernate, log out, reboot, shut down - the last three ask once more |
 | **Alt+Ctrl+N** | `rofi-notify` | the notification history, with do-not-disturb and "copy this notification" |
 | **Alt+Ctrl+Q** | `rofi-calc` | a calculator: type `(3*4)/2`, Enter copies `6` |

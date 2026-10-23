@@ -195,6 +195,14 @@ wf-recorder
 # authentication, because wayvnc only authenticates through a certificate and a
 # password file (~/.config/wayvnc/config) that this image does not ship.
 wayvnc
+# wdisplays is the manual display arrangement: a GTK3 window that draws the two
+# outputs as rectangles to drag, over wlr-output-management (swayfx advertises
+# it; verified here with wlr-randr).  188 kB, and every dependency is already in
+# this image.  It is the second half of ~/.config/bin/rofi-display (Settings ->
+# Display arrangement), which opens it on a workspace of its own - the
+# rectangles need the width - and does the one-line arrangements itself.
+# Nothing resident: a window while it is open.
+wdisplays
 wlsunset
 brightnessctl
 # pactl(1) for the XF86Audio* keys; pipewire-pulse provides the server only.

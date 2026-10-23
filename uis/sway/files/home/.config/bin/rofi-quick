@@ -259,6 +259,11 @@ render() { # OUTFILE
 		fi
 		ui_row "$UI_I_MOUSE" 'Touchpad' "$_tp" touchpad "$_tpc"
 		ui_row "$UI_I_ROTATE" 'Rotation' "$(rotation_name)" rotation
+		# Where the external monitor sits.  The detail is the arrangement in
+		# words, answered by the menu's own --status, so the row and the menu
+		# cannot disagree about it; with no monitor plugged in it says so.
+		ui_row "$UI_I_DESKTOP" 'Display arrangement' \
+			"$("$dir/rofi-display" --status 2>/dev/null || echo unknown)" display
 		# Tablet mode is the on-screen keyboard, both physical inputs off (the
 		# touchpad is on the back of the screen, and the folded keys are on the
 		# table) and the accelerometer turning the screen; the row is also the
@@ -358,6 +363,7 @@ while :; do
 	vnc) exec "$dir/rofi-vnc" ;;
 	touchpad) swaymsg input type:touchpad events toggle >/dev/null 2>&1 || true ;;
 	rotation) exec "$dir/rofi-quick" --rotation-menu ;;
+	display) exec "$dir/rofi-display" ;;
 	tablet) "$dir/tablet-mode" toggle ;;
 	tablet-calibrate) "$dir/tablet-mode" calibrate || true ;;
 	layout) exec "$dir/rofi-layout" ;;

@@ -1067,15 +1067,31 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   trip, and not a disable/enable, because the modeset is what retrains the link
   (a crosspoint write after training changes nothing, measured) while disabling
   the output moved that workspace to the internal panel (workspace 2 on DP-1
-  came back on eDP-1). **The night light cannot reach it**: `modetest -M
+  came back on eDP-1). **Where it sits is Settings → Display arrangement**
+  (`~/.config/bin/rofi-display`): right/left/above/below/mirrored, resolution and
+  scale, and `--status` is the single copy of the answer - the Settings row's
+  detail reads it, so the row and the menu cannot disagree. A runtime position
+  dies with the session, so every arrangement is also written to
+  `~/.config/sway/config.d/40-display.conf`, which `~/.config/sway/config`
+  includes. The panel is never moved - the monitor is placed relative to it, so
+  "on the left" is a negative x, and `swaymsg --` is what makes that legal:
+  without it swaymsg's own option parser reads `-1920` as a flag (`invalid option
+  -- '1'`). Only the monitor is written, because it is the output that can be
+  absent; **Only the monitor**/**Only the internal panel** are deliberately not
+  saved, since a config that disables a screen boots a card with nothing on it.
+  **wdisplays** is the manual row (188 kB, every dependency already in the image)
+  and opens on workspace 11 - the session's keys stop at 10 - because its two
+  rectangles want the width; a second copy is focused instead of started.
+  **The night light cannot reach it**: `modetest -M
   mediatek -p` has `GAMMA_LUT` on the 1366x912 CRTC and nothing on the 1920x1080
   one (MT8192's second path OVL1→RDMA1→DPI has no gamma block bound; the SoC's
   one block is in the first path), so wlsunset logs `gamma control of output ...
   failed` and the monitor keeps its own colour temperature. Witnesses:
   `check-system.sh` FAILs on a missing DP connector (the patch), the helper,
-  the udev rule, i2c-tools, the resume hook and its modeset step, and on a
-  crosspoint that does not name the port whose alt mode is active; the manual is
-  `04-software.md` § *An external monitor* and the symptom list is
+  the udev rule, i2c-tools, the resume hook and its modeset step, the
+  arrangement menu, its Settings row, the `config.d` include and `wdisplays`,
+  and on a crosspoint that does not name the port whose alt mode is active; the
+  manual is `04-software.md` § *An external monitor* and the symptom list is
   `06-troubleshooting.md` § *The external monitor shows no signal*.
 - **Removable media is `udisks2`, and mounting it is a row in Places.** An unprivileged session
   cannot `mount(8)` anything - that is a root operation - so a USB stick used to be unusable:

@@ -139,10 +139,15 @@ A card that only works on the left port has the udev rule, the helper or
 | move the cable to the **right** port, replug twice, then plug it in after login | a picture every time. `sudo i2cget -f -y 7 0x2c 0xb4` reads `0x21` on the left and `0x12` on the right, and `journalctl -t lazyos-dp-mux` is empty |
 | with a window on the monitor, suspend (`Alt+Shift+Escape`) and wake it | the monitor comes back **on its own**, showing the lock screen: no replug, no command. `journalctl -t lazyos-dp-resume` has one line - the crosspoint write plus the 720p round trip that retrains the link |
 | the same, after the wake | the window is still on the monitor. A window that came back on the internal panel means the hook disabled the output instead of changing its mode |
+| Settings (`Alt+Ctrl+O`) -> **Display arrangement** -> **Monitor on the left** | the picture moves at once, `swaymsg -t get_outputs` shows `DP-1` at a negative x, and the Settings row now reads "left of the panel" |
+| log out and back in | the monitor is still on the left: `~/.config/sway/config.d/40-display.conf` holds its resolution, scale and position, and `sway -C -c ~/.config/sway/config` accepts the file |
+| **Monitor above**, **Mirrored**, then **Only the internal panel** and **Bring the monitor back** | each applies at once; the one-screen rows say they are not remembered and their notification gives the `swaymsg output … enable` command back |
+| **Open wdisplays** | one window alone on workspace 11, filling it; closing it and choosing the row again starts it again, not a second copy |
 | turn the night light on with the monitor connected | the internal panel warms, the monitor keeps its own colour: the external CRTC has no `GAMMA_LUT` (`modetest -M mediatek -p` shows one on the 1366x912 CRTC only). The monitor's own colour setting is the answer |
 
 `check-system.sh` FAILs on a missing DP connector, helper, udev rule,
-`i2cset`, resume hook or modeset step, and on a crosspoint that does not name
+`i2cset`, resume hook or modeset step, the arrangement menu, its Settings row,
+the `config.d` include or `wdisplays`, and on a crosspoint that does not name
 the port whose alt mode is active.
 
 ## The idle chain - the screen, the lock, and the panel

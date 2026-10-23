@@ -26,7 +26,7 @@ read. This page is the tour.
 | Alt+Ctrl+Shift+F | the file search in a terminal (`lazyos-find`): live filtering as you type, a preview on the right, Enter opens the file |
 | Alt+Ctrl+G | search inside the files: ripgrep over your home, Enter opens the file at the matching line |
 | Alt+Ctrl+T | translate the selected text (or the clipboard): the answer is copied, and the card names the direction |
-| Alt+Ctrl+O | settings: the radio switches, night light, touchpad, rotation |
+| Alt+Ctrl+O | settings: the radio switches, night light, touchpad, rotation, display arrangement |
 | Alt+Ctrl+N | notifications: the history, do-not-disturb, copy one |
 | Alt+Ctrl+Q | calculator: type it, Enter copies the result |
 | Alt+Ctrl+V | clipboard history: Enter puts an entry back, Alt+1 deletes it |
@@ -104,7 +104,7 @@ with `Super+Ctrl`:
 | Alt+Ctrl+L | lock the screen (the Lock key does the same and then suspends) |
 | Alt+Ctrl+X | dictation on/off (the notification stays while it records; press again to stop) |
 | Alt+Ctrl+Shift+A | agents (launch, accounts, install) |
-| Alt+Ctrl+O | settings: Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation |
+| Alt+Ctrl+O | settings: Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation, display arrangement |
 | Alt+Ctrl+N | notifications: history, do-not-disturb, copy |
 | Alt+Ctrl+Q | calculator |
 | Alt+Ctrl+V | clipboard history (Enter copies back, Alt+1 deletes the entry) |

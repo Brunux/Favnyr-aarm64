@@ -434,6 +434,32 @@ else
 	fail "$_dpr is missing or not executable: the monitor keeps its picture only until the first suspend"
 fi
 
+# The arrangement menu and the file it writes.  A runtime `output position` does
+# not survive a logout, so the menu saves one; a file the session's config does
+# not include is the same as none, and a Settings row that is gone leaves the
+# menu with no way in.
+_disp="$HOME/.config/bin/rofi-display"
+if [ -x "$_disp" ]; then
+	ok "rofi-display is executable"
+	if grep -qs rofi-display "$HOME/.config/bin/rofi-quick"; then
+		ok "Settings has the display arrangement row"
+	else
+		fail "rofi-quick has no display arrangement row: the menu is unreachable"
+	fi
+	if grep -qs 'config\.d' "$HOME/.config/sway/config"; then
+		ok "the saved arrangement is read at login (config.d included)"
+	else
+		fail "$HOME/.config/sway/config does not include config.d/: a saved arrangement is never applied"
+	fi
+else
+	fail "$_disp is missing or not executable: the monitor can only be arranged until the next logout"
+fi
+if have wdisplays; then
+	ok "wdisplays is installed (manual arrangement)"
+else
+	fail "wdisplays is missing: the menu's manual row cannot open it"
+fi
+
 # ---------------------------------------------------------------------------
 section "Input"
 # ---------------------------------------------------------------------------

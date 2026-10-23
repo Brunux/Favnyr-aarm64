@@ -309,6 +309,26 @@ with `Alt+Shift+<arrow>`; unplugging takes its workspaces back to the internal
 panel. The chip drives one DisplayPort stream, so two monitors are one monitor
 followed by the other, not two at once.
 
+**Where it sits is Settings → Display arrangement** (`Alt+Ctrl+O`,
+`~/.config/bin/rofi-display`): monitor on the right, on the left, above, below,
+mirrored, plus the monitor's resolution and scale, and **Open wdisplays** for
+what those rows do not cover (a custom position, a rotation) - that window opens
+on a workspace of its own, because its two rectangles need the width. The
+Settings row's detail is the menu's own `--status`, so the two cannot disagree.
+
+**A position given at runtime is not remembered, and the menu is what remembers
+it.** sway keeps `output position` until the session ends, so each arrangement is
+also written to `~/.config/sway/config.d/40-display.conf`, which the session's
+`~/.config/sway/config` includes: the monitor's resolution, scale and position,
+and nothing else. The panel is never moved - the monitor is placed relative to
+it, which is why "on the left" is a negative x (`swaymsg -- output DP-1 position
+-1920 0`; the `--` is not optional, or swaymsg reads `-1920` as one of its own
+flags). Only the monitor is written because it is the output that can be absent,
+so a boot without it is untouched. **Only the monitor** and **Only the internal
+panel** are deliberately not saved - a config that disables a screen would boot a
+card with nothing on it - so they last until the session ends and the menu says
+how to undo them. Delete the file to go back to sway's default (on the right).
+
 **The night light does not reach it.** `wlsunset` asks the compositor for a
 gamma table per output, and this kernel has one only for the internal panel's
 CRTC: `modetest -M mediatek -p` shows `GAMMA_LUT` on the 1366x912 CRTC and

@@ -186,6 +186,13 @@ monitor* in `04-software.md`). In order:
   ```sh
   ~/.config/bin/lazyos-dp-resume
   ```
+* The monitor is on the wrong side, or the side you chose is not there after a
+  login: the arrangement lives in `~/.config/sway/config.d/40-display.conf`,
+  written by Settings → Display arrangement. `sway -C -c
+  ~/.config/sway/config` validates it; deleting it returns to sway's default
+  (on the right). A monitor that is on during the session but not at the next
+  login is normal - the file only positions the monitor, and it is applied when
+  the output appears.
 
 Neither the night light nor the screen's brightness reaches it: the external
 CRTC has no gamma table and the panel's own backlight is the monitor's.
