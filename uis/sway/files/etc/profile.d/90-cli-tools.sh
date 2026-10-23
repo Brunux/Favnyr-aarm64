@@ -41,6 +41,18 @@ if [ -n "${HOME:-}" ]; then
 		*) PATH="${PATH:+$PATH:}$HOME/.local/bin" ;;
 	esac
 fi
+
+# OpenCode is the one agent the image ships (tools/opencode/, installed by
+# scripts/rootfs-setup.sh). It lives in the upstream installer's layout,
+# ~/.opencode/bin, because that is where its own `opencode upgrade` rewrites it;
+# the Agents menu adds the same directory to its PATH, where sway's environment
+# has neither this nor ~/.local/bin.
+if [ -n "${HOME:-}" ]; then
+	case ":$PATH:" in
+		*":$HOME/.opencode/bin:"*) ;;
+		*) PATH="${PATH:+$PATH:}$HOME/.opencode/bin" ;;
+	esac
+fi
 export PATH
 
 # The editor. Deboma exports EDITOR=omarchy-launch-editor here, a wrapper that

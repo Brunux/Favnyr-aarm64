@@ -22,6 +22,15 @@
 #   npm install -g --prefix ~/.local <package>
 #
 # and ~/.local/bin is already on PATH (etc/profile.d/90-cli-tools.sh).
+# --allow-scripts names the package being installed because npm 12 blocks
+# lifecycle scripts by default: OpenCode's postinstall is the step that picks its
+# platform binary, so without it npm leaves a stub that answers "postinstall
+# script was not run" and the menu would call that installed.
+#
+# OpenCode is the one agent the image already ships - tools/opencode/ pins it and
+# scripts/rootfs-setup.sh puts it in ~/.opencode/bin - so its row is a launch row
+# on a fresh card. The package named below is the V2 one (`opencode-ai` is V1),
+# which is the fallback if that directory is gone.
 #
 #   rofi-agents                 the menu (also Alt+Ctrl+Shift+A)
 #   rofi-agents --env <a> <acc> print the env assignment for an account
@@ -41,8 +50,9 @@ theme="$HOME/.config/rofi/solarized.rasi"
 # sway's own environment has no ~/.local/bin (only login and interactive shells
 # get it from /etc/profile.d/90-cli-tools.sh), and that is where npm puts the
 # agent CLIs. Without this line the menu would offer to install an agent that is
-# already installed.
-PATH="$HOME/.local/bin:$PATH"
+# already installed. ~/.opencode/bin is not npm's: it is where the image installs
+# OpenCode (tools/opencode/), in the layout its own `opencode upgrade` rewrites.
+PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"
 export PATH
 state="${XDG_CONFIG_HOME:-$HOME/.config}/lazyos/agents"
 data="${XDG_DATA_HOME:-$HOME/.local/share}/lazyos/agents"
@@ -52,7 +62,7 @@ default_file="$state/default"
 AGENTS=(
 	"Claude Code|claude|@anthropic-ai/claude-code|CLAUDE_CONFIG_DIR"
 	"Codex|codex|@openai/codex|CODEX_HOME"
-	"OpenCode|opencode|opencode-ai|"
+	"OpenCode|opencode|@opencode/cli|"
 	"Gemini CLI|gemini|@google/gemini-cli|"
 	"GitHub Copilot|copilot|@github/copilot|"
 )
@@ -215,7 +225,7 @@ menu() {
 		IFS='|' read -r name bin npm envvar <<<"$entry"
 		notify "Installing $name" "npm install -g --prefix ~/.local $npm"
 		exec foot -T "Install $name" -e bash -lc \
-			"npm install -g --prefix \"\$HOME/.local\" '$npm' && echo; echo \"$name is in ~/.local/bin; the menu finds it now.\"; read -r _"
+			"npm install -g --prefix \"\$HOME/.local\" --allow-scripts='$npm' '$npm' && echo; echo \"$name is in ~/.local/bin; the menu finds it now.\"; read -r _"
 		;;
 	default)
 		local table chosen

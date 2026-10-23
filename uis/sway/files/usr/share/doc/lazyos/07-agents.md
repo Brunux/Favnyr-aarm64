@@ -28,13 +28,30 @@ The agents it knows about, and their packages:
 |---|---|---|
 | Claude Code | `claude` | `@anthropic-ai/claude-code` |
 | Codex | `codex` | `@openai/codex` |
-| OpenCode | `opencode` | `opencode-ai` |
+| OpenCode | `opencode` | `@opencode/cli` |
 | Gemini CLI | `gemini` | `@google/gemini-cli` |
 | GitHub Copilot | `copilot` | `@github/copilot` |
 
 `node` and `npm` are already installed (they arrived for exactly this), and
 `~/.local/bin` is on `PATH` for every shell, so a CLI installed here is visible
 in the next terminal without logging out.
+
+**OpenCode is already installed.** It is the one agent the image ships: the build
+fetches the pinned arm64 tarball from `tools/opencode/`, verifies its checksum and
+extracts it to `~/.opencode/bin`, so its row on a fresh card says *launch* instead
+of offering an install. That directory is the upstream installer's layout rather
+than npm's, and that is what keeps `opencode upgrade` usable with no root: it
+prints *Using method: curl* for a binary there and rewrites it in place, while
+from `/usr/local` it answers *installation method not found* and asks for a
+package manager. `~/.opencode/bin` is on `PATH` for every shell and for the menu
+itself, and the image ships it **signed out** - the sign-ins live in
+`~/.local/share/opencode`, which the build never writes.
+
+The package in the table is the V2 one; `opencode-ai` is V1. npm 12 blocks
+lifecycle scripts by default, and OpenCode's postinstall is the step that picks
+its platform binary, so the menu's install line passes `--allow-scripts=<package>`
+(and without it the CLI answers *postinstall script was not run* while `command -v`
+finds it happily). Bumping the pinned version is `tools/opencode/README.md`.
 
 ## Accounts
 
@@ -52,8 +69,10 @@ eval "$(rofi-agents --env 'Claude Code' work)"   # export CLAUDE_CONFIG_DIR=…
 claude
 ```
 
-OpenCode, Gemini and Copilot have no such variable; their menu entry says so
-instead of pretending.
+OpenCode, Gemini and Copilot have no variable that moves everything an account
+needs, so their menu entry says so instead of pretending: OpenCode v2 does read
+`OPENCODE_CONFIG_DIR`, but its sign-ins live in the database under the data
+directory, so an account built on that variable alone would share the login.
 
 ## What is not here, and why
 
@@ -70,4 +89,7 @@ instead of pretending.
 The menu is a rofi window (about 16 MB while open) and a foot window for the
 agent itself. The agents are Node programs: 150-400 MB resident while they run,
 which is a lot on 4 GB. Run one at a time, and close it when you are done - the
-bar's power panel shows memory and swap if you want to check.
+bar's power panel shows memory and swap if you want to check. OpenCode is the
+exception there too: one compiled binary (236 MB **on disk**, in
+`~/.opencode/bin`) instead of a Node install, so it costs the image that space and
+nothing while it is not running.

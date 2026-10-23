@@ -16,6 +16,10 @@
 #     identity, so it stops identifying a machine at all.
 #   * /etc/machine-id and /var/lib/dbus/machine-id are the same problem for
 #     systemd, DHCP leases and journal files.
+#   * the shipped agent's state: /home/*/.local/share/opencode holds OpenCode's
+#     database, and its credential table holds the provider sign-ins of whoever
+#     ran it. The image ships OpenCode signed out (tools/opencode/), so a release
+#     built from a tree that has been used must not ship it signed in.
 #   * the build root itself ($HOME/.cache/debian-aarch64) contains the exported
 #     Wi-Fi profiles, so a copy of it inside an artifact leaks them too.
 #
@@ -44,6 +48,10 @@ DIST_EXCLUDES='
 /var/lib/dbus/machine-id
 /root/.ssh/
 /home/*/.cache/debian-aarch64/
+/home/*/.local/share/opencode/
+/home/*/.local/state/opencode/
+/home/*/.cache/opencode/
+/home/*/.config/opencode/
 /var/log/bootstrap.log
 /tmp/repo/
 '
@@ -70,6 +78,9 @@ dist_sanitize() {
 	install -d -m700 -o root -g root "$_d/etc/NetworkManager/system-connections"
 	install -d -m700 -o root -g root "$_d/var/lib/NetworkManager"
 	rm -rf "${_d:?}"/home/*/.cache/debian-aarch64
+	# The shipped agent's state, sign-ins included (see the header).
+	rm -rf "${_d:?}"/home/*/.local/share/opencode "${_d:?}"/home/*/.local/state/opencode
+	rm -rf "${_d:?}"/home/*/.cache/opencode "${_d:?}"/home/*/.config/opencode
 
 	rm -f "$_d"/etc/ssh/ssh_host_*
 	: >"$_d/etc/machine-id"
@@ -96,6 +107,12 @@ dist_assert_clean() {
 	fi
 	if find "$_d/root/.ssh" "$_d"/home/*/.cache/debian-aarch64 -mindepth 1 -print -quit 2>/dev/null | grep -q .; then
 		_bad="$_bad$_d/root/.ssh or $_d/home/*/.cache/debian-aarch64 (not empty)"
+	fi
+	# The agent the image ships keeps its sign-ins in a database; an artifact that
+	# still has one was made from a used tree.
+	_oc_left="$(find "$_d"/home/*/.local/share/opencode -mindepth 1 -print -quit 2>/dev/null)"
+	if [ -n "$_oc_left" ]; then
+		_bad="$_bad$_d/home/*/.local/share/opencode (not empty)"
 	fi
 
 	if [ -n "$_bad" ]; then

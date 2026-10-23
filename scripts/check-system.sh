@@ -2255,6 +2255,34 @@ _agent_bins=""
 for _a in claude codex opencode gemini copilot; do have "$_a" && _agent_bins="$_agent_bins $_a"; done
 [ -n "$_agent_bins" ] && ok "coding agent CLI(s) installed:$_agent_bins" ||
 	skip "no coding-agent CLI installed yet (the Agents menu installs one with npm)"
+# OpenCode is the exception to that: the image ships it (tools/opencode/ pins the
+# tarball, scripts/rootfs-setup.sh installs it into ~/.opencode/bin), so it is a
+# promise and not a choice. A missing binary turns its row into an install row,
+# which reads as the feature being gone, and nothing logs it. `--version` creates
+# the agent's data directories and a log inside $HOME, hence the throwaway home:
+# this report changes nothing.
+_oc_bin="$HOME/.opencode/bin/opencode"
+if [ -x "$_oc_bin" ]; then
+	_oc_home="$(mktemp -d 2>/dev/null || true)"
+	_oc_ver="$(HOME="${_oc_home:-/tmp}" \
+		XDG_CONFIG_HOME="${_oc_home:-/tmp}/config" \
+		XDG_DATA_HOME="${_oc_home:-/tmp}/data" \
+		XDG_CACHE_HOME="${_oc_home:-/tmp}/cache" \
+		XDG_STATE_HOME="${_oc_home:-/tmp}/state" \
+		"$_oc_bin" --version 2>/dev/null || true)"
+	[ -z "$_oc_home" ] || rm -rf "$_oc_home"
+	case "$_oc_ver" in
+	opencode*) ok "OpenCode ships with the image (${_oc_ver#opencode })" ;;
+	*) fail "~/.opencode/bin/opencode does not run: reinstall it from tools/opencode/" ;;
+	esac
+else
+	fail "OpenCode is missing from ~/.opencode/bin: the image ships it (tools/opencode/)"
+fi
+if grep -qs '\.opencode/bin' "$HOME/.config/bin/rofi-agents"; then
+	ok "the Agents menu puts ~/.opencode/bin on PATH"
+else
+	fail "bin/rofi-agents no longer adds ~/.opencode/bin: OpenCode's row becomes an install row"
+fi
 
 # The session's own launcher entries. They are the only way to reach the bar's
 # panels and the session actions by typing, and a missing one is invisible: the

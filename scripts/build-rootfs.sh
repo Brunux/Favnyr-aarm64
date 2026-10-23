@@ -85,6 +85,22 @@ if [ -d "$UI_DIR/files" ]; then
 	cp -a "$UI_DIR/files" "$ROOTFS/tmp/ui-files"
 	chown -R root:root "$ROOTFS/tmp/ui-files"
 fi
+# The one agent the image ships (see the Agents section of scripts/lib.sh): its
+# tarball is fetched here, verified against the committed pin, and handed to
+# rootfs-setup.sh, which extracts it into the user's ~/.opencode/bin. Cached in
+# $SRC_DIR like the kernel and the compositor, so a rebuild downloads nothing.
+if [ -f "$OPENCODE_DIR/SHA256SUMS" ]; then
+	if [ ! -f "$SRC_DIR/$OPENCODE_TARBALL" ]; then
+		log "Downloading $OPENCODE_TARBALL"
+		curl -fL --retry 3 --progress-bar -o "$SRC_DIR/$OPENCODE_TARBALL.part" "$OPENCODE_URL"
+		mv "$SRC_DIR/$OPENCODE_TARBALL.part" "$SRC_DIR/$OPENCODE_TARBALL"
+	fi
+	( cd "$SRC_DIR" && sha256sum -c --ignore-missing "$OPENCODE_DIR/SHA256SUMS" ) ||
+		die "checksum mismatch for $OPENCODE_TARBALL (delete $SRC_DIR/$OPENCODE_TARBALL and retry)"
+	install -m 0644 "$SRC_DIR/$OPENCODE_TARBALL" "$ROOTFS/tmp/opencode.tgz"
+else
+	warn "no $OPENCODE_DIR/SHA256SUMS: the image gets no OpenCode"
+fi
 # The image carries this repository, because the scripts that partition the
 # internal storage, rewrite the ChromeOS kernel partition and report on the
 # system are all meant to run *on* the device (scripts/install-emmc.sh,
@@ -138,7 +154,7 @@ if [ -d "$WIFI_DIR" ]; then
 fi
 
 rm -rf "$ROOTFS/tmp/packages" "$ROOTFS/tmp/ui-files" "$ROOTFS/tmp/repo" \
-	"$ROOTFS/root/rootfs-setup.sh"
+	"$ROOTFS/tmp/opencode.tgz" "$ROOTFS/root/rootfs-setup.sh"
 
 # Whatever is built here ships as a disk (write-sd.sh, make-image.sh) or is
 # cloned onto one (install-emmc.sh), so it has to leave as a first boot: from an

@@ -159,8 +159,10 @@ in range"` turns the card into the answer.*
   first use and verified. No daemon.
 * **Agents** (Alt+Ctrl+Shift+A) - launch Claude Code / Codex / OpenCode / Gemini / Copilot, install
   one with npm (into `~/.local`, never `/usr/local`), and keep **accounts** per agent (Claude Code
-  via `CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`). Usage meters are planned, not built; see
-  [`docs/plan-agents.md`](docs/plan-agents.md).
+  via `CLAUDE_CONFIG_DIR`, Codex via `CODEX_HOME`). **OpenCode is already installed**: it is the
+  agent this port is built with, so the image ships it in `~/.opencode/bin` (pinned in
+  [`tools/opencode/`](tools/opencode/), where its own `opencode upgrade` can replace it without
+  root). Usage meters are planned, not built; see [`docs/plan-agents.md`](docs/plan-agents.md).
 * **Hibernate** - refused unless a **disk** swap (not zram) of at least 2/5 of RAM exists *and* the
   kernel command line carries `resume=` (a swap partition labelled `lazyos_swap` is the intended
   wiring). Each missing condition says what to do.

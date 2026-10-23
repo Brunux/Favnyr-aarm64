@@ -33,6 +33,9 @@ still no daemon, and no new toolchain to build and carry.
 * `rofi-agents`: a rofi menu listing the agents it knows (Claude Code, Codex, OpenCode, Gemini CLI,
   GitHub Copilot); launch in foot from `~/Work`; install the missing ones with
   `npm install -g --prefix ~/.local <pkg>` (no root, no writes to `/usr/local`); set the default.
+  **OpenCode is the exception**: the image ships it (tools/opencode/, installed into
+  `~/.opencode/bin` by rootfs-setup.sh) because it is the agent this port is built with - see the
+  bullet below.
 * Binding `Alt+Ctrl+Shift+A` (Omarchy's `Super+Shift+Ctrl+A`), an `org.lazyos.agents.desktop` entry,
   a root-menu entry, a page in the manual (`07-agents.md`).
 * `PATH` must be forced to include `~/.local/bin` inside the script: sway's environment does not have
@@ -49,7 +52,9 @@ still no daemon, and no new toolchain to build and carry.
 * The first launch in a new account runs the CLI's own sign-in, so two subscriptions never share a
   token. That sign-in is the only flow that touches the network, and it is the CLI's, not ours.
 * OpenCode / Gemini / Copilot have no equivalent variable: the menu says so instead of pretending.
-  Grok is left out until its CLI documents one.
+  Grok is left out until its CLI documents one. (OpenCode v2 does read `OPENCODE_CONFIG_DIR`, but its
+  sign-ins live in the database under the data directory, so a config-directory account would share
+  the login - which is why it is still not an account row.)
 * **Effort: 2-3 h** including the sign-in test on the card (it is the risky part: it needs a real
   account and a terminal).
 

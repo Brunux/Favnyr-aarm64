@@ -111,6 +111,10 @@ compositors/<name>/        one directory per compositor built from source
   scenefx-version          the effects library it links against, when it is a fork
   SHA256SUMS               checksums of the upstream tarballs, verified on build
   README.md                what it is, why it is built here, its effects policy
+tools/<name>/              one directory per pinned upstream tool the image
+                           carries: workstyle (built here from its crate) and
+                           opencode (fetched as a platform binary); version +
+                           SHA256SUMS, the same shape as compositors/
 uis/<ui>/                  one directory per graphical shell
   packages.list            UI packages (Debian names)
   files/                   tree overlaid onto the rootfs; `etc/` is copied as
@@ -1428,8 +1432,10 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   never needs root and never touches `/usr/local`, and `~/.local/bin` is already on PATH), default
   agent, and accounts. An "account" is a directory under
   `~/.local/share/lazyos/agents/<agent>/<name>` used through the variable the CLI itself documents:
-  **`CLAUDE_CONFIG_DIR`** for Claude Code and **`CODEX_HOME`** for Codex. OpenCode, Gemini and
-  Copilot have no such variable and the menu says so instead of pretending. A new account is created
+  **`CLAUDE_CONFIG_DIR`** for Claude Code and **`CODEX_HOME`** for Codex. Gemini and
+  Copilot have no such variable, and OpenCode's `OPENCODE_CONFIG_DIR` moves only its
+  configuration (the sign-ins live in the database under the data directory, which two
+  accounts would share), so the menu says so instead of pretending. A new account is created
   empty on purpose - the first launch there runs the CLI's own sign-in, so two subscriptions never
   share a token. **Every row carries the session's glyph** from `lib-rofi.sh` - a code sign for
   an agent, two people for its accounts, a download arrow for an install, a gear for the default,
@@ -1441,6 +1447,26 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   the shape that would fit here is a stdlib `python3` script printing one line for a waybar `custom`
   module, not a daemon and not a new language. Nothing in this feature is resident: the menu is rofi
   (~16 MB while open) and then the agent is the agent.
+- **OpenCode is the one agent the image ships, installed at `~/.opencode/bin`.** The other CLIs are
+  the user's (`npm install -g --prefix ~/.local`); OpenCode is the agent this port is built with, so
+  a fresh card should not have to download it before it can work. `tools/opencode/` pins the arm64
+  tarball of the npm platform package (`@opencode/cli-linux-arm64`, which is just
+  `package/bin/opencode`, so no npm runs at build time), `build-rootfs.sh` fetches it into
+  `$SRC_DIR`, verifies the committed SHA256 and stages it, and `rootfs-setup.sh` extracts it into the
+  user's home. **Not `/usr/local/bin` on purpose**: `opencode upgrade` picks its update method from
+  where the binary lives - *Using method: curl* from `~/.opencode/bin`, where it rewrites the file in
+  place as the user, and *installation method not found* from anywhere else, which in an agent that
+  changes every week leaves a version only a rebuilt image can move (both measured on v2.1.3). It is
+  also what keeps the image **signed out**: the credentials live in `~/.local/share/opencode`, which
+  the build never creates and `lib-dist.sh` now excludes from anything published (its database holds
+  provider sign-ins). The directory is appended to `PATH` in `90-cli-tools.sh` and prepended in
+  `rofi-agents`, because sway's environment has neither it nor `~/.local/bin` - and the menu's
+  install line passes `--allow-scripts=<package>`, since npm 12 blocks the postinstall that picks
+  OpenCode's platform binary, leaving a stub that `command -v` would call installed. `check-system.sh`
+  FAILs when the binary is missing or does not answer `--version` (with a throwaway `$HOME`: the
+  binary creates its data directory and a log on startup, and the report changes nothing) and when
+  the menu loses the PATH line. Bumping it is `tools/opencode/README.md`; the manual section is
+  `07-agents.md`.
 - **The bar's menus are short-lived `rofi -dmenu` popups, not panels.** Deboma answers a click on
   the bar with a Quickshell panel, and that shell is 361 MB of PSS - more than half of the Deboma
   session. `uis/sway/files/home/.config/bin/bar-*` reproduce the same interactions through

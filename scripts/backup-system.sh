@@ -53,10 +53,15 @@ ROOT_SRC="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
 	die "refusing to write the backup onto the filesystem it is backing up ($DEST is on $ROOT_SRC)"
 
 # Regenerable or per-user state. Anchored at the transfer root.
+#
+# ~/.opencode is not in this list: the image ships OpenCode in that directory
+# (tools/opencode/), so excluding it would restore a system whose Agents menu has
+# no OpenCode. What that directory holds is the binary, not session state - the
+# sessions and sign-ins live in ~/.local/share/opencode, which a backup of the
+# user's own machine should carry.
 EXCLUDES='
 ./home/*/.cache
 ./home/*/.codex
-./home/*/.opencode
 ./home/*/Tools
 ./home/*/go/pkg
 ./home/*/.cargo/registry

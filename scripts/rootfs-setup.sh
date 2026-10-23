@@ -325,6 +325,32 @@ else
 	warn "no UI files staged for '$UI'"
 fi
 
+log "Installing OpenCode (the agent the menu launches, already installed)"
+# The Agents menu's other CLIs are installed by the user with npm into ~/.local;
+# OpenCode ships with the image instead (tools/opencode/ pins the arm64 tarball,
+# and build-rootfs.sh fetched it, verified it and left it here). It lands in
+# ~/.opencode/bin, owned by the user, because that is the layout its own updater
+# recognises: `opencode upgrade` prints "Using method: curl" for a binary there
+# and rewrites it in place, while from /usr/local it answers "installation
+# method not found" and asks for a package manager - a root-owned copy could only
+# be moved by rebuilding the image. Nothing is signed in: the credentials live in
+# the agent's data directory, which this never creates.
+if [ -f /tmp/opencode.tgz ] && [ -d "/home/$USERNAME" ]; then
+	_oc_bin="/home/$USERNAME/.opencode/bin"
+	install -d -o "$USERNAME" -g "$USERNAME" "$_oc_bin"
+	tar -xzf /tmp/opencode.tgz -C "$_oc_bin" --strip-components=2 --no-same-owner \
+		package/bin/opencode
+	chown "$USERNAME:$USERNAME" "$_oc_bin/opencode"
+	chmod 0755 "$_oc_bin/opencode"
+	rm -f /tmp/opencode.tgz
+	# A tarball that did not extract leaves the Agents menu offering to install
+	# an agent the image claims to carry, so stop the build instead.
+	if [ ! -x "$_oc_bin/opencode" ]; then
+		warn "OpenCode did not extract: $_oc_bin/opencode is missing"
+		exit 1
+	fi
+fi
+
 log "Installing the repository copy ($REPO_NAME)"
 # The device-side scripts (install-emmc.sh, install-kpart.sh) source
 # scripts/lib.sh and read devices/, kernels/ and uis/, so the checkout has to be

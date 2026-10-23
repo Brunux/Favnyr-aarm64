@@ -592,7 +592,11 @@ coding-agent CLIs it knows (Claude Code, Codex, OpenCode, Gemini, Copilot), laun
 one in foot from `~/Work`, offers `npm install -g --prefix ~/.local <package>` for the rest (so npm
 never wants root), and keeps **accounts** for the two that support an alternative config directory -
 Claude Code (`CLAUDE_CONFIG_DIR`) and Codex (`CODEX_HOME`) - as one directory per account under
-`~/.local/share/lazyos/agents/`. Omarchy's usage meters are deliberately absent: they read provider
+`~/.local/share/lazyos/agents/`. **OpenCode is the one the image ships** (`tools/opencode/` pins the
+arm64 tarball; `scripts/rootfs-setup.sh` installs it into `~/.opencode/bin`), because it is the agent
+this port is built with and a fresh card should not have to fetch it first: that layout is the one
+its own `opencode upgrade` recognises and rewrites without root, and the image ships it signed out.
+Omarchy's usage meters are deliberately absent: they read provider
 APIs that change shape, and a broken meter is worse than none; if they return, the fitting shape is a
 `python3` script printing one line for a waybar `custom` module, not a daemon.
 

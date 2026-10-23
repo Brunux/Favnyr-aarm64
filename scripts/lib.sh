@@ -128,6 +128,25 @@ require_compositor() {
 }
 
 # ---------------------------------------------------------------------------
+# Agents
+# ---------------------------------------------------------------------------
+# The Agents menu (uis/*/files/home/.config/bin/rofi-agents) launches the
+# coding-agent CLIs and installs a missing one with npm into the user's
+# ~/.local. OpenCode is the exception: it ships with the image, because it is the
+# agent this port is built with and a fresh card should not have to fetch it
+# first. tools/opencode/ pins the arm64 tarball of the npm platform package -
+# the compiled binary on its own, so no npm runs at build time - and
+# build-rootfs.sh stages it for rootfs-setup.sh, which installs it into
+# ~/.opencode/bin. That is the layout the binary's own `opencode upgrade`
+# recognises; see tools/opencode/README.md for why it is not a .deb.
+OPENCODE="opencode"
+OPENCODE_DIR="$REPO_DIR/tools/$OPENCODE"
+[ -d "$OPENCODE_DIR" ] || die "agent '$OPENCODE' not found in $REPO_DIR/tools"
+OPENCODE_VERSION="$(cat "$OPENCODE_DIR/version")"
+OPENCODE_TARBALL="$OPENCODE-cli-linux-arm64-$OPENCODE_VERSION.tgz"
+OPENCODE_URL="https://registry.npmjs.org/@opencode/cli-linux-arm64/-/cli-linux-arm64-$OPENCODE_VERSION.tgz"
+
+# ---------------------------------------------------------------------------
 # Boot chain (depthcharge / ChromeOS GPT)
 # ---------------------------------------------------------------------------
 DEPTHCHARGE_BOARD="${deviceinfo_depthcharge_board:-}"
@@ -186,3 +205,4 @@ export REPO_DIR BUILD_ROOT WORK_DIR SRC_DIR DEVICE DEVICE_DIR KERNEL_DIR
 export UI UIS_DIR UI_DIR WIFI_DIR
 export LOCALE TIMEZONE
 export BOOT_SIZE_MIB BOOT_FS KERNEL_RELEASE
+export OPENCODE OPENCODE_DIR OPENCODE_VERSION OPENCODE_TARBALL OPENCODE_URL
