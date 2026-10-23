@@ -286,7 +286,9 @@ fn diff(paths: &Paths, args: &[&str]) -> i32 {
         }
     }
     if differing.is_empty() {
-        say!("ok\t{slug}\t{} surfaces", SURFACES.len());
+        if !quiet {
+            say!("ok\t{slug}\t{} surfaces", SURFACES.len());
+        }
         EXIT_OK
     } else {
         if quiet {

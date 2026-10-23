@@ -3500,9 +3500,9 @@ if command -v lazyos >/dev/null 2>&1; then
 		fi
 
 		# The regeneration witness: rendering again must reproduce the files
-		# that are installed, byte for byte.
-		_theme_diff=$(lazyos theme diff --quiet 2>&1) || true
-		if [ -z "$_theme_diff" ]; then
+		# that are installed, byte for byte.  The exit status is the answer;
+		# `--quiet` prints only the surfaces that differ.
+		if _theme_diff=$(lazyos theme diff --quiet 2>&1); then
 			ok "every surface is byte-identical to a fresh render"
 		else
 			fail "regeneration differs on: $(printf '%s' "$_theme_diff" | head -n 1) (run \`lazyos theme set $_theme_slug\`)"
