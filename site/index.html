@@ -65,6 +65,8 @@
 @font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
 @font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 @font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-ExtraBold.woff2") format("woff2"); font-weight: 800; font-display: swap; }
+/* Silkscreen is the arcade word's alone: "play" in "press any key to play". */
+@font-face { font-family: "Silkscreen"; src: url("fonts/Silkscreen-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 
 /* The brand palette: brand/README.md */
 :root {
@@ -211,6 +213,7 @@ footer .big { font-size: 34px; font-weight: 800; letter-spacing: -0.05em; color:
 footer p { color: var(--muted); font-size: 14px; margin-top: 8px; }
 footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 14px; }
 .arcade { margin-top: 18px; color: var(--muted); font-size: 14px; }
+.play { font-family: "Silkscreen", var(--mono); font-weight: 700; font-size: 1.3em; line-height: 1; color: var(--cursor); letter-spacing: 0.02em; margin: 0 0.1em; }
 
 @media (max-width: 900px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -299,7 +302,7 @@ footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; fo
   <section id="keys" aria-labelledby="keys-h">
     <div class="wrap">
       <div class="sec-head">
-        <span class="kicker">PRESS ANY KEY TO CONTINUE</span>
+        <span class="kicker">PRESS ANY KEY TO <span class="play">PLAY</span></span>
         <h2 id="keys-h">The keys worth knowing on day one</h2>
         <p>Omarchy's letters, with <kbd>Alt</kbd> where Omarchy uses Super. Forget one? <kbd class="hot">Alt</kbd> <kbd class="hot">Ctrl</kbd> <kbd class="hot">K</kbd> lists every binding, generated from the configuration itself.</p>
       </div>
@@ -474,7 +477,7 @@ footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; fo
     <div>
       <div class="big">lazyOS<span class="cur">_</span></div>
       <p>lazy by design</p>
-      <p class="arcade">» press any key to continue «</p>
+      <p class="arcade">» press any key to <span class="play">play</span> «</p>
     </div>
     <ul>
       <li><a href="https://github.com/Brunux/LazyOS">Source on GitHub</a></li>
@@ -482,7 +485,7 @@ footer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; fo
       <li><a href="https://github.com/Brunux/LazyOS/tree/main/uis/sway/files/usr/share/doc/lazyos">The manual</a></li>
       <li><a href="https://github.com/Brunux/LazyOS/tree/main/brand">Brand</a></li>
     </ul>
-    <p style="flex-basis: 100%; font-size: 13px">Developed by its maintainer together with an AI agent running on <a href="https://opencode.ai">OpenCode</a>. Set in <a href="fonts/OFL.txt">JetBrains Mono</a>.</p>
+    <p style="flex-basis: 100%; font-size: 13px">Developed by its maintainer together with an AI agent running on <a href="https://opencode.ai">OpenCode</a>. Set in <a href="fonts/OFL-JetBrainsMono.txt">JetBrains Mono</a> and <a href="fonts/OFL-Silkscreen.txt">Silkscreen</a>.</p>
   </div>
 </footer>
 

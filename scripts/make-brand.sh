@@ -114,6 +114,6 @@ printf '%s\n' \
 	"lazyOS_" \
 	"" \
 	":: lazy by design ::" \
-	"» press any key to continue «" >"$saver"
+	"» press any key to play «" >"$saver"
 
 echo "Done."
