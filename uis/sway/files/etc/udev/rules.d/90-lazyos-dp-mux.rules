@@ -1,0 +1,7 @@
+# The ANX7625 Type-C bridge has one DP transmitter and two downstream ports;
+# its crosspoint register picks which port gets it, and the chip powers up
+# pointing at the left one.  The mainline driver has no typec-switch mux (the
+# ChromeOS one does), so a monitor on the right port gets HPD and EDID, a mode
+# is set, and nothing is drawn.  Point the crosspoint at the port that just
+# entered DisplayPort alt mode, before the compositor enables the output.
+SUBSYSTEM=="typec", ACTION=="add", ENV{DEVTYPE}=="typec_partner_alternate_mode", DRIVER=="typec_displayport", RUN+="/usr/local/sbin/lazyos-dp-mux %k"

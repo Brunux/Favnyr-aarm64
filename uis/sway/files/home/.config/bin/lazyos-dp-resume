@@ -1,0 +1,106 @@
+#!/bin/sh
+# Give the external display its DisplayPort lanes back after a resume.
+#
+# The ANX7625 has one DP transmitter and two downstream Type-C ports, and its
+# TCPC crosspoint decides which port the transmitter reaches: 0x21 is the left
+# port, 0x12 the right one, and the chip powers up on the left.  Mainline has no
+# typec-switch mux to set it (ChromeOS's driver does), so udev runs
+# lazyos-dp-mux when a port enters DisplayPort alt mode - see
+# /etc/udev/rules.d/90-lazyos-dp-mux.rules.
+#
+# A resume is the case udev cannot see.  The bridge is powered down with the
+# rest of the display pipeline and re-initialised on the way back, which resets
+# the crosspoint to its power-on default (measured on this machine: 0x12 before
+# the sleep, then 0x00 and 0x21 after it), while the EC re-detects the partner
+# without re-adding the alt-mode device the rule matches ("EC does not support
+# AP driven mode entry", a -95 the kernel logs on every resume).  The connector
+# still reports connected with its EDID and sway still has the mode, so the
+# session paints into a link that now points at the empty port: the panel shows
+# its no-signal pattern until the cable is replugged.
+#
+# Two steps fix it, in this order and nowhere else:
+#
+#   1. write the crosspoint for the port that has DisplayPort alt mode;
+#   2. retrain the link.  The write alone does nothing - the bridge trains when
+#      the output is enabled, and at this point the link is already trained with
+#      the crosspoint the chip reset itself to (measured: the panel stayed black
+#      after the write and came back when the mode changed).  A 720p round trip
+#      is the least the encoder accepts, and unlike disabling the output it
+#      leaves sway's layout alone: a disable moves that output's workspaces to
+#      the internal panel (measured: workspace 2 on DP-1 came back on eDP-1),
+#      which is not something a resume hook should rearrange.
+#
+# Nothing is resident: this runs once from the idle chain's after-resume, and
+# exits without touching anything when no port carries DisplayPort alt mode.
+set -u
+
+log() { logger -t lazyos-dp-resume "$*" 2>/dev/null || true; }
+
+# 1. The port the EC put into DisplayPort alt mode: the same alt-mode device
+#    the udev rule is called with.  svid ff01 is DisplayPort.
+alt=
+for d in /sys/class/typec/port*-partner/*/; do
+	[ -r "$d/active" ] || continue
+	[ "$(cat "$d/active" 2>/dev/null)" = yes ] || continue
+	[ "$(cat "$d/svid" 2>/dev/null)" = ff01 ] || continue
+	alt=${d%/}
+	alt=${alt##*/}
+	break
+done
+[ -n "$alt" ] || exit 0
+
+# 2. The crosspoint, through the same helper udev uses.  Only root writes i2c-7,
+#    and this image's default account has passwordless sudo; without it the
+#    second half would retrain a link that still points the wrong way.
+if ! sudo -n /usr/local/sbin/lazyos-dp-mux "$alt" 2>/dev/null; then
+	log "could not set the crosspoint for $alt"
+	exit 0
+fi
+
+command -v swaymsg >/dev/null 2>&1 || exit 0
+
+# 3. The external output.  The internal panel is the DSI one (eDP-*); the
+#    bridge's connector is DP-*.
+out=$(swaymsg -t get_outputs -r 2>/dev/null |
+	jq -r '.[] | select(.name | startswith("DP-")) | select(.active) | .name' 2>/dev/null |
+	head -n 1)
+if [ -z "$out" ]; then
+	log "crosspoint set for $alt, no active DisplayPort output to retrain"
+	exit 0
+fi
+
+cur=$(swaymsg -t get_outputs -r 2>/dev/null |
+	jq -r --arg o "$out" \
+		'.[] | select(.name==$o) | "\(.current_mode.width) \(.current_mode.height) \(.current_mode.refresh)"' 2>/dev/null)
+w=${cur%% *}
+rest=${cur#* }
+h=${rest%% *}
+r=${rest##* }
+
+# The output was off when the machine slept: enabling it at its first mode is
+# already a modeset, so it trains with the crosspoint that was just written.
+if [ -z "$w" ] || [ "$w" = 0 ]; then
+	first=$(swaymsg -t get_outputs -r 2>/dev/null |
+		jq -r --arg o "$out" '.[] | select(.name==$o) | .modes[0] | "\(.width)x\(.height)"' 2>/dev/null)
+	[ -n "$first" ] && swaymsg output "$out" resolution "$first" >/dev/null 2>&1
+	log "$out was not enabled; re-enabled at ${first:-its preferred mode}"
+	exit 0
+fi
+
+# 4. Retrain: one intermediate mode, then the exact one that was in use.  The
+#    refresh is reported in mHz and sway wants Hz (%g drops the trailing 0 of
+#    "60.00" and keeps 59.94 as it is).
+modes=$(swaymsg -t get_outputs -r 2>/dev/null |
+	jq -r --arg o "$out" '.[] | select(.name==$o) | .modes[] | "\(.width)x\(.height)"' 2>/dev/null |
+	sort -u)
+mid=$(printf '%s\n' "$modes" | grep -x 1280x720 || true)
+[ -n "$mid" ] || mid=$(printf '%s\n' "$modes" | grep -vx "${w}x${h}" | head -n 1)
+if [ -z "$mid" ]; then
+	log "$out offers no second mode: the link cannot be retrained (replug the monitor)"
+	exit 0
+fi
+hz=$(awk -v r="$r" 'BEGIN { printf "%g", r / 1000 }')
+swaymsg output "$out" resolution "$mid" >/dev/null 2>&1
+sleep 0.5
+swaymsg output "$out" resolution "${w}x${h}@${hz}Hz" >/dev/null 2>&1
+log "crosspoint set for $alt and $out retrained (${w}x${h}@${hz}Hz)"

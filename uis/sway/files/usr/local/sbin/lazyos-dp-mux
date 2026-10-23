@@ -1,0 +1,56 @@
+#!/bin/sh
+# Point the ANX7625 Type-C crosspoint at the port that has the DisplayPort sink.
+#
+# The bridge has two downstream Type-C ports and one DP transmitter, and its
+# TCPC crosspoint (TCPC_SWITCH_0/1) decides which of the two the transmitter
+# reaches.  ChromeOS's driver sets those registers from a typec-switch mux on
+# every alt-mode notification; the mainline driver has no such code, so the
+# chip keeps its power-on default (the left port) and a monitor on the right
+# port still reports HPD and answers EDID - the kernel happily sets a mode -
+# while the panel shows its no-signal test pattern, because the lanes never
+# reach it.
+#
+# The EC reports which port entered DisplayPort alt mode; udev calls this with
+# that alt-mode device's name before the compositor enables the output.
+set -eu
+
+ALT=${1:-}
+[ -n "$ALT" ] || exit 0
+
+# 0x21 = left port (ChromeOS's TYPEC_ORIENTATION_NORMAL),
+# 0x12 = right port (TYPEC_ORIENTATION_REVERSE); the bit pairs are
+# SW_SEL1_SSRX_RX1|SW_SEL1_DPTX0_RX2 and SW_SEL1_SSRX_RX2|SW_SEL1_DPTX0_RX1.
+case $ALT in
+port0*) SELECT=0x21 ;;
+port1*) SELECT=0x12 ;;
+*) exit 0 ;;
+esac
+
+# Find the i2c bus of the DisplayPort bridge.  Two anx7625 chips sit on the
+# same machine - the internal panel's (which has an aux-bus and a DSI input)
+# and this one, whose input endpoint is a DPI bus.
+BUS=
+for dev in /sys/bus/i2c/devices/*-0058; do
+	[ -e "$dev/of_node/ports/port@0/endpoint/bus-type" ] || continue
+	BUS=${dev##*/}
+	BUS=${BUS%%-*}
+	break
+done
+[ -n "$BUS" ] || exit 0
+[ -e "/dev/i2c-$BUS" ] || exit 0
+
+# i2c-tools lives in sbin, which a udev worker does not have on PATH.
+I2CSET=/usr/sbin/i2cset
+[ -x "$I2CSET" ] || I2CSET=/usr/bin/i2cset
+[ -x "$I2CSET" ] || exit 0
+
+# The chip's firmware keeps a page pointer that the driver re-syncs before it
+# switches i2c addresses (ChromeOS's i2c_access_workaround()); do the same.
+if "$I2CSET" -f -y "$BUS" 0x2c 0x00 0x00 &&
+	"$I2CSET" -f -y "$BUS" 0x2c 0xb4 "$SELECT" &&
+	"$I2CSET" -f -y "$BUS" 0x2c 0xb5 "$SELECT"; then
+	exit 0
+fi
+
+logger -t lazyos-dp-mux "could not set the crosspoint for $ALT on i2c-$BUS"
+exit 0

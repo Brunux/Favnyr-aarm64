@@ -279,6 +279,61 @@ once per session. Native programs are unaffected; a Flatpak application, which
 may only reach a camera through that portal, sees none at all. That is a stated
 limit rather than a reason to run one more daemon.
 
+## An external monitor
+
+**Both USB-C ports carry DisplayPort, and the display is the DTB plus one
+udev one-shot.** This port's device tree described no external-display pipeline
+at all: `dpi@14016000` was disabled and the second ANX7625 bridge - the one on
+`i2c@11d00000`, not the internal panel's - was missing, so the kernel created a
+single connector and there was nowhere for a monitor to go. The patch
+`kernels/mediatek-mt81/patches/mt8192-asurada-external-display.patch` describes
+them (the DPI output with its pins, the bridge with its rails, its power and
+reset GPIOs and its DPI input), and that is what makes `card1-DP-1` exist.
+
+**The chip has one DisplayPort transmitter and two Type-C ports**, and which one
+it reaches is a crosspoint (`TCPC_SWITCH_0/1`, 7-bit address `0x2c` on
+`i2c-7`): `0x21` is the left port, `0x12` the right one, and the chip powers up
+pointing at the left one. ChromeOS sets those registers from a typec-switch mux;
+mainline's driver has no such code, so a monitor on the right port reports HPD,
+answers EDID and gets a mode - and shows its no-signal test pattern, because the
+lanes never reach it. The fix is not in the session: `/usr/local/sbin/lazyos-dp-mux`,
+run by `/etc/udev/rules.d/90-lazyos-dp-mux.rules` when a port enters DisplayPort
+alt mode, writes the two registers with `i2cset` (package `i2c-tools`). It has to
+happen before the compositor enables the output, which is why it is a udev rule
+and not a login hook: the Type-C event arrives about a second before the
+connector's hotplug. Nothing is resident - one process while the plug is handled.
+
+**A monitor can be plugged in at any time and into either port.** That is sway's
+own output handling: the new connector gets a workspace and windows go there
+with `Alt+Shift+<arrow>`; unplugging takes its workspaces back to the internal
+panel. The chip drives one DisplayPort stream, so two monitors are one monitor
+followed by the other, not two at once.
+
+**The night light does not reach it.** `wlsunset` asks the compositor for a
+gamma table per output, and this kernel has one only for the internal panel's
+CRTC: `modetest -M mediatek -p` shows `GAMMA_LUT` on the 1366x912 CRTC and
+nothing on the 1920x1080 one, because MT8192's second display path
+(OVL1 → RDMA1 → DPI) has no gamma block bound to it in mainline, and the SoC's
+one gamma block sits in the first path. `wlsunset -t 3000` says so itself:
+*gamma control of output ... failed*. Use the monitor's own colour setting; a
+warm external display would need the driver to carry a gamma block on that CRTC.
+
+**A suspend resets the bridge's crosspoint, and the session puts it back.** The
+bridge powers down with the rest of the display pipeline and re-initialises on
+the way back, so the crosspoint returns to its power-on default (the left port)
+- measured on this machine: `0x12` before the sleep, `0x00` and then `0x21`
+after it - while the kernel's Type-C stack only re-detects the partner. The
+connector still says `connected` with its EDID and sway still has the mode, so
+the picture goes to the empty port and the panel shows its no-signal pattern
+until the cable is replugged. `~/.config/bin/lazyos-dp-resume` runs from the
+idle chain's `after-resume` and does the two things that fix it: it writes the
+crosspoint for the port that has DisplayPort alt mode, then forces one modeset
+(1280x720 and back), because a crosspoint write alone changes nothing - the link
+was already trained when it ran. The mode change is deliberate: disabling the
+output would move that output's workspaces to the internal panel, and a resume
+hook should not rearrange the desktop. Nothing is resident, and
+`journalctl -t lazyos-dp-resume` says what it did.
+
 ## Files in a window
 
 **Search+Shift** opens **pcmanfm**: the files **Alt+Search** and **Alt+Ctrl+F**
@@ -406,6 +461,10 @@ drop-in's `after-resume` hook asks the helper to restart the mode that was
 running (`night-light resume`), and it does nothing when the night light was off
 before the sleep. `night-light status` prints `on schedule`, `on warm` or `off`
 from a terminal.
+
+**An external monitor stays at its own colour temperature**: the kernel has a
+gamma table only for the internal panel's CRTC, so the warm ramp cannot reach
+it - see § *An external monitor*.
 
 ## Translate
 

@@ -156,6 +156,40 @@ Never append a bare `debug`: initramfs-tools then sends its own output to a file
 inside the initramfs, and the messages that explain a failure never reach the
 screen.
 
+## The external monitor shows no signal
+
+The bridge, the connector and the mode can all be right and the panel still
+show its no-signal pattern - the lanes are routed by the chip's Type-C
+crosspoint, which the kernel does not set on its own (see § *An external
+monitor* in `04-software.md`). In order:
+
+* `cat /sys/class/drm/card1-DP-1/status` says `connected` and
+  `wc -c < /sys/class/drm/card1-DP-1/edid` says 256: the monitor is answering
+  EDID and the fault is the crosspoint, not the cable.
+* Which port has it: `ls -d /sys/class/typec/*-partner`, and the port's own
+  displayport alt mode says `active`. Then read the two registers - `0x21` is
+  the left port, `0x12` the right one:
+  ```sh
+  sudo i2cget -f -y 7 0x2c 0xb4
+  ```
+  If it names the other port, the udev rule did not run: write it by hand with
+  the helper (`sudo /usr/local/sbin/lazyos-dp-mux port1-partner.0`) and replug,
+  because the chip only trains the link when it sees a sink.
+* `journalctl -t lazyos-dp-mux` names the reason when the write itself failed -
+  normally `i2c-tools` missing (`sudo apt install i2c-tools`), or no
+  `/usr/local/sbin/lazyos-dp-mux` at all.
+* A black external display after a resume is the same crosspoint, reset: the
+  bridge re-initialises and comes back on its power-on default (the left port).
+  The session's `after-resume` hook normally puts it back within a second or two
+  - `journalctl -t lazyos-dp-resume` has one line saying so. If it did not, run
+  the same sequence by hand, or replug the cable (the udev rule then runs):
+  ```sh
+  ~/.config/bin/lazyos-dp-resume
+  ```
+
+Neither the night light nor the screen's brightness reaches it: the external
+CRTC has no gamma table and the panel's own backlight is the monitor's.
+
 ## The launcher opens empty, or shows an error dialog
 
 * An error dialog naming a file, line and column is a **rofi theme parse error**;

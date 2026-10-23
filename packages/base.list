@@ -99,3 +99,12 @@ file
 # `resolvectl` to ask instead - DNS is set with `nmcli` (the DNS menu) and read
 # back from the connection's `ipv4.dns`.
 bind9-dnsutils
+# i2cset, which is how the ANX7625 Type-C crosspoint gets set.  The bridge has
+# one DP transmitter and two downstream ports, and the TCPC_SWITCH_0/1
+# registers pick which port it reaches; the chip powers up pointing at the left
+# one and mainline has no typec-switch mux (the ChromeOS driver does), so a
+# monitor on the right port reports HPD, answers EDID and gets a mode while the
+# panel shows its no-signal pattern.  /usr/local/sbin/lazyos-dp-mux is what
+# writes the two registers when a port enters DisplayPort alt mode, and it has
+# nothing else to ask.
+i2c-tools

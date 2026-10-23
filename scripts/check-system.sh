@@ -348,6 +348,92 @@ if [ "$(id -u)" -ne 0 ]; then
 	fi
 fi
 
+# The external display is the DTB plus one udev one-shot.  The patch describes
+# the DPI output and the second ANX7625, which is what creates a DP connector
+# at all; the bridge then has one DP transmitter and two downstream Type-C
+# ports, and its TCPC crosspoint picks which port it reaches.  Mainline has no
+# typec-switch mux (ChromeOS's driver does), so the chip keeps its power-on
+# default - the left port - and a monitor on the right one still gets HPD,
+# EDID and a mode while the panel shows its no-signal pattern.
+_dp=""
+for _s in /sys/class/drm/card*-DP-*/status; do
+	[ -e "$_s" ] || continue
+	_dp="${_s%/status}"
+	_dp="${_dp##*/}"
+	break
+done
+if [ -n "$_dp" ]; then
+	ok "external display connector $_dp present (DPI and ANX7625 in the DTB)"
+else
+	fail "no DP connector: the DTB describes no DPI output (kernels/mediatek-mt81/patches/mt8192-asurada-external-display.patch)"
+fi
+if [ -x /usr/local/sbin/lazyos-dp-mux ]; then
+	ok "lazyos-dp-mux is executable"
+else
+	fail "/usr/local/sbin/lazyos-dp-mux is missing or not executable: the Type-C crosspoint is never set"
+fi
+if grep -qs lazyos-dp-mux /etc/udev/rules.d/90-lazyos-dp-mux.rules; then
+	ok "udev runs lazyos-dp-mux when a port enters DisplayPort alt mode"
+else
+	fail "/etc/udev/rules.d/90-lazyos-dp-mux.rules is missing: only the left-hand port reaches the monitor"
+fi
+if command -v i2cset >/dev/null 2>&1; then
+	ok "i2cset is installed"
+else
+	fail "i2cset is missing (i2c-tools): lazyos-dp-mux cannot write the crosspoint"
+fi
+# The crosspoint has to name the port the EC put into DisplayPort alt mode, or
+# the monitor is an EDID source with no lanes behind it.  Reading it does not
+# change the chip: each transaction carries its own register address, and the
+# two registers live on the same page.
+for _alt in /sys/class/typec/port*-partner/port*-partner.*/; do
+	[ -r "$_alt/active" ] || continue
+	[ "$(cat "$_alt/active" 2>/dev/null)" = yes ] || continue
+	_port="${_alt#/sys/class/typec/}"
+	_port="${_port%%-*}"
+	case $_port in
+	port0) _want=0x21 ;;   # left  / TYPEC_ORIENTATION_NORMAL
+	port1) _want=0x12 ;;   # right / TYPEC_ORIENTATION_REVERSE
+	*) continue ;;
+	esac
+	_bus=""
+	for _c in /sys/bus/i2c/devices/*-0058; do
+		[ -e "$_c/of_node/ports/port@0/endpoint/bus-type" ] || continue
+		_bus="${_c##*/}"
+		_bus="${_bus%%-*}"
+		break
+	done
+	_got=0x
+	if [ -n "$_bus" ] && command -v i2cget >/dev/null 2>&1; then
+		_got="$(asroot i2cget -f -y "$_bus" 0x2c 0xb4)"
+	fi
+	case $_got in
+	"$_want") ok "Type-C crosspoint on $_port ($_got)" ;;
+	0x) skip "Type-C crosspoint on $_port (no i2c bus or i2cget here)" ;;
+	*) fail "Type-C crosspoint is $_got, not $_want: a monitor on $_port gets no picture" ;;
+	esac
+done
+
+# The resume half.  udev sees a plug, never a resume: the bridge re-initialises
+# when the machine wakes and the crosspoint goes back to its power-on default
+# (measured here: 0x12 before the sleep, 0x00 and then 0x21 after it), while the
+# EC re-detects the partner without re-adding the alt-mode device the rule
+# matches.  Without this hook the connector still reports connected and sway
+# still has the mode, so the picture is painted into the empty port until the
+# cable is replugged.  The modeset is asked for by name because the crosspoint
+# write alone changes nothing - the link was already trained when it ran.
+_dpr="$HOME/.config/bin/lazyos-dp-resume"
+if [ -x "$_dpr" ]; then
+	ok "lazyos-dp-resume is executable"
+	if grep -qs 'resolution' "$_dpr"; then
+		ok "lazyos-dp-resume retrains the link after writing the crosspoint"
+	else
+		fail "$_dpr lost its modeset: the crosspoint would be right and the link still dead"
+	fi
+else
+	fail "$_dpr is missing or not executable: the monitor keeps its picture only until the first suspend"
+fi
+
 # ---------------------------------------------------------------------------
 section "Input"
 # ---------------------------------------------------------------------------
@@ -988,6 +1074,7 @@ if [ -r "$_idle_cfg" ]; then
 	grep -q "timeout 360 .*power off" "$_idle_cfg" || _idle="$_idle no-360s-dpms"
 	grep -q "^[[:space:]]*resume .*power on" "$_idle_cfg" || _idle="$_idle no-dpms-resume"
 	grep -q "after-resume .*power on" "$_idle_cfg" || _idle="$_idle no-dpms-after-resume"
+	grep -q "after-resume .*lazyos-dp-resume" "$_idle_cfg" || _idle="$_idle no-external-display-after-resume"
 	grep -q "before-sleep .*sway-lock --wait" "$_idle_cfg" || _idle="$_idle no-lock-before-sleep"
 fi
 pgrep -x swayidle >/dev/null 2>&1 || _idle="$_idle swayidle-not-running"

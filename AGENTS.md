@@ -1023,6 +1023,60 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   and Camera row in `bar-menu`, FAILs when `uvcvideo` is loaded and no node is bound to it, and
   SKIPs when there is no UVC device at all; the manual is `04-software.md` § *The camera* and the
   symptom list is `06-troubleshooting.md` § *The camera shows nothing, or an app cannot find it*.
+- **An external monitor is the device tree plus one register write per plug, and
+  the second half is a udev one-shot.** The port shipped no external-display
+  pipeline at all - `dpi@14016000` disabled, no second ANX7625 - so the kernel
+  created one connector and `card1-DP-1` did not exist;
+  `kernels/mediatek-mt81/patches/mt8192-asurada-external-display.patch` is the
+  three nodes ChromeOS's asurada DTSI carries (the DPI output with its 16 pins
+  at 6 mA, the bridge on `i2c@11d00000` with the `pp*_dpbrdg` rails, GPIO 8
+  power / 9 reset / 7 IRQ and a DPI input endpoint `bus-type = <7>`, and the
+  pinmux groups), applied to the shared asurada dtsi because that is where
+  ChromeOS puts it. The bridge then has **one DP transmitter and two downstream
+  Type-C ports**, and `TCPC_SWITCH_0/1` (7-bit `0x2c` on `i2c-7`) pick which one
+  it reaches: `0x21` is the left port, `0x12` the right, and the chip powers up
+  on the left. ChromeOS writes those from a typec-switch mux on every alt-mode
+  notification (`anx7625_set_crosspoint_switch`); mainline registers a typec
+  port and no mux, and its cros-ec-typec has no DT port endpoints to bind one
+  to, so nothing ever writes them - measured: a monitor on the right port
+  reports HPD, answers EDID over AUX and gets 1920x1080@60 while the panel shows
+  its no-signal pattern, and the same monitor on the left port works. The fix is
+  `/usr/local/sbin/lazyos-dp-mux`, run by
+  `/etc/udev/rules.d/90-lazyos-dp-mux.rules` when a port's DisplayPort alt mode
+  appears: it finds the bridge's bus (the anx7625 whose `port@0` endpoint has
+  `bus-type`; the panel's has an `aux-bus`) and writes the two registers with
+  `i2cset -f` (i2c-tools; the driver has claimed the TCPC address) after the
+  page sync ChromeOS's `i2c_access_workaround()` does. **The timing is the
+  feature**: the connector's hotplug arrives before the alt-mode device (46 ms,
+  measured), and the chip trains the link when it is enabled, so a write
+  afterwards changes nothing and only a fresh enable retrains it - the rule has
+  to react to the alt-mode event, and it does so before sway commits the mode
+  (verified by presetting the wrong crosspoint and watching a replug bring the
+  picture up on its own). Nothing stays: one process while the plug is handled,
+  and no daemon. **A resume is the half udev cannot see**: the bridge powers down
+  with the display pipeline and re-initialises on the way back, so the
+  crosspoint returns to its power-on default - measured `0x12` before the sleep
+  and `0x00` then `0x21` after it - while the EC re-detects the partner without
+  re-adding the alt-mode device the rule matches (`typec port1.0: EC does not
+  support AP driven mode entry`, a -95 logged on every resume). The connector
+  still reports connected, EDID is intact and sway keeps the mode, so the
+  session paints into a link that now points at the empty port until the cable
+  is replugged. `~/.config/bin/lazyos-dp-resume` runs from the idle chain's
+  `after-resume` and does the two things that fix it: the crosspoint for the
+  port that has DisplayPort alt mode, then **one modeset** - a 1280x720 round
+  trip, and not a disable/enable, because the modeset is what retrains the link
+  (a crosspoint write after training changes nothing, measured) while disabling
+  the output moved that workspace to the internal panel (workspace 2 on DP-1
+  came back on eDP-1). **The night light cannot reach it**: `modetest -M
+  mediatek -p` has `GAMMA_LUT` on the 1366x912 CRTC and nothing on the 1920x1080
+  one (MT8192's second path OVL1→RDMA1→DPI has no gamma block bound; the SoC's
+  one block is in the first path), so wlsunset logs `gamma control of output ...
+  failed` and the monitor keeps its own colour temperature. Witnesses:
+  `check-system.sh` FAILs on a missing DP connector (the patch), the helper,
+  the udev rule, i2c-tools, the resume hook and its modeset step, and on a
+  crosspoint that does not name the port whose alt mode is active; the manual is
+  `04-software.md` § *An external monitor* and the symptom list is
+  `06-troubleshooting.md` § *The external monitor shows no signal*.
 - **Removable media is `udisks2`, and mounting it is a row in Places.** An unprivileged session
   cannot `mount(8)` anything - that is a root operation - so a USB stick used to be unusable:
   no mount point, no `udisksctl`, and pcmanfm's Devices pane had nothing to talk to.

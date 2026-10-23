@@ -125,6 +125,26 @@ effect on the screen - warm at 22:00, daylight at 22:05. `check-system.sh` FAILs
 when `bin/night-light` is missing and WARNs when the idle drop-in loses
 `night-light resume`; whether the screen is warm is only the eye's answer.
 
+## An external monitor (USB-C)
+
+The display is a device-tree patch (the DPI output and the second ANX7625) plus
+one register write per plug: the bridge has one DP transmitter and two Type-C
+ports, and the crosspoint that picks the port is what mainline does not set.
+A card that only works on the left port has the udev rule, the helper or
+`i2c-tools` missing.
+
+| Step | Expected |
+|---|---|
+| plug a DisplayPort monitor into the **left** port | the desktop extends onto it; `swaymsg -t get_outputs` names `DP-1` with its mode |
+| move the cable to the **right** port, replug twice, then plug it in after login | a picture every time. `sudo i2cget -f -y 7 0x2c 0xb4` reads `0x21` on the left and `0x12` on the right, and `journalctl -t lazyos-dp-mux` is empty |
+| with a window on the monitor, suspend (`Alt+Shift+Escape`) and wake it | the monitor comes back **on its own**, showing the lock screen: no replug, no command. `journalctl -t lazyos-dp-resume` has one line - the crosspoint write plus the 720p round trip that retrains the link |
+| the same, after the wake | the window is still on the monitor. A window that came back on the internal panel means the hook disabled the output instead of changing its mode |
+| turn the night light on with the monitor connected | the internal panel warms, the monitor keeps its own colour: the external CRTC has no `GAMMA_LUT` (`modetest -M mediatek -p` shows one on the 1366x912 CRTC only). The monitor's own colour setting is the answer |
+
+`check-system.sh` FAILs on a missing DP connector, helper, udev rule,
+`i2cset`, resume hook or modeset step, and on a crosspoint that does not name
+the port whose alt mode is active.
+
 ## The idle chain - the screen, the lock, and the panel
 
 Three timers, each with a job the previous one does not do. The last one is the
