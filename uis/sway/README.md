@@ -757,8 +757,9 @@ Deboma runs a screensaver 150 s after the last input and locks at 300 s
   `[app_id="org.lazyos.screensaver"]` on the current workspace.
 
 The art is `~/.config/lazyos/screensaver.txt`: the **z_** mark in block characters, `lazyOS_`,
-`:: lazy by design ::` and the arcade continue line `» press any key to continue «`, drawn in the
-brand's cyan (`foreground=2aa198` in `screensaver.ini`, and its own SGR in the static frame). The
+`:: lazy by design ::` and the arcade line `» press any key to play «`, drawn in the brand's cyan
+(`foreground=2aa198` in `screensaver.ini`, and its own SGR in the static frame, which also turns
+`play` cursor orange after centring). The
 art, the fastfetch logo, the wallpaper and the launcher icon all come from `scripts/make-brand.sh`;
 `brand/README.md` has the rules.
 

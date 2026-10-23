@@ -7,4 +7,4 @@
 lazyOS_
 
 :: lazy by design ::
-» press any key to continue «
+» press any key to play «

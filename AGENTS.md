@@ -1831,7 +1831,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   looping with `--reuse-canvas` over a curated list (`decrypt middleout print sweep wipe slide
   expand`; the effects that end with the text sitting still, so the next one starts from the wordmark).
   The art is `~/.config/lazyos/screensaver.txt`: the **z_** mark in block characters, `lazyOS_`,
-  `:: lazy by design ::` and the arcade continue line `» press any key to continue «` - the lazy-tools idea
+  `:: lazy by design ::` and the arcade line `» press any key to play «` - the lazy-tools idea
   (lazygit/lazydocker: the tool does the boring part, the thing to press is on the screen) plus the
   arcade screen an idle machine deserves. It is the surface that carries the **wordmark**: the art
   is `~/.config/lazyos/screensaver.txt`, the script is `~/.config/bin/lazyos-screensaver`, the app

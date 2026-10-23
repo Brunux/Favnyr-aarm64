@@ -57,7 +57,7 @@ up when nobody is looking.
 ## The idle screen
 
 150 s without input and the screen becomes **lazyOS_**: the z_ mark, the wordmark, `:: lazy by
-design ::` and the arcade line `» press any key to continue «`, drawn in cyan. One terminal-text
+design ::` and the arcade line `» press any key to play «`, drawn in cyan. One terminal-text
 effect rebuilds the letters, then the next one does it differently, and so on while the machine waits. Any
 key returns you to the session and the 150 s starts over.
 

@@ -61,12 +61,22 @@ The session's Solarized, with one adjustment for type.
 image (`fonts-jetbrains-mono`), and a monospace face is the brand: the prompt, the terminal, the
 keyboard.
 
+**Silkscreen Bold** is the arcade word and nothing else: `play` in "» press any key to **play** «",
+always in cursor orange `#e8743b`, about 1.3x the size of the line around it. It is a pixel face,
+the one place the brand plays. Where it is drawn:
+
+- the wallpaper: outlined as paths in `brand/wallpaper.svg`, like all of that file's type, so it
+  draws the same in any viewer and the build host needs no pixel font;
+- the landing page and the 404: self-hosted `site/fonts/Silkscreen-Bold.woff2` (OFL);
+- the idle screen: a terminal cannot change face, so `play` is only orange there, and only in the
+  static frame (`tte` reads the art as plain text and would draw colour escapes as characters).
+
 ## Voice
 
 Short, dry, keyboard-first. Say what the machine did and what key comes next.
 
 - "lazy by design"
-- "» press any key to continue «"
+- "» press any key to **play** «" (the arcade line: the machine is ready, the next move is yours)
 - "`$ lazyos --do-the-boring-part` → done. go outside."
 
 ## Not the brand
