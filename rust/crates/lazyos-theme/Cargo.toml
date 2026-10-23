@@ -7,3 +7,10 @@ edition = "2024"
 description = "The LazyOS session palette (spec 001 ships only the roles)"
 
 [dependencies]
+# theme.toml (spec 004): the format is TOML because it is what a person edits
+# and what the community themes will arrive in, and a hand-written parser would
+# be the "cheap to write, expensive to get right" half (escapes, arrays,
+# comments, spans). `toml` reports the offending line, which is what an unknown
+# key has to name.
+toml = "0.9"
+serde = { version = "1.0", features = ["derive"] }

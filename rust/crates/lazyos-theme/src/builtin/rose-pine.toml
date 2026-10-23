@@ -1,0 +1,39 @@
+# Rose Pine (main) - https://rosepinetheme.com
+#
+# A theme with no green: `regular2` is pine, the accent is iris, and the roles
+# that read as "ok" and "info" are stated so a status line is legible rather
+# than merely thematic.
+name = "Rose Pine"
+author = "Rose Pine"
+source = "https://rosepinetheme.com"
+
+wallpapers = ["mountains.jpg"]
+motion = "full"
+
+[colors]
+background = "#191724"
+foreground = "#e0def4"
+regular0 = "#26233a"
+regular1 = "#eb6f92"
+regular2 = "#31748f"
+regular3 = "#f6c177"
+regular4 = "#9ccfd8"
+regular5 = "#c4a7e7"
+regular6 = "#ebbcba"
+regular7 = "#e0def4"
+bright0 = "#6e6a86"
+bright1 = "#eb6f92"
+bright2 = "#31748f"
+bright3 = "#f6c177"
+bright4 = "#9ccfd8"
+bright5 = "#c4a7e7"
+bright6 = "#ebbcba"
+bright7 = "#e0def4"
+
+[roles]
+accent = "#c4a7e7"
+accent_alt = "#9ccfd8"
+surface = "#1f1d2e"
+selection = "#26233a"
+ok = "#9ccfd8"
+info = "#9ccfd8"

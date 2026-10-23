@@ -9,6 +9,12 @@
 //! (`~/.config/foot/foot.ini`, `rofi/solarized.rasi`, `mako/config`, the GTK
 //! overrides): the framework must look like the session it replaces.
 
+pub mod builtin;
+pub mod contrast;
+pub mod theme;
+
+pub use theme::{Hex, Motion, Roles, Theme};
+
 /// One colour, independent of any terminal library (the UI crate maps it).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Rgb {

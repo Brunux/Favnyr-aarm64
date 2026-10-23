@@ -1,0 +1,37 @@
+# Kanagawa (wave) - https://github.com/rebelot/kanagawa.nvim
+#
+# Like Gruvbox, the regular set is the quiet one: the roles that carry a signal
+# name the wave/bright pair so a card is readable on sumiInk.
+name = "Kanagawa"
+author = "rebelot"
+source = "https://github.com/rebelot/kanagawa.nvim"
+
+wallpapers = ["mountains.jpg"]
+motion = "full"
+
+[colors]
+background = "#1f1f28"
+foreground = "#dcd7ba"
+regular0 = "#2a2a37"
+regular1 = "#c34043"
+regular2 = "#98bb6c"
+regular3 = "#e6c384"
+regular4 = "#7e9cd8"
+regular5 = "#957fb8"
+regular6 = "#7fb4ca"
+regular7 = "#c8c093"
+bright0 = "#54546d"
+bright1 = "#e46876"
+bright2 = "#98bb6c"
+bright3 = "#e6c384"
+bright4 = "#7e9cd8"
+bright5 = "#957fb8"
+bright6 = "#7fb4ca"
+bright7 = "#dcd7ba"
+
+[roles]
+accent = "#7e9cd8"
+accent_alt = "#957fb8"
+surface = "#2a2a37"
+selection = "#363646"
+danger = "#e46876"
