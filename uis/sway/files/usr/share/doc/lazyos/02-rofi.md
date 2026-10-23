@@ -15,7 +15,7 @@ daemon).
 | **Alt+Ctrl+G** | `rofi-grep` | **search inside the files**: ripgrep over your home, one row per match; Enter opens the file at that line |
 | **Download** (root menu, launcher) | `rofi-download` | a link - or the one in the clipboard - kept in `~/Downloads`, as a video or as audio |
 | **Alt+Ctrl+C** | `rofi-capture` | **capture**: a screenshot (screen, area or window), annotate it, read the text or a QR code out of a region, and start or stop a recording |
-| **Alt+Ctrl+O** | `rofi-quick` | **Settings**: the switches (Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation) and the panels, in one list |
+| **Alt+Ctrl+O** | `rofi-quick` | **Settings**: the switches (Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation, screen sharing) and the panels, in one list |
 | **Alt+Ctrl+P** or **Alt+Escape** | `rofi-power` | **power**: lock, suspend, hibernate, log out, reboot, shut down - the last three ask once more |
 | **Alt+Ctrl+N** | `rofi-notify` | the notification history, with do-not-disturb and "copy this notification" |
 | **Alt+Ctrl+Q** | `rofi-calc` | a calculator: type `(3*4)/2`, Enter copies `6` |
@@ -50,6 +50,10 @@ playing, play/pause/next/previous), **Time zone** (with network time),
 `/` or `=` to re-quote when it is pasted into a file or a URL, and the value never
 appears in a notification - mako keeps a history, and a password in it is a
 password on disk), **SSH** (hosts from `~/.ssh/config`),
+**Share this screen** (Settings and the root menu: `wayvnc` serves the session
+read-only on the loopback address, so another machine can look at it through the
+ssh login — the menu carries the tunnel command, and `05-system.md` has the how
+and the why),
 **DNS** (which resolver this connection uses), **Packages** (search the archive
 and install one), **Colour** (the hex of any pixel, and the palette this session
 is drawn with), **Reminders** (be told later), **About** (kernel, uptime,

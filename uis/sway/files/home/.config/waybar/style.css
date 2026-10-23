@@ -41,6 +41,7 @@ tooltip label {
 #tray,
 #custom-keyboard-layout,
 #custom-bluetooth,
+#custom-vnc,
 #network,
 #pulseaudio,
 #backlight,
@@ -58,6 +59,7 @@ tooltip label {
 #custom-keyboard-layout { color: #839496; } /* base0 */
 #custom-bluetooth     { color: #586e75; } /* base01, i.e. off */
 #custom-bluetooth.on  { color: #268bd2; } /* blue */
+#custom-vnc           { color: #b58900; } /* yellow: this session is being served */
 #network              { color: #2aa198; }
 #network.disconnected {
     color: #dc322f;
@@ -81,6 +83,7 @@ tooltip label {
 #custom-updates:hover,
 #custom-keyboard-layout:hover,
 #custom-bluetooth:hover,
+#custom-vnc:hover,
 #network:hover,
 #pulseaudio:hover,
 #backlight:hover,
@@ -108,7 +111,8 @@ tooltip label {
    bar.  The class comes from the JSON the script prints. */
 #custom-updates.empty,
 #custom-busy.empty,
-#custom-keyboard-layout.empty {
+#custom-keyboard-layout.empty,
+#custom-vnc.empty {
     padding: 0;
     margin: 0;
     border: none;

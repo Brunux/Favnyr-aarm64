@@ -304,6 +304,43 @@ this is one line in the report rather than a warning you have to notice.
 image ships a udev rule (group `video`, `g+w`); after changing it,
 `sudo udevadm control --reload && sudo udevadm trigger`.
 
+## The screen is being shared but the viewer shows nothing
+
+The paths in order, because each one fails in its own way:
+
+1. **Is it on?** `rofi-vnc status` answers `off` or
+   `localhost:5900 · read-only`. If it says off, Settings → **Share this
+   screen**. If the row says *wayvnc is not installed*, that is the package:
+   `sudo apt install wayvnc` (a rebuilt image has it).
+2. **Did it start?** A failure is a notification quoting wayvnc's last two
+   lines, and the log is `$XDG_RUNTIME_DIR/lazyos-vnc/wayvnc.log`. The usual
+   cause is the port: something else already listens on 5900 —
+   `ss -ltnp | grep 5900`. Stop that server, then start this one again.
+3. **It only listens on the loopback address**, on purpose. `ss -ltn | grep
+   5900` must show `127.0.0.1:5900` and not `0.0.0.0`. If it shows the wildcard,
+   the script was edited: that is an unauthenticated desktop on the network, and
+   `check-system.sh` reports it as a FAIL.
+4. **The tunnel has to be open.** On the other machine:
+
+   ```sh
+   ssh -L 5900:127.0.0.1:5900 brunux@lazyos
+   ```
+
+   and leave that session open while you watch. The viewer connects to
+   `localhost:5900` **on your machine** — not to `lazyos:5900`, which is closed
+   from the network by design. Over a slow link, raise the compression in the
+   viewer rather than the frame rate.
+5. **You cannot type, click or scroll.** That is `--disable-input`, and it is
+   the feature: the viewer looks. To act on this machine, use the ssh session
+   you already have open.
+6. **The bar's eye is missing while it is shared.** The module is `custom/vnc`
+   in `~/.config/waybar/config.jsonc`; force the poll with
+   `pkill -RTMIN+8 waybar`. The indicator is a state file being read, so it
+   follows `rofi-vnc status`, and a wayvnc started by hand (without the menu)
+   has no state file — the failure `check-system.sh` warns about.
+
+There is no audio over VNC, and nothing to configure: the sound stays on this
+machine.
 ## A key does nothing at all
 
 keyd grabs the keyboard, and it reads its configuration only at start:

@@ -66,6 +66,60 @@ into tars (ACLs and xattrs preserved) plus a `README.md` with the restore steps
 and a `SHA256SUMS`. `restore-system.sh` wants a disk of the same size and
 `CONFIRM=yes`, and refuses to run from the disk it would overwrite.
 
+## Looking at the screen from another machine
+
+`wayvnc` serves this session as VNC, so a screen that is misbehaving can be
+looked at from a bigger machine — the other half of what ssh gives you, which is
+a shell but not the picture. A rotated screen, a window that will not draw, a
+lock screen that came up wrong: all of those are one glance away instead of one
+photograph.
+
+**Settings** (Alt+Ctrl+O) → **Share this screen** starts it and says where it is
+serving; the same list is in the root menu (Alt+Space), and it is where **Stop
+sharing** and **Copy the tunnel command** live. While it is on, an eye appears on
+the bar (right click stops it).
+
+It listens on **127.0.0.1:5900 and nothing else**, and it is **read-only**. Both
+are decisions, not limitations:
+
+* wayvnc 0.10 authenticates only through `~/.config/wayvnc/config`, where
+  `enable_auth` wants a certificate, a private key and a password. This image
+  ships no such file, so a server on the network address would be an
+  unauthenticated desktop on every network the machine joins.
+* the loopback address is reached through the **ssh login the image already
+  answers** (`openssh-server` is installed and `ssh.service` enabled on every
+  boot), so the tunnel *is* the authentication — using the part that is already
+  configured, tested and documented.
+* read-only (`--disable-input`) means the viewer cannot type, click or move the
+  pointer here. Remote input would arrive in this session as a keyboard nobody
+  can attribute, and "see what is on the screen" never needs to touch it.
+
+From the other machine:
+
+```sh
+ssh -L 5900:127.0.0.1:5900 brunux@lazyos
+```
+
+and then point a VNC viewer at `localhost:5900`: Remmina, TigerVNC's
+`vncviewer`, `gvncviewer`, or on macOS the built-in Screen Sharing app
+(`vnc://localhost:5900`). The **Copy the tunnel command** row copies that line
+with this machine's user and host name already in it. Keep the ssh session open
+for as long as you are watching.
+
+A few things follow from the rules above and are worth knowing before debugging
+them:
+
+* **No audio.** VNC carries pixels; the sound stays on this machine.
+* **Nothing runs until the row is used**, and nothing stays after **Stop
+  sharing**. There is no unit and no autostart: `wayvnc` is one process started
+  by the menu, and the bar's eye is a state file being read (one `sh` every ten
+  seconds), not a daemon.
+* **A session that ends takes the state with it** (it lives in
+  `$XDG_RUNTIME_DIR/lazyos-vnc`), so a logout cannot leave a stale "on".
+* **Port 5900 is the only port.** If something else already listens there, the
+  menu says so — with wayvnc's own message — instead of starting half a server.
+* `~/.config/bin/rofi-vnc status` prints the state in one line, which is the
+  quickest answer to "is this machine being watched right now".
 ## Suspend and hibernate
 
 Suspend-to-RAM works and resumes cleanly. Two paths lead to it, and they are

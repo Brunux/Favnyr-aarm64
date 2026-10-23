@@ -40,6 +40,7 @@
         "tray",
         "custom/keyboard-layout",
         "custom/bluetooth",
+        "custom/vnc",
         "network",
         "pulseaudio",
         "backlight",
@@ -120,6 +121,23 @@
         "icon-size": 14,
         "spacing": 10,
         "show-passive-items": true
+    },
+    // Screen sharing (Settings > Share this screen, and the root menu): an eye
+    // while wayvnc serves this session read-only on the loopback address, and
+    // nothing at all otherwise (style.css collapses .empty).  The module reads
+    // the state file rofi-vnc keeps - one `sh` every ten seconds, no daemon -
+    // and a start or a stop signals the bar (RTMIN+8), so the eye appears and
+    // disappears at the moment it happens instead of on the next poll.  A right
+    // click stops it: the one thing someone wants from an indicator that says
+    // "you are being watched" is to be able to end it from the same place.
+    "custom/vnc": {
+        "exec": "~/.config/bin/rofi-vnc status --bar",
+        "return-type": "json",
+        "interval": 10,
+        "signal": 8,
+        "tooltip": true,
+        "on-click": "~/.config/bin/rofi-vnc",
+        "on-click-right": "~/.config/bin/rofi-vnc stop"
     },
     "custom/keyboard-layout": {
         "exec": "~/.config/bin/bar-key",

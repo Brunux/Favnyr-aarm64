@@ -399,6 +399,36 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   warning.
 - `zstd` lets initramfs-tools compress the initramfs with zstd; otherwise it warns
   `No zstd in /usr/bin:/sbin:/bin, using gzip`.
+- **The screen can be looked at from another machine, read-only and only through ssh.**
+  `wayvnc` (312 kB + libneatvnc 218 kB + libaml 82 kB) serves the session as VNC, started and
+  stopped from `~/.config/bin/rofi-vnc` (Settings → *Share this screen*, and the root menu); the
+  bar's `custom/vnc` eye appears while it runs (`waybar` reads a state file every ten seconds plus
+  `RTMIN+8` when it is toggled, so it is not a daemon), and a right click on the eye stops it.
+  **Two decisions are the feature.** It binds **127.0.0.1 only**: wayvnc 0.10 authenticates only
+  through `~/.config/wayvnc/config`, where `enable_auth` wants a certificate, a private key and a
+  password, and this image ships no such file - a server on the network address would be an
+  unauthenticated desktop on every network the machine joins, while the loopback address is reached
+  through the ssh login the image already answers (`openssh-server` in `packages/base.list`, with
+  `ssh.service` enabled by Debian), which makes the tunnel the authentication and uses the part that
+  is already configured and tested. It runs
+  **`--disable-input`**: remote input would arrive in this session as a keyboard nobody can
+  attribute, and "see what is on the screen" never needs to touch it. Everything else is the house
+  shape: `nohup` so the server outlives the menu **and `$!` is wayvnc's own pid** (`setsid` forks
+  when it is already a process-group leader, which would leave the pid file naming a process that
+  has exited), pid and log in `$XDG_RUNTIME_DIR/lazyos-vnc` so a session that dies takes the state
+  with it, the pid trusted only after `kill -0` **and** `/proc/PID/comm` saying `wayvnc` (a reused
+  pid is not killed by mistake), and an `ss -ltnH "sport = :5900"` read-back instead of believing
+  the pid - which is what separates "started" from "serving" and what the menu's *Not serving* row
+  reports. **`busy` is deliberately
+  not used**: `bar-busy` drops a card older than five minutes as stale, so a share that lasts an
+  afternoon would lose its stop button; the permanent state is the bar's eye and the menu's row.
+  Witnesses: `check-system.sh` FAILs on the binary, the script, `--disable-input`, a bind that is
+  not `127.0.0.1` and the rows in Settings/root menu, WARNs when the tunnel command is missing from
+  the manual, when `style.css` lost `#custom-vnc.empty`, and when a `wayvnc` runs that `rofi-vnc`
+  does not own (the menu would say off while the screen is being served). The manual is
+  `05-system.md` § *Looking at the screen from another machine*, the way in is `02-rofi.md`, and the
+  symptom list is `06-troubleshooting.md` § *The screen is being shared but the viewer shows
+  nothing*.
 - **Bluetooth**: `libspa-0.2-bluetooth` provides PipeWire's BlueZ SPA plugins, but those are
   only a D-Bus client of `org.bluez`. The `bluez` package is what supplies `bluetoothd`,
   `bluetoothctl`/`btmgmt` and the `bluetooth.service` unit; without it the HCI controller

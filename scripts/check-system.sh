@@ -1708,6 +1708,86 @@ if [ -r /usr/share/applications/org.lazyos.screenshot-area.desktop ]; then
 		ok "the Screenshot (area) launcher entry uses bin/screenshot" ||
 		fail "org.lazyos.screenshot-area.desktop still runs grimshot: that entry saves into \$HOME"
 fi
+# Screen sharing (Settings > Share this screen, and the root menu) is wayvnc
+# served on the loopback address.  Three things fail quietly and one fails
+# loudly, and only the last is visible: a missing binary (the menu says so when
+# it is opened), a script without its execute bit (the row closes and nothing
+# happens), and - the one that matters - a script that starts listening on the
+# network with remote input enabled, which is an unauthenticated desktop on
+# every network the machine joins.  `--disable-input` is the read-only decision
+# and 127.0.0.1 is the authentication (wayvnc 0.10 only authenticates through a
+# certificate and a password file this image does not ship), so both are asked
+# of the file itself instead of being trusted to a comment.
+_missing_vnc=""
+have wayvnc || _missing_vnc="$_missing_vnc wayvnc"
+[ -x "$HOME/.config/bin/rofi-vnc" ] || _missing_vnc="$_missing_vnc bin/rofi-vnc"
+if [ -z "$_missing_vnc" ]; then
+	ok "screen sharing complete (wayvnc, bin/rofi-vnc)"
+else
+	fail "screen sharing incomplete:$_missing_vnc (wayvnc is the server, bin/rofi-vnc is the menu)"
+fi
+if [ -r "$HOME/.config/bin/rofi-vnc" ]; then
+	if grep -qs -- '--disable-input' "$HOME/.config/bin/rofi-vnc"; then
+		ok "screen sharing is read-only (wayvnc --disable-input)"
+	else
+		fail "rofi-vnc no longer passes --disable-input: a viewer could type into this session"
+	fi
+	# A bare 0.0.0.0 (or a bind to the interface address) with no auth configured
+	# is the failure this feature must not have.  Matching the literal address is
+	# enough: the script has exactly one wayvnc invocation and check 1 fails
+	# without the binary.
+	if grep -qs '127\.0\.0\.1' "$HOME/.config/bin/rofi-vnc" &&
+		! grep -qs '0\.0\.0\.0' "$HOME/.config/bin/rofi-vnc"; then
+		ok "screen sharing listens on the loopback address only"
+	else
+		fail "rofi-vnc does not bind 127.0.0.1 only: that is an unauthenticated desktop on the network"
+	fi
+	# The tunnel command is the only way in, so it is not decoration: the row
+	# copies what the manual prints, and both have to name the same port.
+	if grep -qs 'ssh -L' "$HOME/.config/bin/rofi-vnc" &&
+		grep -qs 'ssh -L 5900:127.0.0.1:5900' /usr/share/doc/lazyos/05-system.md; then
+		ok "the ssh tunnel command is on the menu row and in the manual (5900, loopback)"
+	else
+		warn "the tunnel command is missing from rofi-vnc or from 05-system.md: the way in is undocumented"
+	fi
+fi
+# A row and its arm, in both menus: a row whose key has no arm closes the list
+# and does nothing, which is the quietest failure a menu can have.
+grep -qs 'rofi-vnc' "$HOME/.config/bin/rofi-quick" &&
+	ok "Settings carries the Share this screen row" ||
+	fail "rofi-quick has no Share this screen row: the only way in would be the root menu"
+grep -qs 'rofi-vnc' "$HOME/.config/bin/bar-menu" &&
+	ok "the root menu reaches Share this screen" ||
+	fail "bar-menu has no Share this screen row"
+# The bar's eye is a module over a state file, so the two halves that can be
+# dropped are its place in modules-right (the module then never runs) and the
+# .empty rule (a card stays on the bar saying nothing).  A missing .empty is a
+# cosmetic warning; a module that does not run is the indicator that never
+# appears while the screen is being served.
+if [ -r "$HOME/.config/waybar/config.jsonc" ]; then
+	grep -qs '"custom/vnc"' "$HOME/.config/waybar/config.jsonc" &&
+		ok "the bar has the screen-sharing indicator (custom/vnc)" ||
+		fail "waybar config.jsonc has no custom/vnc: nothing on the bar says the screen is being shared"
+fi
+if [ -r "$HOME/.config/waybar/style.css" ]; then
+	grep -qs '#custom-vnc.empty' "$HOME/.config/waybar/style.css" &&
+		ok "the sharing indicator collapses when nothing is shared" ||
+		warn "style.css has no #custom-vnc.empty: an empty card is left on the bar"
+fi
+# Nothing starts it by itself.  A wayvnc in the session's startup - or one left
+# behind by a script - is a screen served to whoever asks, and the menu would
+# then offer to start a second one on a port already taken.  `status` is the
+# same read the Settings row makes, so this compares the process with the state
+# the menu reports instead of guessing.
+_vnc_pid=$(pgrep -x wayvnc 2>/dev/null || true)
+if [ -n "$_vnc_pid" ]; then
+	_vnc_state=$("$HOME/.config/bin/rofi-vnc" status 2>/dev/null | head -n 1 || true)
+	if [ "$_vnc_state" = off ]; then
+		warn "wayvnc is running but rofi-vnc does not own it: the menu says off while the screen is being served (pid $_vnc_pid)"
+	else
+		info "the screen is being shared: $_vnc_state"
+	fi
+fi
 
 # Clipboard history (Alt+Ctrl+V) and the emoji picker (Alt+Ctrl+E): each is a
 # script over one tool and one file, and every half of it fails quietly. Without

@@ -464,6 +464,36 @@ name for that reason.
 | `Alt+Ctrl+C` -> the last row | opens the screenshots folder (or `~/Pictures` before the first one) |
 | `ls -d ~/Pictures/Screenshots/*/` | one directory per day, no `*.png` left in `$HOME` |
 
+## Share this screen - Settings -> **Share this screen**
+
+| Step | Expected |
+|---|---|
+| `Alt+Ctrl+O` | a **Share this screen** row, `off` until it is used |
+| Enter on it | the menu reopens saying `localhost:5900 · read-only`, with **Stop sharing**; a notification names the port and the `ssh -L` command; an **eye appears on the bar** |
+| `~/.config/bin/rofi-vnc status` | `localhost:5900 · read-only` |
+| `ss -ltn \| grep 5900` | `127.0.0.1:5900` and **not** `0.0.0.0:5900` |
+| from the laptop: `ssh -L 5900:127.0.0.1:5900 brunux@lazyos`, then a VNC viewer on `localhost:5900` | the screen, live. Typing in the viewer does **nothing** (it is read-only), and the pointer in the viewer does not move anything here |
+| right click on the bar's eye | stopped: the notification says so, the eye is gone, `ss` shows nothing, `rofi-vnc status` answers `off` |
+| start it twice | the second says *Already sharing* instead of starting a second server |
+| `kill -9` the wayvnc process, then open the menu | the menu says `off` (a stale pid is not trusted) and offers to share again - never *Not serving* |
+| occupy the port first (`python3 -m http.server 5900 --bind 127.0.0.1`), then start | the notification quotes wayvnc's bind error instead of claiming success |
+| log out with it on, log in again | nothing is shared and `rofi-vnc status` says `off`: the state lives in `$XDG_RUNTIME_DIR/lazyos-vnc` |
+
+What a failure means:
+
+* **the menu says wayvnc is not installed**: the package is missing from the image;
+  `check-system.sh` FAILs on it.
+* **the row is there but Enter does nothing**: the script lost its execute bit, or the
+  row has no `case` arm; `check-system.sh` FAILs on both.
+* **the eye never appears**: `custom/vnc` is missing from `modules-right` in
+  `~/.config/waybar/config.jsonc` (FAIL) or `style.css` lost `.empty` (WARN - then the
+  card stays on the bar saying nothing). `pkill -RTMIN+8 waybar` forces the poll.
+* **`ss` shows `0.0.0.0:5900`**: the script was edited; that is an unauthenticated
+  desktop on the network and `check-system.sh` FAILs on it.
+* **the viewer cannot connect**: the tunnel is closed (it has to stay open), or the
+  viewer was pointed at `lazyos:5900` instead of `localhost:5900` - the port is on the
+  loopback address by design. `06-troubleshooting.md` has the ordered list.
+
 ## Touchpad swipes
 
 | Step | Expected |

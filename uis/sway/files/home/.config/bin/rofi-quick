@@ -238,6 +238,16 @@ render() { # OUTFILE
 			ui_row "$UI_I_BELL" 'Notifications' allowed notify
 			ui_row "$UI_I_BELL" 'Do not disturb' off dnd "$UI_DIM"
 		fi
+		# Screen sharing is a state like the radios: the row says where this
+		# session is being served, and opening it is where the tunnel command
+		# lives.  The probe is one file read and a `kill -0`, so it does not
+		# belong to a slow group.
+		_vnc=$("$dir/rofi-vnc" status 2>/dev/null || echo off)
+		if [ "$_vnc" = off ]; then
+			ui_row "$UI_I_EYE" 'Share this screen' "$_vnc" vnc "$UI_DIM"
+		else
+			ui_row "$UI_I_EYE" 'Share this screen' "$_vnc" vnc "$UI_YELLOW"
+		fi
 	) >"$_s/3" &
 	(
 		if touchpad_on; then
@@ -341,6 +351,7 @@ while :; do
 		;;
 	dnd) makoctl mode -t do-not-disturb >/dev/null 2>&1 || true ;;
 	notify) exec "$dir/rofi-notify" ;;
+	vnc) exec "$dir/rofi-vnc" ;;
 	touchpad) swaymsg input type:touchpad events toggle >/dev/null 2>&1 || true ;;
 	rotation) exec "$dir/rofi-quick" --rotation-menu ;;
 	tablet) "$dir/tablet-mode" toggle ;;

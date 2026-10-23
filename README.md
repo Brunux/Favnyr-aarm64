@@ -171,6 +171,11 @@ in range"` turns the card into the answer.*
   (100) is used first. The same disk list as Format a disk; `nofail` and a 15 s device timeout keep
   a boot without the card clean. The **Turn it off** row undoes it.
 * **Screenshots** - region, full screen, or region to the clipboard.
+* **Share this screen** (Settings → *Share this screen*, and the root menu) - `wayvnc` serves the
+  session to another machine **read-only** and **only on the loopback address**, so the way in is
+  the ssh login the image already answers (`ssh -L 5900:127.0.0.1:5900 brunux@lazyos`, copied by a
+  row in the menu, then any VNC viewer on `localhost:5900`). The bar keeps an eye while it is on
+  and a right click stops it. Nothing runs until the row is used.
 
 ### The terminal
 

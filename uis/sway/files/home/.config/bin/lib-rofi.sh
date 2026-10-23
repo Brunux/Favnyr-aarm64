@@ -156,6 +156,10 @@ UI_ICON_DISK=drive-harddisk
 UI_ICON_BOX=package-x-generic
 UI_ICON_SEARCH=system-search
 UI_ICON_VIDEO=video-x-generic
+# A server: the screen being served over VNC (rofi-vnc).  The name is already in
+# the theme's third table (the same one dialog-information comes from), so the
+# card for "this screen is being shared" has a picture without a new PNG.
+UI_ICON_SERVER=network-server
 # Install LazyOS is the one feature that adds a picture: the launcher entry, the
 # busy card and the final notification all ask for this name, so it is a row in
 # the first table of scripts/make-icons.sh (the shield, f132) rather than a name

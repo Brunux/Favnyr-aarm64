@@ -61,6 +61,10 @@ while :; do
 		ui_row "$UI_I_VOLUME" 'Audio output' 'sinks and volume' audio
 		ui_row "$UI_I_MUSIC" 'Media' 'play, pause, next' media
 		ui_row "$UI_I_BELL" 'Notifications' 'history and do-not-disturb' notify
+		# The screen on another machine: wayvnc on the loopback address, reached
+		# through the ssh login the image already answers.  It is in this group
+		# because it is a switch about the machine, not an application.
+		ui_row "$UI_I_EYE" 'Share this screen' 'read-only, over ssh' vnc
 		ui_row "$UI_I_CLOCK" 'Time zone' 'and network time' tz
 		ui_row "$UI_I_TRASH" 'Free space' 'what is using it, and clean up' clean
 		ui_row "$UI_I_CHIP" 'Auxiliary swap' 'a card as more memory, on every boot' swap
@@ -134,6 +138,7 @@ while :; do
 	audio) exec "$dir/bar-audio" ;;
 	media) exec "$dir/rofi-media" ;;
 	notify) exec "$dir/rofi-notify" ;;
+	vnc) exec "$dir/rofi-vnc" ;;
 	tz) exec "$dir/rofi-tz" ;;
 	clean) exec "$dir/rofi-clean" ;;
 	swap) exec "$dir/rofi-swap" ;;

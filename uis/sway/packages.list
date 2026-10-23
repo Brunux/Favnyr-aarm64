@@ -172,6 +172,16 @@ swappy
 # CPU, since this SoC has no hardware encoder. It needs ffmpeg, which
 # packages/tools.list already installs for yt-dlp.
 wf-recorder
+# wayvnc serves this session as VNC, so a screen that is misbehaving can be
+# looked at from a bigger machine - the other half of the ssh login, which gives
+# a shell but not the picture (06-troubleshooting.md, 05-system.md). 0.10.1 is
+# 312 kB plus libneatvnc (218 kB) and libaml (82 kB). rofi-vnc starts it on
+# 127.0.0.1:5900 with --disable-input (read-only) and stops it again; nothing
+# runs until the row in Settings is used. Both halves are decisions: a viewer
+# looks and cannot type, and the loopback address means the ssh tunnel is the
+# authentication, because wayvnc only authenticates through a certificate and a
+# password file (~/.config/wayvnc/config) that this image does not ship.
+wayvnc
 wlsunset
 brightnessctl
 # pactl(1) for the XF86Audio* keys; pipewire-pulse provides the server only.
