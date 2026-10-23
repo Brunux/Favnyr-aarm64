@@ -915,8 +915,9 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   cache is unwritable or `rofi-files` stops passing `-show-icons`/`thumbnail://` - a dropped flag
   makes the list silently text-only.
 - **Files exists twice on purpose: `rofi-files` is the list and `pcmanfm` is the window.** The
-  file list (`Alt+Search`) and `Alt+Ctrl+F` open the list (one process, no window); **`Search+Shift`** opens
-  pcmanfm, and the launcher and the root menu carry both rows - **Files** and **Files (window)**
+  file list (`Alt+Search`) and `Alt+Ctrl+F` open the list (one process, no window);
+  **`Search+Shift`** opens pcmanfm, and the launcher and the root menu carry both rows - **Files**
+  and **Files (window)**
   (`pcmanfm.desktop` is shadowed by a user-level copy with that name, so the launcher says what it
   opens). nautilus was measured and rejected (`docs/omarchy-gap.md` §1: 504 packages, GTK4 +
   libadwaita + 38 MB of ICU + GStreamer + 31 MB of `samba-libs`, a `localsearch` indexer crawling

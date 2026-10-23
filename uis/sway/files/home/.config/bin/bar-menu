@@ -141,7 +141,7 @@ while :; do
 	settings) exec "$dir/rofi-quick" ;;
 	learn) exec "$dir/rofi-learn" ;;
 	keys) exec "$dir/rofi-keys" ;;
-	# The default agent, not the list: rofi-agents --default applies the
+	# The default agent, not the list: rofi-agents --default applies the same
 	# rule the menu marks with ● and falls back to OpenCode.
 	agent) exec "$dir/rofi-agents" --default ;;
 	agents) exec "$dir/rofi-agents" ;;
