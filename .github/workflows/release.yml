@@ -1,0 +1,90 @@
+# Release: a tag builds the aarch64 binaries, checks the version and the notes,
+# and publishes the GitHub release with its checksums.
+#
+# The disk image is deliberately *not* built here. It needs a kernel build,
+# debootstrap, a loop device and root (scripts/build.sh, scripts/make-image.sh),
+# which a hosted runner does not give; publishing an artifact this workflow
+# cannot test would contradict the release rule in AGENTS.md. So the release
+# publishes what CI can vouch for (the framework binaries, tested at the same
+# commit) and the notes point at the image the maintainer builds on the device.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    name: build and publish
+    # arm64: the device is aarch64 and the binaries ship as they run. The arm
+    # hosted runner is available for public repositories; on a plan without it
+    # the job needs a self-hosted arm64 runner with the same labels.
+    runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check the tag against VERSION and the notes
+        working-directory: .
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME}"
+          version=$(cat VERSION)
+          if [ "$tag" != "v$version" ]; then
+            echo "VERSION is $version but the tag is $tag"
+            exit 1
+          fi
+          if [ ! -f "docs/releases/$tag.md" ]; then
+            echo "docs/releases/$tag.md is missing (it is the release body)"
+            exit 1
+          fi
+
+      - name: Install the toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache the registry and the target directory
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Test the tagged commit
+        run: cargo test --workspace --all-targets
+
+      - name: Build
+        run: cargo build --workspace --release
+
+      - name: Package the binaries
+        working-directory: .
+        run: |
+          set -eu
+          mkdir -p dist
+          # Every top-level executable the workspace produces (today the sixel
+          # spike; `lazyos` joins it with spec 001).
+          find rust/target/release -maxdepth 1 -type f -perm -u+x ! -name '*.d' \
+            -exec cp {} dist/ \;
+          if [ -z "$(ls -A dist)" ]; then
+            echo "the workspace produced no binary to publish"
+            exit 1
+          fi
+          ( cd dist && sha256sum -- * > SHA256SUMS )
+          ls -l dist
+
+      - name: Publish the release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file "docs/releases/$GITHUB_REF_NAME.md" \
+            dist/*

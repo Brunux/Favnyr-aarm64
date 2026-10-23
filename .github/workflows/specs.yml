@@ -1,0 +1,92 @@
+# Specs: the contract of specs/.
+#
+# A spec is the unit of work (specs/README.md): it carries the scope, the
+# acceptance criteria, the three witnesses, the tests and the model that builds
+# it. This workflow refuses a spec that lost one of those, and a PR whose branch
+# does not name the spec it implements. It is deliberately a grep, not a
+# markdown parser: the fields are stable, and a missing line is the failure the
+# process cares about.
+name: Specs
+
+on:
+  push:
+    paths: ["specs/**", ".github/workflows/specs.yml"]
+  pull_request:
+    paths: ["specs/**", ".github/workflows/specs.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: every spec carries its fields and witnesses
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The contract fields
+        run: |
+          set -eu
+          status=0
+          for file in specs/[0-9][0-9][0-9]-*.md; do
+            [ "$file" = "specs/000-template.md" ] && continue
+            for field in "- **Status**:" "- **Phase**:" "- **Model**:" "- **Branch**:"; do
+              if ! grep -qF -- "$field" "$file"; then
+                echo "FAIL $file: missing $field"
+                status=1
+              fi
+            done
+            for heading in "## Problem" "## Scope" "## Design" "## Acceptance criteria" "## Tests"; do
+              if ! grep -qF -- "$heading" "$file"; then
+                echo "FAIL $file: missing $heading"
+                status=1
+              fi
+            done
+            grep -q "opencode-go/" "$file" ||
+              { echo "FAIL $file: no opencode-go model assigned"; status=1; }
+            grep -q "scripts/check-system.sh" "$file" ||
+              { echo "FAIL $file: no check-system witness"; status=1; }
+            grep -q "usr/share/doc/lazyos" "$file" ||
+              { echo "FAIL $file: no manual witness"; status=1; }
+            grep -q "AGENTS.md" "$file" ||
+              { echo "FAIL $file: no AGENTS.md witness"; status=1; }
+            grep -q "cargo test" "$file" ||
+              { echo "FAIL $file: no unit-test criterion"; status=1; }
+          done
+          if [ "$status" -ne 0 ]; then
+            echo "Specs describe the work; fix the lines above instead of the workflow."
+          fi
+          exit "$status"
+
+      - name: The index links every spec
+        run: |
+          set -eu
+          status=0
+          for file in specs/[0-9][0-9][0-9]-*.md; do
+            name=$(basename "$file")
+            [ "$name" = "000-template.md" ] && continue
+            grep -qF -- "($name)" specs/README.md ||
+              { echo "FAIL specs/README.md does not link $name"; status=1; }
+          done
+          exit "$status"
+
+      - name: The branch names its spec
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -eu
+          case "$HEAD_REF" in
+            spec/[0-9][0-9][0-9]-*)
+              number=$(printf '%s' "$HEAD_REF" | cut -d/ -f2 | cut -d- -f1)
+              if ! ls specs/"$number"-*.md >/dev/null 2>&1; then
+                echo "FAIL branch $HEAD_REF has no specs/$number-*.md"
+                exit 1
+              fi
+              echo "branch $HEAD_REF maps to specs/$number-*.md"
+              ;;
+            *)
+              echo "not a spec branch ($HEAD_REF); nothing to compare"
+              ;;
+          esac

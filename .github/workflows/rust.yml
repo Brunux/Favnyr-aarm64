@@ -1,0 +1,56 @@
+# Rust: format, lint, test and build the workspace on every push and pull request.
+#
+# The Rust workspace is the part of this repository a GitHub runner can build
+# without a kernel, a disk or root: no debootstrap, no loop device, no boot.
+# The image is built on the device (scripts/build.sh) and judged by
+# check-system.sh there (docs/plan-ui.md §15); this workflow keeps the
+# framework honest between device builds.
+name: Rust
+
+on:
+  push:
+    branches: [main, "spec/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    working-directory: rust
+
+jobs:
+  check:
+    name: fmt, clippy, tests, release build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache the registry and the target directory
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --all-targets
+
+      # A spec's tests are only believable if the same tree also builds the way
+      # it ships (opt-level 3, no debug assertions): a release-only overflow or
+      # a feature that differs between profiles fails here and not on the card.
+      - name: Build (release)
+        run: cargo build --workspace --release

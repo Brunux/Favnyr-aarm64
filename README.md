@@ -29,8 +29,11 @@ First target: the **Google Hayato** Chromebook (MediaTek MT8192, `google-asurada
 - **Measured device tuning:** [`docs/optimization.md`](docs/optimization.md)
 - **What of Omarchy can move onto rofi:** [`docs/plan-rofi.md`](docs/plan-rofi.md) ·
   **the agents feature, phased:** [`docs/plan-agents.md`](docs/plan-agents.md)
-- **Plan:** [`docs/plan.md`](docs/plan.md) · **Recon of the reference machine:**
-  [`docs/recon.md`](docs/recon.md) · **hardware reports:** [`reports/`](reports/)
+- **Plan:** [`docs/plan.md`](docs/plan.md) · **the session UI framework:**
+  [`docs/plan-ui.md`](docs/plan-ui.md) · **how it ships:** [`specs/`](specs/README.md)
+  (one spec per change, one branch and one PR each, CI on every push)
+- **Recon of the reference machine:** [`docs/recon.md`](docs/recon.md) · **hardware
+  reports:** [`reports/`](reports/)
 - **Agent/build instructions:** [`AGENTS.md`](AGENTS.md)
 
 ![The ported sway session on the Hayato rev1](docs/screenshots/hayato-r1-sway.png)

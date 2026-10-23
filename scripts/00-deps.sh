@@ -61,6 +61,9 @@ elif command -v apt-get >/dev/null 2>&1; then
 	#   * gptfdisk is `gdisk`, dtc is `device-tree-compiler`.
 	# clang/lld/llvm build the kernel with LLVM=1; rustc/rust-src/bindgen are
 	# needed by CONFIG_RUST=y and dwarves by CONFIG_DEBUG_INFO_BTF=y.
+	# rust-clippy and rustfmt are what `.github/workflows/rust.yml` runs
+	# (`cargo fmt --check`, `cargo clippy -D warnings`), so the same two
+	# commands answer here before a push does.
 	# The compositor (compositors/swayfx) is a meson project: its own build
 	# needs meson/ninja/scdoc plus the wlroots 0.20 development files, which is
 	# the version in forky and the one the fork is written against.
@@ -70,7 +73,7 @@ elif command -v apt-get >/dev/null 2>&1; then
 	apt-get install -y \
 		bash bc bison flex \
 		build-essential clang lld llvm libclang-dev \
-		rustc rust-src cargo bindgen \
+		rustc rust-src cargo bindgen rustfmt rust-clippy \
 		libssl-dev libelf-dev dwarves \
 		perl python3 \
 		findutils rsync cpio patch \

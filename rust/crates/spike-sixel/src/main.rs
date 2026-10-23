@@ -309,3 +309,53 @@ fn shorten(path: &str) -> String {
         path.to_string()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shorten_keeps_a_short_path() {
+        assert_eq!(shorten("lazyos.png"), "lazyos.png");
+        assert_eq!(shorten("apps/lazyos.png"), "apps/lazyos.png");
+        assert_eq!(shorten("usr/apps/lazyos.png"), "usr/apps/lazyos.png");
+    }
+
+    #[test]
+    fn shorten_elides_an_absolute_path() {
+        assert_eq!(
+            shorten("/usr/share/icons/LazyOS/48x48/apps/lazyos.png"),
+            "…/apps/lazyos.png"
+        );
+    }
+
+    /// Relative luminance, WCAG 2.x.
+    fn luma(color: Color) -> f32 {
+        let Color::Rgb(r, g, b) = color else {
+            return 0.0;
+        };
+        let channel = |value: u8| {
+            let value = f32::from(value) / 255.0;
+            if value <= 0.040_45 {
+                value / 12.92
+            } else {
+                ((value + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        (0.2126 * channel(r)) + (0.7152 * channel(g)) + (0.0722 * channel(b))
+    }
+
+    #[test]
+    fn text_on_background_is_readable() {
+        let (light, dark) = (luma(FG), luma(BG));
+        let ratio = (light.max(dark) + 0.05) / (light.min(dark) + 0.05);
+        assert!(ratio >= 4.5, "solarized base1 on base03 is {ratio:.2}:1");
+    }
+
+    #[test]
+    fn the_three_roles_are_distinct() {
+        assert_ne!(BG, FG);
+        assert_ne!(BG, ACCENT);
+        assert_ne!(FG, ACCENT);
+    }
+}

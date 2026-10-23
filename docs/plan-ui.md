@@ -530,6 +530,11 @@ the MCP server only inside an agent session. Credentials stay in `~/.local/share
 
 ## 16. Roadmap
 
+Each numbered phase below is one or more **specs** in [`../specs/`](../specs/README.md): the
+scope, acceptance criteria, tests, three witnesses and the `opencode go` model that builds it.
+One branch (`spec/NNN-slug`) and one PR per spec; [`specs/README.md`](../specs/README.md) holds
+the workflow and the routing.
+
 1. **v0.4.0** — installer TUI fullscreen (already planned): first TaskView + typed-gate
    confirm + splash/hero.
 2. **Framework core + first loop** — `lazyos-ui` (design system, glyphs, list, launch, notify

@@ -67,6 +67,17 @@ yet present in `scripts/` as not implemented.
   power), so the MCP manifest is the witness. The framework itself does not exist yet (the
   sixel spike in `rust/crates/spike-sixel` is the one validated piece); `docs/plan-ui.md` §16 is
   the order, and each tier lands with its three witnesses like everything else.
+- **Work ships as a spec, one branch and one PR each.** [`specs/`](specs/README.md) turns
+  [`docs/plan-ui.md`](docs/plan-ui.md) §16 into 14 mergeable specs, each naming its scope,
+  acceptance criteria, three witnesses, tests and the `opencode go` model that builds it. The
+  branch is `spec/NNN-slug`, the PR body is `.github/PULL_REQUEST_TEMPLATE.md`, and **the AI
+  never merges its own**: a person reads the diff, the tests and the witnesses. CI is three
+  workflows: `Rust` (fmt, clippy `-D warnings`, `cargo test`, release build), `Specs` (every
+  spec carries its fields, its witnesses and an index entry, and the branch names its spec) and
+  `Release` (a tag checks `VERSION` and the notes, tests, builds aarch64 binaries and publishes
+  them; the disk image is deliberately not built in CI because it needs a kernel, a loop device
+  and root). A criterion that cannot name how it is observed is not a criterion, and editing
+  the criteria to match the code is how a spec stops being one.
 
 ## Critical upstream facts
 
@@ -154,10 +165,19 @@ reports/                   check-system.sh output captured on real hardware, kep
                            as evidence for the checks, plus the maintainer's
                            own session feedback from a booted card (see
                            reports/README.md)
+specs/                     one spec per mergeable change (scope, acceptance,
+                           the three witnesses, its tests) and the opencode-go
+                           model that builds it; specs/README.md is the process
+rust/                      the Rust workspace: lazyos-ui/-theme/-cli and the
+                           sixel spike that validated foot before anything
+                           depended on it (rust/README.md)
+.github/workflows/         Rust (fmt/clippy/tests/build), Specs (the contract),
+                           Release (tag -> binaries) and Pages (the site)
 docs/                      plan.md, recon.md, optimization.md (measured device
                            and kernel-config findings), plan-rofi.md (what of
                            Omarchy's menus can move onto rofi), plan-agents.md
-                           (the agents feature, phased), test-checklist.md (what
+                           (the agents feature, phased), plan-ui.md (the session
+                           framework this port becomes), test-checklist.md (what
                            to try on a fresh card before capturing a report),
                            releases/<version>.md
                            (release notes, reused as the tag message and the

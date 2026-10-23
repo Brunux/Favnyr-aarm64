@@ -260,7 +260,8 @@ The first non-Hayato port is the test that the device layer is real.
 - [`plan-installer.md`](plan-installer.md) — the installer design: layers, phases, safety, protocol,
   screens, tests, packaging.
 - [`plan-ui.md`](plan-ui.md) — the session UI framework: design system, TaskView, theme engine,
-  and the OpenCode/MCP contract that lets the AI drive the desktop visually.
+  and the OpenCode/MCP contract that lets the AI drive the desktop visually. Its §16 roadmap is
+  carried out as the specs in [`../specs/`](../specs/README.md), one branch and one PR each.
 - [`plan-rofi.md`](plan-rofi.md) — what of the session can move onto rofi (the menus being ported).
 - [`plan-agents.md`](plan-agents.md) — the agents feature, phased.
 - [`optimization.md`](optimization.md) — the measured device and kernel tuning.
