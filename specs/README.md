@@ -126,6 +126,7 @@ reproducible assignment).
 | 012 launcher/reference | parsing + IPC + many surfaces | `gpt-6-luna` | `kimi-k2.7-code` |
 | 013 themes + greeter | palette data + generated files | `gpt-6-luna` | `glm-5.3` |
 | 014 perf + witnesses | measurement + repo sweep | `deepseek-v4-pro` | `gpt-6-luna` |
+| 015 browser bar | protocol client + profile/data | `deepseek-v4.1-flash` | `kimi-k2.7-code` |
 
 ## 7. CI
 
@@ -162,3 +163,4 @@ specs.
 | 012 | [`012-launcher-reference.md`](012-launcher-reference.md) — launcher, window, run, reference | 4 | draft |
 | 013 | [`013-themes-greeter.md`](013-themes-greeter.md) — 7 themes, wallpapers, greeter | 5 | draft |
 | 014 | [`014-perf-witnesses.md`](014-perf-witnesses.md) — budget, ledger, closure | 5 | draft |
+| 015 | [`015-browser-bar.md`](015-browser-bar.md) — the browser bar (optional, not on the plan) | - | draft |
