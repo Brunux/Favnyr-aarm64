@@ -1,6 +1,6 @@
 # Spec 001 — The `lazyos` binary and its host
 
-- **Status**: draft
+- **Status**: in progress
 - **Phase**: 2 (framework core, plan §16)
 - **Depends on**: none
 - **Model**: `opencode-go/deepseek-v4-pro` — cross-crate architecture and a dispatch table that
@@ -32,9 +32,16 @@ and the agent can call.
   `rofi-files` resolves to the same handler. The table is one `enum Command` + one
   `fn dispatch(argv0, args)`. Unknown names exit 2 with the list of known ones.
 - **The host**: when the process has no usable terminal (`WAYLAND_DISPLAY` set and no
-  `LAZYOS_UI`), it opens `foot --app-id=lazyos-<command> -e <self> …` and returns; inside
-  (`LAZYOS_UI=1`) it runs inline. It floats and centres itself through `swaymsg` for the
-  commands whose spec asks for it (the flag lives in the command table, not in each command).
+  `LAZYOS_UI`), it opens `foot --app-id=lazyos-<shape> --window-size-pixels=<shape size>
+  -e <self> …` and returns; inside (`LAZYOS_UI=1`) it runs inline. The shape (pick/task/full)
+  is a field of the command table, not a decision each command makes.
+  *Corrected while building it, with the measurement:* the floating/centring step is **not** a
+  `swaymsg` from the app. The app runs before foot's first commit, so a criteria match at that
+  moment finds no node (the window stayed tiled, `floating=auto_off`, 0x0), and a `resize set`
+  at map time is overwritten by foot's own commit (a 900x600 rule produced a 700x496 window
+  while the centre still computed from 900). The size is therefore foot's
+  `--window-size-pixels`, and sway floats and centres the app-id from
+  `config.d/18-framework-windows.conf` - which is what `plan-ui.md` §3 already specified.
 - **Terminal hygiene**: raw mode, alternate screen, cursor, mouse and the sixel protocol are
   restored on every exit path, including panic (`std::panic::set_hook`) and SIGINT. Nothing
   writes to the pty after the restore.
@@ -60,22 +67,40 @@ and the agent can call.
 
 ## Acceptance criteria
 
-- [ ] `lazyos --version` prints the `VERSION` file's value; `lazyos nope` exits 2 and lists
+- [x] `lazyos --version` prints the `VERSION` file's value; `lazyos nope` exits 2 and lists
       `menu`; `lazyos menu` from sway opens one floating foot window, and from inside a
       terminal (`LAZYOS_UI=1`) runs in that terminal.
-- [ ] A symlink named `rofi-files` → `lazyos` reaches the same handler as `lazyos menu files`.
-- [ ] A forced panic inside the frame restores the cursor and leaves the alternate screen; the
+      *Observed:* `tests/cli.rs` (version, unknown, no-command, fake-foot argv) and on the
+      Hayato: `swaymsg -t get_tree` showed `lazyos-pick floating=user_on 234,175 898x596`
+      (centred on the 1366x912 panel), one window, and the parent returned before it opened.
+- [x] A symlink named `rofi-files` → `lazyos` reaches the same handler as `lazyos menu files`.
+      *Observed:* `command::tests::dispatch_resolves_symlink_names` (both spellings resolve to
+      `menu files`); the process-level `a_symlink_resolves_to_its_command` runs the binary
+      through a link named `lazyos-menu` and reaches `menu`, not "unknown command".
+- [x] A forced panic inside the frame restores the cursor and leaves the alternate screen; the
       window that hosted it stays usable.
-- [ ] Escape returns 1 with nothing written to disk; a failed command returns 3 and shows the
+      *Observed:* `a_forced_panic_restores_the_terminal` runs `LAZYOS_FORCE_PANIC=1` in a real
+      pty and asserts the restore sequence arrives after the alternate screen was entered
+      (exit 101); `reports/2026-10-23-framework-001.md`.
+- [x] Escape returns 1 with nothing written to disk; a failed command returns 3 and shows the
       error card (the fallback when no foot exists is stderr, still exit 3).
-- [ ] witness: `scripts/check-system.sh` FAILs when the `lazyos` binary is missing, when a
+      *Observed:* `escape_returns_one_and_draws_the_empty_state`, `a_menu_writes_nothing_to_disk`
+      (the temporary `$HOME` is empty afterwards), `a_failed_command_shows_the_card_and_exits_three`
+      (`lazyos menu bogus` draws the card and exits 3) and `without_a_terminal_the_reason_goes_to_stderr`.
+- [x] witness: `scripts/check-system.sh` FAILs when the `lazyos` binary is missing, when a
       symlink in the migrated set does not resolve, and when `lazyos --help` does not list a
       subcommand whose symlink exists.
-- [ ] witness: a paragraph in `uis/sway/files/usr/share/doc/lazyos/02-rofi.md` says the menus
+      *Observed:* the new `==> The framework` section; removing `/usr/bin/lazyos-menu` on the
+      device turned the symlink line FAIL (reported in `reports/2026-10-23-framework-001.md`).
+- [x] witness: a paragraph in `uis/sway/files/usr/share/doc/lazyos/02-rofi.md` says the menus
       are one program now and how to call it from a terminal.
-- [ ] witness: an `AGENTS.md` bullet records the argv[0] dispatch and the `LAZYOS_UI` guard.
-- [ ] unit tests: `dispatch_resolves_symlink_names`, `dispatch_rejects_unknown`,
+      *Observed:* § *The menus are becoming one program*.
+- [x] witness: an `AGENTS.md` bullet records the argv[0] dispatch and the `LAZYOS_UI` guard.
+      *Observed:* the bullet after the framework's direction bullet.
+- [x] unit tests: `dispatch_resolves_symlink_names`, `dispatch_rejects_unknown`,
       `paths_honour_xdg`, `version_matches_file`, `host_guard_does_not_nest`.
+      *Observed:* `cargo test --workspace` (19 unit tests in `lazyos-cli`, 5 in `lazyos-ui`,
+      2 in `lazyos-theme`, 13 process tests).
 
 ## Tests
 

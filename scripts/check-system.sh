@@ -3237,6 +3237,83 @@ if have systemctl; then
 fi
 
 # ---------------------------------------------------------------------------
+section "The framework"
+# ---------------------------------------------------------------------------
+# The session's Rust framework (docs/plan-ui.md): one `lazyos` binary that the
+# rofi/bars menus become symlinks to. Spec 001 lands the binary, the dispatch,
+# the host and the terminal; every check below is what would otherwise fail
+# silently - a key that opens nothing because the binary is missing, a symlink
+# that points at a name the table does not carry, or a window that tiles because
+# its shape lost the rule that floats it.
+if have lazyos; then
+	ok "lazyos is installed ($(command -v lazyos))"
+	_fw_version=$(lazyos --version 2>/dev/null)
+	_rev_version=$(sed -n 's/^version //p' /etc/debian-aarch64-revision 2>/dev/null)
+	if [ -n "$_fw_version" ] && [ -n "$_rev_version" ]; then
+		if [ "$_fw_version" = "$_rev_version" ]; then
+			ok "lazyos reports the version the image was built from ($_fw_version)"
+		else
+			fail "lazyos reports $_fw_version but the image was built from $_rev_version (a stale /usr/bin/lazyos)"
+		fi
+	else
+		skip "cannot compare the framework version (/etc/debian-aarch64-revision has no version)"
+	fi
+	_fw_help=$(lazyos --help 2>/dev/null)
+	if grep -q '^  menu' <<<"$_fw_help"; then
+		ok "lazyos --help lists the menu"
+	else
+		fail "lazyos --help does not list 'menu': the command table and the binary disagree"
+	fi
+	# The migrated set: every name the installer creates today must resolve and
+	# must belong to a command the help lists. This is the check that notices a
+	# renamed subcommand leaving a symlink pointing at nothing, which fails as
+	# "the key does nothing" in the session.
+	_fw_links=$(lazyos --symlinks 2>/dev/null)
+	if [ -n "$_fw_links" ]; then
+		while IFS='	' read -r _fw_name _fw_path; do
+			[ -n "$_fw_name" ] || continue
+			if [ -L "/usr/bin/$_fw_name" ] && [ -x "/usr/bin/$_fw_name" ]; then
+				if grep -q "^  $_fw_path" <<<"$_fw_help"; then
+					ok "/usr/bin/$_fw_name -> lazyos $_fw_path"
+				else
+					fail "/usr/bin/$_fw_name points at '$_fw_path', which --help does not list"
+				fi
+			else
+				fail "/usr/bin/$_fw_name is missing or does not resolve to the lazyos binary"
+			fi
+		done <<<"$_fw_links"
+	fi
+	# The other direction: a link someone made by hand, pointing at the
+	# framework but absent from the table, is drift - the table is the source of
+	# truth and `--symlinks` is what the installer and this check both read.
+	for _fw_link in "$HOME"/.config/bin/*; do
+		[ -L "$_fw_link" ] || continue
+		[ "$(readlink -f "$_fw_link" 2>/dev/null)" = "/usr/bin/lazyos" ] || continue
+		_fw_base=$(basename "$_fw_link")
+		if grep -q "^$_fw_base	" <<<"$_fw_links"; then
+			ok "~/.config/bin/$_fw_base is a framework symlink the table knows"
+		else
+			warn "~/.config/bin/$_fw_base points at lazyos but the command table does not list it"
+		fi
+	done
+else
+	fail "lazyos is missing: every menu that becomes a symlink to it does nothing"
+fi
+
+# The window shapes: the binary asks foot for its pixels, and only the
+# compositor can float and centre it (docs/plan-ui.md §3). Without these rules a
+# menu opens as a tiled terminal that looks like the shell was replaced.
+_fw_sway=$(cat /etc/sway/config.d/*.conf "$HOME"/.config/sway/config.d/*.conf 2>/dev/null)
+for _fw_shape in pick task; do
+	if grep -q "for_window \[app_id=\"lazyos-$_fw_shape\"\] floating enable" <<<"$_fw_sway" &&
+		grep -q "for_window \[app_id=\"lazyos-$_fw_shape\"\] move position center" <<<"$_fw_sway"; then
+		ok "sway floats and centres lazyos-$_fw_shape"
+	else
+		fail "sway has no floating/centre rule for app_id lazyos-$_fw_shape (the window tiles)"
+	fi
+done
+
+# ---------------------------------------------------------------------------
 section "The brand"
 # ---------------------------------------------------------------------------
 # /etc/os-release is Debian's symlink to /usr/lib/os-release, and base-files

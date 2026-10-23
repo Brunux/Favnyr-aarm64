@@ -82,6 +82,28 @@ yet present in `scripts/` as not implemented.
   `image` crate's default codecs: 147 s of build and 2.17 MB of binary against 49 s and 0.73 MB for
   `png` + `jpeg`, so **a codec is opt-in and the commit names the file that needs it** (the spike's
   clean build went 228 s → 115 s and its binary 8.6 → 2.21 MB with that one change).
+- **The framework is one multi-call binary, and its shape is settled in four decisions.**
+  `lazyos` (spec 001) resolves a command from **`argv[0]` or from the words after it** - a
+  symlink named `rofi-files` and `lazyos menu files` reach the same handler, longest word match
+  first, unknown names exit 2 with the list - because that is what keeps the ~64 old paths
+  working while each surface is ported: the binding keeps its name, the program behind it
+  changes. **`LAZYOS_UI=1` is the one guard**: the host sets it on the `foot` it spawns, and a
+  process that carries it never spawns another window (with no terminal it reports, exit 3) -
+  a guard in each command is a guard one command will forget. **Exit codes are the shell's
+  contract**: 0 did something, 1 Escape (nothing happened), 2 usage, 3 failed with the card
+  already shown, so `|| exit 0` stays correct. And **the window's shape is table data**: the
+  command row names `pick`/`task`/`full`, the host turns it into `foot --app-id=lazyos-<shape>
+  --window-size-pixels=<size>`, and sway floats and centres that app-id from
+  `config.d/18-framework-windows.conf` - the app cannot do it with `swaymsg`, because it runs
+  before foot's first commit (measured on the card: the criteria matched no node and the window
+  stayed tiled), and the size is foot's because a `resize set` at map time is overwritten by
+  foot's own commit (900x600 rule, 700x496 window, centre still computed from 900).
+  **Terminal hygiene is one module**: raw mode, alternate screen, cursor, mouse and sixel are
+  undone by `Drop`, by a panic hook and by a `SIGINT`/`SIGTERM`/`SIGHUP` handler (`tcsetattr` +
+  `write` + `_exit`, all async-signal-safe - a pty left in raw mode is the same bug in another
+  costume); SIGKILL promises nothing. The binary's `--version` is the committed `VERSION`,
+  compiled in, so `--version` and `/etc/debian-aarch64-revision` cannot disagree, and
+  `check-system.sh` compares them. Cargo's package versions are placeholders for that reason.
 - **Work ships as a spec, one branch and one PR each.** [`specs/`](specs/README.md) turns
   [`docs/plan-ui.md`](docs/plan-ui.md) §16 into 14 mergeable specs, each naming its scope,
   acceptance criteria, three witnesses, tests and the `opencode go` model that builds it. The

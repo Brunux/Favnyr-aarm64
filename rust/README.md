@@ -3,7 +3,30 @@
 The Rust side of LazyOS: the workspace that `docs/plan-ui.md` grows into the session UI
 framework (`lazyos-ui`, `lazyos-theme`, `lazyos` multi-call binary, `lazyos mcp`).
 
-Today it holds exactly one crate, and that crate is a spike, not a product.
+It holds the framework's crates (`lazyos-cli`, `lazyos-ui`, `lazyos-theme`) and
+the spike that validated the one technical risk before anything depended on it.
+The framework is built by `scripts/build-lazyos.sh` and installed by
+`scripts/install-lazyos.sh`; `lazyos` reports the repository's `VERSION`
+(compiled in), which is what `check-system.sh` compares with the image record.
+
+## `crates/lazyos-cli` - the binary
+
+`lazyos`, the session's multi-call binary (`specs/001-core.md`): the command
+table, the `argv[0]`/words dispatch, the host (`foot` window or this terminal),
+the terminal restore and the two states spec 001 draws. `cargo test -p
+lazyos-cli` runs the unit tests and `tests/cli.rs`, which drives the real binary
+in a pty.
+
+## `crates/lazyos-ui` - the widgets
+
+The frame's building blocks; spec 001 ships the empty state and the error card,
+spec 002 (`specs/002-design-system.md`) grows the design system here.
+
+## `crates/lazyos-theme` - the palette
+
+The colour roles a surface asks for (`Palette`, `Rgb`), solarized dark today.
+Spec 004 turns it into the engine that owns `theme.toml` and the generated
+palette files.
 
 ## `crates/spike-sixel`
 
@@ -36,7 +59,10 @@ What it established (device: Hayato, foot 1.28, release build, 150x45 cells):
   that must fill its card needs `Resize::Scale`.
 - `ratatui-image`'s default features pull `libchafa-dev` through `chafa-dyn`; sixel does not
   need it, so the dependency is declared with `default-features = false` and
-  `features = ["crossterm", "image-defaults"]`. The build host stays free of chafa.
+  `features = ["crossterm"]`. The build host stays free of chafa.
+- The `image` crate is declared with `png` + `jpeg` only: its default features are every codec
+  it has (AVIF, EXR, TIFF, WebP, GIF, QOI, …), measured at +98 s of build and +1.4 MB of binary
+  for formats nothing here opens (`docs/optimization.md` §13). A codec is opt-in.
 
 ## Building
 
