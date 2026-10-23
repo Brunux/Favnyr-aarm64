@@ -1,6 +1,6 @@
 # Spec 003 — The Nerd Font glyph alphabet
 
-- **Status**: in progress
+- **Status**: merged
 - **Phase**: 2
 - **Depends on**: 001
 - **Model**: `opencode-go/gpt-6-luna` — a data table checked against a font, plus a sweep of
