@@ -506,6 +506,24 @@ the MCP server only inside an agent session. Credentials stay in `~/.local/share
   a pre-scaled 128 px thumbnail (or encoding off the UI thread) keeps the window responsive.
 - Tablet mode: layout tokens enlarge rows/buttons when the tablet state dir is present
   (touch-first pickers, no daemon).
+- **Ratatui stays; a "ratatui-lite" was evaluated and rejected on measurement.** On this device,
+  against a crossterm-only app doing the same job: +23.6 s of clean build, +89 MB of `target/`,
+  +328 KB of stripped binary, **no startup difference** (23 ms both, the `script` floor) and
+  **233 kB of PSS either way** - a text-only ratatui app inside foot is 1.0 MB PSS next to foot's
+  21 MB and a picture's 13.3 MB. A frame at 152x45 costs **154 µs empty** (ratatui's reset + diff
+  floor), 231 µs with one changing cell and 445 µs when 43 rows are `format!`ed again, i.e. 0.15 %
+  of a core at the plan's 10 fps tick. A home-grown renderer would save that and own Unicode width,
+  wide cells, wrapping, the `Layout` solver and terminal quirks - the class of silent rendering bug
+  this port keeps fixing. The two rules that follow are the ones to enforce: **event-driven redraw
+  (10 fps only while something moves)** and **the widget tree is built per state, not per frame**.
+  Feature-pruning (`default-features = false`) measured 0 s / 0 KB of gain, and thin LTO + one codegen
+  unit -9 % of binary for +13 s of build, so neither is adopted. The measured table and method are
+  `optimization.md` §13.
+- **Image codecs are opt-in, not default**: `image` with its default features is 147 s of build,
+  272 MB of `target/` and 2.17 MB of binary for decoders nothing opens; `png` + `jpeg` is 49 s,
+  49 MB and 0.73 MB. The spike's clean build went 228 s → 115 s and its binary 8.6 → 2.21 MB
+  (1.58 MB stripped) with that one change. A codec is added when a real file needs it, and the
+  commit says which file.
 
 ## 15. Witnesses
 

@@ -4,9 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-image = "0.25.10"
-ratatui = "0.30.2"
+# Only the two formats this program reads: a theme PNG and a picture that
+# `lazyos-thumbnail` produced (PNG/JPEG). The crate's default features pull
+# every decoder and encoder (AVIF/ravif, EXR, TIFF, WebP, GIF, QOI), which is
+# measured at +98 s of build, +223 MB of target and +1.4 MB of binary for
+# nothing (docs/optimization.md, "What the UI framework costs").
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg"] }
 # chafa-dyn is in ratatui-image's default features; it exists for a text-mode
-# encoder we do not use. SIXEL comes from icy_sixel, so the spike (and the UI
-# framework after it) keeps the build host free of libchafa-dev.
-ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm", "image-defaults"] }
+# encoder we do not use, and `image-defaults` would re-enable every codec above.
+ratatui-image = { version = "11.1.0", default-features = false, features = ["crossterm"] }
+ratatui = "0.30.2"

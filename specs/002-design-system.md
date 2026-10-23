@@ -61,6 +61,11 @@ the same in the root menu, the installer and the AI surface.
 - [ ] a raw colour outside `lazyos-theme` fails `cargo test` (the grep test).
 - [ ] motion: a test asserts every effect is ≤300 ms, and `LAZYOS_REDUCED_MOTION=1` renders
       the final frame without an animation tick.
+- [ ] frame budget (measured, `optimization.md` §13): a test renders the shell at 152x45 for
+      1 000 ticks and asserts the per-tick cost stays under the measured ceiling (ratatui's own
+      empty-draw floor is 154 µs on this device; the whole tick must stay under 1 ms, which the
+      measurement shows is 231 µs with one changing cell and 445 µs only if rows are rebuilt).
+      The test fails when a tick formats text that did not change.
 - [ ] witness: `scripts/check-system.sh` FAILs when the session's font lacks the box-drawing
       and block glyphs the widgets use, and when the app's header height/one-frame rule is
       bypassed by a command that draws its own `Frame` (grep in `rust/`).

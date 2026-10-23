@@ -67,6 +67,21 @@ yet present in `scripts/` as not implemented.
   power), so the MCP manifest is the witness. The framework itself does not exist yet (the
   sixel spike in `rust/crates/spike-sixel` is the one validated piece); `docs/plan-ui.md` §16 is
   the order, and each tier lands with its three witnesses like everything else.
+- **Ratatui is not the expensive part, and that is measured rather than assumed**
+  ([`docs/optimization.md`](docs/optimization.md) §13). Against a crossterm-only app doing the same
+  job it adds 23.6 s to a clean build, 89 MB of `target/`, 328 KB of stripped binary, **no**
+  measurable startup and no measurable PSS (233 kB either way; a text-only ratatui app in foot is
+  1.0 MB next to foot's 21 MB), and a 152x45 frame costs 154 µs empty - 0.15 % of a core at the
+  plan's 10 fps tick. So **there is no ratatui-lite**: the saving would be a third of a megabyte
+  and a fraction of a percent of CPU, paid for with Unicode width, wide cells, wrapping, the
+  `Layout` solver and terminal quirks, which is exactly the class of silent rendering bug this port
+  keeps fixing. What the rule does require: **event-driven redraw (10 fps only while something
+  moves)** and **the widget tree built per state, not per frame** (rebuilding 40 formatted rows
+  costs 445 µs against 231 µs for one changing cell). Feature-pruning and thin LTO were measured
+  too and are not adopted (0 KB, and -9 % for +13 s of build). The cost that *was* real is the
+  `image` crate's default codecs: 147 s of build and 2.17 MB of binary against 49 s and 0.73 MB for
+  `png` + `jpeg`, so **a codec is opt-in and the commit names the file that needs it** (the spike's
+  clean build went 228 s → 115 s and its binary 8.6 → 2.21 MB with that one change).
 - **Work ships as a spec, one branch and one PR each.** [`specs/`](specs/README.md) turns
   [`docs/plan-ui.md`](docs/plan-ui.md) §16 into 14 mergeable specs, each naming its scope,
   acceptance criteria, three witnesses, tests and the `opencode go` model that builds it. The

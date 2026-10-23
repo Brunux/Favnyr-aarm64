@@ -654,3 +654,101 @@ before changing the algorithm; enabling MULTI_COMP is a separate kernel-config d
 MiB), and under the load that produced the 1.4 GB reading `orig_data_size` should pass 1 902 MiB
 while the card's used column in `/proc/swaps` stays 0. `check-system.sh` asks both halves - the file
 and the live device - because a machine edited in place keeps the device it created at boot.
+
+## 13. What the UI framework costs - ratatui, and why not a ratatui-lite
+
+The session UI is moving to Ratatui in foot ([`plan-ui.md`](plan-ui.md)). The question this
+section answers is whether Ratatui is the expensive part: if it is, the alternative would be a
+home-grown "ratatui-lite" with only the widgets the framework uses. Everything below is measured on
+this device (aarch64, 4 GB, release builds, `rustc` 1.97.1), not estimated.
+
+### Ratatui against crossterm alone
+
+Two throwaway crates with the same job - draw a header, a 40-row list and a key bar, then exit - one
+with `ratatui` 0.30.2 and one writing the cells with `crossterm` 0.29 directly. Each built into its
+own empty target directory, then stripped.
+
+| | crossterm only | ratatui | delta |
+|---|---|---|---|
+| clean `cargo build --release` | 15.1 s | 38.7 s | **+23.6 s** (once per clean build) |
+| `target/` | 46 MB | 135 MB | +89 MB |
+| stripped binary | 398 KB | 726 KB | **+328 KB** |
+| start to first frame | 23 ms | 23 ms | 0 (both are the `script` floor) |
+| PSS of the process | 233 kB | 233 kB | 0 - the buffer is in the noise |
+
+So the compile cost is real but one-time, the binary cost is a third of a megabyte, and the runtime
+floor is invisible. The product's memory is elsewhere: a text-only ratatui app inside foot is
+**1.0 MB of PSS**, foot itself is **21.1-21.7 MB**, and the same app showing a 1366x912 picture plus
+a 48 px icon is **13.3 MB** (decode + sixel encode buffers). For scale, the same session measured
+`rofi -show drun` at **73 MB** that day cold (the 15.7-17.1 MB in section 8 is a warm run with the
+icon cache populated) - the framework's budget is not the thing to worry about.
+
+### What a frame costs (152x45, the panel's real grid)
+
+`Terminal::draw` on a `TestBackend`, 5 000 frames each, release build:
+
+| what the frame does | per frame | at 10 fps | at 30 fps |
+|---|---|---|---|
+| empty draw (buffer reset + diff of 6 840 cells) | **154 µs** | 0.15 % of a core | 0.46 % |
+| one cell changes (spinner / clock) | 231 µs | 0.23 % | 0.7 % |
+| 43 lines rebuilt with `format!` each frame | 445 µs | 0.45 % | 1.3 % |
+
+The load-bearing line is the first one: **~0.15 % of one core is what ratatui itself charges**, and
+it is the floor every frame pays whether it changes one cell or the whole screen. The rest is the
+widget tree being rebuilt. That makes two rules for the framework:
+
+- **Event-driven redraw, 10 fps only while something is moving** - which the plan already says. At
+  that cadence the framework spends 0.2-0.4 % of a core, i.e. below the noise of one compositor
+  frame.
+- **Build the widget tree once per state, not once per frame.** The 445 → 231 µs difference is
+  `format!` per row per frame; a list of 40 formatted rows is 40 allocations and 40 strings per
+  tick to display text that did not change. Cache the `Vec<Line>`, mutate the selected index.
+
+### Why not write a ratatui-lite
+
+Stripping Ratatui saves at most the numbers above: **~0.15 % of a core at 10 fps, ~300 KB of binary
+and ~24 s of a clean build**. Against that, a home-grown renderer owns exactly the code that is
+cheap to write and expensive to get right: Unicode width (CJK, emoji, combining marks, and the
+private-use Nerd Font glyphs this UI is made of), wide-cell and grapheme handling in the diff, line
+wrapping, the constraint solver behind `Layout`, terminal capability quirks, and a snapshot backend
+for tests. Every silent rendering bug this repository has already chased - a font without a
+codepoint, a glyph that draws nothing, a menu row that loses its icon column - is that class of bug,
+and none of them would be caught by a unit test on a diff algorithm.
+
+Two cheaper levers were measured and rejected as well, so nobody re-runs them:
+
+- **Pruning ratatui's features** (`default-features = false, features = ["crossterm",
+  "layout-cache"]`): same build time (38.7 s), same binary (726 KB), `target/` 135 → 120 MB. The
+  default feature set only gates the calendar widget, the `text!` macros and underline colour.
+- **A harder release profile** (`lto = "thin"`, `codegen-units = 1`, `strip = "symbols"` on the
+  ratatui crate): 726 → 660 KB (-9 %), frame cost unchanged (159 µs empty draw, within noise),
+  build 38.5 → 51.8 s. Three hundred kilobytes and no runtime gain do not buy back the extra build
+  time or the symbols a panic report needs.
+
+### The dependency that actually costs: image codecs
+
+The sixel spike pulled `image` 0.25 with its **default features**, which is every decoder and
+encoder the crate has - AVIF via `ravif`, EXR, TIFF, WebP, GIF, QOI, PNM, TGA, DDS, HDR - to draw
+two things: the theme's PNG icons and the pictures `lazyos-thumbnail` produces (PNG, and JPEG
+straight from ffmpeg).
+
+| `image` features | clean build | `target/` | stripped binary |
+|---|---|---|---|
+| defaults (all codecs) | 147 s | 272 MB | 2.17 MB |
+| `png` + `jpeg` only | **49 s** | **49 MB** | **0.73 MB** |
+
+On the spike itself that took the clean release build from **228 s to 115 s** and the binary from
+8.6 MB unstripped to 2.21 MB (1.58 MB stripped). This is the one change from the whole evaluation
+that is worth applying, and it is applied: `crates/spike-sixel/Cargo.toml` names `png` + `jpeg` and
+drops ratatui-image's `image-defaults` (which would turn every codec back on). The framework
+inherits the same rule: **a codec is added when a real file needs it, and with the numbers that say
+why**, because each one is seconds of build and hundreds of kilobytes of binary shipped in a 4 GB
+image.
+
+### How to check it took
+
+`cargo tree -p image --depth 1` lists only `png`/`zune-jpeg` among the decoders, and
+`cargo build --release` from an empty target directory stays under two minutes on this machine. The
+frame budget is checked by the design-system test (spec 002), which fails when a tick is above the
+measured ceiling; the PSS numbers are re-taken with the method in section 8 whenever a new window
+carries pictures.
