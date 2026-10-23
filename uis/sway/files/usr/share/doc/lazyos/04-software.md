@@ -329,6 +329,16 @@ panel** are deliberately not saved - a config that disables a screen would boot 
 card with nothing on it - so they last until the session ends and the menu says
 how to undo them. Delete the file to go back to sway's default (on the right).
 
+**If the panel is the screen that is off, the way back is the same menu.**
+"Only the monitor" turns the internal panel off for the session, so if the cable
+then comes out - or the monitor loses its link - there is no picture at all.
+`Alt+Ctrl+O` still reaches sway (keys work with no output), and **Bring the
+internal panel back** is the menu's first row even with no monitor plugged in;
+it is the row that exists for exactly this state. From another machine, over
+ssh, `swaymsg output eDP-1 enable` is the same command. A reboot also brings it
+back, because the choice is never written to the file - the power key is just
+the expensive version of this paragraph.
+
 **The night light does not reach it.** `wlsunset` asks the compositor for a
 gamma table per output, and this kernel has one only for the internal panel's
 CRTC: `modetest -M mediatek -p` shows `GAMMA_LUT` on the 1366x912 CRTC and

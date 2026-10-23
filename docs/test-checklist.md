@@ -143,6 +143,7 @@ A card that only works on the left port has the udev rule, the helper or
 | log out and back in | the monitor is still on the left: `~/.config/sway/config.d/40-display.conf` holds its resolution, scale and position, and `sway -C -c ~/.config/sway/config` accepts the file |
 | **Monitor above**, **Mirrored**, then **Only the internal panel** and **Bring the monitor back** | each applies at once; the one-screen rows say they are not remembered and their notification gives the `swaymsg output … enable` command back |
 | **Open wdisplays** | one window alone on workspace 11, filling it; closing it and choosing the row again starts it again, not a second copy |
+| **Only the monitor**, then unplug the monitor, then `Alt+Ctrl+O` -> **Display arrangement** | the menu still opens (keys work with no output) and its first row is **Bring the internal panel back**; choosing it turns the panel on again. This is the black-screen-with-no-exit state, so try it once on purpose |
 | turn the night light on with the monitor connected | the internal panel warms, the monitor keeps its own colour: the external CRTC has no `GAMMA_LUT` (`modetest -M mediatek -p` shows one on the 1366x912 CRTC only). The monitor's own colour setting is the answer |
 
 `check-system.sh` FAILs on a missing DP connector, helper, udev rule,

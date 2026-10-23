@@ -460,6 +460,41 @@ else
 	fail "wdisplays is missing: the menu's manual row cannot open it"
 fi
 
+# The one state with no other exit: the panel off and no monitor.  That is a
+# black screen, so the menu has to keep offering the row that brings the panel
+# back - and a missing row is invisible until the day it is needed.  Exercised
+# with a stub swaymsg (the real one would change the session) and a stub picker
+# that keeps the rows it was offered.
+if [ -x "$_disp" ] && [ -f "$HOME/.config/bin/lib-rofi.sh" ]; then
+	_bt=$(mktemp -d "${TMPDIR:-/tmp}/lazyos-display.XXXXXX" 2>/dev/null || true)
+	if [ -n "$_bt" ]; then
+		mkdir -p "$_bt/bin"
+		cp "$_disp" "$HOME/.config/bin/lib-rofi.sh" "$_bt/" 2>/dev/null || true
+		cat >"$_bt/bin/swaymsg" <<'SH'
+#!/bin/sh
+case $1 in
+-t) printf '%s\n' '[{"name":"eDP-1","active":false,"rect":{"x":0,"y":0,"width":0,"height":0},"scale":1.0,"current_mode":null,"modes":[]}]' ;;
+esac
+exit 0
+SH
+		printf '%s\n' '#!/bin/sh' 'cat >"$DISPLAY_TEST_ROWS"' 'exit 1' >"$_bt/bar-pick"
+		chmod 0755 "$_bt/bin/swaymsg" "$_bt/bar-pick" "$_bt/rofi-display" 2>/dev/null || true
+		_black=$(
+			export PATH="$_bt/bin:$PATH" DISPLAY_TEST_ROWS="$_bt/rows"
+			"$_bt/rofi-display" >/dev/null 2>&1 || true
+			grep -qs 'Bring the internal panel back' "$_bt/rows" && printf 'ok '
+			"$_bt/rofi-display" --status 2>/dev/null
+		)
+		case $_black in
+		'ok internal panel off')
+			ok "the display menu brings the panel back with no monitor (no dead end)" ;;
+		*)
+			fail "the display menu has no way back with the panel off and no monitor ('${_black:-nothing}'): that is a black screen and the power key" ;;
+		esac
+		rm -rf "$_bt"
+	fi
+fi
+
 # ---------------------------------------------------------------------------
 section "Input"
 # ---------------------------------------------------------------------------

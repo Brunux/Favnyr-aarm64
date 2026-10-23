@@ -193,6 +193,15 @@ monitor* in `04-software.md`). In order:
   (on the right). A monitor that is on during the session but not at the next
   login is normal - the file only positions the monitor, and it is applied when
   the output appears.
+* **Nothing on either screen**: the panel was turned off by "Only the monitor"
+  and then the monitor stopped answering (the cable came out, or it lost the
+  link to the crosspoint). The keyboard still reaches sway with no output, so
+  `Alt+Ctrl+O` opens Settings and **Display arrangement**'s first row,
+  **Bring the internal panel back**, turns the panel on again - the menu offers
+  that row even with no monitor plugged in, which is the whole reason it is
+  there. Blind, over ssh, the same command is `swaymsg output eDP-1 enable`. A
+  reboot clears it too, because the choice is never written to the saved
+  arrangement; the power key is just the slow way to the same place.
 
 Neither the night light nor the screen's brightness reaches it: the external
 CRTC has no gamma table and the panel's own backlight is the monitor's.
