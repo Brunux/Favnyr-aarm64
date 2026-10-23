@@ -25,18 +25,17 @@ pub mod version;
 use std::io::{self, Write};
 use std::time::Duration;
 
-use lazyos_theme::Palette;
+use lazyos_ui::app::exit::{ESCAPE as EXIT_ESCAPE, FAILED as EXIT_FAILED};
+use lazyos_ui::app::exit::{OK as EXIT_OK, USAGE as EXIT_USAGE};
+use lazyos_ui::{
+    App, BodyCtx, Design, EmptyScreen, FailureScreen, Header, KeyHint, Outcome, Screen,
+};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind};
 
 use command::{COMMANDS, ResolveError, Resolved};
 use host::{Env, Launch};
-
-pub const EXIT_OK: i32 = 0;
-pub const EXIT_ESCAPE: i32 = 1;
-pub const EXIT_USAGE: i32 = 2;
-pub const EXIT_FAILED: i32 = 3;
 
 /// Why a command could not do what it was asked, in the two lines the card
 /// shows: the summary says what failed, the detail says what to do about it.
@@ -125,6 +124,24 @@ fn global(args: &[String]) -> Option<i32> {
                 out,
                 "  -V, --version   the version this image was built with"
             );
+            let _ = writeln!(
+                out,
+                "  --glyphs        the codepoints the widgets draw, one per line"
+            );
+            let _ = writeln!(
+                out,
+                "  --symlinks      the names the session calls this binary by"
+            );
+            Some(EXIT_OK)
+        }
+        // The codepoints the widgets draw, so `check-system.sh` can ask a font
+        // for each one. A box-drawing glyph no font has is a hole in the frame
+        // that logs nothing, which is why the list travels with the binary.
+        "--glyphs" => {
+            let mut out = io::stdout();
+            for glyph in lazyos_ui::GLYPHS {
+                let _ = writeln!(out, "U+{:04X}", *glyph as u32);
+            }
             Some(EXIT_OK)
         }
         // Machine-readable, for the witness: the links the installer creates
@@ -163,12 +180,12 @@ fn run_inline(resolved: &Resolved) -> i32 {
             return EXIT_FAILED;
         }
     };
-    let palette = Palette::default();
+    let design = Design::for_session(std::env::var("XDG_RUNTIME_DIR").ok().as_deref());
 
-    let code = match execute(resolved, &mut terminal, &palette) {
+    let code = match execute(resolved, &mut terminal, &design) {
         Ok(code) => code,
         Err(failure) => {
-            show_failure(&mut terminal, &palette, &failure);
+            show_failure(&mut terminal, &design, &failure);
             EXIT_FAILED
         }
     };
@@ -181,11 +198,11 @@ fn run_inline(resolved: &Resolved) -> i32 {
 fn execute(
     resolved: &Resolved,
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    palette: &Palette,
+    design: &Design,
 ) -> Result<i32, Failure> {
     match resolved.spec.path {
-        "menu" => menu(resolved, terminal, palette, "the session menu", "spec 007"),
-        "menu files" => menu(resolved, terminal, palette, "the file browser", "spec 009"),
+        "menu" => menu(resolved, terminal, design, "the session menu", "spec 007"),
+        "menu files" => menu(resolved, terminal, design, "the file browser", "spec 009"),
         other => Err(Failure::new(
             format!("`{other}` is in the table but has no implementation"),
             "this is a bug: the command table and this match disagree",
@@ -200,7 +217,7 @@ fn execute(
 fn menu(
     resolved: &Resolved,
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    palette: &Palette,
+    design: &Design,
     title: &str,
     arrives: &str,
 ) -> Result<i32, Failure> {
@@ -211,36 +228,42 @@ fn menu(
         ));
     }
     let hint = format!("{arrives} - Esc closes");
+    let mut screen = MenuScreen {
+        inner: EmptyScreen::new(title, hint),
+    };
+    let mut app = App::new(Header::new("LazyOS").subtitle(title))
+        .design(design.clone())
+        .keybar(vec![
+            KeyHint::new("Esc", "close"),
+            KeyHint::new("q", "close"),
+        ])
+        .screen(&mut screen);
+    app.run(terminal)
+        .map_err(|error| Failure::new("the terminal stopped answering", error.to_string()))
+}
 
-    loop {
-        terminal
-            .draw(|frame| {
-                // A panic here is the acceptance test's way of proving the hook
-                // restores the cursor and the alternate screen.
-                if std::env::var_os("LAZYOS_FORCE_PANIC").is_some() {
-                    panic!("LAZYOS_FORCE_PANIC: the frame's panic path");
-                }
-                lazyos_ui::empty_state(frame, frame.area(), palette, title, &hint);
-            })
-            .map_err(|error| Failure::new("cannot draw this terminal", error.to_string()))?;
+/// The menu's body, and the one place a panic can be forced on purpose.
+///
+/// The acceptance test sets `LAZYOS_FORCE_PANIC=1` to prove the hook restores
+/// the cursor and the alternate screen; the panic has to happen while the
+/// terminal is in UI mode, which is what drawing the body is.
+struct MenuScreen {
+    inner: EmptyScreen,
+}
 
-        match event::read() {
-            Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => match key.code {
-                KeyCode::Esc | KeyCode::Char('q') => return Ok(EXIT_ESCAPE),
-                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    return Ok(EXIT_ESCAPE);
-                }
-                _ => {}
-            },
-            Ok(_) => {}
-            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-            Err(error) => {
-                return Err(Failure::new(
-                    "the terminal stopped answering",
-                    error.to_string(),
-                ));
-            }
+impl Screen for MenuScreen {
+    fn draw(&mut self, ctx: &mut BodyCtx) {
+        if std::env::var_os("LAZYOS_FORCE_PANIC").is_some() {
+            panic!("LAZYOS_FORCE_PANIC: the frame's panic path");
         }
+        self.inner.draw(ctx)
+    }
+
+    fn key(&mut self, key: KeyEvent, design: &Design) -> Outcome {
+        if key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
+            return Outcome::Done(EXIT_ESCAPE);
+        }
+        self.inner.key(key, design)
     }
 }
 
@@ -250,19 +273,13 @@ fn menu(
 /// but never for ever - a broken input must not be able to hang the session.
 fn show_failure(
     terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-    palette: &Palette,
+    design: &Design,
     failure: &Failure,
 ) {
-    let _ = terminal.draw(|frame| {
-        lazyos_ui::error_card(
-            frame,
-            frame.area(),
-            palette,
-            &failure.summary,
-            &failure.detail,
-        )
-    });
-    if matches!(event::poll(Duration::from_secs(30)), Ok(true)) {
-        let _ = event::read();
-    }
+    let mut screen = FailureScreen::new(failure.summary.clone(), failure.detail.clone());
+    let mut app = App::new(Header::new("LazyOS").subtitle("failed"))
+        .design(design.clone())
+        .keybar(vec![KeyHint::new("any key", "close")])
+        .screen(&mut screen);
+    let _ = app.run_until(terminal, Some(Duration::from_secs(30)));
 }
