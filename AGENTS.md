@@ -1082,6 +1082,17 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   **wdisplays** is the manual row (188 kB, every dependency already in the image)
   and opens on workspace 11 - the session's keys stop at 10 - because its two
   rectangles want the width; a second copy is focused instead of started.
+  **The menu has to keep the way back when the panel is the screen that is off**:
+  "Only the monitor" and then a cable that comes out is a black screen, and the
+  keys still reach sway, so the no-monitor branch offers **Bring the internal
+  panel back** - the one row that must exist with nothing else on screen - and
+  `--status` says `internal panel off` instead of `no external monitor`. That
+  state is a test, not a paragraph: `check-system.sh` runs the menu against a
+  stub swaymsg (only eDP-1, inactive) and FAILs when the row is gone, because
+  the failure is invisible - the machine is alive, the screen is black, and the
+  only exit left is the power key. A short power-key press and a clean poweroff
+  is what that looks like in the journal: no oops, no segfault, no core, and
+  nothing else in the boot to name.
   **The night light cannot reach it**: `modetest -M
   mediatek -p` has `GAMMA_LUT` on the 1366x912 CRTC and nothing on the 1920x1080
   one (MT8192's second path OVL1→RDMA1→DPI has no gamma block bound; the SoC's
@@ -1089,7 +1100,8 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   failed` and the monitor keeps its own colour temperature. Witnesses:
   `check-system.sh` FAILs on a missing DP connector (the patch), the helper,
   the udev rule, i2c-tools, the resume hook and its modeset step, the
-  arrangement menu, its Settings row, the `config.d` include and `wdisplays`,
+  arrangement menu, its Settings row, the `config.d` include, `wdisplays` and
+  the menu's way back with the panel off and no monitor,
   and on a crosspoint that does not name the port whose alt mode is active; the
   manual is `04-software.md` § *An external monitor* and the symptom list is
   `06-troubleshooting.md` § *The external monitor shows no signal*.
