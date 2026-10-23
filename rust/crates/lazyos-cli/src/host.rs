@@ -84,10 +84,17 @@ pub enum Launch {
     },
     /// No terminal and no compositor to ask for one.
     NoTerminal,
+    /// Run in place: the command owns no surface (it writes files).
+    Direct,
 }
 
 /// Decide, from the environment alone. Pure: the tests call it directly.
 pub fn plan(resolved: &Resolved, env: &Env) -> Launch {
+    // A direct command has no surface to draw on, so neither the guard nor the
+    // compositor has anything to say about it.
+    if resolved.spec.shape == crate::command::Shape::Direct {
+        return Launch::Direct;
+    }
     // The guard: a process that is already the UI never spawns the UI. If it
     // also has no terminal, that is a failure the card reports - not a second
     // window nobody asked for.
@@ -222,7 +229,10 @@ mod tests {
         // A symlink that resolves to `menu files` hands over the words, not the
         // name it was called by.
         let files = Resolved {
-            spec: &crate::command::COMMANDS[1],
+            spec: crate::command::COMMANDS
+                .iter()
+                .find(|spec| spec.path == "menu files")
+                .expect("menu files is in the table"),
             args: vec!["--search".into()],
         };
         let Launch::Spawn { args, .. } = plan(&files, &sway) else {

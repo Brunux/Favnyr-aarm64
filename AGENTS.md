@@ -169,6 +169,32 @@ yet present in `scripts/` as not implemented.
   rows, with allocations that do not scale with the list (`lazyos-ui/tests/filter.rs`,
   `optimization.md` §13). Two matchers would be two case rules, so a surface with a search field
   uses `ListState` and nothing else.
+- **The palette is one file, and every surface is generated from it** (spec 004).
+  `lazyos-theme` parses `theme.toml` - the 18 colours a terminal asks for by name plus the
+  semantic roles a surface asks for (`text`, `accent`, `danger`, `hover`, `faint`, …) - ships
+  **eight built-ins** (solarized and the plan's seven), derives a role a theme leaves out, and
+  **refuses a palette that cannot be read** (4.5:1 for `text`, 3:1 for the signal roles, the
+  failing pair and its ratio named). Eleven surfaces are rendered from templates
+  (`rust/crates/lazyos-theme/templates/*.tpl`, placeholders `{{ role }}`, `{{ role:bare }}` for
+  `foot.ini`, `{{ role:rgb }}` for `rgba()`, `{{ header }}`): foot, waybar, mako, rofi, starship,
+  btop, lazygit, nvim, fzf, swaylock, and the sway wallpaper+frame drop-in. **Solarized's output is
+  the session that existed before the engine** - a unit test pins its `Palette` to
+  `Palette::solarized_dark()` - so the first `set` on a healthy card is an empty diff, and
+  `lazyos theme diff` is that witness on the device (`check-system.sh` FAILs on a non-empty one).
+  Writes are **atomic and idempotent**: `<target>.new` in the same directory then a rename, an
+  unchanged surface is not rewritten at all (a running foot watches its file), and the last
+  generated body is kept in `~/.local/state/lazyos/theme/` so **a hand edit is reported, not
+  overwritten** (exit 1 with the differing lines; `--force` replaces it). **A file the engine did
+  not generate has no header and is never replaced in silence** - the first line is the engine's
+  claim of ownership. `Alt+Shift+T` and `Alt+Shift+W` run `lazyos theme next` and
+  `lazyos theme wallpaper next`, which open no window: a command whose whole job is to write a
+  file and print a line is `Shape::Direct` in the command table, so neither the `LAZYOS_UI` guard
+  nor `foot` has anything to do with it. The templates live in the crate (`include_str!`) so the
+  binary works on a checkout with no image tree, and the image ships the rendered solarized files
+  because it is staged with `git archive HEAD` - `scripts/make-theme.sh` is the host tool that
+  regenerates them, like `make-icons.sh`. Two surfaces stay hand-written on purpose: the
+  screensaver's profile (it carries the brand's cyan) and the GTK stylesheets (they are the
+  session's, not a terminal's palette).
 - **Work ships as a spec, one branch and one PR each.** [`specs/`](specs/README.md) turns
   [`docs/plan-ui.md`](docs/plan-ui.md) §16 into 14 mergeable specs, each naming its scope,
   acceptance criteria, three witnesses, tests and the `opencode go` model that builds it. The

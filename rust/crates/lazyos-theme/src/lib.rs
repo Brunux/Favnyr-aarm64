@@ -11,8 +11,11 @@
 
 pub mod builtin;
 pub mod contrast;
+pub mod render;
+pub mod store;
 pub mod theme;
 
+pub use store::{Outcome, Paths, SURFACES, Surface};
 pub use theme::{Hex, Motion, Roles, Theme};
 
 /// One colour, independent of any terminal library (the UI crate maps it).

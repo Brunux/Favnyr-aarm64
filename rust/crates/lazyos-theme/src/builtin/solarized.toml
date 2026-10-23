@@ -9,7 +9,7 @@ name = "Solarized Dark"
 author = "Ethan Schoonover"
 source = "https://ethanschoonover.com/solarized"
 
-wallpapers = ["mountains.jpg"]
+wallpapers = ["lazyos.png"]
 motion = "full"
 
 [colors]
@@ -35,6 +35,9 @@ bright7 = "#fdf6e3"
 [roles]
 surface = "#073642"
 surface_alt = "#586e75"
+hover = "#09404c"
+faint = "#839496"
+danger_bg = "#3b2023"
 border = "#2aa198"
 border_focus = "#2aa198"
 text = "#93a1a1"

@@ -1,6 +1,6 @@
 # Spec 004 — The theme engine
 
-- **Status**: draft
+- **Status**: in progress
 - **Phase**: 2
 - **Depends on**: 001
 - **Model**: `opencode-go/deepseek-v4-pro` — a schema, a set of generators, atomic and
@@ -56,22 +56,22 @@ daemon (013), the icon theme (the PNGs stay as they are).
 
 ## Acceptance criteria
 
-- [ ] `lazyos theme set solarized` on a stock card changes nothing (empty diff on every
+- [x] `lazyos theme set solarized` on a stock card changes nothing (empty diff on every
       surface); `set catppuccin` changes the footer, the bar, mako, btop and starship, and
       `set solarized` restores byte-identical files.
-- [ ] `lazyos theme set` refuses an unknown name (exit 2, list shown); `validate` rejects a
+- [x] `lazyos theme set` refuses an unknown name (exit 2, list shown); `validate` rejects a
       palette below the contrast floor with the failing pair named.
-- [ ] an edited hand-written generated file is reported and not overwritten without
+- [x] an edited hand-written generated file is reported and not overwritten without
       confirmation; `--force` overwrites and says so.
-- [ ] `Alt+Shift+T`/`Alt+Shift+W` cycle and persist; a session restart keeps the choice.
-- [ ] witness: `scripts/check-system.sh` FAILs when the active theme file is missing, when the
+- [x] `Alt+Shift+T`/`Alt+Shift+W` cycle and persist; a session restart keeps the choice.
+- [x] witness: `scripts/check-system.sh` FAILs when the active theme file is missing, when the
       regeneration diff is non-empty, when a surface lacks the palette header, or when the two
       cycle bindings are absent.
-- [ ] witness: a paragraph in `uis/sway/files/usr/share/doc/lazyos/04-software.md` § Themes
+- [x] witness: a paragraph in `uis/sway/files/usr/share/doc/lazyos/04-software.md` § Themes
       says how to switch, what changes, and how to undo a hand edit.
-- [ ] witness: an `AGENTS.md` bullet records that palette files are generated and the
+- [x] witness: an `AGENTS.md` bullet records that palette files are generated and the
       idempotence check is the witness.
-- [ ] unit tests: schema parsing (valid/invalid), every generator's golden output per built-in,
+- [x] unit tests: schema parsing (valid/invalid), every generator's golden output per built-in,
       idempotence, atomic failure injection, theme resolution and cycle order.
 
 ## Tests

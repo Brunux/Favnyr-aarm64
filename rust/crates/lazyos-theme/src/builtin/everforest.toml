@@ -3,7 +3,7 @@ name = "Everforest Dark"
 author = "sainnhe"
 source = "https://github.com/sainnhe/everforest"
 
-wallpapers = ["mountains.jpg"]
+wallpapers = ["lazyos.png"]
 motion = "full"
 
 [colors]

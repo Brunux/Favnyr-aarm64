@@ -100,6 +100,12 @@ pub struct Colours {
 pub struct RoleOverrides {
     pub surface: Option<Hex>,
     pub surface_alt: Option<Hex>,
+    /// A row under the pointer: the surface lifted off the background.
+    pub hover: Option<Hex>,
+    /// Metadata that is present but deliberately quiet (`base0` in solarized).
+    pub faint: Option<Hex>,
+    /// A danger-tinted fill behind a danger text, for a warning card.
+    pub danger_bg: Option<Hex>,
     pub border: Option<Hex>,
     pub border_focus: Option<Hex>,
     pub text: Option<Hex>,
@@ -120,6 +126,9 @@ pub struct RoleOverrides {
 pub struct Roles {
     pub surface: Hex,
     pub surface_alt: Hex,
+    pub hover: Hex,
+    pub faint: Hex,
+    pub danger_bg: Hex,
     pub border: Hex,
     pub border_focus: Hex,
     pub text: Hex,
@@ -142,6 +151,9 @@ impl Roles {
         BTreeMap::from([
             ("surface", self.surface),
             ("surface_alt", self.surface_alt),
+            ("hover", self.hover),
+            ("faint", self.faint),
+            ("danger_bg", self.danger_bg),
             ("border", self.border),
             ("border_focus", self.border_focus),
             ("text", self.text),
@@ -213,6 +225,15 @@ impl Theme {
         Roles {
             surface,
             surface_alt: stated.surface_alt.unwrap_or(c.bright0),
+            hover: stated
+                .hover
+                .unwrap_or_else(|| surface.mix(c.background, 0.35)),
+            faint: stated
+                .faint
+                .unwrap_or_else(|| c.foreground.mix(c.background, 0.45)),
+            danger_bg: stated
+                .danger_bg
+                .unwrap_or_else(|| stated.danger.unwrap_or(c.regular1).mix(c.background, 0.82)),
             border: stated.border.unwrap_or(accent),
             border_focus: stated.border_focus.unwrap_or(accent),
             text: stated.text.unwrap_or(c.foreground),
@@ -228,6 +249,37 @@ impl Theme {
             info: stated.info.unwrap_or(c.regular4),
             selection: stated.selection.unwrap_or(surface),
         }
+    }
+
+    /// Every name a template may write: the 18 colours a terminal asks for by
+    /// name plus the semantic roles. The two sets are disjoint on purpose - a
+    /// template that wants the terminal's `regular1` says so, and one that wants
+    /// "the colour a warning is drawn in" says `danger`.
+    pub fn table(&self) -> BTreeMap<&'static str, Hex> {
+        let c = self.colors;
+        let ansi = [
+            ("background", c.background),
+            ("foreground", c.foreground),
+            ("regular0", c.regular0),
+            ("regular1", c.regular1),
+            ("regular2", c.regular2),
+            ("regular3", c.regular3),
+            ("regular4", c.regular4),
+            ("regular5", c.regular5),
+            ("regular6", c.regular6),
+            ("regular7", c.regular7),
+            ("bright0", c.bright0),
+            ("bright1", c.bright1),
+            ("bright2", c.bright2),
+            ("bright3", c.bright3),
+            ("bright4", c.bright4),
+            ("bright5", c.bright5),
+            ("bright6", c.bright6),
+            ("bright7", c.bright7),
+        ];
+        let mut table = self.roles().table();
+        table.extend(ansi);
+        table
     }
 
     /// The roles that have to be readable on the background, with the floor
