@@ -9,3 +9,11 @@ description = "The LazyOS session widgets (spec 001 ships the frame and its two 
 [dependencies]
 lazyos-theme = { path = "../lazyos-theme" }
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
+# Cell width, for right-aligning a row's value and truncating a label with an
+# ellipsis: ratatui clips by cells but does not tell a widget how wide a string
+# is, and a UTF-8 label measured in bytes misaligns the column.
+unicode-width = "0.2"
+# Motion (spec 002): bounded effects on the frame's buffer. The DSL is not used,
+# so only the runtime is enabled - and it shares ratatui-core 0.1.2 with
+# ratatui 0.30, so the buffers are the same type.
+tachyonfx = { version = "0.25.2", default-features = false, features = ["std"] }
