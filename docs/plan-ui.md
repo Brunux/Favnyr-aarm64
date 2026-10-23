@@ -123,6 +123,23 @@ The canonical references: **yazi** (async walk + preview pane + task manager wit
     clickable. Foot reports SGR mouse (proven by the screensaver).
 12. **Gradients.** `Gradient` fills in task gauges (solarized base03→accent); optional, late.
 13. **Hyperlinks.** OSC 8 in Learn (verify foot support in the spike).
+14. **The layout is ours, not rofi's.** A port keeps the *job* - the list, the switch, the
+    confirm - not the shape. The taste it aims at is **Omarchy's**: wide margins, one accent,
+    soft cards, a selection that reads as a row rather than a highlight, and metadata dim
+    enough that it never competes with the name. None of that is copied from rofi, because
+    rofi's row is a single line of text with a 26 px icon and no space between a name and its
+    detail - on a 152x45 canvas that throws the canvas away. Every surface is designed at the
+    size it actually opens in (§3), and `pick`/`task`/`full` are the grid it is designed
+    against, so a ported menu may come out shorter, wider, two-column, or with a preview pane
+    beside the list. What a port must keep is the job and the keys, never the old geometry.
+15. **Every list filters as you type, and case does not matter.** A search that is not
+    case-insensitive is not a search (`readme` must find `README.md`, `año` its `AÑO`), and
+    the narrowing happens on the keystroke, not on `Enter`. `ListState` is the only
+    implementation: the needle folds once per change, an ASCII needle takes an allocation-free
+    byte scan, an accented one the Unicode path, and a growing needle tests only the rows that
+    are already visible. A surface that adds a search field gets the behaviour by using the
+    widget - never a second matcher, because two matchers are two case rules. The numbers and
+    the rejected alternative are in [`optimization.md`](optimization.md) §13.
 
 ## 6. Icons and pictures
 

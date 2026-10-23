@@ -753,6 +753,44 @@ Two cheaper levers were measured and rejected as well, so nobody re-runs them:
   build 38.5 → 51.8 s. Three hundred kilobytes and no runtime gain do not buy back the extra build
   time or the symbols a panic report needs.
 
+### The list filter: a keystroke, not a frame
+
+Filtering happens on a state change, so the per-frame rules above do not apply - but a keystroke
+is still a person waiting, and the file list is thousands of rows. The first version lowercased
+the needle *inside* the row test, so every row built a folded copy of the needle and three more
+of its own fields:
+
+| 5,000 rows, one keystroke (release) | before | after |
+|---|---|---|
+| worst key | **1.74 ms** | **0.37 ms** |
+| a needle that matches the first field | 1.74 ms (no early exit: every field was rebuilt first) | **0.15 ms** |
+| allocations per keystroke | ~20,000 (four per row) | **1-2**, independent of the row count |
+| 200 rows instead of 5,000 | only the time changes | same allocations |
+
+Three changes, each with a witness in `lazyos-ui/tests/filter.rs`:
+
+- **The needle folds once per change**, never per row; the row test takes the folded form.
+- **An ASCII needle takes a byte path** (`eq_ignore_ascii_case` over the bytes, with a single-byte
+  fast case for the first key). UTF-8 never encodes an ASCII byte inside a multi-byte character,
+  so folding `a-z`/`A-Z` *is* case-insensitivity for it, and nothing is allocated. An accented
+  needle falls back to `to_lowercase` - the only form that folds `Ü` to `ü` - and pays one
+  allocation per row only while it carries an accent.
+- **Typing narrows instead of rebuilding**: a longer needle can only match a subset of a shorter
+  one's matches (`"repo"` matches nothing `"rep"` did not), so the pass is a `retain` over the
+  visible set - no scan of the full list, no allocation. A backspace rebuilds, which is why the
+  table measures both, and `narrowing_gives_the_same_answer_as_a_fresh_filter` is the proof
+  obligation that comes with the shortcut.
+
+What is left is memory, not arithmetic: a row is three heap strings, so a needle that matches
+almost nothing walks three allocations per row (~115 ns/row, ~3 cache misses). Packing the
+searchable text into one lowercased buffer with an offset per row was measured too, and it is
+faster on exactly that case - **151 µs against 443 µs** when few rows match, **420 against 543 µs**
+when none do - but it loses on the early-match case (143 µs against 68 µs), costs **287 KB** for
+5,000 rows, rebuilds the index on every `set_rows`, and keeps a second representation of every
+row's text. That is 0.3 ms saved on a path already far below one frame, so the simple shape stays,
+the same trade as the ratatui-lite above. The budget test pins it: 3 ms for the worst key in
+release, 25 ms in debug (the debug number is the tripwire; `--release` is the device's).
+
 ### The dependency that actually costs: image codecs
 
 The sixel spike pulled `image` 0.25 with its **default features**, which is every decoder and

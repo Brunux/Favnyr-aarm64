@@ -56,7 +56,9 @@ window you have never seen is readable the first time:
 
 The keys are letters and Enter, never Alt chords: sway sees every Alt chord
 before the window does, so an Alt hint in a window would be a hint the session
-swallows. Type to filter the list, `Up`/`Down` (or `k`/`j`) to move, `Enter` to
+swallows. Type to filter the list - **upper and lower case are the same**, so
+`readme` finds `README.md` and `año` finds `AÑO`, and the list narrows while you
+type instead of waiting for Enter; `Up`/`Down` (or `k`/`j`) to move, `Enter` to
 open, `Esc` to close with nothing done. A click on a row does what moving to it
 and pressing `Enter` does; fold the keyboard back and the rows become two lines
 tall so a finger can hit one, and a click on the blank line between two of them

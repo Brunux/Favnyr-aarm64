@@ -157,6 +157,18 @@ yet present in `scripts/` as not implemented.
   single-cell advance, not because the alternative is a box. A font upgrade that drops a
   codepoint is caught by the pin, and `scripts/make-glyphs.sh` is how that row becomes text
   again.
+  **A ported surface is redesigned for the terminal, not re-skinned**: the taste is Omarchy's (one
+  accent, soft cards, dim metadata that never competes with the name, a selection that reads as a
+  row) drawn with box-drawing, blocks and one Nerd Font glyph per row, at the size the window
+  actually opens in - so a menu may come out shorter, wider, two-column or with a preview pane,
+  and what a port keeps is its job and its keys, never rofi's one-line row with a 26 px icon.
+  **And every list filters as you type with case folded** (`readme` finds `README.md`, `año` its
+  `AÑO`): the needle is folded once per keystroke rather than once per row, an ASCII needle takes
+  the allocation-free byte path and an accented one the Unicode path, and a growing needle is a
+  `retain` over the visible set instead of a rescan - measured 372 µs against 1.74 ms for 5,000
+  rows, with allocations that do not scale with the list (`lazyos-ui/tests/filter.rs`,
+  `optimization.md` §13). Two matchers would be two case rules, so a surface with a search field
+  uses `ListState` and nothing else.
 - **Work ships as a spec, one branch and one PR each.** [`specs/`](specs/README.md) turns
   [`docs/plan-ui.md`](docs/plan-ui.md) §16 into 14 mergeable specs, each naming its scope,
   acceptance criteria, three witnesses, tests and the `opencode go` model that builds it. The
