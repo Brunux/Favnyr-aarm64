@@ -10,7 +10,8 @@
 # scripts/make-brand.sh. The idea behind it is the lazy-tools family (lazygit,
 # lazydocker and friends): the tool does the boring part, the thing you can press
 # is on the screen, and the machine is allowed to look like it is having fun
-# while it waits. Hence the wordmark and the arcade continue line underneath it.
+# while it waits. Hence the wordmark and the arcade line underneath it:
+# "press any key to play".
 #
 # The chain lives in etc/sway/config.d/23-lazyos-screensaver.conf: swayidle runs
 # this at 150 s and ~/.config/bin/sway-lock at 300 s.
@@ -79,9 +80,13 @@ center_logo() {
 static_frame() {
 	clear
 	# No cursor, and the art in the brand's cyan (#2aa198): the z_ mark is
-	# cyan everywhere it is drawn (brand/README.md).
+	# cyan everywhere it is drawn (brand/README.md).  "play" in the arcade line
+	# is the cursor orange (#e8743b), as on the wallpaper and the web page.  The
+	# colour goes in after centre_logo has padded the line, so the escapes are
+	# never counted as columns; the art file itself stays plain text, because
+	# tte reads it and would draw the escapes as characters.
 	printf '\033[?25l\033[38;2;42;161;152m'
-	center_logo
+	center_logo | sed 's/ play «$/ \x1b[38;2;232;116;59mplay\x1b[38;2;42;161;152m «/'
 }
 
 run() {

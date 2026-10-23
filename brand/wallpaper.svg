@@ -60,6 +60,12 @@
   <g font-family="JetBrains Mono">
     <text x="88" y="722" font-size="72" font-weight="800" letter-spacing="-3.6" fill="#eee8d5">lazyOS<tspan fill="#e8743b">_</tspan></text>
     <text x="88" y="766" font-size="20" fill="#2aa198">lazy by design</text>
-    <text x="88" y="800" font-size="15" fill="#93a1a1">» press any key to continue «</text>
+    <text x="88" y="800" font-size="15" fill="#93a1a1">» press any key to</text>
+    <text x="340" y="800" font-size="15" fill="#93a1a1">«</text>
   </g>
+  <!-- "play" in Silkscreen Bold at 20 px, the arcade word in cursor orange.
+       Outlined (glyph paths, not text) so the build host needs no pixel font:
+       Silkscreen is the web page's, not the image's.  It starts at x=261, one
+       space plus 2 px after "to" (JetBrains Mono advances 9 px at 15 px). -->
+  <path fill="#e8743b" d="M263.5 800V787.5H273.5V790H276V792.5H273.5V795H268.5V800ZM268.5 792.5H270.9V790H268.5ZM281 800V787.5H286V797.5H291V800ZM296 800V790H298.5V787.5H306V790H308.5V800H303.5V795H301V800ZM301 792.5H303.5V790.1H301ZM318.5 800V792.5H316V790H313.5V787.5H318.5V790H323.5V787.5H328.5V790H326V792.5H323.5V800Z"/>
 </svg>
