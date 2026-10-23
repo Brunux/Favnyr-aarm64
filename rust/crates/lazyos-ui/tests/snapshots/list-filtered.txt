@@ -1,5 +1,5 @@
 ===== 80x24 =====
-▍  Files (window)  pcmanfm                                       Search+Shift
+▍   Files (window)  pcmanfm                                      Search+Shift
 
 
 
@@ -24,7 +24,7 @@
 
                                                                          1 of 12
 ===== 152x45 =====
-▍  Files (window)  pcmanfm                                                                                                               Search+Shift
+▍   Files (window)  pcmanfm                                                                                                              Search+Shift
 
 
 

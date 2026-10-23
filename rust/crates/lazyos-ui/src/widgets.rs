@@ -23,6 +23,7 @@ use ratatui::widgets::Widget;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::design::{Border, ColorRole, Design, TextStyle};
+use crate::glyphs::Glyph;
 
 // ---------------------------------------------------------------------------
 // Drawing helpers
@@ -79,6 +80,13 @@ fn fill(buf: &mut Buffer, area: Rect, style: Style) {
         return;
     }
     buf.set_style(area, style);
+}
+
+/// `width` spaces, without formatting a string per row per frame.
+const PADDING: &str = "                ";
+
+fn spaces(width: u16) -> &'static str {
+    &PADDING[..(width as usize).min(PADDING.len())]
 }
 
 // ---------------------------------------------------------------------------
@@ -336,8 +344,14 @@ impl Row {
         }
     }
 
-    pub fn glyph(mut self, glyph: impl Into<String>) -> Self {
-        self.glyph = Some(glyph.into());
+    /// The row's picture, from the TUI alphabet ([`Glyph`]).
+    ///
+    /// The glyph is resolved once, here, not per frame: a name draws either its
+    /// codepoint or its text token (`Glyph::cell`), and `ListState` reserves the
+    /// widest cell among the rows so the labels line up whether a row has a
+    /// picture, a token or nothing.
+    pub fn glyph(mut self, glyph: Glyph) -> Self {
+        self.glyph = Some(glyph.cell().to_string());
         self
     }
 
@@ -389,6 +403,10 @@ pub struct ListState {
     offset: usize,
     filter: String,
     empty: String,
+    /// The widest glyph cell among the rows, reserved for every row so a text
+    /// token (`bt`) does not shift the labels under it.  Computed when the rows
+    /// change, from *all* of them: filtering a row out must not move the column.
+    glyph_width: u16,
 }
 
 impl ListState {
@@ -400,6 +418,7 @@ impl ListState {
             offset: 0,
             filter: String::new(),
             empty: "nothing here yet".to_string(),
+            glyph_width: 0,
         }
     }
 
@@ -409,6 +428,12 @@ impl ListState {
     }
 
     pub fn set_rows(&mut self, rows: Vec<Row>) {
+        self.glyph_width = rows
+            .iter()
+            .filter_map(|row| row.glyph.as_deref())
+            .map(|glyph| UnicodeWidthStr::width(glyph) as u16)
+            .max()
+            .unwrap_or(0);
         self.rows = rows;
         self.refilter();
     }
@@ -631,12 +656,27 @@ impl ListState {
             } else {
                 x = put(buf, x, y, "  ", area.width, design.style(TextStyle::Dim));
             }
-            if let Some(glyph) = &row.glyph {
+            if self.glyph_width > 0 {
+                let mut room = self.glyph_width;
+                if let Some(glyph) = &row.glyph {
+                    let width = UnicodeWidthStr::width(glyph.as_str()) as u16;
+                    x = put(
+                        buf,
+                        x,
+                        y,
+                        glyph,
+                        area.right() - x,
+                        design.style(TextStyle::Body),
+                    );
+                    room = room.saturating_sub(width);
+                }
+                // A row with no picture of its own still spends the column, or
+                // its label starts further left than every other row's.
                 x = put(
                     buf,
                     x,
                     y,
-                    glyph,
+                    spaces(room),
                     area.right() - x,
                     design.style(TextStyle::Body),
                 );
@@ -1281,6 +1321,66 @@ mod tests {
         assert!(!list.type_filter(KeyEvent::new(KeyCode::Char('r'), KeyModifiers::CONTROL)));
         assert!(list.type_filter(key(KeyCode::Backspace)));
         assert_eq!(list.filter(), "");
+    }
+
+    #[test]
+    fn a_row_without_a_glyph_lines_up_with_one_that_has_it() {
+        let design = Design::solarized();
+        let mut list = ListState::new();
+        list.set_rows(vec![
+            Row::new("pictured").glyph(Glyph::Folder),
+            Row::new("bare"),
+            // A text token is wider than a codepoint; the column takes the
+            // widest row, so every label still starts at the same place.
+            Row::new("tokenised").glyph(Glyph::Bluetooth),
+        ]);
+        let area = Rect::new(0, 0, 60, 3);
+        let mut buf = Buffer::empty(area);
+        list.render(area, &mut buf, &design, false);
+        let line = |y: u16| -> String {
+            (0..60)
+                .map(|x| buf.cell((x, y)).unwrap().symbol().to_string())
+                .collect()
+        };
+        let columns: Vec<usize> = ["pictured", "bare", "tokenised"]
+            .iter()
+            .enumerate()
+            .map(|(row, label)| {
+                let text = line(row as u16);
+                let byte = text
+                    .find(label)
+                    .unwrap_or_else(|| panic!("{label} is not on row {row}"));
+                // A glyph is three bytes and one cell, so the column is the
+                // number of characters before the label, not of bytes.
+                text[..byte].chars().count()
+            })
+            .collect();
+        assert_eq!(columns[0], columns[1], "a row with no glyph drifts left");
+        assert_eq!(columns[0], columns[2], "a text token widens the column");
+        assert_eq!(columns[0], 5, "two of margin, the token, one of gap");
+    }
+
+    #[test]
+    fn a_list_without_glyphs_does_not_reserve_the_column() {
+        let design = Design::solarized();
+        let mut list = ListState::new();
+        list.set_rows(vec![Row::new("plain")]);
+        let area = Rect::new(0, 0, 40, 1);
+        let mut buf = Buffer::empty(area);
+        list.render(area, &mut buf, &design, false);
+        let text: String = (0..40)
+            .map(|x| buf.cell((x, 0)).unwrap().symbol().to_string())
+            .collect();
+        assert!(text.starts_with("  plain"), "{text:?}");
+    }
+
+    #[test]
+    fn the_fallback_glyph_is_text() {
+        assert_eq!(Glyph::Bluetooth.codepoint(), None);
+        assert_eq!(Glyph::Bluetooth.cell(), "bt");
+        assert_eq!(Glyph::Folder.cell(), "\u{ea83}");
+        let row = Row::new("x").glyph(Glyph::Bluetooth);
+        assert_eq!(row.glyph.as_deref(), Some("bt"));
     }
 
     #[test]

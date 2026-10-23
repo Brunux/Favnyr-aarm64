@@ -18,13 +18,15 @@ fi
 # imagemagick is only make-icons.sh's (the launcher, the command palette and the
 # freedesktop names that script renders), rsvg-convert (librsvg2-bin) and
 # JetBrains Mono are make-brand.sh's (the mark, the wallpaper, the SVG, the
-# social card and both block-character wordmarks), and fontconfig is
-# make-emojis.sh's (fc-match/fc-query, the font whose glyphs the table is
-# filtered against).  Every PNG and table those scripts produce is committed, so
-# a build without them still builds - only an edit needs them.  Regenerating the
-# emoji table also needs the font itself (fonts-noto-color-emoji), which is a
-# desktop package and lives in uis/sway/packages.list; the host only needs to
-# have it installed where scripts/make-emojis.sh runs.
+# social card and both block-character wordmarks), and fontconfig and sha256sum
+# are make-emojis.sh's and make-glyphs.sh's (fc-match/fc-query, the font whose
+# glyphs a table is filtered against, and the pin its SHA256).  Every PNG and
+# table those scripts produce is committed, so a build without them still builds
+# - only an edit needs them.  Regenerating the emoji table also needs the font
+# itself (fonts-noto-color-emoji) and the glyph table its own symbol font
+# (fonts-nerd-symbols); both are desktop packages and live in
+# uis/sway/packages.list, so the host only needs them installed where the
+# scripts run.
 if command -v apk >/dev/null 2>&1; then
 	log "Installing host build dependencies (apk)"
 	apk add --no-cache \

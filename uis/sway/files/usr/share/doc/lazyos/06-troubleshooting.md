@@ -298,10 +298,31 @@ it. mako reads no icon-theme metadata - it walks the roots named by
 
 ## Icons render as boxes
 
-Terminals do not use fontconfig fallback: foot lists its fonts explicitly. The
-shipped `~/.config/foot/foot.ini` names `Symbols Nerd Font Mono` after JetBrains
-Mono, which is what makes eza's icons, faststart and the starship glyphs render.
-If you replace the font line, keep a symbol font in the list.
+A terminal reaches fontconfig twice: through the fonts its configuration names,
+and through fontconfig's own fallback for a glyph none of them carries (foot does
+search it, `foot.ini(5)`). The shipped `~/.config/foot/foot.ini` names `Symbols
+Nerd Font Mono` after JetBrains Mono anyway, because the fallback resolves a
+glyph from whichever family happens to have it and at **that family's** size: a
+symbol font in the list is what keeps eza's icons, fastfetch and the starship
+prompt the same size as the text. If you replace the font line, keep a symbol
+font in it.
+
+**A window the framework draws** (the `lazyos` menus) shows its pictures from the
+same symbol font, and eight of its names deliberately have no picture: the
+package Debian ships is DFSG-stripped and carries none of Font Awesome, so
+Bluetooth, Wi-Fi, the battery, the keyboard, the touchpad, the calculator, a QR
+code and crop are the short words `bt`, `wifi`, `bat`, `kbd`, `pad`, `=`, `qr` and
+`crop` on the row. Those are the design, not a missing font. A **box** where any
+other picture belongs is one: `fc-match 'Symbols Nerd Font Mono'` must name
+`SymbolsNerdFontMono-Regular.ttf`, `check-system.sh` compares that file's SHA256
+with the table the windows were built from, and
+
+```sh
+sudo apt install fonts-nerd-symbols
+```
+
+puts it back (log out and in afterwards: a running session keeps the font it
+started with).
 
 Emoji are a second, separate font: `fonts-noto-color-emoji` is what draws them,
 and without it an inserted emoji is a tofu box in the same way an icon without a

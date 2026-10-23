@@ -19,9 +19,9 @@ use std::path::PathBuf;
 
 use lazyos_ui::widgets::put;
 use lazyos_ui::{
-    App, BodyCtx, ColorRole, Confirm, Design, EmptyScreen, FailureScreen, GLYPHS, Header, KeyHint,
-    ListState, LogPane, Row, Screen, TextStyle, draw_badge, draw_card, draw_empty, draw_failure,
-    draw_gauge, draw_header, draw_keybar, draw_progress,
+    App, BodyCtx, ColorRole, Confirm, Design, EmptyScreen, FailureScreen, GLYPHS, Glyph, Header,
+    KeyHint, ListState, LogPane, Row, Screen, TextStyle, draw_badge, draw_card, draw_empty,
+    draw_failure, draw_gauge, draw_header, draw_keybar, draw_progress,
 };
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -125,53 +125,59 @@ fn body_rows() -> ListState {
     let mut list = ListState::new().with_empty("no file matches");
     list.set_rows(vec![
         Row::new("Files")
-            .glyph("\u{f07b}")
+            .glyph(Glyph::Folder)
             .detail("rofi-files")
             .value("Alt+Ctrl+F"),
         Row::new("Files (window)")
-            .glyph("\u{f07b}")
+            .glyph(Glyph::Folder)
             .detail("pcmanfm")
             .value("Search+Shift"),
         Row::new("Capture")
-            .glyph("\u{f030}")
+            .glyph(Glyph::Capture)
             .detail("screenshot")
             .value("Alt+Ctrl+C"),
         Row::new("Translate")
-            .glyph("\u{f0ac}")
+            .glyph(Glyph::Globe)
             .detail("selection")
             .value("Alt+Ctrl+T"),
         Row::new("Search inside files")
-            .glyph("\u{f002}")
+            .glyph(Glyph::Search)
             .detail("ripgrep")
             .value("Alt+Ctrl+G"),
         Row::new("Download")
-            .glyph("\u{f019}")
+            .glyph(Glyph::Download)
             .detail("yt-dlp")
             .value("Alt+Ctrl+U"),
         Row::new("Settings")
-            .glyph("\u{f013}")
+            .glyph(Glyph::Gear)
             .detail("radios")
             .value("Alt+Ctrl+O"),
         Row::new("Notifications")
-            .glyph("\u{f0f3}")
+            .glyph(Glyph::Bell)
             .detail("mako history")
             .value("Alt+Ctrl+N"),
         Row::new("Clipboard")
-            .glyph("\u{f0ea}")
+            .glyph(Glyph::Clipboard)
             .detail("cliphist")
             .value("Alt+Ctrl+V"),
         Row::new("Emoji")
-            .glyph("\u{f118}")
+            .glyph(Glyph::Smile)
             .detail("1,296 rows")
             .value("Alt+Ctrl+E"),
         Row::new("Camera")
-            .glyph("\u{f030}")
+            .glyph(Glyph::Camera)
             .detail("uvcvideo")
             .value("row"),
         Row::new("Power")
-            .glyph("\u{f011}")
+            .glyph(Glyph::Power)
             .detail("rofi-power")
             .value("Alt+Escape"),
+        // One name the stripped symbol set does not draw: the row shows its
+        // token (`bt`) and every other label keeps its column (spec 003).
+        Row::new("Bluetooth")
+            .glyph(Glyph::Bluetooth)
+            .detail("bluez")
+            .value("Alt+Ctrl+B"),
     ]);
     list
 }
@@ -224,7 +230,7 @@ fn header() {
             design,
             &Header::new("LazyOS")
                 .subtitle("the session menu")
-                .status("12 rows"),
+                .status("13 rows"),
         );
     });
 }
@@ -439,7 +445,7 @@ fn the_app_shell_with_the_menu() {
     let mut app = App::new(
         Header::new("LazyOS")
             .subtitle("the session menu")
-            .status("12 rows"),
+            .status("13 rows"),
     )
     .design(Design::solarized().with_reduced_motion(true))
     .keybar(vec![

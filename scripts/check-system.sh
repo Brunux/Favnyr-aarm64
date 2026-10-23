@@ -3313,55 +3313,135 @@ for _fw_shape in pick task; do
 	fi
 done
 
-# The widgets draw box-drawing and block characters - the frame's corners, the
-# selection bar, the gauge's cells - and a codepoint no font carries is a hole in
-# the window that logs nothing, the same failure the menu alphabet has in
-# another surface.  `lazyos --glyphs` prints the list from the binary, so the
-# check cannot drift from what the widgets actually draw, and the union of the
-# installed charsets answers for all of them in one fc-list call.
+# The widgets draw two alphabets, and they come from two different fonts: the
+# frame's box-drawing and block characters are text (JetBrains Mono, first in
+# foot's chain), and a row's picture is a Nerd Font codepoint from the symbol
+# font (spec 003).  A codepoint no font carries is a hole in the window that logs
+# nothing, which is the failure the rofi alphabet already shipped once in another
+# surface.
+#
+# `lazyos --glyphs` prints both lists from the binary, one `U+XXXX<TAB>name` per
+# line, and `--glyph-font` prints the pin the alphabet was filtered against, so
+# neither can drift from what a window actually draws.  Three things are
+# checked, and each reads as something else when it breaks:
+#
+#  1. the font named by the pin is installed.  fontconfig answers a missing
+#     family with a substitute, which renders half the codepoints and not the
+#     other half - a window of boxes with no error anywhere;
+#  2. the file is the one the table was generated from.  A font upgrade that
+#     drops a codepoint turns that row into a hole, and regenerating the table
+#     (`scripts/make-glyphs.sh`) is the fix;
+#  3. every alphabet codepoint is in that font's own character map, asked once
+#     with `fc-query` (a call per glyph cost two seconds of the report on a 4 GB
+#     device).  The frame's characters are asked of the union of the installed
+#     fonts instead: they are text, and any font that draws them will do.
+#
+# The eight names `fonts-nerd-symbols` (DFSG-stripped) does not draw are text on
+# purpose - `bt`, `wifi`, `bat`, `kbd`, `pad`, `=`, `qr`, `crop` - so the pin is
+# also asked which ones those are; a name that answered with a box would be the
+# bug this alphabet exists to prevent.
 if have lazyos && have fc-list; then
 	_fw_glyphs=$(lazyos --glyphs 2>/dev/null)
-	_fw_glyph_total=$(printf '%s\n' "$_fw_glyphs" | awk 'NF { n++ } END { print n + 0 }')
-	if [ "$_fw_glyph_total" -eq 0 ]; then
-		fail "lazyos --glyphs printed nothing: the widget glyph list is empty or the binary predates it"
+	_fw_font=$(lazyos --glyph-font 2>/dev/null)
+	_fw_total=$(printf '%s\n' "$_fw_glyphs" | awk 'NF { n++ } END { print n + 0 }')
+	_fw_family=$(sed -n 's/^family=//p' <<<"$_fw_font")
+	_fw_pin=$(sed -n 's/^sha256=//p' <<<"$_fw_font")
+	_fw_nerd=$(sed -n 's/^nerd=//p' <<<"$_fw_font")
+	_fw_fallback=$(sed -n 's/^fallback=//p' <<<"$_fw_font")
+	_fw_text=$(sed -n 's/^text=//p' <<<"$_fw_font")
+	if [ "$_fw_total" -eq 0 ] || [ -z "$_fw_family" ] || [ -z "$_fw_pin" ]; then
+		fail "lazyos --glyphs/--glyph-font printed nothing: the binary predates the alphabet (spec 003)"
 	else
-		_fw_missing=$(fc-list -f '%{charset}\n' 2>/dev/null | tr ' ' '\n' | sort -u |
-			awk -v glyphs="$_fw_glyphs" '
-			function dec(h,   i, v) {
-				v = 0
-				for (i = 1; i <= length(h); i++)
-					v = v * 16 + index("0123456789abcdef", substr(h, i, 1)) - 1
-				return v
-			}
-			BEGIN {
-				n = split(glyphs, line, "\n")
-				for (i = 1; i <= n; i++) {
-					if (line[i] == "") continue
-					want[i] = dec(tolower(substr(line[i], 3)))
-					name[i] = line[i]
-				}
-			}
-			{
-				lo = $1
-				if (index(lo, "-")) {
-					split(lo, r, "-")
-					a = dec(r[1])
-					b = dec(r[2])
-				} else {
-					a = b = dec(lo)
-				}
-				for (i = 1; i <= n; i++)
-					if (!seen[i] && want[i] >= a && want[i] <= b) seen[i] = 1
-			}
-			END {
-				for (i = 1; i <= n; i++)
-					if (want[i] && !seen[i]) out = out " " name[i]
-				print out
-			}')
-		if [ -z "$_fw_missing" ]; then
-			ok "the framework's frame renders ($_fw_glyph_total glyphs, every codepoint covered by a font)"
+		_fw_path=$(fc-match -f '%{file}' "$_fw_family" 2>/dev/null) || _fw_path=
+		_fw_families=$(fc-query --format='%{family}' "$_fw_path" 2>/dev/null | tr ',' '\n' | sed 's/^ *//')
+		if [ -z "$_fw_path" ] || [ ! -r "$_fw_path" ]; then
+			fail "fontconfig resolves no font for '$_fw_family': the rows have nothing to draw (apt install fonts-nerd-symbols)"
+		elif ! grep -qxF "$_fw_family" <<<"$_fw_families"; then
+			fail "fontconfig resolves '$_fw_family' to $_fw_path, which is not that family: install fonts-nerd-symbols"
 		else
-			fail "no installed font renders:$_fw_missing (a hole in every window that draws it, and nothing logs it)"
+			_fw_now=$(sha256sum "$_fw_path" 2>/dev/null)
+			_fw_now=${_fw_now%% *}
+			if [ "$_fw_now" = "$_fw_pin" ]; then
+				ok "the alphabet's font is the one it was generated from ($_fw_family, Nerd Fonts $_fw_nerd)"
+			else
+				fail "the alphabet's pin is for another font ($_fw_now != $_fw_pin): a font upgrade needs scripts/make-glyphs.sh, or the rows it changed are empty boxes"
+			fi
+			_fw_symbol=$(fc-query --format='%{charset}' "$_fw_path" 2>/dev/null)
+			# The union of the installed character maps is far too big for an
+			# awk -v argument (ARG_MAX said so the first time this ran): it
+			# travels on stdin, one range per line.
+			_fw_union=$(fc-list -f '%{charset}\n' 2>/dev/null | tr ' ' '\n' | sort -u)
+			if [ -z "$_fw_union" ]; then
+				fail "fc-list reports no character maps at all: the glyph check cannot answer"
+			else
+				_fw_missing=$(printf '%s\n' "$_fw_union" | awk -v glyphs="$_fw_glyphs" -v symbol="$_fw_symbol" '
+					function dec(h,   i, v) {
+						v = 0
+						for (i = 1; i <= length(h); i++)
+							v = v * 16 + index("0123456789abcdef", tolower(substr(h, i, 1))) - 1
+						return v
+					}
+					function add(token, lo, hi, index_,   range, a, b) {
+						if (token == "") return index_
+						if (index(token, "-")) {
+							split(token, range, "-")
+							a = dec(range[1])
+							b = dec(range[2])
+						} else {
+							a = b = dec(token)
+						}
+						lo[index_] = a
+						hi[index_] = b
+						return index_ + 1
+					}
+					function within(cp, lo, hi, count,   i) {
+						for (i = 0; i < count; i++)
+							if (cp >= lo[i] && cp <= hi[i]) return 1
+						return 0
+					}
+					BEGIN {
+						ucount = 0
+						scount = 0
+						n = split(symbol, token, /[ \t\n]+/)
+						for (i = 1; i <= n; i++) scount = add(token[i], slo, shi, scount)
+					}
+					{ ucount = add($0, ulo, uhi, ucount) }
+					END {
+						n = split(glyphs, line, "\n")
+						for (i = 1; i <= n; i++) {
+							if (line[i] == "") continue
+							split(line[i], field, "\t")
+							cp = dec(tolower(substr(field[1], 3)))
+							if (field[2] == "frame") {
+								if (!within(cp, ulo, uhi, ucount)) frame = frame " " field[1]
+							} else if (!within(cp, slo, shi, scount)) {
+								alphabet = alphabet " " field[2] " " field[1]
+							}
+						}
+						print "frame" frame
+						print "alphabet" alphabet
+					}')
+				_fw_miss_frame=$(sed -n 's/^frame //p' <<<"$_fw_missing")
+				_fw_miss_alpha=$(sed -n 's/^alphabet //p' <<<"$_fw_missing")
+				if [ -z "$_fw_miss_frame" ]; then
+					ok "the frame's characters render (no installed font is missing one)"
+				else
+					fail "no installed font renders:$_fw_miss_frame (a hole in every window that draws them, and nothing logs it)"
+				fi
+				if [ -z "$_fw_miss_alpha" ]; then
+					ok "the rows' glyphs render ($_fw_total codepoints, every one in $_fw_family)"
+				else
+					fail "$_fw_family does not carry:$_fw_miss_alpha (a hole in every window that draws them, and nothing logs it)"
+				fi
+			fi
+			_fw_bad_text=$(printf '%s\n' "$_fw_text" | sed -n '/^[a-z_]* [A-Za-z0-9=]\{1,4\}$/!p')
+			if [ "${_fw_fallback:-0}" -eq 0 ] || [ -z "$_fw_text" ]; then
+				fail "--glyph-font names no text fallbacks: the names the stripped symbol set lacks would draw boxes"
+			elif [ -n "$_fw_bad_text" ]; then
+				fail "a glyph name falls back to something that is not short text: $(printf '%s' "$_fw_bad_text" | tr '\n' ' ')"
+			else
+				ok "$_fw_fallback names the symbol set does not draw render text, not boxes"
+			fi
 		fi
 	fi
 fi

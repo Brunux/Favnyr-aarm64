@@ -126,9 +126,37 @@ yet present in `scripts/` as not implemented.
   one tachyonfx sweep of at most **300 ms** at a 10 fps tick, skipped by
   `LAZYOS_REDUCED_MOTION=1`; nothing loops, and the loop draws on events only - the 10 fps tick
   exists only while the opening animation runs. `lazyos --glyphs` prints the codepoints the
-  widgets draw and `check-system.sh` asks fontconfig for each one in a single call: a box-drawing
-  glyph no font has is a hole in the frame that logs nothing, the same failure the menu alphabet
-  already had in another surface.
+  widgets draw (the frame's and, since spec 003, the row alphabet's) and `check-system.sh`
+  asks the fonts for each one: a glyph no font has is a hole in the frame that logs nothing,
+  the same failure the menu alphabet already had in another surface.
+- **A row's picture is a Nerd Font codepoint, and the table behind it is generated**
+  (spec 003). `lazyos_ui::glyphs::Glyph` is the handle a command names
+  (`Glyph::Bluetooth`), and `scripts/make-glyphs.sh` is where a name becomes a codepoint:
+  it writes `glyphs/table.rs` (variant → codepoint) and `glyphs/font.pin` (family, file,
+  SHA256, Nerd Fonts version, drawn/fallback counts) from Nerd Fonts 3.5.1, filtered
+  against the character map of `Symbols Nerd Font Mono` with `fc-query`. **The filter is
+  the point**: `fonts-nerd-symbols` is DFSG-stripped - no Font Awesome, no MDI plane 15 -
+  so eight names (Bluetooth, Wi-Fi, battery, keyboard, mouse, calculator, qr, crop) have no
+  codepoint at all and draw a short token instead (`bt`, `wifi`, `bat`, `kbd`, `pad`, `=`,
+  `qr`, `crop`), because a box is a hole in the row that logs nothing. `Glyph::cell()`
+  therefore always answers something printable, the codepoints stay `\u{...}` escapes in
+  the source (a literal private-use character has not survived an editor here before), and
+  **the glyph column belongs to the list**: `ListState` reserves the widest cell among its
+  rows, so one text token does not shift the labels beside it (the widget tests render a
+  list of all three kinds and compare the column the labels start at). `--glyphs` prints
+  `U+XXXX<TAB>name` for the frame's characters *and* the alphabet, and `--glyph-font` the
+  pin; `check-system.sh` FAILs when the symbol family is missing, when the installed file's
+  SHA256 is not the pinned one, when a codepoint is not in that font's own character map,
+  and when a fallback is not short text - the frame's characters are asked of the union of
+  the installed fonts instead, because they are text and any font that draws them will do.
+  The eight fallbacks are documented in `01-welcome.md` § *The windows the framework draws*
+  and `06-troubleshooting.md` § *Icons render as boxes*, and that page corrects a claim
+  this port carried: foot **does** search fontconfig's dynamic fallback (`foot.ini(5)`), so
+  a Font Awesome codepoint renders here when `fonts-font-awesome*` is installed - the
+  alphabet is Nerd Font because a row needs the one symbol font the image guarantees and a
+  single-cell advance, not because the alternative is a box. A font upgrade that drops a
+  codepoint is caught by the pin, and `scripts/make-glyphs.sh` is how that row becomes text
+  again.
 - **Work ships as a spec, one branch and one PR each.** [`specs/`](specs/README.md) turns
   [`docs/plan-ui.md`](docs/plan-ui.md) §16 into 14 mergeable specs, each naming its scope,
   acceptance criteria, three witnesses, tests and the `opencode go` model that builds it. The

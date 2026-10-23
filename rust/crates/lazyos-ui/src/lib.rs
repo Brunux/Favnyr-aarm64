@@ -12,6 +12,11 @@
 //!   window shape for every command, with the keys, the mouse and a bounded
 //!   opening animation handled once.
 //!
+//! [`glyphs`] is the alphabet a row's picture comes from: a Nerd Font codepoint
+//! per name, filtered against the font that has to draw it (spec 003), so a
+//! name the stripped symbol package does not carry draws text instead of an
+//! empty box.
+//!
 //! A command implements [`app::Screen`] and draws into [`app::BodyCtx`] - it
 //! never sees a `ratatui::Frame`, which is what keeps the three bands identical
 //! everywhere. `scripts/check-system.sh` greps `lazyos-cli` for a `Frame` to
@@ -25,10 +30,12 @@
 
 pub mod app;
 pub mod design;
+pub mod glyphs;
 pub mod widgets;
 
 pub use app::{App, BodyCtx, EmptyScreen, FailureScreen, MOTION_MS, Outcome, Screen};
 pub use design::{Border, ColorRole, Density, Design, GLYPHS, Space, TextStyle};
+pub use glyphs::Glyph;
 pub use widgets::{
     Confirm, ConfirmAction, Header, KeyHint, ListAction, ListState, LogPane, Row, centered,
     draw_badge, draw_card, draw_empty, draw_failure, draw_gauge, draw_header, draw_keybar,

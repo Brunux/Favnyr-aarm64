@@ -22,6 +22,7 @@ pub mod paths;
 pub mod term;
 pub mod version;
 
+use std::collections::BTreeMap;
 use std::io::{self, Write};
 use std::time::Duration;
 
@@ -126,7 +127,11 @@ fn global(args: &[String]) -> Option<i32> {
             );
             let _ = writeln!(
                 out,
-                "  --glyphs        the codepoints the widgets draw, one per line"
+                "  --glyphs        the codepoints the windows draw, one per line"
+            );
+            let _ = writeln!(
+                out,
+                "  --glyph-font    the font the TUI alphabet was filtered against"
             );
             let _ = writeln!(
                 out,
@@ -137,10 +142,41 @@ fn global(args: &[String]) -> Option<i32> {
         // The codepoints the widgets draw, so `check-system.sh` can ask a font
         // for each one. A box-drawing glyph no font has is a hole in the frame
         // that logs nothing, which is why the list travels with the binary.
+        //
+        // Two alphabets, one list: the frame's box-drawing characters and the
+        // Nerd Font names a row's picture comes from (spec 003). The name beside
+        // a codepoint is what the report calls a hole.
         "--glyphs" => {
             let mut out = io::stdout();
+            let mut seen = BTreeMap::new();
             for glyph in lazyos_ui::GLYPHS {
-                let _ = writeln!(out, "U+{:04X}", *glyph as u32);
+                seen.insert(*glyph as u32, "frame");
+            }
+            for glyph in lazyos_ui::Glyph::all() {
+                if let Some(ch) = glyph.codepoint() {
+                    seen.entry(ch as u32).or_insert(glyph.name());
+                }
+            }
+            for (codepoint, name) in seen {
+                let _ = writeln!(out, "U+{codepoint:04X}\t{name}");
+            }
+            Some(EXIT_OK)
+        }
+        // The pin the alphabet was generated against, for the witness: the check
+        // compares it with the font installed on the machine, because a font
+        // upgrade that drops a codepoint turns that row into an empty box.
+        "--glyph-font" => {
+            let mut out = io::stdout();
+            let _ = writeln!(out, "family={}", lazyos_ui::glyphs::FONT_FAMILY);
+            let _ = writeln!(out, "file={}", lazyos_ui::glyphs::FONT_FILE);
+            let _ = writeln!(out, "sha256={}", lazyos_ui::glyphs::FONT_SHA256);
+            let _ = writeln!(out, "nerd={}", lazyos_ui::glyphs::NERD_VERSION);
+            let _ = writeln!(out, "drawn={}", lazyos_ui::glyphs::DRAWN);
+            let _ = writeln!(out, "fallback={}", lazyos_ui::glyphs::FALLBACK);
+            for glyph in lazyos_ui::Glyph::all() {
+                if glyph.codepoint().is_none() {
+                    let _ = writeln!(out, "text={} {}", glyph.name(), glyph.token());
+                }
             }
             Some(EXIT_OK)
         }
