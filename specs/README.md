@@ -149,7 +149,7 @@ specs.
 | # | Spec | Phase (plan §16) | Status |
 |---|---|---|---|
 | 001 | [`001-core.md`](001-core.md) — the `lazyos` binary and its host | 2 | merged |
-| 002 | [`002-design-system.md`](002-design-system.md) — tokens, widgets, snapshots | 2 | in progress |
+| 002 | [`002-design-system.md`](002-design-system.md) — tokens, widgets, snapshots | 2 | merged |
 | 003 | [`003-glyphs.md`](003-glyphs.md) — the Nerd Font alphabet | 2 | draft |
 | 004 | [`004-theme-engine.md`](004-theme-engine.md) — `theme.toml` and the generators | 2 | draft |
 | 005 | [`005-taskview.md`](005-taskview.md) — the task surface | 2 | draft |

@@ -1,6 +1,6 @@
 # Spec 002 — Design system: tokens, widgets, motion
 
-- **Status**: in progress
+- **Status**: merged
 - **Phase**: 2
 - **Depends on**: 001
 - **Model**: `opencode-go/glm-5.3` — visual judgement is the hard half (spacing, hierarchy,
