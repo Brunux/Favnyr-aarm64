@@ -128,6 +128,11 @@ The canonical references: **yazi** (async walk + preview pane + task manager wit
 
 - **Rows = Nerd Font glyphs.** The current `UI_I_*` alphabet is Font Awesome codepoints, which
   foot cannot draw (its fallback is Symbols Nerd Font Mono — the documented fzf/welcome rule).
+  Measured while building spec 003: this was too strong — foot does search fontconfig's dynamic
+  fallback (`foot.ini(5)`), so a Font Awesome codepoint renders once `fonts-font-awesome*` is
+  installed. The alphabet is Nerd Font anyway, for the reason that survives: a row's picture has
+  to come from the one symbol font the image guarantees (`fonts-nerd-symbols`) and occupy one
+  cell, not from whichever family answers.
   The framework carries an `enum Glyph` mapping the alphabet 1:1 to Nerd Font codepoints
   (Octicons/Codicons/Devicons/Seti/Powerline, from `fonts-nerd-symbols`). The table is
   **generated filtered, not hand-written**: a host tool (`scripts/make-glyphs.sh`, sibling of

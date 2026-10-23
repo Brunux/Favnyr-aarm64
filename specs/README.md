@@ -150,7 +150,7 @@ specs.
 |---|---|---|---|
 | 001 | [`001-core.md`](001-core.md) — the `lazyos` binary and its host | 2 | merged |
 | 002 | [`002-design-system.md`](002-design-system.md) — tokens, widgets, snapshots | 2 | merged |
-| 003 | [`003-glyphs.md`](003-glyphs.md) — the Nerd Font alphabet | 2 | draft |
+| 003 | [`003-glyphs.md`](003-glyphs.md) — the Nerd Font alphabet | 2 | in progress |
 | 004 | [`004-theme-engine.md`](004-theme-engine.md) — `theme.toml` and the generators | 2 | draft |
 | 005 | [`005-taskview.md`](005-taskview.md) — the task surface | 2 | draft |
 | 006 | [`006-notifications.md`](006-notifications.md) — cards and icons | 2 | draft |
