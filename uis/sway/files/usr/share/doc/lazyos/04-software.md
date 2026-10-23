@@ -329,15 +329,18 @@ panel** are deliberately not saved - a config that disables a screen would boot 
 card with nothing on it - so they last until the session ends and the menu says
 how to undo them. Delete the file to go back to sway's default (on the right).
 
-**If the panel is the screen that is off, the way back is the same menu.**
+**If the panel is the screen that is off, there are two ways back.**
 "Only the monitor" turns the internal panel off for the session, so if the cable
 then comes out - or the monitor loses its link - there is no picture at all.
-`Alt+Ctrl+O` still reaches sway (keys work with no output), and **Bring the
-internal panel back** is the menu's first row even with no monitor plugged in;
-it is the row that exists for exactly this state. From another machine, over
-ssh, `swaymsg output eDP-1 enable` is the same command. A reboot also brings it
-back, because the choice is never written to the file - the power key is just
-the expensive version of this paragraph.
+**`Alt+Ctrl+Shift+D`** turns the panel back on and needs no picture to do it: it
+runs `~/.config/bin/rofi-display --panel-on`, which is the reason the key exists,
+because a menu cannot be drawn when every output is off - and sway allows
+turning the last one off. When a screen *can* still draw (the monitor is present
+but disabled, or the panel is off and the monitor is on), `Alt+Ctrl+O` →
+**Display arrangement** carries the same row, **Bring the internal panel back**,
+and the menu offers it even with no monitor plugged in. Over ssh,
+`swaymsg output eDP-1 enable` is the same command, and a reboot clears it too,
+because the choice is never written to the saved arrangement.
 
 **The night light does not reach it.** `wlsunset` asks the compositor for a
 gamma table per output, and this kernel has one only for the internal panel's

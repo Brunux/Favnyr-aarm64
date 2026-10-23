@@ -195,13 +195,13 @@ monitor* in `04-software.md`). In order:
   the output appears.
 * **Nothing on either screen**: the panel was turned off by "Only the monitor"
   and then the monitor stopped answering (the cable came out, or it lost the
-  link to the crosspoint). The keyboard still reaches sway with no output, so
-  `Alt+Ctrl+O` opens Settings and **Display arrangement**'s first row,
-  **Bring the internal panel back**, turns the panel on again - the menu offers
-  that row even with no monitor plugged in, which is the whole reason it is
-  there. Blind, over ssh, the same command is `swaymsg output eDP-1 enable`. A
-  reboot clears it too, because the choice is never written to the saved
-  arrangement; the power key is just the slow way to the same place.
+  link to the crosspoint). **`Alt+Ctrl+Shift+D`** turns the panel back on - it
+  runs `~/.config/bin/rofi-display --panel-on`, a sway command with no menu
+  involved, which matters because a menu cannot be drawn with every output off.
+  When a screen can still draw, `Alt+Ctrl+O` → **Display arrangement** has the
+  same row, **Bring the internal panel back**, even with no monitor plugged in.
+  Blind, over ssh, the command is `swaymsg output eDP-1 enable`. A reboot clears
+  it too, because the choice is never written to the saved arrangement.
 
 Neither the night light nor the screen's brightness reaches it: the external
 CRTC has no gamma table and the panel's own backlight is the monitor's.

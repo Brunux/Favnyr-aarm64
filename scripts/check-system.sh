@@ -495,6 +495,22 @@ SH
 	fi
 fi
 
+# The blind key.  With every output off there is nowhere to draw a menu - sway
+# lets the last output be turned off (measured) - so the recovery has to be a
+# command, and both halves matter: a binding whose mode is gone does nothing,
+# and a mode nobody binds is unreachable with a black screen.
+if grep -qs 'rofi-display --panel-on' /etc/sway/config.d/*.conf \
+	"$HOME/.config/sway/config.d"/*.conf 2>/dev/null; then
+	ok "a key turns the internal panel back on with no picture (blind recovery)"
+else
+	fail "no binding runs 'rofi-display --panel-on': a black screen has no way back"
+fi
+if grep -qs -- '--panel-on' "$_disp" 2>/dev/null; then
+	ok "rofi-display --panel-on exists"
+else
+	fail "$_disp has no --panel-on mode: the recovery key would run nothing"
+fi
+
 # ---------------------------------------------------------------------------
 section "Input"
 # ---------------------------------------------------------------------------

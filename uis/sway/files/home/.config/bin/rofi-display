@@ -139,6 +139,23 @@ if [ "${1:-}" = "--status" ]; then
 	exit 0
 fi
 
+# --- the blind way back ---------------------------------------------------
+# With every output off there is nothing to draw a menu on: sway permits
+# disabling the last one (measured - eDP-1 inactive with no mode, and `output
+# eDP-1 enable` brings it straight back).  This is the binding rather than a row
+# because a person with a black screen has no menu to pick from; it runs the
+# command and needs no surface.
+if [ "${1:-}" = "--panel-on" ]; then
+	[ -n "$panel" ] || panel=eDP-1
+	if swaymsg output "$panel" enable >/dev/null 2>&1; then
+		ui_say 'Display' "$panel is back on" normal "$UI_ICON_INFO"
+	else
+		ui_say 'Display' "Could not turn $panel back on" critical "$UI_ICON_ERROR"
+		exit 1
+	fi
+	exit 0
+fi
+
 # --- resolution -----------------------------------------------------------
 # Every mode the monitor reports, deduplicated (the EDID repeats 1920x1080 for
 # each variant it offers), the current one marked.  Changing it changes the

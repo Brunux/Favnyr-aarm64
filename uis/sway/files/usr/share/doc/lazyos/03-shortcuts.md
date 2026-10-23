@@ -27,6 +27,7 @@ read. This page is the tour.
 | Alt+Ctrl+G | search inside the files: ripgrep over your home, Enter opens the file at the matching line |
 | Alt+Ctrl+T | translate the selected text (or the clipboard): the answer is copied, and the card names the direction |
 | Alt+Ctrl+O | settings: the radio switches, night light, touchpad, rotation, display arrangement |
+| Alt+Ctrl+Shift+D | bring the internal panel back when the screen is black (no menu needed: it works with nothing on screen) |
 | Alt+Ctrl+N | notifications: the history, do-not-disturb, copy one |
 | Alt+Ctrl+Q | calculator: type it, Enter copies the result |
 | Alt+Ctrl+V | clipboard history: Enter puts an entry back, Alt+1 deletes it |
@@ -105,6 +106,7 @@ with `Super+Ctrl`:
 | Alt+Ctrl+X | dictation on/off (the notification stays while it records; press again to stop) |
 | Alt+Ctrl+Shift+A | agents (launch, accounts, install) |
 | Alt+Ctrl+O | settings: Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation, display arrangement |
+| Alt+Ctrl+Shift+D | the internal panel back on, with nothing on screen: the way out of a black screen (it runs a sway command, not a menu) |
 | Alt+Ctrl+N | notifications: history, do-not-disturb, copy |
 | Alt+Ctrl+Q | calculator |
 | Alt+Ctrl+V | clipboard history (Enter copies back, Alt+1 deletes the entry) |
