@@ -1533,6 +1533,12 @@ fi
 [ -x "$HOME/.config/bin/rofi-files" ] && ok "file browser (rofi-files) is executable" ||
 	fail "bin/rofi-files is missing: Alt+Ctrl+F and the Files menu entry do nothing"
 
+# The translate key is taught in one place, the shortcuts page, and the Settings
+# row only says what it does - not that it exists.  A manual that lost the row
+# is a key nobody finds.
+grep -qs 'Alt+Ctrl+T' /usr/share/doc/lazyos/03-shortcuts.md ||
+	fail "03-shortcuts.md does not name Alt+Ctrl+T (the only place the translate key is taught)"
+
 # Every menu behind the root menu is a rofi-* script. A missing one is the
 # quietest failure in the session: the row is still listed (bar-menu draws it
 # from a static list) and choosing it does nothing at all.
@@ -1989,13 +1995,14 @@ grep -qs '^exec .*/lazyos-welcome' "$HOME/.config/sway/config.d/30-welcome.conf"
 if [ -z "$_welcome" ]; then
 	_welcome_text=$("$HOME/.config/bin/lazyos-welcome" --print 2>/dev/null || true)
 	_welcome_missing=""
-	for _k in 'Alt+Space' 'Alt+D' 'Search' 'Alt+Ctrl+F' 'Alt+Return' 'Alt+Q' 'Alt+Escape' 'Alt+Ctrl+K'; do
+	for _k in 'Alt+Space' 'Alt+D' 'Search' 'Alt+Ctrl+F' 'Alt+Ctrl+T' 'Alt+Return' \
+		'Alt+Q' 'Alt+Escape' 'Alt+Ctrl+K'; do
 		grep -qF -- "$_k" <<<"$_welcome_text" || _welcome_missing="$_welcome_missing $_k"
 	done
 	grep -qF -- 'once per install' <<<"$_welcome_text" ||
 		_welcome_missing="$_welcome_missing once-per-install"
 	if [ -z "$_welcome_missing" ]; then
-		ok "welcome window lists the eight keys and says it is once per install"
+		ok "welcome window lists the nine keys and says it is once per install"
 	else
 		fail "welcome window text lacks:$_welcome_missing"
 	fi
@@ -2314,6 +2321,55 @@ fi
 _model="$(ls "$HOME"/.local/share/whisper/ggml-*.bin 2>/dev/null | head -1)"
 [ -n "$_model" ] && ok "speech model present ($(basename "$_model"))" ||
 	skip "no speech model yet: the dictation shortcut fetches tiny.en (78 MB) on first use"
+
+# Translate (Alt+Ctrl+T): the selection goes to one endpoint with a fallback.
+# What a report can see is the tools, the binding and the Settings row - the
+# network is asked, never required, because a card without Wi-Fi translates
+# nothing and says so.
+_missing_translate=""
+for _t in curl jq wl-paste; do
+	have "$_t" || _missing_translate="$_missing_translate $_t"
+done
+[ -x "$HOME/.config/bin/translate" ] ||
+	_missing_translate="$_missing_translate bin/translate(not executable)"
+grep -qs 'bindsym $mod+Ctrl+t exec .*/translate' \
+	/etc/sway/config.d/24-keys.conf 2>/dev/null ||
+	_missing_translate="$_missing_translate 24-keys.conf(no-binding)"
+grep -qs 'translate" config' "$HOME/.config/bin/rofi-quick" 2>/dev/null ||
+	_missing_translate="$_missing_translate rofi-quick(no-row)"
+[ -r /usr/share/icons/LazyOS/48x48/apps/globe.png ] ||
+	_missing_translate="$_missing_translate globe.png"
+if [ -z "$_missing_translate" ]; then
+	ok "translate ready (Alt+Ctrl+T: curl, jq, wl-paste, the binding, the Settings row, the globe icon)"
+else
+	fail "translate incomplete:$_missing_translate (Alt+Ctrl+T does nothing, or its card has a hole)"
+fi
+# The target is one line a person may edit, so a code the table does not know is
+# a typo that would silently translate into the wrong language: it is asked of
+# the script itself, which is the same table the Settings menu draws.
+_target_code=$(sed -n 's/^[[:space:]]*target[[:space:]]*=[[:space:]]*//p' \
+	"$HOME/.config/lazyos/translate.conf" 2>/dev/null | tail -n 1)
+# The list is captured first: `translate --languages | cut | grep -q` would kill
+# the producer with SIGPIPE under pipefail and report a good code as unknown.
+_translate_langs=$("$HOME/.config/bin/translate" --languages 2>/dev/null |
+	cut -f1 || true)
+if [ -z "$_target_code" ]; then
+	ok "translate target is the default (English; Settings → Translate changes it)"
+elif grep -qx -- "$_target_code" <<<"$_translate_langs"; then
+	ok "translate target is '$_target_code', a language both engines take"
+else
+	fail "translate target '$_target_code' is not in the language table (~/.config/lazyos/translate.conf): the script falls back to English, so the setting does nothing"
+fi
+# The endpoint is unofficial, so it is asked and not required: offline is SKIP,
+# and any other answer is a WARN because MyMemory may still be the answer.
+_translate_code=$(curl -sS --max-time 5 -o /dev/null -w '%{http_code}' \
+	'https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl=en&q=ok' \
+	2>/dev/null || true)
+case $_translate_code in
+200) ok "the translation endpoint answers (Google first, MyMemory as the fallback)" ;;
+'' | 000) skip "no network: the translation endpoint was not reachable (Alt+Ctrl+T says so instead of translating)" ;;
+*) warn "the translation endpoint answered $_translate_code, not 200: Google is out and MyMemory is the fallback here" ;;
+esac
 
 # Hibernate needs both a disk swap and resume=; without them the helper explains
 # what is missing, which is the correct behaviour, not a failure.

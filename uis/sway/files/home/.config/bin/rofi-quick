@@ -268,6 +268,13 @@ render() { # OUTFILE
 				tablet-calibrate "$UI_YELLOW"
 		fi
 		ui_row "$UI_I_KEYBOARD" 'Keyboard layout' "$(layout_name)" layout
+		# The one setting this panel does not switch: what Alt+Ctrl+T
+		# translates into.  The row says the current language, so the answer is
+		# on screen without opening the menu, and the menu is where the how-to
+		# lives (a key with no row is a key nobody finds).
+		ui_row "$UI_I_GLOBE" 'Translate' \
+			"into $("$dir/translate" --target-name 2>/dev/null || echo English)" \
+			translate
 	) >"$_s/4" &
 	(
 		ui_row "$UI_I_VOLUME" 'Audio output' "$(audio_detail)" audio
@@ -339,6 +346,7 @@ while :; do
 	tablet) "$dir/tablet-mode" toggle ;;
 	tablet-calibrate) "$dir/tablet-mode" calibrate || true ;;
 	layout) exec "$dir/rofi-layout" ;;
+	translate) "$dir/translate" config ;;
 	audio) exec "$dir/bar-audio" ;;
 	media) exec "$dir/rofi-media" ;;
 	power) exec "$dir/bar-power" ;;

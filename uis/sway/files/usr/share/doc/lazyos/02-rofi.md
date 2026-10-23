@@ -21,6 +21,7 @@ daemon).
 | **Alt+Ctrl+Q** | `rofi-calc` | a calculator: type `(3*4)/2`, Enter copies `6` |
 | **Alt+Ctrl+V** | `rofi-clip` | **clipboard history**: what was copied, Enter puts it back, Alt+1 deletes that entry |
 | **Alt+Ctrl+E** | `rofi-emoji` | **emoji**: type a name, Enter inserts the glyph at the cursor, Alt+1 only copies it |
+| **Alt+Ctrl+T** | `translate` | **translate** the selected text (or the clipboard) into the language Settings sets, English until it is set; the answer is copied, and a long one opens in a read window |
 | any bar module click | `bar-pick` → `rofi -dmenu` | the fixed list that module hands it (Wi-Fi networks, sinks, devices, power actions, …) |
 | **Learn** (root menu) | `rofi-learn` | these pages, rendered with glow, plus a search across all of them |
 
@@ -313,6 +314,26 @@ keysym for its codepoint, and most emoji have none in the current keymap. Alt+1
 is the clipboard write alone, for a program that refuses a virtual keyboard. What
 draws the glyph is `fonts-noto-color-emoji`; without it an emoji is a tofu box,
 which is why `check-system.sh` asks `fc-match emoji`.
+
+## Translate
+
+**Alt+Ctrl+T** is not a menu: it translates **the text you selected with the
+mouse** (or, with nothing selected, the clipboard) into one language, copies the
+answer and names the direction in a notification - `Spanish → English`. The only
+thing to configure is which language that one is, and it is a row in
+**Settings**: **Translate** shows the current one and opens the list of the
+twenty-six languages both engines take, with the how-to on the same screen
+(`~/.config/bin/translate config` is that list from a terminal). Until it is set,
+everything goes into **English**.
+
+The engine is chosen for this machine, not by taste: Google's JSON endpoint first
+(`clients5`, the one that also detects the language), MyMemory without a key
+second (in 450-character pieces; 500 is its ceiling), and a card that says the
+network is the reason when neither answers. `translate-shell` is not installed
+because the endpoint it uses answers this machine with a captcha page. A
+translation longer than a few lines opens in a read window instead of a toast;
+the full page is `04-software.md` § Translate, including why a translated secret
+is a secret in the clipboard history.
 
 ## Colour, DNS, packages, reminders and about
 

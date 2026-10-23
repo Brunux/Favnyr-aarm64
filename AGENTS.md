@@ -1086,7 +1086,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   this is a stylesheet, not a theme package. Adwaita 51 ships no full-colour `folder`,
   `user-home` or `drive-harddisk` at all, which is why `scripts/make-icons.sh` grew a **fourth
   table** (50 names: the places, the actions and the mimetypes the sidebar and the icon view ask
-  for by name; the theme is 220 files in each of `48x48/apps` and `scalable/apps` - 219 from
+  for by name; the theme is 225 files in each of `48x48/apps` and `scalable/apps` - 224 from
   `make-icons.sh`, plus the mark from `make-brand.sh`), and `check-system.sh`
   asks the theme for the names pcmanfm draws instead of trusting the picture.
 - **`Search+Shift` is the window, and both halves are release bindings**: sway matches a release
@@ -1389,6 +1389,34 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   the list shows on a second, dimmer line, and cancelling reads `LoadState`/`Description`/
   `TimersCalendar` before claiming anything. The bar's `sbs-8-000b` gauge is the
   battery there; a `hid-*` power supply belongs to the touchpad and reads 0%.
+- **Translate is a key, not a right-click, and the selection is the text.** `Alt+Ctrl+T`
+  (`~/.config/bin/translate`) sends the mouse selection - the primary selection, which a drag
+  already writes - or the clipboard into one language and copies the answer; a long answer opens in
+  a read window. foot *could* have run it from the mouse: 1.28 here has `pipe-selected`,
+  `[mouse-bindings]` takes any key-binding action, and `pipe-selected=[sh -c "…"] BTN_RIGHT` parses
+  once `select-extend=none` frees the button (`foot -C -c …` is the check). It is a key because that
+  binding would take right-click away from every TUI under foot and right-drag-select with it, and
+  because the key works from the browser, a document and the file manager too. **The engine is
+  chosen by measurement, not taste**: Google's `translate_a/single` - the one `translate-shell`
+  uses - answers this machine with a captcha page, while
+  `clients5.google.com/translate_a/t?client=dict-chrome-ex` answers plain JSON, auto-detects the
+  source and echoes it, so the card can say `Spanish → English` and an English selection can answer
+  **Already English**; it takes GET only (POST 302s to `/sorry`), which is why the query rides in
+  the URL and the selection is capped at 3000 characters. MyMemory (no key, but 500 characters per
+  request, so the text is folded into 450-character pieces) is the fallback, and when neither
+  answers the card says so instead of showing half a translation. `translate-shell` is contrib
+  (277 kB) and would have been a command that never works here. `~/.config/lazyos/translate.conf`
+  holds `target=en` (the default when the file is absent) and `fallback_source=`, the language
+  MyMemory is told when it cannot detect one; **Settings → Translate** (`rofi-quick`) is the list,
+  and `translate config` is the same menu from a terminal. It is a `busy` card with the bar's
+  spinner and a `BUSY_STOP` (both endpoints), so a slow network is visible and a click stops it;
+  nothing is resident. Privacy is stated rather than hidden: the result is on the clipboard and
+  therefore in `cliphist`, and the card is in mako's history. Witnesses: `check-system.sh` FAILs on
+  the script, the binding, the Settings row, `curl`/`jq`/`wl-paste`, the `globe` icon, an unknown
+  language code and `03-shortcuts.md`'s row, WARNs on an endpoint that is not 200, and SKIPs
+  offline; the manual pages are `02-rofi.md` § Translate, `04-software.md` § Translate and
+  `06-troubleshooting.md` § *The translation says the engine refused*; the welcome card and
+  `03-shortcuts.md` teach the key.
 - **The About windows name `Alt+Q`, not foot's close key.** `Ctrl+Shift+W` is foot's
   built-in and did not reach the held windows on this keyboard; `Alt+Q` is sway's own `kill`
   and closes them. The three footers (fastfetch, boot time, devices) and

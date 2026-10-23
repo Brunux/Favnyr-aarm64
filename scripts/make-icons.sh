@@ -273,6 +273,7 @@ dialog-information                 f05a
 dialog-warning                     f071
 dialog-error                       f06a
 network-server                     f233
+globe                              f0ac
 folder                             f07b
 go-up                              f062
 view-hidden                        f070

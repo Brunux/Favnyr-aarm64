@@ -253,7 +253,7 @@ filtered by "can it be a rofi list plus a script, with no resident process". Cos
 | Rotation (manual) | `wlr-randr` (81 kB) | output transform; see the tablet section |
 | Unit conversion | `units` (917 kB) or a python table | script mode like the calculator |
 | Screen recording | `wf-recorder` (220 kB) | **done**, without audio: full screen or region, pid file in `$XDG_RUNTIME_DIR`, start/stop from `rofi-capture`; audio later |
-| Translate | `translate-shell` (277 kB) | network; to a notification and the clipboard |
+| Translate | none (`curl` + `jq`) | **done**: the selection (or the clipboard) into one language, Google's JSON endpoint with MyMemory as the fallback; the answer to the clipboard and a card, long text to a read window. `translate-shell` was the candidate, but its engine answers this machine with a captcha page |
 | Weather | none (`curl`) | `wttr.in` in foot |
 | World clock | none | `TZ=… date` list |
 | Disk usage | `ncdu` (156 kB) | ncdu in foot for `/`, `/home`, the card |
@@ -317,7 +317,7 @@ a sway concept) · a theme *store* (the theme switcher is its own project).
 | Round | Contents | Effort |
 |---|---|---|
 | 1 | Batch A (ten menus, no packages) + the manual page for them | done |
-| 2 | Batch B (emoji, clipboard, calculator, snippets, pass, swappy, wlr-randr, units, recording, translate, weather, world clock, ncdu) | partly: emoji, clipboard, calculator, annotation, recording and the manual rotation are done; snippets, `pass`, units, translate, weather, world clock and `ncdu` remain |
+| 2 | Batch B (emoji, clipboard, calculator, snippets, pass, swappy, wlr-randr, units, recording, translate, weather, world clock, ncdu) | partly: emoji, clipboard, calculator, annotation, recording, the manual rotation and translate are done; snippets, `pass`, units, weather, world clock and `ncdu` remain |
 | 3 | Tablet mode + on-screen keyboard + rotation | done; **the switch itself is untested on hardware** |
 | 4 | Agents usage (local logs), recording with audio, theme switcher | open |
 

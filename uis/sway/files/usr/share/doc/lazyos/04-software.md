@@ -334,6 +334,50 @@ running (`night-light resume`), and it does nothing when the night light was off
 before the sleep. `night-light status` prints `on schedule`, `on warm` or `off`
 from a terminal.
 
+## Translate
+
+**Alt+Ctrl+T** translates **the text you selected with the mouse** - in the
+terminal, in the browser, in any window - or, when nothing is selected, what is
+on the clipboard. Nothing is opened first: the selection *is* the question, and
+the key answers it in place.
+
+The source language is always detected; everything goes into the language
+**Settings → Translate** sets. Until that is set it is **English**, so an image
+that was never configured answers the common case with one key. The Settings row
+also says which language is in use, and the menu it opens lists the twenty-six
+languages both engines take with the how-to on the same screen
+(`~/.config/bin/translate config` from a terminal). The setting is one line in
+`~/.config/lazyos/translate.conf`:
+
+    target=es
+
+The translation is **copied to the clipboard** and shown in a card that names
+the direction it went (`Spanish → English`). When it is longer than a few lines
+the card is only the summary: a read window opens with the whole translation and
+the selection underneath it, paged with `bat`, and Alt+Q closes it. A selection
+cut at 3000 characters says so on the card. English into English is the one
+direction that answers something already known, so that case says **Already
+English** instead of echoing the text and points at Settings.
+
+**The network** decides the rest. Google's JSON endpoint is asked first
+(`clients5` with `client=dict-chrome-ex` - the same answer that detects the
+language), and MyMemory without a key is the fallback, in 450-character pieces
+because 500 is its ceiling. When neither answers, the card says so - *No answer
+from the translator: is the network up?* - instead of showing half a
+translation. The request is one `curl`; a `busy` card and the bar's spinner say
+it is running, and **a click on the spinner stops it**.
+
+Nothing is stored by this feature: no history file, no cache. The result is on
+the clipboard, which means it is in the clipboard history (`Alt+Ctrl+V`) like
+anything else copied, and the card is in mako's history - so a secret translated
+is a secret in both, and the clipboard menu's last row clears that history.
+
+`translate-shell` is deliberately not installed. It would have been one package
+(277 kB), but its engine is Google's *other* endpoint, which answers this
+machine with a captcha page; the package would be a command that never works
+here. `check-system.sh` reports the tools this script does need (`curl`, `jq`,
+`wl-paste`) and SKIPs the network probe when the machine is offline.
+
 ## What is deliberately not installed
 
 A GUI editor, an office suite and any Electron-style application. The image is

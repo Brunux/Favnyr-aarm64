@@ -138,7 +138,7 @@ listed here so the two lists do not have to be read together to know what is lef
 | Snippets | — | — | `~/.config/snippets.tsv` → rofi → `wtype`/`wl-copy`; `wtype` is installed. |
 | Password store | `pass` (or `rbw`) | 129 kB (15.3 MB) | `passmenu`-style, one row per entry; `gnupg` is installed. The choice between the two is still open in the plan. |
 | Unit / currency conversion | `units` (or a python table) | 917 kB | A script mode beside `rofi-calc`. |
-| Translate | `translate-shell` | 277 kB | Network; result to a notification and the clipboard. |
+| Translate | — (`curl` + `jq`) | — | **done**: `Alt+Ctrl+T` translates the mouse selection (or the clipboard) with Google's JSON endpoint and MyMemory as the fallback - `translate-shell` is contrib and its engine answers this machine with a captcha page. Result to the clipboard and a card; long text to a read window. |
 | Disk usage | `ncdu` | 156 kB | `ncdu` in foot for `/`, `/home` and the card (the Free space menu walks `du`). |
 | Mirror ranking | `netselect-apt` | 35 kB | A system task, last in the plan. |
 | Weather | — (`curl` installed) | — | `wttr.in` in foot. |

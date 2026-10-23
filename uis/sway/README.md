@@ -29,6 +29,7 @@ launcher, waybar and the foot terminal.
 | `home/.config/bin/rofi-learn` | **Learn**: the manual, one page at a time. |
 | `home/.config/bin/rofi-keys` | **Keybindings**: every binding, parsed from the configuration, one icon per section. |
 | `home/.config/bin/dictate`, `dictate-model` | Dictation with whisper.cpp; the model is fetched (pinned SHA256) on first use. |
+| `home/.config/bin/translate` | **Alt+Ctrl+T**: the text selected with the mouse (or the clipboard) into the language Settings sets - English until it is - with Google's JSON endpoint and MyMemory as the fallback; the answer goes to the clipboard and, when long, to a read window. |
 | `home/.config/bin/sway-hibernate` | Hibernate, gated on a disk swap and `resume=`. |
 | `home/.config/bin/rofi-agents` | **Agents**: launch a coding agent, install one, keep accounts per agent. |
 | `home/.config/bin/rofi-capture`, `rofi-qr`, `screenshot` | **Capture** (screenshot, annotate, OCR, QR, record), the Wi-Fi QR code, and the one place a screenshot's folder is decided (`~/Pictures/Screenshots/<today>/`). |
@@ -206,7 +207,7 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 
 | Script | Key / entry | What it does |
 |---|---|---|
-| `rofi-quick` | `Alt+Ctrl+O`, Settings | the switches of the session in one list: Wi-Fi and Bluetooth radios (with the pickers one row below), night light, do-not-disturb, touchpad, tablet mode (the on-screen keyboard and the rotation, see the tablet section) and **Calibrate rotation** while the mode is on, rotation, keyboard layout, audio, media, battery. It redraws after every switch, so the state it shows is never stale, and its probes run in parallel (two `bluetoothctl` clients, `nmcli` and `swaymsg` in sequence made it feel broken) |
+| `rofi-quick` | `Alt+Ctrl+O`, Settings | the switches of the session in one list: Wi-Fi and Bluetooth radios (with the pickers one row below), night light, do-not-disturb, touchpad, tablet mode (the on-screen keyboard and the rotation, see the tablet section) and **Calibrate rotation** while the mode is on, rotation, keyboard layout, what **Alt+Ctrl+T** translates into, audio, media, battery. It redraws after every switch, so the state it shows is never stale, and its probes run in parallel (two `bluetoothctl` clients, `nmcli` and `swaymsg` in sequence made it feel broken) |
 | `rofi-power` | `Alt+Escape`, `Alt+Ctrl+P`, Power menu | lock, suspend, hibernate, log out, reboot, shut down; the last three ask once more through `bar-pick` |
 | `rofi-notify` | `Alt+Ctrl+N`, Notifications | mako's history (`makoctl history -j`), Enter copies one, plus restore, dismiss-all and do-not-disturb |
 | `rofi-clean` | Free space | `df` plus what grows (trash, thumbnails, apt cache, journal, `~/.cache`), one action per row, re-measured afterwards |

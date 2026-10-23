@@ -33,7 +33,7 @@ cat /etc/debian-aarch64-revision ~/Dev/LazyOS/REVISION ~/Dev/LazyOS/VERSION
 
 | Step | Expected |
 |---|---|
-| log in on a card that has never been logged into | one foot window (`--app-id=lazyos-welcome`) with eight keys: `Alt+Space` menu, `Alt+D` launcher, `Search` file search, `Alt+Ctrl+F` file list, `Alt+Return` terminal, `Alt+Q` close, `Alt+Escape` power, `Alt+Ctrl+K` bindings. Enter closes it |
+| log in on a card that has never been logged into | one foot window (`--app-id=lazyos-welcome`) with nine keys: `Alt+Space` menu, `Alt+D` launcher, `Search` file search, `Alt+Ctrl+F` file list, `Alt+Ctrl+T` translate, `Alt+Return` terminal, `Alt+Q` close, `Alt+Escape` power, `Alt+Ctrl+K` bindings. Enter closes it |
 | log out and back in | no window: it is once per install, not once per login |
 | `cat ~/.local/state/lazyos/welcome` | the content of `/etc/machine-id` |
 | delete that file, log out and back in | the window returns |
@@ -136,6 +136,27 @@ be read from the contents.
 Tofu boxes instead of glyphs mean `fonts-noto-color-emoji` is missing (a FAIL in
 `check-system.sh`); an empty list means `~/.config/emojis.tsv` is missing
 (regenerate it with `scripts/make-emojis.sh` on the build host).
+
+## Translate - `Alt+Ctrl+T`
+
+| Step | Expected |
+|---|---|
+| select a Spanish sentence with the mouse in foot, press `Alt+Ctrl+T` | a `Translating…` card, then `Spanish → English` with the translation; the whole answer is on the clipboard (`Ctrl+Shift+V` in foot) |
+| `Alt+Ctrl+T` with nothing selected, after copying a sentence | the clipboard's sentence is the one translated (the clipboard is the second source) |
+| select an English sentence | the card says **Already English** and the clipboard is untouched |
+| select a long paragraph (half a screen) | the card and a floated `foot` read window with the translation and the selection underneath; Alt+Q closes it |
+| **Settings** (`Alt+Ctrl+O`) → **Translate** | the list opens with the current language marked and the how-to rows; pick **Spanish**, Escape, open Settings again | the row says `into Spanish` |
+| select English text and press `Alt+Ctrl+T` | `English → Spanish`, which is the configured direction |
+| `cat ~/.config/lazyos/translate.conf` | `target=es` |
+| disconnect Wi-Fi, select text, press the key | one critical card, *No answer from the translator: is the network up?*, and nothing on the clipboard |
+| press the key, then click the bar's spinner while `Translating…` is up | the card disappears and nothing is reported (a stopped translation is not a failure) |
+
+A card titled `… (MyMemory)` means Google was unreachable and the fallback
+answered (the guess is `es` for an English target unless `fallback_source=`
+says otherwise). A card that never appears at all is the binding
+(`/etc/sway/config.d/24-keys.conf`) or the script's executable bit;
+`check-system.sh` reports both, and SKIPs its network probe when the card is
+offline instead of failing.
 
 ## DNS - root menu (`Alt+Space`) -> **DNS**
 

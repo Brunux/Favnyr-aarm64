@@ -192,6 +192,36 @@ with the session; a session older than that line has no history. The list also
 says so itself when `cliphist` is missing. `Alt+Ctrl+V` → **Clear the history**
 empties it, and the database is `~/.cache/cliphist/db`.
 
+## The translation says the engine refused
+
+`Alt+Ctrl+T` asks two free endpoints in order: Google's JSON one, then MyMemory
+without a key. The card *No answer from the translator: is the network up?*
+means neither answered, which is most often exactly that - `ping -c1 1.1.1.1`
+settles it. Nothing is cached, so a translation that failed is not remembered as
+failed: press the key again once the network is back.
+
+A title ending in **(MyMemory)** means Google was unreachable and the fallback
+answered. MyMemory cannot detect the source language, so it was told it is the
+one `fallback_source=` names in `~/.config/lazyos/translate.conf`, or the
+opposite of the target when that key is absent - a Spanish selection translated
+into English is the default guess. A wrong guess gives a wrong translation, and
+naming the language fixes it:
+
+```sh
+printf 'fallback_source=es\n' >> ~/.config/lazyos/translate.conf
+```
+
+**Already English** (or whatever the target is) means the detected language was
+already the target, so there was nothing to translate; **Settings → Translate**
+sets a different one. The whole translation is always on the clipboard
+(`wl-paste -n` in a terminal), and when the card was only a preview the read
+window has the rest - the card says so by opening it.
+
+The key runs `~/.config/bin/translate` once and exits, so "it stopped working" is
+never a daemon to restart. `check-system.sh` reports `curl`, `jq` and `wl-paste`,
+SKIPs the network probe when the machine is offline, and FAILs when the binding
+or the Settings row has gone missing.
+
 ## Tablet mode: no keyboard, or the screen does not turn
 
 Detaching the keyboard is what turns tablet mode on: `cros_ec_buttons` reports

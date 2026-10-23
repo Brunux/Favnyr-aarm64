@@ -22,6 +22,7 @@ the command. This page is the tour.
 | Alt+Ctrl+K | every key binding, searchable, Enter copies the command |
 | Alt+Ctrl+F | files: browse a directory, Enter reads a text file in foot, Alt+1 acts on the row |
 | Alt+Ctrl+G | search inside the files: ripgrep over your home, Enter opens the file at the matching line |
+| Alt+Ctrl+T | translate the selected text (or the clipboard): the answer is copied, and the card names the direction |
 | Alt+Ctrl+O | settings: the radio switches, night light, touchpad, rotation |
 | Alt+Ctrl+N | notifications: the history, do-not-disturb, copy one |
 | Alt+Ctrl+Q | calculator: type it, Enter copies the result |
@@ -69,6 +70,14 @@ so which one fires is decided by whether Shift is still down when Search comes
 up; releasing Shift first gives you the file search, which answers a narrower
 question rather than the wrong one. The same window is on the root menu
 (**Alt+Space**) as **Files (window)**, and on the launcher.
+
+**Alt+Ctrl+T translates what you selected.** The mouse selection *is* the text,
+so the gesture is highlight-then-key in any window - foot, the browser, a
+document - and with nothing selected it takes the clipboard. Everything goes
+into the language **Settings → Translate** sets (English until it is set), the
+translation is copied to the clipboard, and a long one opens in a read window
+with the selection underneath it. `04-software.md` § Translate has the rest: the
+two engines, what happens offline, and why `translate-shell` is not on the card.
 
 ## Panels, lock and power
 
