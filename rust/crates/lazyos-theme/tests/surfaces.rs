@@ -97,6 +97,21 @@ fn every_surface_renders_for_every_theme_without_a_literal_or_a_placeholder() {
                 slug,
                 name = surface.name
             );
+            // The header has to be a comment *in that file's language*: a `#`
+            // in CSS is an id selector (waybar exits on it, measured), and rasi
+            // has no `#` comment either.
+            let opener = match surface.target.rsplit_once('.') {
+                Some((_, "css" | "rasi")) => "/*",
+                Some((_, "vim")) => "\"",
+                _ => "#",
+            };
+            assert!(
+                body.starts_with(opener),
+                "{}/{name}: the header must open with {opener:?}, not {:?}",
+                slug,
+                body.lines().next().unwrap_or(""),
+                name = surface.name
+            );
         }
     }
 }

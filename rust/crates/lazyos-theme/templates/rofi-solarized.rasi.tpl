@@ -1,4 +1,4 @@
-{{ header }}
+{{ header:/* }}
 /* The session palette for rofi, in the same roles it has everywhere else: the
  * theme's background, its surface as the selected card, its text, and its accent
  * for the prompt, the rim and the matched characters. Generated: `lazyos theme

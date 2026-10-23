@@ -1,4 +1,4 @@
-{{ header }}
+{{ header:/* }}
 /* The bar: restrained terminal aesthetic with consistent module spacing. The
    palette comes from the active theme (spec 004) - this file is generated. */
 * {
