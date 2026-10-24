@@ -586,6 +586,43 @@ from a terminal.
 gamma table only for the internal panel's CRTC, so the warm ramp cannot reach
 it - see § *An external monitor*.
 
+## Themes
+
+The colours of this session come from **one file**, not from a dozen edited
+configs: `theme.toml` holds the 16 terminal colours and the roles a surface asks
+for (background, text, accent, danger…), and every other file is *generated*
+from it — foot, waybar, mako, rofi, btop, lazygit, nvim, fzf, the lock screen,
+the prompt (starship) and the wallpaper and window frame sway uses.
+
+```
+lazyos theme list           # every theme, the active one marked *
+lazyos theme set gruvbox    # regenerate everything and reload the session
+lazyos theme next           # the next one in the cycle      (Alt+Shift+T)
+lazyos theme wallpaper next # the next wallpaper of a theme  (Alt+Shift+W)
+lazyos theme validate       # parse every built-in and check its contrast
+lazyos theme diff           # is every file still what the theme says?
+```
+
+Solarized Dark is the default and the brand; the others are Catppuccin Mocha,
+Tokyo Night, Rose Pine, Nord, Gruvbox, Everforest Dark and Kanagawa.
+
+**A generated file says so on its first line.** If you edit one of them, the
+next switch will *report* the difference and leave your edit alone instead of
+silently replacing it: `lazyos theme set NAME` prints the differing lines and
+exits 1, and `--force` replaces them. To keep a change, put it in the template
+(`/usr/share/lazyos/themed/` or `~/.config/lazyos/themed/`) — that is what the
+generator reads.
+
+Two things a switch does not do. **A terminal that is already open keeps its
+palette**, because foot reads its configuration when a window is created: open a
+new window and it has the new colours. And a theme's own wallpaper art arrives
+with the release that ships it; until then every theme names the same picture.
+
+`lazyos theme set NAME --headless` writes the files and asks nothing to reload,
+which is what to use over ssh. The last generated body is kept in
+`~/.local/state/lazyos/theme/`, which is how "the template moved on" is told from
+"a person edited this file".
+
 ## Translate
 
 **Alt+Ctrl+T** translates **the text you selected with the mouse** - in the

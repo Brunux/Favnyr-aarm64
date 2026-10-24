@@ -3469,6 +3469,74 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+section "The theme engine"
+# ---------------------------------------------------------------------------
+# The palette lives in theme.toml and every surface is generated from it (spec
+# 004).  Four things are checked, and each is a failure that reads as something
+# else: no active theme means `lazyos theme next` has no place to start; a
+# regeneration diff means a hand edit or a stale image, and the surface will
+# drift on the next switch; a missing header means the engine does not own that
+# file and would refuse to replace it; a missing binding means the keys that
+# switch the palette do nothing.
+if command -v lazyos >/dev/null 2>&1; then
+	_theme_current=$(lazyos theme current 2>/dev/null || true)
+	if [ -z "$_theme_current" ]; then
+		fail "no active theme (\`lazyos theme set solarized\` sets one)"
+	else
+		_theme_slug=${_theme_current%%	*}
+		_theme_name=${_theme_current#*	}
+		ok "the active theme is $_theme_slug ($_theme_name)"
+
+		_theme_missing=
+		for _theme_file in \
+			.config/foot/foot.ini .config/waybar/style.css .config/mako/config \
+			.config/rofi/solarized.rasi .config/starship.toml \
+			.config/btop/themes/lazyos.theme .config/lazygit/config.yml \
+			.config/nvim/colors/lazyos.vim .config/lazyos/fzf.env \
+			.config/swaylock/config .config/sway/config.d/35-theme.conf
+		do
+			if [ ! -r "$HOME/$_theme_file" ]; then
+				_theme_missing="$_theme_missing $_theme_file"
+			elif ! head -n 1 "$HOME/$_theme_file" | grep -q "LazyOS theme:"; then
+				_theme_missing="$_theme_missing $_theme_file(no header)"
+			fi
+		done
+		if [ -n "$_theme_missing" ]; then
+			fail "a generated surface is missing or was not generated:$_theme_missing"
+		else
+			ok "every surface is generated and carries the theme header"
+		fi
+
+		# The regeneration witness: rendering again must reproduce the files
+		# that are installed, byte for byte.  The exit status is the answer;
+		# `--quiet` prints only the surfaces that differ.
+		if _theme_diff=$(lazyos theme diff --quiet 2>&1); then
+			ok "every surface is byte-identical to a fresh render"
+		else
+			fail "regeneration differs on: $(printf '%s' "$_theme_diff" | head -n 1) (run \`lazyos theme set $_theme_slug\`)"
+		fi
+	fi
+
+	if lazyos theme validate >/dev/null 2>&1; then
+		ok "every built-in theme parses and clears its contrast floor"
+	else
+		fail "a built-in theme does not parse or fails its contrast floor (\`lazyos theme validate\`)"
+	fi
+else
+	skip "no lazyos binary: the theme engine is not installed"
+fi
+
+# The two keys, parsed out of the configuration the way rofi-keys parses them.
+_theme_keys=$(grep -rhs '^bindsym .*exec lazyos theme ' /etc/sway/config.d/*.conf "$HOME/.config/sway/config.d/"*.conf 2>/dev/null || true)
+for _theme_key in "theme next" "theme wallpaper next"; do
+	if printf '%s' "$_theme_keys" | grep -qF "$_theme_key"; then
+		ok "the binding for \`lazyos $_theme_key\` is present"
+	else
+		fail "no binding runs \`lazyos $_theme_key\` (Alt+Shift+T and Alt+Shift+W)"
+	fi
+done
+
+# ---------------------------------------------------------------------------
 section "The brand"
 # ---------------------------------------------------------------------------
 # /etc/os-release is Debian's symlink to /usr/lib/os-release, and base-files

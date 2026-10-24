@@ -20,6 +20,7 @@ pub mod command;
 pub mod host;
 pub mod paths;
 pub mod term;
+mod theme;
 pub mod version;
 
 use std::collections::BTreeMap;
@@ -84,6 +85,7 @@ pub fn run(argv: Vec<String>, env: &Env) -> i32 {
     };
 
     match host::plan(&resolved, env) {
+        Launch::Direct => run_direct(&resolved),
         Launch::Inline => run_inline(&resolved),
         Launch::Spawn { program, args, .. } => match host::spawn(&program, &args) {
             Ok(()) => EXIT_OK,
@@ -201,6 +203,18 @@ fn print_commands(out: &mut impl Write) {
 }
 
 /// Draw in the terminal this process already has.
+/// A command with no surface: it writes its files and says what it did, so it
+/// runs where it was called - a `foot` window for a `mv` would steal the focus.
+fn run_direct(resolved: &Resolved) -> i32 {
+    match resolved.spec.path {
+        "theme" => theme::run(resolved),
+        other => {
+            eprintln!("lazyos {other}: this command has no direct handler");
+            EXIT_USAGE
+        }
+    }
+}
+
 fn run_inline(resolved: &Resolved) -> i32 {
     let session = match term::Session::enter() {
         Ok(session) => session,

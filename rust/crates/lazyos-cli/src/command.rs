@@ -27,6 +27,10 @@ pub enum Shape {
     Task,
     /// Fullscreen (the installer, the greeter).
     Full,
+    /// No window at all: a command whose whole job is to write a file and
+    /// print a line (`theme set`). A menu still gets a canvas; this one would
+    /// be a terminal that opens and closes around a `mv`.
+    Direct,
 }
 
 impl Shape {
@@ -37,6 +41,7 @@ impl Shape {
             Shape::Pick => "pick",
             Shape::Task => "task",
             Shape::Full => "full",
+            Shape::Direct => "direct",
         }
     }
 
@@ -53,7 +58,7 @@ impl Shape {
         match self {
             Shape::Pick => Some((900, 600)),
             Shape::Task => Some((940, 620)),
-            Shape::Full => None,
+            Shape::Full | Shape::Direct => None,
         }
     }
 }
@@ -85,6 +90,16 @@ pub const COMMANDS: &[CommandSpec] = &[
         shape: Shape::Pick,
         symlinks: &["lazyos-menu"],
         installed: &["lazyos-menu"],
+    },
+    CommandSpec {
+        // The palette. `theme set` writes files and prints what it did, so it
+        // never opens a window: the cycle keys run it from the session and a
+        // window would steal the focus for a `mv`.
+        path: "theme",
+        summary: "list, set or check the session palette (spec 004)",
+        shape: Shape::Direct,
+        symlinks: &[],
+        installed: &[],
     },
     CommandSpec {
         // The file browser (`rofi-files` today). Its own spec ports the

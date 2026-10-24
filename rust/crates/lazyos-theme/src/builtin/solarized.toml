@@ -1,0 +1,52 @@
+# Solarized Dark - the default, and the palette the session already had.
+#
+# Every role is stated here on purpose. The other built-ins let the engine derive
+# them from the 16 ANSI colours; this one does not, because it has to reproduce
+# the hand-written files the image carried before there was an engine, byte for
+# byte (`lazyos theme set solarized` on a healthy card is an empty diff - the
+# fastest way to notice a generator bug).
+name = "Solarized Dark"
+author = "Ethan Schoonover"
+source = "https://ethanschoonover.com/solarized"
+
+wallpapers = ["lazyos.png"]
+motion = "full"
+
+[colors]
+background = "#002b36"
+foreground = "#93a1a1"
+regular0 = "#073642"
+regular1 = "#dc322f"
+regular2 = "#859900"
+regular3 = "#b58900"
+regular4 = "#268bd2"
+regular5 = "#d33682"
+regular6 = "#2aa198"
+regular7 = "#eee8d5"
+bright0 = "#586e75"
+bright1 = "#cb4b16"
+bright2 = "#586e75"
+bright3 = "#657b83"
+bright4 = "#839496"
+bright5 = "#93a1a1"
+bright6 = "#657b83"
+bright7 = "#fdf6e3"
+
+[roles]
+surface = "#073642"
+surface_alt = "#586e75"
+hover = "#09404c"
+faint = "#839496"
+danger_bg = "#3b2023"
+border = "#2aa198"
+border_focus = "#2aa198"
+text = "#93a1a1"
+strong = "#eee8d5"
+dim = "#586e75"
+accent = "#2aa198"
+accent_alt = "#268bd2"
+ok = "#859900"
+warn = "#b58900"
+danger = "#dc322f"
+info = "#268bd2"
+selection = "#073642"
