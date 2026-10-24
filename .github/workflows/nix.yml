@@ -1,0 +1,101 @@
+# Builds the Nix package, on request only.
+#
+# There is deliberately NO schedule. `flake.lock` pins an exact nixpkgs
+# revision, so whoever runs `nix run github:...` builds against that revision
+# and not against whatever nixpkgs is today. The build is therefore
+# reproducible and cannot break on its own: a periodic run on an unchanged
+# lock would rebuild the same thing forever and always pass.
+#
+# What does create risk is changing something, so that is when this runs:
+#
+#   - unticked, after a release, on the branch of the version bump: proves the
+#     recipe builds against the archive that was just published, before that
+#     change is merged;
+#   - ticked, now and then: raises nixpkgs, proves the recipe still builds with
+#     it, and attaches the raised lock for the maintainer to commit.
+#
+# Running it before tagging is pointless: the recipe still names the previous
+# release, which has already been proven.
+#
+# Nothing here can change the repository. The raised lock leaves as a download
+# attached to the run, never as a commit, so this workflow needs no write
+# permission at all and the third-party action below never sees one.
+name: Nix
+
+on:
+  workflow_dispatch:
+    inputs:
+      update_lock:
+        description: "Also raise flake.lock and attach it to this run"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the Nix package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          # The flake commands below are still behind an experimental flag in
+          # the stable Nix CLI.
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+
+      # Before the build, so a lock that breaks the recipe fails the run rather
+      # than being handed over as if it were good.
+      - name: Raise flake.lock
+        if: inputs.update_lock
+        run: nix flake update --flake ./packaging/nix
+
+      # The recipe downloads the published archive and checks its hash, so this
+      # fails loudly on a hash that does not match the bytes on the release.
+      - name: Build
+        run: nix build ./packaging/nix --print-build-logs
+
+      # `checks.default` is the package itself, so this adds the flake's own
+      # consistency checks on top of the build above.
+      - name: Check the flake
+        run: nix flake check ./packaging/nix --print-build-logs
+
+      # Nothing to hand over when the lock did not move, which is the normal
+      # outcome shortly after a previous raise.
+      - name: Did the lock move
+        if: inputs.update_lock
+        id: lock
+        run: |
+          if git diff --quiet -- packaging/nix/flake.lock; then
+            echo "moved=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "moved=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Attach the raised lock
+        if: inputs.update_lock && steps.lock.outputs.moved == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: flake-lock
+          path: packaging/nix/flake.lock
+          if-no-files-found: error
+
+      # Printed at the top of the run page, so the outcome is readable without
+      # hunting for an attachment that may not be there.
+      - name: Say what happened
+        run: |
+          if [ "${{ inputs.update_lock }}" != "true" ]; then
+            echo "The recipe builds. The lock was left alone." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.lock.outputs.moved }}" = "true" ]; then
+            {
+              echo "flake.lock was raised and the recipe still builds with it."
+              echo ""
+              echo "Download the \`flake-lock\` artifact below, put the file back"
+              echo "at \`packaging/nix/flake.lock\`, and commit it."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "flake.lock is already current. Nothing to download." >> "$GITHUB_STEP_SUMMARY"
+          fi

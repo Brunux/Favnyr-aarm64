@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Favnyr
+GenericName=File Manager
+Comment=A modern and lightweight file manager
+Exec=favnyr %F
+Icon=favnyr
+Terminal=false
+Categories=System;FileTools;FileManager;
+MimeType=inode/directory;
+StartupWMClass=favnyr

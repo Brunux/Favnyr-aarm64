@@ -1,0 +1,216 @@
+# Publishes the two portable executables when a version tag is pushed.
+#
+#   git tag v0.3.1 && git push origin v0.3.1
+#
+# The Linux binary is built INSIDE an Ubuntu 22.04 container rather than on the
+# runner itself. A binary links against the glibc it was built with and then
+# requires at least that version at run time, so building on a current runner
+# would produce something that refuses to start on Debian 12, Mint 21 and most
+# conservative distributions. Building against 2.35 keeps it running everywhere
+# from those up to the newest systems, a newer machine simply supplies its own,
+# patched glibc at run time.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: Linux binary
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    steps:
+      # The image is bare: even git and curl have to be installed before
+      # checkout can run.
+      - name: Container dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential pkg-config libfontconfig1-dev \
+            curl ca-certificates git
+
+      - uses: actions/checkout@v4
+
+      # The distribution's rustc is far too old; rustup gives the pinned
+      # toolchain from rust-toolchain.toml.
+      - name: Install Rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+            | sh -s -- -y --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: cargo build --release --bin favnyr --locked
+
+      # Proof the container did its job. Measured, not assumed: a version above
+      # 2.35 here means the binary escaped the container's glibc and would fail
+      # to start on the older distributions this job exists to support.
+      - name: Check the glibc floor
+        run: |
+          objdump -T target/release/favnyr \
+            | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -5
+          highest=$(objdump -T target/release/favnyr \
+            | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1)
+          echo "Highest required: $highest"
+          if [ "$(printf '%s\nGLIBC_2.35\n' "$highest" | sort -V | tail -1)" != "GLIBC_2.35" ]; then
+            echo "::error::$highest exceeds GLIBC_2.35, the binary will not run on older distributions"
+            exit 1
+          fi
+
+      # A GitHub release asset is served as a bare file with no permission
+      # metadata: uploading the binary directly would silently drop its
+      # executable bit, unlike this workflow's own inter-job artifacts. tar
+      # preserves Unix permissions, so extracting the archive already leaves
+      # `favnyr` executable, no `chmod` step for whoever downloads it.
+      #
+      # The icon and the desktop entry ride along in the same download. They are
+      # what a packager needs to integrate the binary with a desktop, and the
+      # Nix recipe installs both straight out of this archive rather than
+      # generating a launcher of its own. `Exec=favnyr` resolves through the
+      # PATH, which is correct once the binary is installed; extracting the
+      # archive into a home folder is not that case, and needs either the binary
+      # on the PATH or the entry edited by hand.
+      - name: Package
+        run: |
+          mkdir -p dist
+          chmod +x target/release/favnyr
+          cp crates/favnyr-gui/assets/favnyr.svg target/release/favnyr.svg
+          cp packaging/favnyr.desktop target/release/favnyr.desktop
+          tar -czf dist/favnyr-linux-x86_64.tar.gz \
+            -C target/release favnyr favnyr.svg favnyr.desktop
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: favnyr-linux-x86_64
+          path: dist/favnyr-linux-x86_64.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Windows binary
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --bin favnyr --locked
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: favnyr-windows-x86_64
+          path: target/release/favnyr.exe
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    # Only what the release needs. `id-token` lets GitHub mint the short-lived
+    # identity the attestation is signed with, and `attestations` lets it be
+    # recorded. Declaring any permission sets the others to none, so the three
+    # listed here are the whole set this job gets.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # Flatten and give the files names that say what they are once
+      # downloaded, since a browser drops them straight into Downloads. The
+      # Linux side is already a named .tar.gz (built and permission-preserved
+      # in the `linux` job); only the Windows binary needs renaming here.
+      - name: Collect binaries
+        run: |
+          mkdir -p dist
+          cp artifacts/favnyr-linux-x86_64/favnyr-linux-x86_64.tar.gz dist/
+          cp artifacts/favnyr-windows-x86_64/favnyr.exe dist/favnyr-windows-x86_64.exe
+          ls -l dist
+
+      # Signs a statement binding each file's digest to this repository, this
+      # workflow and this commit. The digest GitHub already shows on a release
+      # asset proves the download matches what GitHub stores; it cannot prove
+      # what GitHub stores came from here. This can, and anyone may check it:
+      #
+      #     gh attestation verify --repo <owner>/<repo> <file>
+      #
+      # Placed before publication so a failure here leaves no release at all
+      # rather than binaries nobody can verify. Replacing an asset by hand
+      # afterwards would make that check fail on it, which is the point.
+      - name: Attest the release binaries
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/favnyr-linux-x86_64.tar.gz
+            dist/favnyr-windows-x86_64.exe
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --repo "${{ github.repository }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            dist/favnyr-linux-x86_64.tar.gz \
+            dist/favnyr-windows-x86_64.exe
+
+  # Prints the two values the Nix recipe needs for this release, and stops
+  # there. Editing `packaging/nix/package.nix` is two lines of typing : what is
+  # tedious is obtaining the hash, because it means downloading the published
+  # archive and running a command. So this does that part, which keeps the rule 
+  # the whole repository follows: no workflow ever writes to the repository.
+  #
+  # It runs after the release exists and touches neither the assets nor the
+  # release, so a failure here leaves the publication intact and only turns
+  # this one badge red. `continue-on-error` would repaint the badge green and
+  # throw away the signal, so it is not used.
+  nix-bump:
+    name: Nix recipe values
+    needs: [publish]
+    runs-on: ubuntu-latest
+    # An artifact from this same run travels on the runner's own token, not
+    # on this one, as the publish job above already demonstrates. So nothing
+    # has to be granted here, and declaring one permission sets every other
+    # one to none.
+    permissions:
+      contents: read
+    steps:
+      # The same bytes the release carries, taken from the artifact the Linux
+      # job produced rather than downloaded back from the release.
+      - uses: actions/download-artifact@v4
+        with:
+          name: favnyr-linux-x86_64
+          path: dist
+
+      # The hash `fetchurl` expects is the archive's SHA-256 encoded in Base64
+      # behind a prefix naming the algorithm. Nothing about it is specific to
+      # Nix, which is why installing Nix here is unnecessary.
+      - name: Values for the Nix recipe
+        run: |
+          hash="sha256-$(openssl dgst -binary -sha256 \
+            dist/favnyr-linux-x86_64.tar.gz | openssl base64 -A)"
+          case "$GITHUB_REF" in
+            refs/tags/v*) version="${GITHUB_REF_NAME#v}" ;;
+            *) version="no version tag on this run" ;;
+          esac
+          {
+            echo "## Nix recipe"
+            echo ""
+            echo "Copy both values into \`packaging/nix/package.nix\`, commit,"
+            echo "then run the Nix workflow unticked on \`main\` to prove the"
+            echo "recipe builds against the archive just published."
+            echo ""
+            echo '```nix'
+            echo "  version = \"$version\";"
+            echo "  hash = \"$hash\";"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
