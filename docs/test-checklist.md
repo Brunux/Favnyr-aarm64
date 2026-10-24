@@ -594,7 +594,10 @@ queue; the manual is `04-software.md` § *Files in a window* and
 | `systemctl status udisks2` | *inactive (dead)* until something mounts - it is D-Bus activated, nothing runs resident, and `udiskie` is deliberately absent |
 
 A **Mount** row that fails says why in a critical notification, in udisks' own
-words. `vfat`/`exFAT`/`NTFS` need no helper package: the kernel has the drivers.
+words, and so does an auto-mount that fails; an auto-mount that decided not to act
+(a swap, a LUKS volume, the disk this system came from) says nothing at all,
+because none of those is an error. `vfat`/`exFAT`/`NTFS` need no helper package:
+the kernel has the drivers.
 
 ## Developer - `Alt+Ctrl+D`
 
