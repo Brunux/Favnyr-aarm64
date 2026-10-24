@@ -3,7 +3,7 @@ LazyOS · the session menu                                               13 rows
 ────────────────────────────────────────────────────────────────────────────────
 ╭ the session menu ────────────────────────────────────────────────────────────╮
 │ ▍   Files  rofi-files                                          Alt+Ctrl+F   │
-│     Files (window)  pcmanfm                                  Search+Shift   │
+│     Files (window)  pcmanfm                              Alt+Ctrl+Shift+F   │
 │     Capture  screenshot                                        Alt+Ctrl+C   │
 │     Translate  selection                                       Alt+Ctrl+T   │
 │     Search inside files  ripgrep                               Alt+Ctrl+G   │
@@ -28,7 +28,7 @@ LazyOS · the session menu                                                      
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ╭ the session menu ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▍   Files  rofi-files                                                                                                                  Alt+Ctrl+F   │
-│     Files (window)  pcmanfm                                                                                                          Search+Shift   │
+│     Files (window)  pcmanfm                                                                                                      Alt+Ctrl+Shift+F   │
 │     Capture  screenshot                                                                                                                Alt+Ctrl+C   │
 │     Translate  selection                                                                                                               Alt+Ctrl+T   │
 │     Search inside files  ripgrep                                                                                                       Alt+Ctrl+G   │

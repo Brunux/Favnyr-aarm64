@@ -369,7 +369,7 @@ hook should not rearrange the desktop. Nothing is resident, and
 
 ## Files in a window
 
-**Search+Shift** opens **pcmanfm**: the files **Alt+Search** and **Alt+Ctrl+F**
+**Alt+Ctrl+Shift+F** opens **pcmanfm**: the files **Alt+Search** and **Alt+Ctrl+F**
 list, with a mouse. It is a second entry and not a replacement, because the two
 answer different questions - a list is one keystroke and no window, a window is
 what drag and drop, several files at once, renaming in place and the trash need.
@@ -435,7 +435,7 @@ gets corrupted.
 * Mounting is **udisks2**'s job, because an ordinary session cannot mount
   anything itself (that is a root operation). It is D-Bus activated: nothing of
   it runs until a mount is asked for, and nothing stays afterwards.
-* The same disks are in pcmanfm's sidebar (**Search+Shift**), and a stick shows
+* The same disks are in pcmanfm's sidebar (**Alt+Ctrl+Shift+F**), and a stick shows
   up there as soon as it is mounted.
 * **Unmounting from pcmanfm needs `eject`.** The window's Unmount action runs
   `eject`, not `udisksctl`, and the package is not a dependency of udisks2 or

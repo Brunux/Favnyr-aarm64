@@ -1,6 +1,6 @@
 ===== 80x24 =====
     Files  rofi-files                                              Alt+Ctrl+F
-    Files (window)  pcmanfm                                      Search+Shift
+    Files (window)  pcmanfm                                  Alt+Ctrl+Shift+F
     Capture  screenshot                                            Alt+Ctrl+C
     Translate  selection                                           Alt+Ctrl+T
     Search inside files  ripgrep                                   Alt+Ctrl+G
@@ -25,7 +25,7 @@
 
 ===== 152x45 =====
     Files  rofi-files                                                                                                                      Alt+Ctrl+F
-    Files (window)  pcmanfm                                                                                                              Search+Shift
+    Files (window)  pcmanfm                                                                                                          Alt+Ctrl+Shift+F
     Capture  screenshot                                                                                                                    Alt+Ctrl+C
     Translate  selection                                                                                                                   Alt+Ctrl+T
     Search inside files  ripgrep                                                                                                           Alt+Ctrl+G

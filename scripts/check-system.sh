@@ -1547,16 +1547,16 @@ else
 	fail "fd is missing (package fd-find): rofi-files --search falls back to browsing"
 fi
 
-# The terminal file search (Alt+Ctrl+Shift+F) asks the same question with fzf:
+# The terminal file search (Search+Shift) asks the same question with fzf:
 # lazyos-find streams fd into fzf and hands the choice to lazyos-view. There are
 # four separate ways for that key to look dead - no binding, a script without its
 # executable bit, no fzf, no opener - and the fzf one is a FAIL rather than a
 # warning because a missing filter is an *empty list*: the window opens, prints
 # nothing, and reads as "no such file" instead of as a missing package.
-if grep -rqs 'Ctrl+Shift+f exec .*lazyos-find' /etc/sway/config.d/; then
-	ok "Alt+Ctrl+Shift+F opens the terminal file search (lazyos-find)"
+if grep -qs 'Super_L+Shift exec .*lazyos-find' "$HOME/.config/sway/config"; then
+	ok "Search+Shift opens the terminal file search (lazyos-find)"
 else
-	fail "no 'Ctrl+Shift+f exec ...lazyos-find' binding in /etc/sway/config.d/: the key does nothing"
+	fail "no 'Super_L+Shift exec ...lazyos-find' binding in ~/.config/sway/config: the key does nothing"
 fi
 if grep -qs '^leftmeta = f20$' /etc/keyd/default.conf; then
 	ok "keyd maps Alt+Search to F20"
@@ -1566,12 +1566,12 @@ fi
 if [ -x "$HOME/.config/bin/lazyos-find" ]; then
 	ok "terminal file search (lazyos-find) is executable"
 else
-	fail "bin/lazyos-find is missing or not executable: Alt+Ctrl+Shift+F opens a foot window that closes at once"
+	fail "bin/lazyos-find is missing or not executable: Search+Shift opens a foot window that closes at once"
 fi
 if have fzf; then
 	ok "fzf present, which the terminal file search filters with"
 else
-	fail "fzf is missing (package fzf): Alt+Ctrl+Shift+F lists nothing"
+	fail "fzf is missing (package fzf): Search+Shift lists nothing"
 fi
 # Its notifications carry the search glyph, and a name mako cannot resolve draws
 # no picture at all: the card is text-only with no log line.
@@ -2878,6 +2878,14 @@ if have pcmanfm; then
 	ok "file manager installed (pcmanfm $(dpkg-query -W -f='${Version}' pcmanfm 2>/dev/null))"
 else
 	fail "pcmanfm is missing: the Files (window) entry and 'Open containing folder' do nothing"
+fi
+# The window has a key of its own (Alt+Ctrl+Shift+F, the Shift variant of the
+# Files menu's Alt+Ctrl+F): without the binding the window is only reachable
+# from the launcher, which reads as "the shortcut stopped working".
+if grep -rqs 'Ctrl+Shift+f exec .*pcmanfm' /etc/sway/config.d/; then
+	ok "Alt+Ctrl+Shift+F opens the file manager (pcmanfm)"
+else
+	fail "no 'Ctrl+Shift+f exec ...pcmanfm' binding in /etc/sway/config.d/: Alt+Ctrl+Shift+F does nothing"
 fi
 # Mounting a USB stick needs udisks2: this session has no privilege for mount(8),
 # and both consumers - pcmanfm's Devices pane and rofi-places' "Mount" rows - go

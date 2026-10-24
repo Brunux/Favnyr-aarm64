@@ -24,7 +24,7 @@ and on `Alt+D`, waybar and the foot terminal.
 |---|---|
 | `etc/sway/config` | System half of the session (replaces Debian's default file). Includes `config.d/*` at the end. |
 | `etc/sway/config.d/*` | Drop-ins: logo key, bar, launcher, brightness, waybar, notifications, lock, volume, sleep, gestures, screenshots, theme, touchpad, bar panels, swayfx effects, the LazyOS idle screen, clipboard, tablet mode, terminal file search, idle inhibition. |
-| `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key bindings (the launcher on Search, the file list on `Alt+Search`, the file window on `Search+Shift`). |
+| `home/.config/sway/config` | Personal overlay: re-includes `/etc/sway/config`, then adds the keyboard repeat rate and the Search-key bindings (the launcher on Search, the file list on `Alt+Search`, the terminal file search on `Search+Shift`). |
 | `home/.config/waybar/{config.jsonc,style.css}` | Solarized waybar theme and the bar itself (see **The bar** below). |
 | `home/.config/bin/osd` | The volume and brightness overlay: the key's `pactl`/`brightnessctl` step plus one mako card with its progress bar and the matching icon (no process, no daemon). |
 | `home/.config/gtk-4.0/{settings.ini,gtk.css}` | The GTK4/libadwaita half of the palette (`papers` and anything else GTK4): the dark preference the missing Settings portal would otherwise answer, and the solarized named colours. The GTK3 pair next door does not reach it. |
@@ -37,7 +37,7 @@ and on `Alt+D`, waybar and the foot terminal.
 | `home/.config/bin/rofi-capture`, `rofi-qr`, `screenshot` | **Capture** (screenshot, annotate, OCR, QR, record), the Wi-Fi QR code, and the one place a screenshot's folder is decided (`~/Pictures/Screenshots/<today>/`). |
 | `home/.config/bin/rofi-dev`, `lazyos-profile` | **Developer** (`Alt+Ctrl+D`): the account into one encrypted archive on a disk (keys, dotfiles, package list), the restore that backs the current profile up first, and a diagnostics bundle for a bug report. `lazyos-profile` is the engine and also runs from a terminal. |
 | `home/.config/bin/rofi-files`, `lazyos-thumbnail`, `lazyos-view` | The file browser, the thumbnail generator it calls, and the "open with LazyOS" rule (text/bat, document/papers, image/imv, video/mpv, the rest/Firefox). |
-| `home/.config/bin/lazyos-find` | **Alt+Ctrl+Shift+F**: `fd` streamed into `fzf` over the whole home, with a preview pane (see **Files in a terminal**). |
+| `home/.config/bin/lazyos-find` | **Search+Shift**: `fd` streamed into `fzf` over the whole home, with a preview pane (see **Files in a terminal**). |
 | `home/.config/bin/rofi-power` | **Power** menu: lock, suspend, hibernate, log out, reboot, shut down (the last three ask first). |
 | `usr/share/doc/lazyos/*.md` | The seven manual pages the Learn menu opens. |
 | `home/.config/rofi/config.rasi` | Launcher settings: the three modes, `terminal = foot`, matching. |
@@ -406,8 +406,8 @@ which applies the same rules as the browser: text in `bat`, a document in `paper
 
 The mouse half of the same story is **pcmanfm** (`uis/sway/packages.list`, with `gvfs`). It is a
 second entry, not a replacement: `Alt+Search` and `Alt+Ctrl+F` keep opening `rofi-files` (one
-process, no window, a list a key opens and a key closes), and `Search+Shift` opens the window for
-what a list cannot do - drag and drop, several files at once, rename in place, the trash. The
+process, no window, a list a key opens and a key closes), and `Alt+Ctrl+Shift+F` opens the window
+for what a list cannot do - drag and drop, several files at once, rename in place, the trash. The
 launcher carries both rows (**Files**, **Files (window)**) and so does the root menu.
 
 * **Why not nautilus**: on forky its closure is **504 packages** (GTK4 + libadwaita, 38 MB of ICU,
@@ -443,10 +443,10 @@ launcher carries both rows (**Files**, **Files (window)**) and so does the root 
   the UI thread with gdk-pixbuf, and a 24 MP JPEG costs ~83 MB for a 128 px thumbnail),
   `bm_open_method=0` (ask GIO, which is how `mimeapps.list` is reached), `autorun=0`, the Network
   places off (`gvfs-backends` is 31 MB of `samba-libs` and is not installed) and a 900x600 window.
-* **`Search+Shift` is bound on release**, like the other Search-key bindings: sway matches a release
-  binding against the modifiers held when the key comes up, so Search released with Shift still
-  down lands on pcmanfm and Search alone falls through to the launcher. The top row doubles as
-  F1-F10 while Search is held (keyd), which is why neither binding fires on the press.
+* **`Alt+Ctrl+Shift+F` is the Shift variant of the Files key** (`Alt+Ctrl+F`), which is the key
+  scheme's pattern: the plain chord opens the menu, the Shift chord the window it stands for. It
+  keeps the Search key for lists and filters (launcher, file list, terminal search), and it is the
+  same shape Omarchy uses for its file manager.
 * **What it does not do**: its thumbnails are images only (libfm ignores the freedesktop
   `.thumbnailer` files, so a PDF or a video keeps its mimetype icon there, while `rofi-files`
   draws both through `lazyos-thumbnail`); SMB and phone mounts need `gvfs-backends`; and
@@ -457,13 +457,18 @@ launcher carries both rows (**Files**, **Files (window)**) and so does the root 
 
 ## Files in a terminal (lazyos-find)
 
-**Alt+Ctrl+Shift+F** opens `lazyos-find`: `fd` streamed into **fzf** in a floated foot window, one row
+**Search+Shift** opens `lazyos-find`: `fd` streamed into **fzf** in a floated foot window, one row
 per file under `$HOME`, a preview pane on the right, and Enter handing the choice to `lazyos-view`
 - the same opener a double click in pcmanfm reaches. It is the third answer to "where is that
 file", and the three are one feature with three shapes: `rofi-files --search` is a *menu* (rows
 with icons and thumbnails, open before you type, one bounded `fd` run, a list you scroll),
 pcmanfm is the *window* (drag and drop, the trash), and this is the *filter* - uncapped, live
 while the walk is still running, with the file's contents beside it.
+
+**It is a release binding**, like the launcher on Search and the file list on `Alt+Search`: sway
+matches a release binding against the modifiers held when the key comes up, so Search released
+with Shift still down lands here and Search alone falls through to the launcher. The top row
+doubles as F1-F10 while Search is held (keyd), which is why none of the three fires on the press.
 
 **Why fzf and nothing new.** It is already in the image for the shell's `Ctrl-R`/`Ctrl-T`/`Alt-C`
 bindings, it matches *while* the producer streams instead of after it, and `--read0`/`--print0`
@@ -511,7 +516,8 @@ Four things that are not obvious, each of them a bug that was caught:
   one and saying nothing about the others.
 
 The window is floated and centred by `etc/sway/config.d/29-file-search.conf` (`app_id=lazyos-find`,
-1200x760), and the binding is `Alt+Ctrl+Shift+F` in `24-keys.conf` next to the other file keys.
+1200x760), and the binding is the `Super_L+Shift` release line in `home/.config/sway/config` next
+to the launcher's.
 `check-system.sh` asks for the binding, the
 executable bit, `fzf`, the `system-search` notification icon and (through `lazyos-view`) the
 opener, because each one on its own makes the key look dead: a missing filter is an *empty list*,
@@ -528,14 +534,14 @@ own it. The whole set is the *Shortcuts* page of the manual
 | Group | Keys | Where it lives |
 |---|---|---|
 | launcher, switcher, commands | `Alt+D` and the Search key, `Alt+Tab`, `Alt+Shift+D` | `19-launcher.conf`, `home/.config/sway/config` |
-| file search | `Alt+Search` (`rofi-files --search`), `Search+Shift` (pcmanfm), `Alt+Ctrl+Shift+F` (`lazyos-find`) | `home/.config/sway/config`, `24-keys.conf` |
+| file search | `Alt+Search` (`rofi-files --search`, a list), `Search+Shift` (`lazyos-find`, a terminal filter) | `home/.config/sway/config` |
 | root menu | `Alt+Space` (Omarchy: `Super+Space`) | `24-keys.conf` |
 | panels | `Alt+Ctrl+A/B/W` → audio, Bluetooth, network (Omarchy: `Super+Ctrl+A/B/W`) | `24-keys.conf` |
 | system | `Alt+Escape` and `Alt+Ctrl+P` power menu (`rofi-power`), `Alt+Ctrl+L` lock, `Alt+Shift+Escape` lock+sleep, `Alt+Ctrl+Escape` sleep | `21-lock-screen.conf`, `22-sleep.conf`, `24-keys.conf` |
 | browser | `Alt+Shift+Return` opens `firefox-esr` | `19-launcher.conf` |
 | windows | `Alt+Q` close, `Alt+T` float, `Alt+F` fullscreen, `Alt+grave` scratchpad, `Alt+R` resize | `config`, `24-keys.conf` |
 | views | `Alt+Ctrl+K` every binding, `Alt+Ctrl+X` dictation, `Alt+Ctrl+Shift+A` agents | `24-keys.conf` |
-| files | `Alt+Ctrl+F` (`rofi-files`) | `24-keys.conf` |
+| files | `Alt+Ctrl+F` (`rofi-files`), `Alt+Ctrl+Shift+F` (pcmanfm, the window) | `24-keys.conf` |
 
 The three places where the letter differs are deviations with a reason, and each is written
 next to the binding: close is `Alt+Q` because `Alt+W` is sway's tabbed layout, the key view is

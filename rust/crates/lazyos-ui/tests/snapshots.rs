@@ -131,7 +131,7 @@ fn body_rows() -> ListState {
         Row::new("Files (window)")
             .glyph(Glyph::Folder)
             .detail("pcmanfm")
-            .value("Search+Shift"),
+            .value("Alt+Ctrl+Shift+F"),
         Row::new("Capture")
             .glyph(Glyph::Capture)
             .detail("screenshot")

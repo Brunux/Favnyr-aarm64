@@ -202,7 +202,7 @@ broad, type one more letter rather than scrolling. The dotfiles are still one ro
 away, and Escape closes it without opening anything. With `fd` missing the
 script says so and opens the browser instead.
 
-**Alt+Ctrl+Shift+F: the same files, in a terminal.** The 500-row cap is the list's
+**Search+Shift: the same files, in a terminal.** The 500-row cap is the list's
 trade - it is what makes it open like a menu - so the question "where is the file
 I would recognise but cannot name" has a different answer: `lazyos-find` streams
 the whole tree through `fd` into `fzf`, with the same four exclusions and the
@@ -237,7 +237,7 @@ desktop. That is what foot's ctrl+click and the CLI tools that print a URL call.
 It is the same trade as everything else here: 16 MB while open, nothing
 afterwards.
 
-**Search+Shift: the same files in a window.** `pcmanfm` (the root menu's **Files
+**Alt+Ctrl+Shift+F: the same files in a window.** `pcmanfm` (the root menu's **Files
 (window)** row, `Files (window)` in the launcher) is a real file manager for the
 things a list cannot do - drag a file onto a folder, select several, rename in
 place, send to the trash - and it opens a file with exactly the rules above: a

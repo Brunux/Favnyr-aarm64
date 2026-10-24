@@ -28,7 +28,7 @@ MediaTek MT8192).  These nine keys are the rest of the desktop:
 
   Alt+Space       the menu: applications, settings, the manual, power
   Search / Alt+D  the launcher: type part of a name, Enter opens it
-  Alt+Search      find a file by name; Search+Shift: the file manager
+  Alt+Search      find a file by name; Alt+Ctrl+Shift+F: the file manager
   Alt+Ctrl+F      browse the files, one directory per step
   Alt+Ctrl+T      translate the selected text (into English, or Settings)
   Alt+Return      a terminal

@@ -44,15 +44,17 @@ bindsym --no-repeat --release Super_L exec $launcher
 bindsym --no-repeat F20 exec /home/brunux/.config/bin/rofi-files --search
 bindsym --no-repeat --release Super_L+Mod1 exec /home/brunux/.config/bin/rofi-files --search
 
-# Search+Shift is the same key held with Shift: the *windowed* file manager
-# (pcmanfm), for what a list cannot do - drag and drop, a multi-selection,
-# renaming in place, the trash. The two do not compete: a release binding is
-# matched against the modifiers held at the moment the key comes up, so Search
-# released while Shift is still down lands here, and Search on its own falls
-# through to the launcher above. `$HOME` is passed explicitly because the
-# window would otherwise open at the session's working directory.
+# Search+Shift is the same key held with Shift: the *terminal* file search
+# (~/.config/bin/lazyos-find), fd streamed into fzf with a preview pane. The
+# windowed manager (pcmanfm) moved to the Alt+Ctrl+Shift+F family in
+# 24-keys.conf, where the Files key already lives, so this chord stays with the
+# Search key: Search opens the launcher, Alt+Search the file list, Search+Shift
+# the terminal filter - three lists, no window. The two do not compete: a
+# release binding is matched against the modifiers held at the moment the key
+# comes up, so Search released while Shift is still down lands here, and Search
+# on its own falls through to the launcher above.
 #
 # It is bound on release for the same reason as the line above - the top row
 # doubles as F1-F10 while Search is held (keyd), and it is `--no-repeat` because
 # holding the key has nothing to repeat.
-bindsym --no-repeat --release Super_L+Shift exec pcmanfm "$HOME"
+bindsym --no-repeat --release Super_L+Shift exec /home/brunux/.config/bin/lazyos-find

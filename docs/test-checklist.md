@@ -486,7 +486,7 @@ stays in `~/.local/state/lazyos/install-<timestamp>.log`.
 | press **Search** (nothing else) | the applications menu, the same one as `Alt+D`: one row per `.desktop` entry, narrowed as you type |
 | type `fire` and press Enter | `firefox-esr` starts |
 | hold **Search**, tap a top-row key | an F-key reaches the focused window; no launcher opens on the way |
-| press **Search+Shift** | the file manager window (see below), not the launcher |
+| press **Search+Shift** | the terminal file search window (see below), not the launcher |
 
 Both keys are one rofi process while the menu is open and nothing afterwards.
 
@@ -504,11 +504,11 @@ Both keys are one rofi process while the menu is open and nothing afterwards.
 `rofi-files --search` is the same mode from a terminal. An empty list on a home
 with files means `fd`/`fdfind` is missing (`check-system.sh` FAILs).
 
-## Alt+Ctrl+Shift+F - the terminal file search
+## Search+Shift - the terminal file search
 
 | Step | Expected |
 |---|---|
-| press **Alt+Ctrl+Shift+F** | a floated, centred foot window with an `fzf` prompt showing `~ > ` and rows filling in as the walk runs |
+| press **Search+Shift** | a floated, centred foot window with an `fzf` prompt showing `~ > ` and rows filling in as the walk runs |
 | type part of a path, two segments | the list narrows while you type, with no pause between keystrokes (the whole tree is the pool: nothing is capped at 500 rows) |
 | put the cursor on a text file | the right 55 % shows its first lines through `bat` (`BAT_THEME=ansi`, solarized) |
 | put it on a photo or a PDF | the preview draws a picture in the pane (symbols, not sixels - it survives the next redraw) |
@@ -517,7 +517,7 @@ with files means `fd`/`fdfind` is missing (`check-system.sh` FAILs).
 | Enter on a text file / a photo / a video | opens exactly as a double click in pcmanfm does (`bat`, `imv`, `mpv`) |
 | type `config` | dotfiles are found here (`~/.config/...`), unlike the file list (Alt+Search) |
 | Escape | the window closes and nothing opens |
-| press Alt+Ctrl+Shift+F twice in a row | two windows, and no `fzf` process left after both close |
+| press Search+Shift twice in a row | two windows, and no `fzf` process left after both close |
 | `lazyos-find` from a foot prompt | the same search runs *in that terminal* instead of a new window |
 
 A window that flashes and closes means `bin/lazyos-find` lost its executable
@@ -526,11 +526,12 @@ bit; an empty list on a home with files means `fzf` is missing
 `.local/share/containers` are excluded, so a file inside one of them is
 correctly absent.
 
-## Files (window) - Search+Shift
+## Files (window) - Alt+Ctrl+Shift+F
 
 | Step | Expected |
 |---|---|
-| hold **Shift**, tap **Search**, release Search then Shift | pcmanfm opens on `$HOME`, in the solarized palette (base03 window, cyan selection), JetBrains Mono, LazyOS icons |
+| press **Alt+Ctrl+Shift+F** | pcmanfm opens on `$HOME`, in the solarized palette (base03 window, cyan selection), JetBrains Mono, LazyOS icons |
+| press **Alt+Ctrl+F** | the file list (`rofi-files`), not the window |
 | tap **Search** on its own | the launcher, not the window |
 | press **Alt+Search** | the file search, not the window |
 | hold **Search**, tap a top-row key | an F-key reaches the focused window; no menu opens on the way |
@@ -581,7 +582,7 @@ queue; the manual is `04-software.md` § *Files in a window* and
 | **Alt+1** on a folder row (Home, Documents) | "Only a disk can be unmounted", and nothing else happens |
 | a swap partition or a LUKS one on the stick | no **Mount** row for it (a swap has nothing to show and LUKS needs a passphrase prompt this menu does not have) |
 | unplug and replug the stick | it is listed again; a stick that stays mounted after the unplug is a sign the filesystem is dirty |
-| right-click a mounted stick in **pcmanfm** (Search+Shift) -> **Unmount** | it unmounts and the icon goes away, with no `Failed to execute child process "eject"`: pcmanfm unmounts through `/usr/bin/eject`, which is its own package (`gvfs` and `udisks2` do not depend on it) |
+| right-click a mounted stick in **pcmanfm** (Alt+Ctrl+Shift+F) -> **Unmount** | it unmounts and the icon goes away, with no `Failed to execute child process "eject"`: pcmanfm unmounts through `/usr/bin/eject`, which is its own package (`gvfs` and `udisks2` do not depend on it) |
 | `systemctl status udisks2` | *inactive (dead)* until something mounts - it is D-Bus activated, nothing runs resident, and `udiskie` is deliberately absent |
 
 A **Mount** row that fails says why in a critical notification, in udisks' own
@@ -844,7 +845,7 @@ allowlist is the agreement, not the names.
 | Step | Expected |
 |---|---|
 | `Alt+Ctrl+K` (key view) | the Clipboard and Emoji bindings with their descriptions, and **a picture on every row**: the tool (power, files, clipboard, capture…), the action (an arrow for focus and move, a cross for close, a refresh arrow for reload) or the section (windows, gear, lock, sun, speaker…). Every row's text starts in the same column |
-| **Search**, **Alt+Search**, **Alt+Ctrl+Shift+F** | the applications menu, then the file list (`rofi-files --search`), then the fzf window in foot - and Search alone does not open either file view |
+| **Search**, **Alt+Search**, **Search+Shift** | the applications menu, then the file list (`rofi-files --search`), then the fzf window in foot - and Search alone does not open either file view |
 | `Alt+Escape` | the power menu (not the battery banner) |
 | a slow action (Wi-Fi scan, DNS change) | a mako card that becomes the result, and the bar's spinner while it runs |
 | **click the spinner** during a Wi-Fi scan | the card turns into "Stopped Wi-Fi" (or whatever it was), no second toast, and the Wi-Fi menu opens nothing instead of half a list |

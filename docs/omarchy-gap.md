@@ -49,7 +49,8 @@ on the eMMC - and glycin's sandboxed per-thumbnail decoders, which `plan-rofi.md
 `uis/sway/packages.list` with `gvfs` (431 kB: the trash and the local volume monitor) and without
 `gvfs-backends`, which is where `samba-libs` comes from. It is the *windowed* half of the file
 story, not a replacement for the menu: `Alt+Search` and `Alt+Ctrl+F` still open `rofi-files` (one
-process, no window), while `Search+Shift` and the root menu's **Files (window)** row open pcmanfm.
+process, no window), while `Alt+Ctrl+Shift+F` and the root menu's **Files (window)** row open
+pcmanfm.
 Three limits stay documented at the setting: its thumbnails come from libfm's own gdk-pixbuf
 loader, so they are **images only** (the freedesktop `.thumbnailer` files are invisible to it); its
 Devices pane is whatever `udisks2` reports through gvfs' volume monitor (`udisks2` is in
@@ -59,7 +60,7 @@ card never runs its own contents; and `pcmanfm --desktop` is X11-only, i.e. noth
 Adopted since this list was written: `swappy` and `wf-recorder` (the capture menu, `rofi-capture`),
 `cliphist` (clipboard history, `rofi-clip`: the one resident process, ~2 MB),
 `fonts-noto-color-emoji` (the emoji picker's glyphs, `rofi-emoji`), `pcmanfm` + `gvfs` (the
-windowed file manager: `Search+Shift`, the launcher's **Files (window)**; the decision is section
+windowed file manager: `Alt+Ctrl+Shift+F`, the launcher's **Files (window)**; the decision is section
 1), and the five names the file story was waiting for: **`mpv` + `mpv-mpris`** (a video plays in a
 real player, and `playerctl`, `rofi-media` and the bar see it because `lazyos-view` passes
 `--script=/etc/mpv/scripts/mpris.so` - `--no-config` empties the directory the plugin installs

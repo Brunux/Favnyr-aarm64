@@ -846,8 +846,9 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   **The Chromebook Search key opens the applications** (the same `$launcher` as `$mod+d`), and
   **`Alt+Search` is the file search** (`rofi-files --search`: one bounded `fd` run over `$HOME`).
   The two were the other way around for a while, and this is the maintainer asking for the
-  magnifier to show all apps again: the file list moved one chord over to `Alt+Search`, and the
-  terminal filter that already lived there moved to `Alt+Ctrl+Shift+F`. The Search-key bindings
+  magnifier to show all apps again: the file list moved one chord over to `Alt+Search`, the
+  terminal filter went back to `Search+Shift`, and the windowed manager (pcmanfm) took
+  `Alt+Ctrl+Shift+F`, the Shift variant of the Files key. The Search-key bindings
   live in `~/.config/sway/config`, not in `19-launcher.conf` (which documents the launcher
   alone), and both release bindings are `--release --no-repeat` because the top row doubles as
   F1-F10 with Search held down (keyd). `Alt+d` stays the launcher and was never unbound: the
@@ -1051,7 +1052,7 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   makes the list silently text-only.
 - **Files exists twice on purpose: `rofi-files` is the list and `pcmanfm` is the window.** The
   file list (`Alt+Search`) and `Alt+Ctrl+F` open the list (one process, no window);
-  **`Search+Shift`** opens pcmanfm, and the launcher and the root menu carry both rows - **Files**
+  **`Alt+Ctrl+Shift+F`** opens pcmanfm, and the launcher and the root menu carry both rows - **Files**
   and **Files (window)**
   (`pcmanfm.desktop` is shadowed by a user-level copy with that name, so the launcher says what it
   opens). nautilus was measured and rejected (`docs/omarchy-gap.md` §1: 504 packages, GTK4 +
@@ -1467,15 +1468,15 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   tool or a failed run is a warning, not a failed build: the image is still correct, just slower on
   first use. `check-system.sh` WARNs when either cache is absent; the manual is `05-system.md`
   § *The first launch*.
-- **`Search+Shift` is the window, and both halves are release bindings**: sway matches a release
-  binding against the modifiers held when the key comes up, so Search released with Shift still
-  down lands on `pcmanfm "$HOME"`, Search alone falls through to the launcher, and
-  neither fires on the press - the top row doubles as F1-F10 while Search is held (keyd), so a
-  press binding would open a menu on the way to an F-key. Releasing Shift first gives the
-  launcher rather than the window, which answers a narrower question instead of the wrong one.
+- **The window is `Alt+Ctrl+Shift+F`, the Shift variant of the Files key**: `Alt+Ctrl+F` opens the
+  list and its Shift chord the window, so the file family sits together in `24-keys.conf` where
+  `$mod+Ctrl+letter` opens a menu and `$mod+Ctrl+Shift+letter` the variant it stands for (the same
+  shape as `Alt+Ctrl+D`/`Alt+Ctrl+Shift+D` and `Alt+Ctrl+A`/`Alt+Ctrl+Shift+A`). The Search key
+  keeps the three lists - launcher, `Alt+Search`, `Search+Shift` - so a key that says "find" never
+  opens a window, and `Search+Shift` now carries the terminal search (next bullet).
   Nothing of this is resident: the menu is one rofi process while it is open, and the window is
   the window.
-- **`Alt+Ctrl+Shift+F` is the same question in a terminal** (`~/.config/bin/lazyos-find`): `fd`
+- **`Search+Shift` is the same question in a terminal** (`~/.config/bin/lazyos-find`): `fd`
   streams the whole tree under `$HOME` into **fzf**, the fruit of typing narrows it while the walk is
   still running, the right 55 % is a preview pane, and Enter hands the choice to **`lazyos-view`**
   - the same opener a double click in pcmanfm uses - so the list, the window and the key never
@@ -1518,7 +1519,13 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   looked like. `check-system.sh` FAILs on a missing
   binding, on a script that lost its executable bit (the window would flash and close), on a
   missing `fzf` (an empty list reads as "no such file", never as a missing package) and on a
-  missing `lazyos-view`, and warns on the icon. Nothing is resident: one fzf process while the
+  missing `lazyos-view`, and warns on the icon. **It is a release binding**, like the launcher on
+  `Search` and the list on `Alt+Search`: sway matches a release binding against the modifiers held
+  when the key comes up, so Search released with Shift still down lands here, Search alone falls
+  through to the launcher, and none of the three fires on the press - the top row doubles as
+  F1-F10 while Search is held (keyd), so a press binding would open a menu on the way to an F-key.
+  Releasing Shift first gives the launcher rather than the search, which answers a narrower
+  question instead of the wrong one. Nothing is resident: one fzf process while the
   window is open.
 - **`Alt+Ctrl+G` searches the text inside the files** (`rofi-grep`, and "Search inside files" in
   the root menu). It is the third question in the family and each one is a different tool on
