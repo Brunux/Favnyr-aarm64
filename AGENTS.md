@@ -2256,11 +2256,19 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   **`audio-volume-muted`/`-low`/`-high`**, plus the theme's existing `display-brightness` (`f185`);
   `< 50 %` is the low glyph, muted ignores the level. Volume over 100 % (pactl allows it) is
   clamped to the bar's 100. The overlay is a *card*, not `swayosd` - that one is packaged in forky
-  (0.3.0-4) but is a resident GTK4 server for the same picture. `check-system.sh` FAILs on the
-  helper, `notify-send`, either binding or any of the four icons, and WARNs when mako lost `icons=1`
-  or `progress-color` (text-only card); the manual is `03-shortcuts.md` § *Sound, light and
-  screenshots* and `06-troubleshooting.md` § *The volume or brightness keys change the value but
-  show nothing*.
+  (0.3.0-4) but is a resident GTK4 server for the same picture. **The brightness delta carries its
+  sign after the number** (`5%-`, the form `brightnessctl --help` lists), never in front:
+  `brightnessctl` parses its own argv with getopt, which reads `-5%` as an option
+  (`invalid option -- '5'`) and exits 1, so `osd brightness down` changed nothing and raised
+  *could not change the backlight* while `up` worked - one direction, and the helper reads
+  perfectly. `pactl` has no such trap (`set-sink-volume ... -5%` is fine), and the bar's own
+  `on-scroll-up/down` in `config.jsonc` already wrote the brightness pair in the suffix form.
+  `check-system.sh` FAILs on the helper, `notify-send`, either binding or any of the four icons,
+  FAILs when the helper hands brightnessctl a step that starts with a hyphen (it runs it against a
+  stub, so no backlight is touched) and WARNs when mako lost `icons=1` or `progress-color`
+  (text-only card); the manual is `03-shortcuts.md` § *Sound, light and screenshots* and
+  `06-troubleshooting.md` § *The volume or brightness keys change the value but show nothing* and
+  § *The brightness keys do nothing*.
 - **The CLI tools are Deboma's, in `packages/tools.list`** (a third list next to base and the UI
   one, installed by `rootfs-setup.sh` between the two). It is deliberately *only* tools: everything
   Deboma installs that is a service, a daemon or a timer stays out, which is why `plocate` is

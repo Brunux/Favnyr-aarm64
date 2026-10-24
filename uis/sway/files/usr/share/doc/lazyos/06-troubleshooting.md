@@ -552,6 +552,14 @@ five minutes is not a bug - typing is the unlock.
 image ships a udev rule (group `video`, `g+w`); after changing it,
 `sudo udevadm control --reload && sudo udevadm trigger`.
 
+**When only one direction does nothing** it is not permission. `brightnessctl`
+reads its own arguments as options, so `brightnessctl set -5%` fails with
+`invalid option -- '5'` and changes nothing, while `set +5%` works: the down key
+raises *could not change the backlight* and the up key behaves. The helper
+`~/.config/bin/osd` therefore writes the delta with the sign after the number
+(`5%-`, the form `brightnessctl --help` lists), and `check-system.sh` runs it
+against a stub to prove both directions pass one.
+
 ## The screen is being shared but the viewer shows nothing
 
 The paths in order, because each one fails in its own way:

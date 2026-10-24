@@ -1313,6 +1313,35 @@ if [ -r "$HOME/.config/mako/config" ]; then
 	fi
 fi
 
+# Both steps have to be in a form brightnessctl accepts.  A delta written with a
+# leading hyphen is read by its getopt as an option ("invalid option -- '5'"), so
+# `osd brightness down` returns 1, changes nothing and raises the error card while
+# `up` works: one direction only, and the helper reads perfectly.  The stub
+# records the arguments the helper really passes, so nothing is written and the
+# helper's own code is what runs.
+_osd_tmp=$(mktemp -d "${TMPDIR:-/tmp}/lazyos-osd.XXXXXX" 2>/dev/null || true)
+if [ -n "$_osd_tmp" ] && [ -x "$HOME/.config/bin/osd" ]; then
+	printf '%s\n' '#!/bin/sh' 'printf "%s\n" "$*" >>"$OSD_TEST_LOG"' >"$_osd_tmp/brightnessctl"
+	printf '%s\n' '#!/bin/sh' 'exit 0' >"$_osd_tmp/notify-send"
+	chmod +x "$_osd_tmp/brightnessctl" "$_osd_tmp/notify-send"
+	(
+		export PATH="$_osd_tmp:$PATH" OSD_TEST_LOG="$_osd_tmp/args"
+		: >"$_osd_tmp/args"
+		"$HOME/.config/bin/osd" brightness down >/dev/null 2>&1 || true
+		"$HOME/.config/bin/osd" brightness up >/dev/null 2>&1 || true
+	)
+	_osd_steps=$(grep -- '^set ' "$_osd_tmp/args" | tr '\n' ' ')
+	_osd_steps=${_osd_steps% }
+	if grep -q -- '^set -' "$_osd_tmp/args"; then
+		fail "bin/osd passes brightnessctl a step starting with a hyphen ($_osd_steps): getopt reads it as an option, so that direction does nothing"
+	elif [ "$(grep -c -- '^set ' "$_osd_tmp/args")" -lt 2 ]; then
+		fail "bin/osd asks brightnessctl for fewer than two steps (${_osd_steps:-none}): a key changes nothing"
+	else
+		ok "both brightness directions pass a step brightnessctl accepts ($_osd_steps)"
+	fi
+	rm -rf "$_osd_tmp"
+fi
+
 # The night light is one helper now: the login line, the Settings switch and
 # the after-resume hook all ask it, so a raw `exec wlsunset` and the switch's own
 # copy of the coordinates are both regressions. The resume has to run after the
