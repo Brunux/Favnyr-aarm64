@@ -1,0 +1,15 @@
+[Desktop Entry]
+Name=Favnyr
+Comment=A modern file browser with tabbed interface and workspace management
+Exec=favnyr
+Terminal=false
+Type=Application
+Categories=Utility;FileManager;FileTools;
+Icon=applications-system
+StartupWMClass=favnyr
+Terminal=false
+X-MultipleFiles=true
+X-GNOME-FullName=Favnyr
+X-Purpose=file-management
+X-KDE-SubstituteFor=kfmclient
+X-KDE-StartupNotify=true
