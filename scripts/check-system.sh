@@ -2901,6 +2901,91 @@ if have udisksctl; then
 else
 	fail "udisks2 is missing: an unprivileged session cannot mount a USB stick at all"
 fi
+# A plugged USB drive mounts itself: the udev rule wants
+# lazyos-automount@<dev>.service, and /usr/local/sbin/lazyos-automount mounts it
+# as the desktop user through udisksd, then says so in a notification. Nothing
+# stays resident, so the chain *is* the feature and every link fails silently:
+# the stick simply never appears, and there is no journal line anybody would
+# think to look for. The two halves that are easy to lose are the polkit rule (a
+# session-less caller is auth_admin, not allow_active, so udisksd denies the
+# mount) and the plugdev membership that rule matches by group - which is why
+# they are checked together.
+_am_missing=
+for _am_f in /etc/udev/rules.d/90-lazyos-automount.rules \
+	/etc/systemd/system/lazyos-automount@.service \
+	/usr/local/sbin/lazyos-automount; do
+	[ -r "$_am_f" ] || _am_missing="$_am_missing $_am_f"
+done
+# /etc/polkit-1/rules.d is 0750 root:polkitd, so the rule is read through sudo
+# like every other privileged file in this report (captured first: a
+# `producer | grep -q` here would report a match as a failure whenever grep
+# exits before the producer finishes).
+_am_polkit=$(sudo -n cat /etc/polkit-1/rules.d/49-lazyos-automount.rules 2>/dev/null || true)
+[ -n "$_am_polkit" ] || _am_missing="$_am_missing /etc/polkit-1/rules.d/49-lazyos-automount.rules"
+[ -x /usr/local/sbin/lazyos-automount ] || _am_missing="$_am_missing lazyos-automount(!exec)"
+if [ -z "$_am_missing" ]; then
+	ok "a plugged USB drive mounts itself (udev rule, unit, helper, polkit rule)"
+else
+	fail "auto-mount is incomplete:$_am_missing (a plugged stick stays unmounted)"
+fi
+# The rule must stay USB-only: the eMMC and the microSD slot are the two disks
+# this machine boots from, and a rule that matched them would mount a partition
+# of the running system under /run/media.
+if grep -qs 'SUBSYSTEMS=="usb"' /etc/udev/rules.d/90-lazyos-automount.rules; then
+	ok "auto-mount matches USB disks only (never the eMMC or the SD slot)"
+else
+	fail '90-lazyos-automount.rules lost SUBSYSTEMS=="usb": it would mount the internal disks too'
+fi
+if grep -qs 'SYSTEMD_WANTS}+="lazyos-automount@%k.service"' /etc/udev/rules.d/90-lazyos-automount.rules; then
+	ok "the udev rule wants the auto-mount unit"
+else
+	fail "the auto-mount udev rule does not want lazyos-automount@%k.service: a plug starts nothing"
+fi
+# A root mount of a vfat/exFAT filesystem is /run/media/root/<label> with uid=0,
+# i.e. a stick the person at the screen cannot write to: setpriv is the line that
+# makes the mount the user's.
+if grep -qs setpriv /usr/local/sbin/lazyos-automount &&
+	grep -qs 'udisksctl mount' /usr/local/sbin/lazyos-automount; then
+	ok "the auto-mount helper mounts as the session user (setpriv + udisksctl)"
+else
+	fail "lazyos-automount no longer mounts as the user: a vfat stick would be uid=0"
+fi
+# The helper's own tools: setpriv drops to the account, findfs resolves the
+# UUID=/LABEL= specs it refuses to mount over, and udisksctl is the mount.
+_missing=
+for _c in setpriv findfs udisksctl lsblk findmnt; do have "$_c" || _missing="$_missing $_c"; done
+if [ -z "$_missing" ]; then
+	ok "the auto-mount helper has its tools (setpriv, findfs, udisksctl, lsblk, findmnt)"
+else
+	fail "the auto-mount helper is missing:$_missing (a plugged stick fails to mount)"
+fi
+if grep -qs 'filesystem-mount' <<<"$_am_polkit" &&
+	grep -qs "isInGroup('plugdev')" <<<"$_am_polkit"; then
+	ok "polkit lets the auto-mount helper mount a removable disk (plugdev)"
+else
+	fail "49-lazyos-automount.rules does not grant filesystem-mount to plugdev: udisksd answers auth_admin"
+fi
+# The account, not this process: the helper mounts with setpriv --init-groups,
+# which reads the group database, so a shell that predates the membership is not
+# what the question is about.
+case " $(id -nG "$(id -un 2>/dev/null)" 2>/dev/null) " in
+*" plugdev "*)
+	ok "the session user is in plugdev (the group the auto-mount rule names)"
+	;;
+*)
+	fail "the session user is not in plugdev: the auto-mount polkit rule matches nobody"
+	;;
+esac
+if systemctl is-active --quiet polkit 2>/dev/null; then
+	ok "polkitd is running (the auto-mount rule is in force)"
+else
+	warn "polkitd is not running: a plugged stick will not mount (the rule is not read)"
+fi
+if grep -qs 'Auto-mount USB drives' "$HOME/.config/bin/rofi-quick"; then
+	ok "Settings has the auto-mount switch"
+else
+	fail "rofi-quick lost the 'Auto-mount USB drives' row: the switch is unreachable"
+fi
 # pcmanfm's Unmount runs `eject`, which is not a dependency of udisks2 or gvfs:
 # without it the action answers `Failed to execute child process "eject"` and the
 # stick stays mounted.

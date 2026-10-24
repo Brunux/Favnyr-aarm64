@@ -575,13 +575,21 @@ queue; the manual is `04-software.md` § *Files in a window* and
 
 | Step | Expected |
 |---|---|
-| insert a stick or a card and open **Places** (root menu, or `rofi-places`) | a **Mount** row for each partition with a filesystem, labelled with its name (a space in a label reads as a space, not `\x20`) |
+| **insert a USB stick** | a mako card `USB drive: <label> mounted at /run/media/<you>/<label>` within a second, and no process left behind (`systemctl status 'lazyos-automount@*'` is `inactive (dead)`) |
+| open **Places** (root menu, or `rofi-places`) with the stick in | the stick is a **disk** row (already mounted) and there is **no Mount row for it**; an SD card in the internal slot still shows a **Mount** row, because auto-mount is USB only |
+| Settings -> **Auto-mount USB drives** -> off, unplug and replug the stick | no notification, no mount, and Places shows a **Mount** row for it; turn the switch back on and replug |
+| `cat ~/.config/lazyos/automount.conf` | `enabled=no` or `enabled=yes` - one line, and a missing file means on |
+| `ls -ld /run/media/*/` and `findmnt -rn -S /dev/sdX1 -o OPTIONS` | the directory is under your name and the options carry `uid=<you>`, not `uid=0`: the helper mounts as the account, not as root |
+| insert a stick formatted without a partition table (a bare `mkfs.vfat /dev/sdX`) | it mounts too: the rule has a `DEVTYPE=="disk"` line for exactly that shape |
+| **insert the rescue card into the internal microSD slot** | nothing mounts by itself, and the eMMC is never a candidate: the udev rule matches `SUBSYSTEMS=="usb"` and `check-system.sh` fails if that line goes |
+| plug a stick while the switch is on but with `plugdev` missing (`sudo gpasswd -d "$USER" plugdev`, then log out and back in) | the notification says `Not authorized` in udisks' words - the polkit rule matches by group, and `check-system.sh` fails on the membership |
+| `systemctl status udisks2` after all of it | *inactive (dead)* again - udisks2 is D-Bus activated, and the helper is one process per plug, not a watcher |
 | Enter on a **Mount** row | a mako card while it mounts, then `rofi-files` opens that directory. A trailing `.` in the path is the `udisksctl` message not being stripped |
 | Enter on a mounted disk row | `rofi-files` browses it |
 | **Alt+1** on a mounted disk row | "Unmounted `<label>`" and the row is gone from the next menu; pulling a stick that is still mounted is how a filesystem is lost |
 | **Alt+1** on a folder row (Home, Documents) | "Only a disk can be unmounted", and nothing else happens |
 | a swap partition or a LUKS one on the stick | no **Mount** row for it (a swap has nothing to show and LUKS needs a passphrase prompt this menu does not have) |
-| unplug and replug the stick | it is listed again; a stick that stays mounted after the unplug is a sign the filesystem is dirty |
+| unplug and replug the stick | it mounts again (or is listed again with auto-mount off); a stick that stays mounted after the unplug is a sign the filesystem is dirty |
 | right-click a mounted stick in **pcmanfm** (Alt+Ctrl+Shift+F) -> **Unmount** | it unmounts and the icon goes away, with no `Failed to execute child process "eject"`: pcmanfm unmounts through `/usr/bin/eject`, which is its own package (`gvfs` and `udisks2` do not depend on it) |
 | `systemctl status udisks2` | *inactive (dead)* until something mounts - it is D-Bus activated, nothing runs resident, and `udiskie` is deliberately absent |
 

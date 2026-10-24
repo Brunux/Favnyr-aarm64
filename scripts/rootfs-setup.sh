@@ -152,7 +152,13 @@ EOF
 
 log "Creating user $USERNAME"
 if ! id "$USERNAME" >/dev/null 2>&1; then
-	useradd -m -s /bin/bash -G sudo,video,audio,input,render,netdev "$USERNAME"
+	# plugdev is for the udev auto-mount helper: it mounts a plugged USB drive
+	# as this user (a root mount would be /run/media/root with uid=0 on vfat),
+	# and polkit authorizes a session-less caller by its *group* -
+	# /etc/polkit-1/rules.d/49-lazyos-automount.rules names plugdev and nothing
+	# else. The group ships with base-passwd (gid 46); without the membership
+	# the rule matches nobody and a plugged stick stays unmounted.
+	useradd -m -s /bin/bash -G sudo,video,audio,input,render,netdev,plugdev "$USERNAME"
 	echo "$USERNAME:$USERPASS" | chpasswd
 fi
 echo "%sudo ALL=(ALL) NOPASSWD:ALL" >/etc/sudoers.d/99-$USERNAME

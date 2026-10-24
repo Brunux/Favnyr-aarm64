@@ -1,0 +1,201 @@
+#!/bin/sh
+# Mount a USB drive when it is plugged in.
+#
+# 90-lazyos-automount.rules wants lazyos-automount@<dev>.service for a filesystem
+# on a USB disk, and the unit runs this once and exits: the session gains no
+# daemon.  It is Places' "Mount ..." row without the click.
+#
+# Four things here are the feature, and each one is a way it can go wrong:
+#
+# * It mounts **as the desktop user**, through udisksd on the system bus.
+#   udisks2 writes the *caller's* uid and gid into the mount options of a vfat or
+#   exFAT filesystem, so a root mount would be /run/media/root/<label> with
+#   uid=0 - a stick nobody can write to.  setpriv is the whole of it: no PAM
+#   session, no logind session, no second login.  (Measured: a session-less
+#   caller is authorized by the polkit rule through its *group*, which is why
+#   the rule names plugdev and not subject.local.)
+# * It refuses anything that is not a removable USB disk.  The udev rule already
+#   says SUBSYSTEMS=="usb", but this is also a command a person can run, and the
+#   eMMC and the microSD slot are the two disks this machine boots from.
+# * It refuses a device the running system came from.  udev's add event for the
+#   root partition of a USB-booted system arrives *before* systemd has mounted
+#   it, so findmnt still says "not mounted" at that moment, and mounting the root
+#   filesystem a second time under /run/media is the one thing this must never do.
+# * ~/.config/lazyos/automount.conf can say enabled=no (Settings -> Auto-mount
+#   USB drives).  A missing file means on, and the file is read here rather than
+#   by udev so the switch and the mount cannot disagree about the state.
+#
+# Everything else - a filesystem that is already mounted, no filesystem, swap,
+# LUKS, RAID, an LVM member - exits 0 without a word: those are not failures,
+# they are devices this helper has nothing to do with.
+set -eu
+
+# A udev-triggered unit starts with udev's PATH, which has no /sbin: findfs,
+# setpriv and udisksctl are all reached through this line.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+DEV=${1:-}
+[ -n "$DEV" ] || exit 0
+[ -b "$DEV" ] || exit 0
+
+# --- which account ---------------------------------------------------------
+
+# The person at the screen.  With nobody logged in there is no session to hand
+# the stick to and the mount could only be root's, so this does nothing and the
+# next login can mount it from Places.  loginctl is systemd's own answer and
+# covers a session on another VT as well, which is what the polkit rule's
+# filesystem-mount-other-seat half is for.
+USER_NAME=
+for _u in $(loginctl list-users --no-legend 2>/dev/null | awk '{ print $2 }'); do
+	if [ "$_u" != root ] && id -u "$_u" >/dev/null 2>&1; then
+		USER_NAME=$_u
+		break
+	fi
+done
+[ -n "$USER_NAME" ] || exit 0
+
+USER_UID=$(id -u "$USER_NAME")
+USER_GID=$(id -g "$USER_NAME")
+USER_HOME=$(getent passwd "$USER_NAME" | cut -d: -f6)
+[ -n "${USER_HOME:-}" ] || exit 0
+RUNTIME_DIR=/run/user/$USER_UID
+
+# Run a command as that user, with the environment a session would give it:
+# udisksctl and notify-send both need the *user* bus, and without
+# XDG_RUNTIME_DIR notify-send has no bus address at all.
+as_user() {
+	setpriv --reuid="$USER_UID" --regid="$USER_GID" --init-groups -- \
+		env HOME="$USER_HOME" USER="$USER_NAME" LOGNAME="$USER_NAME" \
+		XDG_RUNTIME_DIR="$RUNTIME_DIR" \
+		DBUS_SESSION_BUS_ADDRESS="unix:path=$RUNTIME_DIR/bus" \
+		PATH="$PATH" "$@"
+}
+
+# --- the switch ------------------------------------------------------------
+
+CONF=$USER_HOME/.config/lazyos/automount.conf
+if [ "$(sed -n 's/^enabled=//p' "$CONF" 2>/dev/null | tail -1)" = no ]; then
+	exit 0
+fi
+
+# --- is this a device this helper should touch? -----------------------------
+
+# The disk it belongs to.  lsblk's PKNAME is empty for a whole disk that carries
+# a filesystem and no partition table (a stick formatted directly), and then the
+# device is its own disk.
+DISK=$(lsblk -no PKNAME "$DEV" 2>/dev/null | head -1)
+[ -n "$DISK" ] || DISK=${DEV##*/}
+
+# Removable, asked the way ui_disk_system in lib-rofi.sh asks it: /sys/block/
+# <disk>/removable is 0 on this eMMC *and* on the microSD slot, so the
+# device-level flag and the transport are what actually answer the question.
+REMOVABLE=no
+if [ "$(cat "/sys/block/$DISK/removable" 2>/dev/null || echo 0)" = 1 ]; then
+	REMOVABLE=yes
+elif [ "$(cat "/sys/block/$DISK/device/removable" 2>/dev/null || true)" = removable ]; then
+	REMOVABLE=yes
+elif [ "$(lsblk -dnro TRAN "$DISK" 2>/dev/null || true)" = usb ]; then
+	REMOVABLE=yes
+fi
+[ "$REMOVABLE" = yes ] || exit 0
+
+# A filesystem this helper can mount.  swap is not a filesystem, and the other
+# three need a passphrase or a device assembled before there is anything to
+# mount.
+FSTYPE=$(lsblk -no FSTYPE "$DEV" 2>/dev/null | head -1)
+case $FSTYPE in
+'' | swap | crypto_LUKS | linux_raid_member | LVM2_member | zfs_member | BitLocker)
+	exit 0
+	;;
+esac
+
+# Already mounted: nothing to do.  This is also what the booted system's own
+# /boot looks like on a machine that came up from a USB disk.
+if [ -n "$(findmnt -rn -S "$DEV" 2>/dev/null || true)" ]; then
+	exit 0
+fi
+
+# Does a spec name $DEV?  findfs resolves UUID=/LABEL=/PARTUUID=/PARTLABEL= the
+# way the kernel command line and /etc/fstab do, and -ef compares the device
+# nodes (a by-uuid path is a symlink to the same node).
+spec_is_dev() {
+	case ${1:-} in
+	UUID=* | LABEL=* | PARTUUID=* | PARTLABEL=* | /dev/*) ;;
+	*) return 1 ;;
+	esac
+	[ "$(findfs "$1" 2>/dev/null || true)" -ef "$DEV" ]
+}
+
+# The device this system came from, and anything it has a standing claim on.
+is_system_source() {
+	for _arg in $(tr ' ' '\n' </proc/cmdline 2>/dev/null); do
+		case $_arg in
+		root=* | resume=*)
+			if spec_is_dev "${_arg#*=}"; then return 0; fi
+			;;
+		kern_guid=*)
+			if spec_is_dev "PARTUUID=${_arg#*=}"; then return 0; fi
+			;;
+		esac
+	done
+	while read -r _spec _rest; do
+		case ${_spec:-} in
+		'' | '#'*) continue ;;
+		esac
+		if spec_is_dev "$_spec"; then return 0; fi
+	done </etc/fstab
+	while read -r _spec _rest; do
+		if spec_is_dev "$_spec"; then return 0; fi
+	done </proc/mounts
+	return 1
+}
+if is_system_source; then
+	exit 0
+fi
+
+# --- mount ------------------------------------------------------------------
+
+# udisksd learns about a device from its own udev monitor, which is a different
+# queue from the one that runs this unit: the object can still be missing when
+# the plug event reaches us, and udisksctl then answers "No such object path".
+# Retry for up to five seconds instead of believing the first error.
+MOUNTED=
+TRIES=0
+OUT=
+while [ "$TRIES" -lt 25 ]; do
+	TRIES=$((TRIES + 1))
+	if OUT=$(as_user udisksctl mount -b "$DEV" 2>&1); then
+		MOUNTED=yes
+		break
+	fi
+	sleep 0.2
+done
+
+LABEL=$(lsblk -no LABEL "$DEV" 2>/dev/null | head -1)
+[ -n "$LABEL" ] || LABEL=${DEV##*/}
+
+if [ -z "$MOUNTED" ]; then
+	echo "could not mount $DEV: $OUT" >&2
+	as_user notify-send -a LazyOS -i dialog-error -u critical 'USB drive' \
+		"$LABEL did not mount: $OUT" 2>/dev/null || true
+	exit 1
+fi
+
+# udisksctl prints "Mounted /dev/sda1 at /run/media/<user>/<label>." - with the
+# full stop, which is not part of the path.
+MP=${OUT##* at }
+MP=${MP%.}
+
+# udisks mounts a dirty vfat/exFAT read-only rather than refusing it, and a stick
+# nobody can write to looks like a broken stick.  The exact `ro` field of the
+# option list is the test: `errors=remount-ro` contains "ro" without being it.
+OPTS=$(findmnt -rn -S "$DEV" -o OPTIONS 2>/dev/null || true)
+NOTE=
+case ",$OPTS," in
+*,ro,*) NOTE=' (read-only)' ;;
+esac
+
+echo "mounted $DEV ($LABEL) at $MP$NOTE"
+as_user notify-send -a LazyOS -i drive-harddisk 'USB drive' \
+	"$LABEL mounted at $MP$NOTE" 2>/dev/null || true

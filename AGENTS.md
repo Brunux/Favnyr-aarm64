@@ -1297,6 +1297,64 @@ exactly what forky ships) and **scenefx 0.5**, and `scripts/build-swayfx.sh` bui
   No userspace filesystem helper is needed either: the kernel has `VFAT_FS=y` and
   `EXFAT_FS=m`/`NTFS3_FS=m`, so a stick from any other machine mounts, and `dosfstools` is
   already in `packages/base.list` for the `fsck.vfat` udisks runs before mounting one.
+- **A plugged USB drive mounts itself, and the whole feature is one udev event.** The user asked
+  for it in those words ("usb drives should be auto mount when plugged in"), and it is built the
+  way the no-daemon rule allows: `90-lazyos-automount.rules` matches `ACTION=="add"`,
+  `SUBSYSTEMS=="usb"` and `ID_FS_USAGE=="filesystem"` and wants
+  `lazyos-automount@<partition>.service`, a `Type=oneshot` unit that runs
+  `/usr/local/sbin/lazyos-automount` once and exits. One process per plug, nothing between two
+  plugs, and no `udiskie` (that bullet above is why). Five decisions are the feature and each one
+  is a way it silently fails:
+  **It mounts as the desktop user**, because udisks2 writes the *caller's* uid/gid into the mount
+  options of vfat/exFAT: a root mount is `/run/media/root/<label>` with `uid=0`, a stick nobody
+  can write to. `setpriv --reuid --regid --init-groups` is the whole of it (no PAM session, no
+  logind session, no second login), and it is verified on hardware by reading
+  `findmnt -o OPTIONS` back for `uid=1000`.
+  **Polkit has to be told, and by group.** A caller with no session is `auth_admin` and never
+  `allow_active` - udisksd cannot ask "is this user active?" about a process that has no session -
+  so `/etc/polkit-1/rules.d/49-lazyos-automount.rules` grants
+  `org.freedesktop.udisks2.filesystem-mount` **and** `-other-seat` (udisksd picks between them per
+  *user*, through `sd_uid_is_on_seat`, so a session on another VT takes the second) to
+  `subject.isInGroup('plugdev')`, and `rootfs-setup.sh` adds `plugdev` to `useradd -G`. `-system`
+  is deliberately absent: that is the internal disk's action. Measured: `subject.local` is false
+  in a session-less process, which is why the group is what the rule matches.
+  **Only USB.** The match is the transport, so the eMMC and the internal microSD slot are never
+  candidates - they are the two disks this machine boots and rescues from, and `mmcblk1` is where
+  the rescue card lives. An SD card stays a **Mount** row in Places, which is also the honest
+  amount of ceremony for a card about to be repartitioned.
+  **The helper refuses more than the rule matches**, because it is also a command a person can
+  run: non-block, a disk that is not removable (`removable=1` **or** `device/removable=removable`
+  **or** `TRAN=usb`, the same triple as `ui_disk_system`, since `/sys/block/mmcblk1/removable` is
+  `0` on this machine), no filesystem or one of `swap`/`crypto_LUKS`/`linux_raid_member`/
+  `LVM2_member`, already mounted, and **any device the running system came from** (`root=`,
+  `resume=`, `kern_guid=` resolved through `findfs`, every `/etc/fstab` source, every
+  `/proc/mounts` source, compared with `[ "$src" -ef "$DEV" ]`). That last one is not
+  hypothetical: on a machine booted from a USB stick, udev's `add` for the root partition arrives
+  *before* systemd mounts it, so `findmnt` still says "not mounted" and mounting `/` a second time
+  under `/run/media` is one plug away.
+  **A switch, because a feature with no off is a feature somebody edits udev to escape**:
+  `~/.config/lazyos/automount.conf`, one line `enabled=no`, missing means on, read by the helper
+  and toggled by Settings' **Auto-mount USB drives** row (`rofi-quick`, `UI_I_DISK`). Both parse
+  the file the same way on purpose, or the row would lie.
+  Two smaller things that cost a round each: **udisksd learns about a device from its own udev
+  monitor**, a different queue from the one that runs the unit, so the helper retries for up to
+  five seconds instead of believing the first "No such object path"; and **`udisksctl mount`
+  prints `Mounted /dev/sda1 at /run/media/<user>/<label>.` with a full stop**, so the path is
+  `${out##* at }` and then `${mp%.}`. The notification is `notify-send` on the user bus (with
+  `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` handed to it by the same `setpriv` wrapper,
+  since a system unit has neither), it names the label and the path, and it adds `(read-only)`
+  when the mount options carry an exact `ro` field - a dirty vfat mounts `ro` rather than
+  refusing, and that is otherwise indistinguishable from a broken stick.
+  One behaviour follows from the account rule and is worth knowing: **a stick already inserted
+  when the machine booted waits in Places**, because udev's coldplug event arrives before anyone
+  is logged in and the helper then has no account to mount for - unplug and replug, or pick the row.
+  Witnesses: `check-system.sh` FAILs on any of the four files, the helper's exec bit, a udev rule
+  that lost `SUBSYSTEMS=="usb"` (it would mount the internal disks) or its `SYSTEMD_WANTS`, a
+  helper that lost `setpriv`, a polkit rule that lost `filesystem-mount` or `isInGroup('plugdev')`,
+  an account missing from `plugdev` and the Settings row, and WARNs when `polkitd` is not running.
+  The manual is `04-software.md` § *USB sticks and SD cards*, `02-rofi.md`'s Places paragraph, and
+  the symptom list is `06-troubleshooting.md` § *A plugged USB drive does not mount*. The
+  acceptance row is `docs/test-checklist.md` § *USB sticks and SD cards*.
 - **Format a disk is the one destructive menu, so the list is the safety, not the question.**
   `rofi-format` is reached from the last row of Places and offers only disks where **nothing is
   mounted**, **no partition carries the ChromeOS kernel type**

@@ -36,6 +36,7 @@ and on `Alt+D`, waybar and the foot terminal.
 | `home/.config/bin/rofi-agents` | **Agents**: launch a coding agent, install one, keep accounts per agent; `--default` is the root menu's one-click `Agent session` row. |
 | `home/.config/bin/rofi-capture`, `rofi-qr`, `screenshot` | **Capture** (screenshot, annotate, OCR, QR, record), the Wi-Fi QR code, and the one place a screenshot's folder is decided (`~/Pictures/Screenshots/<today>/`). |
 | `home/.config/bin/rofi-dev`, `lazyos-profile` | **Developer** (`Alt+Ctrl+D`): the account into one encrypted archive on a disk (keys, dotfiles, package list), the restore that backs the current profile up first, and a diagnostics bundle for a bug report. `lazyos-profile` is the engine and also runs from a terminal. |
+| `usr/local/sbin/lazyos-automount`, `etc/udev/rules.d/90-lazyos-automount.rules`, `etc/systemd/system/lazyos-automount@.service`, `etc/polkit-1/rules.d/49-lazyos-automount.rules` | **A plugged USB drive mounts itself**: the udev rule wants one oneshot unit per partition, the helper mounts it through `udisksctl` as the session user (`setpriv`, because a root mount is `uid=0` on vfat) after refusing anything that is not a removable USB disk or that this system came from, and the polkit rule authorizes that session-less caller through `plugdev`. One process per plug, nothing resident. |
 | `home/.config/bin/rofi-files`, `lazyos-thumbnail`, `lazyos-view` | The file browser, the thumbnail generator it calls, and the "open with LazyOS" rule (text/bat, document/papers, image/imv, video/mpv, the rest/Firefox). |
 | `home/.config/bin/lazyos-find` | **Search+Shift**: `fd` streamed into `fzf` over the whole home, with a preview pane (see **Files in a terminal**). |
 | `home/.config/bin/rofi-power` | **Power** menu: lock, suspend, hibernate, log out, reboot, shut down (the last three ask first). |
@@ -219,7 +220,7 @@ Everything that is not the launcher or a bar panel is a `rofi-*` script in
 | `rofi-clean` | Free space | `df` plus what grows (trash, thumbnails, apt cache, journal, `~/.cache`), one action per row, re-measured afterwards |
 | `rofi-kill` | End a process | the heaviest twenty by resident memory; SIGTERM, then an explicit offer of SIGKILL |
 | `rofi-tz` | Time zone | `timedatectl list-timezones` with the current one marked, and the network-clock switch. It restarts waybar afterwards: `timedatectl` only rewrites `/etc/localtime`, and a running process keeps the zone glibc cached the first time it called `localtime()` |
-| `rofi-places` | Places | home, documents, downloads, pictures, every mounted filesystem, and a **Mount** row for each unmounted one (a USB stick, an SD card) through `udisks2`; Enter browses there with `rofi-files`, Alt+1 unmounts the disk under the row |
+| `rofi-places` | Places | home, documents, downloads, pictures, every mounted filesystem, and a **Mount** row for each unmounted one (an SD card in the internal slot, or a USB stick with auto-mount off) through `udisks2`; Enter browses there with `rofi-files`, Alt+1 unmounts the disk under the row |
 | `rofi-swap`, `rofi-format` | Places (swap is also in the root menu) | the two disk actions, both drawn from `ui_disks` in `lib-rofi.sh` (nothing mounted, no ChromeOS kernel partition, no SPI flash or eMMC boot partition): **swap** turns a card into a `lazyos_swap` partition and the fstab block that activates it on every boot (priority 10, below zram; `nofail` and a 15 s timeout), with **Turn it off** as the undo; **format** wipes a disk clean as FAT32 or ext4 |
 | `rofi-media` | Media | the current track and play/pause/next/previous through `playerctl` |
 | `rofi-calc` | `Alt+Ctrl+Q`, Calculator | awk, one prompt; Enter copies the result |
@@ -453,7 +454,8 @@ launcher carries both rows (**Files**, **Files (window)**) and so does the root 
   `pcmanfm --desktop` is X11-only, so nothing starts it on sway. Its Devices pane does mount a
   USB stick, because `udisks2` is installed and `gvfs`' volume monitor is the client - the same
   `udisksd` `rofi-places` talks to through `udisksctl`, and there is no `udiskie` (the resident
-  tray daemon) on purpose.
+  tray daemon) on purpose: a plugged USB stick mounts itself through the udev helper above, one
+  process per plug and nothing in between.
 
 ## Files in a terminal (lazyos-find)
 

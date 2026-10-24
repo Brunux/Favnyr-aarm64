@@ -125,6 +125,19 @@ tablet_mode_detail() {
 	printf '%s' "${_t:-off}"
 }
 
+# Auto-mount is one line in ~/.config/lazyos/automount.conf that
+# /usr/local/sbin/lazyos-automount reads when a USB drive is plugged in (see
+# 90-lazyos-automount.rules).  The parsing below is that helper's, on purpose: a
+# row that said "on" while the helper read "no" would be a switch that lies.
+# A missing file means on, which is the state a fresh card ships in.
+automount_conf() {
+	printf '%s/lazyos/automount.conf' "${XDG_CONFIG_HOME:-$HOME/.config}"
+}
+
+automount_on() {
+	[ "$(sed -n 's/^enabled=//p' "$(automount_conf)" 2>/dev/null | tail -1)" != no ]
+}
+
 audio_detail() {
 	# One call (wireplumber's own client) instead of pactl's three.
 	_v=$(wpctl get-volume @DEFAULT_AUDIO_SINK@ 2>/dev/null || true)
@@ -264,6 +277,17 @@ render() { # OUTFILE
 		# cannot disagree about it; with no monitor plugged in it says so.
 		ui_row "$UI_I_DESKTOP" 'Display arrangement' \
 			"$("$dir/rofi-display" --status 2>/dev/null || echo unknown)" display
+		# Whether a plugged stick mounts itself.  The switch is what makes the
+		# udev helper do nothing, so a card can be made quiet without editing
+		# /etc/udev; the detail says which behaviour is in effect, because "off"
+		# on its own reads as broken.
+		if automount_on; then
+			ui_row "$UI_I_DISK" 'Auto-mount USB drives' \
+				'a plugged stick mounts itself' automount
+		else
+			ui_row "$UI_I_DISK" 'Auto-mount USB drives' \
+				'off · Places mounts a stick when you pick it' automount "$UI_DIM"
+		fi
 		# Tablet mode is the on-screen keyboard, both physical inputs off (the
 		# touchpad is on the back of the screen, and the folded keys are on the
 		# table) and the accelerometer turning the screen; the row is also the
@@ -364,6 +388,27 @@ while :; do
 	touchpad) swaymsg input type:touchpad events toggle >/dev/null 2>&1 || true ;;
 	rotation) exec "$dir/rofi-quick" --rotation-menu ;;
 	display) exec "$dir/rofi-display" ;;
+	automount)
+		_conf=$(automount_conf)
+		if automount_on; then
+			_value=no
+			_word='off · Places mounts a stick when you pick it'
+		else
+			_value=yes
+			_word='on · a plugged USB drive mounts itself'
+		fi
+		# Write to a temporary file beside it and rename: the root helper reads
+		# this file from a udev event, and a half-written line would read as
+		# "enabled=" (which is not "no", so it would mean on).
+		if mkdir -p "$(dirname -- "$_conf")" 2>/dev/null &&
+			printf 'enabled=%s\n' "$_value" >"$_conf.part" 2>/dev/null &&
+			mv -f "$_conf.part" "$_conf" 2>/dev/null; then
+			ui_say 'Auto-mount' "USB drives: $_word" normal drive-harddisk
+		else
+			rm -f "$_conf.part" 2>/dev/null || true
+			ui_say 'Auto-mount' "Could not write $_conf" critical dialog-error
+		fi
+		;;
 	tablet) "$dir/tablet-mode" toggle ;;
 	tablet-calibrate) "$dir/tablet-mode" calibrate || true ;;
 	layout) exec "$dir/rofi-layout" ;;

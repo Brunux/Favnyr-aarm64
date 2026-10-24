@@ -652,6 +652,55 @@ binding (`(?i)^(firefox|code)` and so on), then `swaymsg reload`: two
 `bindgesture` lines for the same swipe are the duplicate that raises the red
 bar above.
 
+## A plugged USB drive does not mount
+
+A stick mounts itself when it is plugged in: udev starts
+`lazyos-automount@<partition>.service`, `/usr/local/sbin/lazyos-automount` mounts
+it through `udisksctl` **as you** and raises a notification with the path. When
+nothing happens, the two commands that say which link broke are:
+
+```sh
+systemctl status 'lazyos-automount@*'
+journalctl -b -u 'lazyos-automount@*'
+```
+
+* **No unit ran at all.** `udevadm monitor --udev --subsystem-match=block` while
+  plugging shows the `add` events; no `lazyos-automount@` behind them means the
+  rule is missing (`/etc/udev/rules.d/90-lazyos-automount.rules`) or udev has not
+  re-read the rules (`sudo udevadm control --reload`).
+* **The unit ran and printed nothing.** That is the helper deciding the device is
+  not its business: not a USB disk, no filesystem (swap, LUKS, RAID, an LVM
+  member), already mounted, or a disk this system came from. It exits 0 in every
+  one of those cases - none of them is an error, and a second mount of the root
+  filesystem is exactly what it is there to prevent.
+* **`could not mount ...: Not authorized`.** The polkit rule
+  (`/etc/polkit-1/rules.d/49-lazyos-automount.rules`) grants the mount to the
+  `plugdev` group, because a caller with no session is `auth_admin` and never
+  `allow_active` - udisksd cannot ask "is this user active?" about a process that
+  has no session. `id -nG` must list `plugdev`; if it does not, the account was
+  created without it and `sudo usermod -aG plugdev "$USER"` fixes a running
+  system (log out and back in for the session to see it). `systemctl is-active
+  polkit` must say `active`.
+* **The notification says `(read-only)`.** The filesystem is dirty and udisks
+  mounted it read-only instead of refusing it. Unplug it, `sudo fsck.vfat -a
+  /dev/sdX1` (or `fsck.exfat`), plug it back in.
+* **The switch is off.** Settings → *Auto-mount USB drives*, or `enabled=no` in
+  `~/.config/lazyos/automount.conf`. With it off the stick waits as a **Mount**
+  row in Places, which is what this image did before the feature.
+* **The stick was already in when the machine booted.** udev's `add` fires at
+  boot, before anyone is logged in, so the helper has no account to mount for and
+  does nothing - the same rule that keeps it away from the root filesystem.
+  Unplug it and plug it back in, or pick the **Mount** row in Places.
+* **`udisksctl mount -b /dev/sdX1` works by hand but the plug does not.**
+  `systemctl status udisks2` should be *inactive (dead)* until something asks (it
+  is D-Bus activated); a `udisks2` that is `failed` is the one state where the
+  helper's five-second retry runs out, and `journalctl -u udisks2` has udisksd's
+  own reason.
+
+An SD card in the internal slot does **not** mount itself, and that is on
+purpose: the rule matches the USB transport only, because that slot holds the
+card this machine boots and rescues from. It is a **Mount** row in Places.
+
 ## Auxiliary swap or Format a disk says the tools are missing
 
 The menu answered `Missing: parted mkswap swapon swapoff blkid` while every one of

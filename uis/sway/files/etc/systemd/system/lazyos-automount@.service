@@ -1,0 +1,20 @@
+[Unit]
+Description=Mount the USB drive %I
+Documentation=file:/usr/share/doc/lazyos/04-software.md
+
+# One instance per partition, started by udev's SYSTEMD_WANTS and gone as soon
+# as the mount is done: Type=oneshot with no RemainAfterExit, so `systemctl
+# list-units` has nothing left and the session keeps no daemon.
+#
+# The helper is the only thing that decides whether the device is worth
+# mounting (it refuses the eMMC, the microSD slot, swap/LUKS/RAID and anything
+# the running system came from), so the unit itself is only the wiring.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lazyos-automount /dev/%I
+
+# udisksd may not have seen the device yet when the plug event reaches us, so
+# the helper retries for up to five seconds; the timeout is the unit's, not the
+# helper's, so a stuck udisksd fails the unit instead of hanging it.
+TimeoutStartSec=20

@@ -1,0 +1,26 @@
+// Mounting a USB drive without a session: the udev helper runs as root from a
+// system unit, and polkit answers a caller with no session as auth_admin - it
+// cannot ask "is this user active?" (allow_active) because there is no session
+// to ask about, so udisksd's filesystem-mount would be denied for a helper that
+// is perfectly well doing what the person who plugged the stick asked for.
+//
+// The subject is still a real user with real groups, so the rule grants by
+// group: plugdev (gid 46, and the only member is the desktop account that
+// rootfs-setup.sh creates with -G plugdev).  That is narrower than a blanket
+// allow and does not depend on a session existing.
+//
+// Two actions, not one.  udisksd picks between them per *user*, not per process:
+//   filesystem-mount             the user is on the drive's seat
+//   filesystem-mount-other-seat  the user is not (another VT, a locked-down
+//                                seat) - the mount is still theirs to make.
+// `filesystem-mount-system` is deliberately absent: that is the internal disk's
+// action, and nothing here should be mounting the eMMC.
+polkit.addRule(function (action, subject) {
+    if (action.id !== 'org.freedesktop.udisks2.filesystem-mount' &&
+        action.id !== 'org.freedesktop.udisks2.filesystem-mount-other-seat') {
+        return;
+    }
+    if (subject.isInGroup('plugdev')) {
+        return polkit.Result.YES;
+    }
+});

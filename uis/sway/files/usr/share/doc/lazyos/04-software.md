@@ -426,12 +426,44 @@ one: tile it, move it to another workspace, close it with **Alt+Q**.
 
 ## USB sticks and SD cards
 
-A USB stick or a card shows up as a **Mount** row in **Places** (the root menu,
-Alt+Space, and the Places entry in the launcher): picking it mounts it and opens
-it in Files, and **Alt+1** on a mounted disk unmounts it. Eject before pulling
+A USB stick **mounts itself when you plug it in**: a notification says *label
+mounted at /run/media/<you>/<label>*, and it is then a row in **Places** (the
+root menu, Alt+Space, and the Places entry in the launcher) and in pcmanfm's
+sidebar. **Alt+1** on a mounted disk in Places unmounts it; eject before pulling
 the stick out - a filesystem that is still mounted when it disappears is how one
-gets corrupted.
+gets corrupted. An SD card in the internal slot is a **Mount** row instead; the
+list below says why.
 
+* **Auto-mount is one udev event, not a daemon.** Plugging in a stick makes udev
+  start `lazyos-automount@<partition>.service`, which runs
+  `/usr/local/sbin/lazyos-automount` once and exits. There is no `udiskie`: that
+  is a resident Python daemon (and a tray icon this bar has no host for), and an
+  on-demand `udisksctl` is the same result without it. Nothing runs between two
+  plugs. A stick that was **already inserted when the machine booted** waits in
+  Places instead: the event fires before anyone is logged in, and the helper has
+  no account to mount for (the same rule that keeps it out of the root
+  filesystem), so unplug it and plug it back in - or pick the Mount row.
+* **It mounts as you, not as root**, because udisks2 writes the *caller's* uid
+  and gid into the mount options of a vfat or exFAT filesystem: a root mount is
+  `/run/media/root/<label>` with `uid=0`, a stick you cannot write to. The helper
+  drops to your account with `setpriv` (no PAM, no logind session, no second
+  login), and a polkit rule
+  (`/etc/polkit-1/rules.d/49-lazyos-automount.rules`) authorizes that
+  session-less caller through the `plugdev` group - which is why the account is
+  created with it.
+* **Only USB disks.** The rule matches the USB transport, so the eMMC and the
+  internal microSD slot are never touched: they are the two disks this machine
+  boots and rescues from, and `mmcblk1` is where the rescue card lives. A card in
+  that slot is a **Mount** row in Places, one click - also the honest amount of
+  ceremony for a card you may be about to repartition.
+* **Settings → Auto-mount USB drives** turns it off: one line, `enabled=no`, in
+  `~/.config/lazyos/automount.conf`, and a missing file means on. With it off a
+  stick waits as a **Mount** row, which is what an image without this feature
+  did.
+* A dirty vfat or exFAT stick mounts read-only and the notification says
+  `(read-only)`: udisks does that rather than refusing it, and a stick nobody can
+  write to looks broken until you know why. Unplug it, or run `sudo fsck.vfat -a
+  /dev/sdX1` (with nothing mounted from it) and plug it back in.
 * Mounting is **udisks2**'s job, because an ordinary session cannot mount
   anything itself (that is a root operation). It is D-Bus activated: nothing of
   it runs until a mount is asked for, and nothing stays afterwards.

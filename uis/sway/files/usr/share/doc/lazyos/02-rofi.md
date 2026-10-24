@@ -16,7 +16,7 @@ daemon).
 | **Alt+Ctrl+D** | `rofi-dev` | **developer**: export your profile (keys, configs, package list) into an encrypted archive on a disk, restore one, or save a diagnostics bundle |
 | **Download** (root menu, launcher) | `rofi-download` | a link - or the one in the clipboard - kept in `~/Downloads`, as a video or as audio |
 | **Alt+Ctrl+C** | `rofi-capture` | **capture**: a screenshot (screen, area or window), annotate it, read the text or a QR code out of a region, and start or stop a recording |
-| **Alt+Ctrl+O** | `rofi-quick` | **Settings**: the switches (Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation, display arrangement, screen sharing) and the panels, in one list |
+| **Alt+Ctrl+O** | `rofi-quick` | **Settings**: the switches (Wi-Fi and Bluetooth radios, night light, do-not-disturb, touchpad, tablet mode, rotation, display arrangement, screen sharing, auto-mount of USB drives) and the panels, in one list |
 | **Alt+Ctrl+P** or **Alt+Escape** | `rofi-power` | **power**: lock, suspend, hibernate, log out, reboot, shut down - the last three ask once more |
 | **Alt+Ctrl+N** | `rofi-notify` | the notification history, with do-not-disturb and "copy this notification" |
 | **Alt+Ctrl+Q** | `rofi-calc` | a calculator: type `(3*4)/2`, Enter copies `6` |
@@ -35,8 +35,10 @@ window.
 The rest of the menus live in the root menu and the launcher: **Places**
 
 (home, documents, downloads, pictures, every mounted disk, and a **Mount** row
-for each unmounted one - a USB stick or an SD card - where Enter mounts it and
-opens it in Files and **Alt+1** unmounts a disk; its last two rows are the disk
+for each unmounted one - an SD card in the internal slot, or a stick when
+Settings' *Auto-mount USB drives* is off - where Enter mounts it and opens it in
+Files and **Alt+1** unmounts a disk; a USB stick is already in that list by the
+time you open it, because plugging one in mounts it; its last two rows are the disk
 actions, **Auxiliary swap** (a card as more memory, activated on every boot) and
 **Format a disk**, and both list only disks with nothing mounted on them, no
 ChromeOS kernel partition, and that are neither built into the machine nor the

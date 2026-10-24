@@ -1,0 +1,23 @@
+# A plugged USB drive mounts itself.
+#
+# The event wants lazyos-automount@<dev>.service, which runs
+# /usr/local/sbin/lazyos-automount once and exits - one process per plug, and
+# nothing afterwards (no udiskie: it is a resident Python daemon whose remaining
+# job would be a tray icon this bar has no host for).
+#
+# Two things in the match are deliberate:
+#
+#   SUBSYSTEMS=="usb"          only a USB-attached disk.  The eMMC (mmcblk0) and
+#                              the microSD slot (mmcblk1) are the two disks this
+#                              machine boots from, they are not removable by the
+#                              device-level flag, and nothing here should ever
+#                              mount a partition of either.
+#   ID_FS_USAGE=="filesystem"  only something with a filesystem to mount.  It is
+#                              what keeps swap, LUKS, RAID and LVM members out
+#                              before the helper is even started (they carry
+#                              ID_FS_USAGE=other, or none at all), and a disk
+#                              with a partition table has no ID_FS_USAGE of its
+#                              own - so the second line is a stick formatted
+#                              without one, not a duplicate of the first.
+ACTION=="add", SUBSYSTEM=="block", SUBSYSTEMS=="usb", ENV{DEVTYPE}=="partition", ENV{ID_FS_USAGE}=="filesystem", TAG+="systemd", ENV{SYSTEMD_WANTS}+="lazyos-automount@%k.service"
+ACTION=="add", SUBSYSTEM=="block", SUBSYSTEMS=="usb", ENV{DEVTYPE}=="disk", ENV{ID_FS_USAGE}=="filesystem", TAG+="systemd", ENV{SYSTEMD_WANTS}+="lazyos-automount@%k.service"
